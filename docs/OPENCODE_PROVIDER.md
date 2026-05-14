@@ -544,9 +544,102 @@ adapter never invokes `opencode run` or the TUI.
   pinned semver triple; the permissive regex hedges against minor
   format changes but a major format change will fail the build by
   design.
-- `tini` / reaper still not wired; long-running revisions may leak
-  zombie children spawned by OpenCode tools until that lands.
 - SSE event JSON schemas remain integration-time risk (Mission 2 doc,
   unchanged here).
 - `OPENCODE_DISABLE_*` env names are documented assumptions; the first
   smoke must verify upstream still honors each name and behavior.
+
+## 16. PID-1 reaper (Mission 2.y)
+
+Mission 2.y wires a small PID-1 reaper into the ham-api Cloud Run
+image so `opencode serve` subprocess fan-out (bash, MCP servers, tool
+children) is reaped instead of accumulating as zombies. Like Mission
+2.x, the image change is dormant at runtime: no env gates are flipped,
+no Cloud Run deploy is in this commit.
+
+### Why a reaper is required
+
+`opencode serve` launches subprocess tools as direct children of the
+process group it owns. When those children exit, their entries linger
+in the kernel process table until a parent calls `wait()` on them.
+The default `uvicorn` master under HAM does not, and Cloud Run does
+not provide an init process for the container. Over the life of a
+long-running revision that fans out hundreds of bash/MCP child
+processes per session, this exhausts the per-container PID budget and
+eventually wedges the runtime. The fix is to run a tiny dedicated
+reaper as PID 1 that `wait(2)`s on any orphaned children.
+
+### Choice of `tini`
+
+Mission 2.y installs **`tini`** (Debian-packaged at
+`/usr/bin/tini` in `bookworm`). Reasons:
+
+- Available as a stable Debian apt package; pinned by the bookworm
+  release HAM already builds against, no manual checksum to maintain.
+- Small (≈10 KB binary, few hundred LOC of audited C); much lighter
+  than `dumb-init`.
+- Well-known reaper used by the upstream Docker docs ("Adding tini")
+  and Kubernetes' shareProcessNamespace examples.
+- Single-purpose: forward signals to the child and `wait(2)` on
+  orphaned grandchildren — no extra behavior to reason about.
+
+### ENTRYPOINT pattern
+
+The Dockerfile keeps the existing `CMD` byte-for-byte and adds an
+exec-form ENTRYPOINT immediately above it:
+
+```dockerfile
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD exec uvicorn src.api.server:app --host 0.0.0.0 --port "${PORT:-8080}"
+```
+
+At runtime Docker exec's `tini` as PID 1, which in turn exec's the
+existing CMD as its only child. CMD semantics (including Cloud Run's
+`PORT` substitution and the existing `exec` keyword) are unchanged.
+
+The pin lives in `src/ham/opencode_runner/version_pin.py` as
+`TINI_INSTALL_PATH = "/usr/bin/tini"`, re-exported from
+`src/ham/opencode_runner/__init__.py` for symmetry with
+`OPENCODE_PINNED_VERSION`. Drift between the constant and the
+Dockerfile ENTRYPOINT is caught by
+`tests/test_dockerfile_entrypoint.py`.
+
+### Runtime smoke checklist (first managed-workspace smoke)
+
+The image change is dormant; live execution still requires an explicit
+operator-authorized deploy with the gate envs set. When that deploy
+happens, the first smoke must confirm:
+
+1. `GET /api/status` returns 200 with `application/json`.
+2. `POST /api/opencode/build/preview` returns 401 when unauthenticated
+   (no operator session, no exec token).
+3. `POST /api/opencode/build/launch` returns 401 when unauthenticated.
+4. `POST /api/claude-agent/build/preview` returns 401 when
+   unauthenticated (Mission 3.1 regression sentinel — the Claude Agent
+   lane is unaffected by this commit and must keep its auth posture).
+5. One preview-only invocation through the dashboard Clerk-auth flow,
+   targeting `managed_workspace`.
+6. If preview succeeds, exactly one corresponding launch.
+7. Verify the resulting `ControlPlaneRun` row carries
+   `status_reason="opencode:snapshot_emitted"` or
+   `opencode:nothing_to_change` — never an unexpected reason code.
+8. Verify the Mission 3.1 deletion guard still blocks deletions
+   (no `HAM_OPENCODE_ALLOW_DELETIONS` override on the live revision,
+   no deletion bypass logged in the audit JSONL).
+
+### Env gates and secret requirements (unchanged by this commit)
+
+Mission 2.y does not flip any env. Before any live execution, an
+operator-authorized deploy must set:
+
+- `HAM_OPENCODE_ENABLED=1` — provider visible in readiness / conductor.
+- `HAM_OPENCODE_EXECUTION_ENABLED=1` — live execution allowed.
+- `HAM_OPENCODE_EXEC_TOKEN` — bound from a Cloud Run Secret Manager
+  secret (the secret name is chosen at deploy time and is **not**
+  documented here; do not hard-code it). Used as the
+  `Authorization: Bearer …` value on the launch route.
+- Provider auth path: at least one of the existing credential surfaces
+  must be configured (Connected Tools BYOK records, OpenRouter, the
+  Anthropic backend key path used by the Claude Agent lane, or a HAM
+  gateway). No new key name is introduced by Mission 2.y; the choice
+  of which existing surface to bind is made at deploy time.

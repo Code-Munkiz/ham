@@ -12,7 +12,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Backend-only Cursor SDK bridge runtime (Node 22).
 # git: Claude Code CLI expects a git binary for workspace introspection in headless runs.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl gnupg git \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg git tini \
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
       | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
@@ -77,4 +77,5 @@ RUN git config --global init.defaultBranch main \
 
 EXPOSE 8080
 
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD exec uvicorn src.api.server:app --host 0.0.0.0 --port "${PORT:-8080}"
