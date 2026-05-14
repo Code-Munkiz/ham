@@ -2,7 +2,7 @@
 
 Routes under test:
 
-- ``POST /api/coding/opencode/launch_proxy`` (this module).
+- ``POST /api/opencode/build/launch_proxy`` (this module).
 
 The proxy must:
 
@@ -193,7 +193,7 @@ def test_proxy_requires_clerk(
 ) -> None:
     monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "1")
     res = _client().post(
-        "/api/coding/opencode/launch_proxy",
+        "/api/opencode/build/launch_proxy",
         json={
             "project_id": "p",
             "user_prompt": "tidy",
@@ -212,7 +212,7 @@ def test_proxy_requires_confirmed_true(
     cleanup_overrides: None,
 ) -> None:
     res = _client(actor).post(
-        "/api/coding/opencode/launch_proxy",
+        "/api/opencode/build/launch_proxy",
         json={
             "project_id": "p",
             "user_prompt": "tidy",
@@ -231,7 +231,7 @@ def test_proxy_requires_opencode_enabled(
     cleanup_overrides: None,
 ) -> None:
     res = _client(actor).post(
-        "/api/coding/opencode/launch_proxy",
+        "/api/opencode/build/launch_proxy",
         json={
             "project_id": "p",
             "user_prompt": "tidy",
@@ -252,7 +252,7 @@ def test_proxy_requires_execution_enabled(
 ) -> None:
     monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
     res = _client(actor).post(
-        "/api/coding/opencode/launch_proxy",
+        "/api/opencode/build/launch_proxy",
         json={
             "project_id": "p",
             "user_prompt": "tidy",
@@ -277,7 +277,7 @@ def test_proxy_requires_project_found(
     fake_store = SimpleNamespace(get_project=lambda _pid: None)
     with patch.object(proxy_api, "get_project_store", lambda: fake_store):
         res = _client(actor).post(
-            "/api/coding/opencode/launch_proxy",
+            "/api/opencode/build/launch_proxy",
             json={
                 "project_id": "missing",
                 "user_prompt": "tidy",
@@ -302,7 +302,7 @@ def test_proxy_requires_managed_workspace_output_target(
     fake_store = SimpleNamespace(get_project=lambda _pid: rec)
     with patch.object(proxy_api, "get_project_store", lambda: fake_store):
         res = _client(actor).post(
-            "/api/coding/opencode/launch_proxy",
+            "/api/opencode/build/launch_proxy",
             json=_good_body(rec),
         )
     assert res.status_code == 409
@@ -336,7 +336,7 @@ def test_proxy_requires_build_approver(
     try:
         with patch.object(proxy_api, "_require_build_approver", _denied):
             res = _client(actor).post(
-                "/api/coding/opencode/launch_proxy",
+                "/api/opencode/build/launch_proxy",
                 json=_good_body(rec),
             )
     finally:
@@ -360,7 +360,7 @@ def test_proxy_requires_readiness_configured(
     )
     try:
         res = _client(actor).post(
-            "/api/coding/opencode/launch_proxy",
+            "/api/opencode/build/launch_proxy",
             json=_good_body(rec),
         )
     finally:
@@ -382,7 +382,7 @@ def test_proxy_rejects_digest_mismatch(
     body = _good_body(rec)
     body["proposal_digest"] = "0" * 64
     try:
-        res = _client(actor).post("/api/coding/opencode/launch_proxy", json=body)
+        res = _client(actor).post("/api/opencode/build/launch_proxy", json=body)
     finally:
         _stop(patches)
     assert res.status_code == 409
@@ -402,7 +402,7 @@ def test_proxy_rejects_missing_env_token(
     patches = _patch_proxy_gates(rec=rec)
     try:
         res = _client(actor).post(
-            "/api/coding/opencode/launch_proxy",
+            "/api/opencode/build/launch_proxy",
             json=_good_body(rec),
         )
     finally:
@@ -459,7 +459,7 @@ def test_proxy_succeeds_and_emits_snapshot(
             patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
         ):
             res = _client(actor).post(
-                "/api/coding/opencode/launch_proxy",
+                "/api/opencode/build/launch_proxy",
                 json=_good_body(rec),
             )
     finally:
@@ -509,7 +509,7 @@ def test_proxy_succeeds_nothing_to_change(
             patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
         ):
             res = _client(actor).post(
-                "/api/coding/opencode/launch_proxy",
+                "/api/opencode/build/launch_proxy",
                 json=_good_body(rec),
             )
     finally:
@@ -553,7 +553,7 @@ def test_proxy_safe_blocks_output_requires_review(
             patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
         ):
             res = _client(actor).post(
-                "/api/coding/opencode/launch_proxy",
+                "/api/opencode/build/launch_proxy",
                 json=_good_body(rec),
             )
     finally:
@@ -606,7 +606,7 @@ def test_proxy_deletion_guard_blocks_when_allow_deletions_false(
             patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
         ):
             res = _client(actor).post(
-                "/api/coding/opencode/launch_proxy",
+                "/api/opencode/build/launch_proxy",
                 json=_good_body(rec),
             )
     finally:
@@ -661,7 +661,7 @@ def test_proxy_response_does_not_leak_token(
             patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
         ):
             res = _client(actor).post(
-                "/api/coding/opencode/launch_proxy",
+                "/api/opencode/build/launch_proxy",
                 json=_good_body(rec),
             )
     finally:
@@ -685,7 +685,7 @@ def test_proxy_does_not_accept_token_from_body(
     monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
     for extra_field in ("exec_token", "token", "authorization"):
         res = _client(actor).post(
-            "/api/coding/opencode/launch_proxy",
+            "/api/opencode/build/launch_proxy",
             json={
                 "project_id": "p",
                 "user_prompt": "tidy",
@@ -716,7 +716,7 @@ def test_proxy_does_not_accept_token_from_header(
     patches = _patch_proxy_gates(rec=rec)
     try:
         res = _client(actor).post(
-            "/api/coding/opencode/launch_proxy",
+            "/api/opencode/build/launch_proxy",
             json=_good_body(rec),
             headers={"Authorization": f"Bearer {header_token}"},
         )
@@ -760,7 +760,7 @@ def test_proxy_persists_control_plane_run(
             patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
         ):
             res = _client(actor).post(
-                "/api/coding/opencode/launch_proxy",
+                "/api/opencode/build/launch_proxy",
                 json=_good_body(rec),
             )
     finally:

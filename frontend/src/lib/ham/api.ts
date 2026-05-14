@@ -1939,7 +1939,7 @@ export async function launchOpencodeBuild(
   body: OpencodeBuildLaunchProxyRequest,
 ): Promise<OpencodeBuildLaunchPayload> {
   const trimmedModel = (body.model ?? "").trim();
-  const res = await hamApiFetch("/api/coding/opencode/launch_proxy", {
+  const res = await hamApiFetch("/api/opencode/build/launch_proxy", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

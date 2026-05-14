@@ -1,4 +1,4 @@
-"""Chat-origin OpenCode launch proxy — ``POST /api/coding/opencode/launch_proxy``.
+"""Chat-origin OpenCode launch proxy — ``POST /api/opencode/build/launch_proxy``.
 
 This route is the browser-callable side of the OpenCode managed-workspace
 build lane. The operator route at ``POST /api/opencode/build/launch`` still
@@ -70,7 +70,7 @@ _OPENCODE_EXEC_TOKEN_ENV = "HAM_OPENCODE_EXEC_TOKEN"  # noqa: S105
 
 
 router = APIRouter(
-    prefix="/api/coding/opencode",
+    prefix="/api/opencode/build",
     tags=["coding-opencode-proxy"],
     dependencies=[Depends(get_ham_clerk_actor)],
 )

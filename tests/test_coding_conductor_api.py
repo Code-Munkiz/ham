@@ -895,13 +895,10 @@ def test_no_launch_endpoint_under_coding_namespace() -> None:
     assert "/api/coding/readiness" in paths
     assert "/api/coding/conductor/preview" in paths
     # Negative locks: no conductor launch / dispatch / run / execute under
-    # /api/coding. The `/api/coding/opencode/launch_proxy` route is the
-    # explicit, browser-callable wrapper around the operator OpenCode
-    # build launch (digest-verified, token read from process env, never
-    # surfaced to the browser) — it is the one allowed exception.
+    # /api/coding. The /api/coding/* namespace is for read/discovery
+    # routes (preview, readiness, conductor) only; launches live under
+    # /api/{provider}/build/* (e.g. /api/opencode/build/launch_proxy).
     for p in paths:
-        if p == "/api/coding/opencode/launch_proxy":
-            continue
         assert "/launch" not in p, f"unexpected launch route: {p}"
         assert "/dispatch" not in p, f"unexpected dispatch route: {p}"
         assert "/execute" not in p, f"unexpected execute route: {p}"
