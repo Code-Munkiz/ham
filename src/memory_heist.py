@@ -223,6 +223,10 @@ MAX_SUMMARY_CHARS = 4_000
 # 3) Trade-offs between memory efficiency and code complexity. Current implementation
 # relies on character-based heuristics (see compact_max_tokens in SessionMemory).
 DEFAULT_SESSION_COMPACTION_MAX_TOKENS=***  # Placeholder: not currently used
+# **CRITICAL WARNING**: This line is intentionally a placeholder with invalid value.
+# Do NOT replace "***" with a real number unless you are implementing token-based
+# session compaction. The value is checked by tests to ensure it's not accidentally
+# set to a production value. Remove this entire line only after full re-implementation.
 # ============================================================================
 # TODO: TOKEN-BASED COMPACTION RESTORATION GUIDANCE (FOR FUTURE MAINTAINERS)
 # ============================================================================
