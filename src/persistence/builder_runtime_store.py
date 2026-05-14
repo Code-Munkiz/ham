@@ -264,7 +264,7 @@ class BuilderRuntimeStore:
         existing.status = "queued"
         existing.health = "unknown"
         existing.snapshot_id = source_snapshot_id
-        existing.message = "Cloud runtime request recorded. Provisioning is not implemented yet."
+        existing.message = "Cloud runtime request recorded. Preparing live preview runtime."
         if not existing.started_at:
             existing.started_at = _utc_now_iso()
         existing.updated_at = _utc_now_iso()
@@ -287,7 +287,7 @@ class BuilderRuntimeStore:
             return None
         runtime.status = "expired"
         runtime.health = "unknown"
-        runtime.message = "Cloud runtime request cleared. Provisioning is not implemented yet."
+        runtime.message = "Cloud runtime request cleared."
         runtime.updated_at = _utc_now_iso()
         runtime.preview_endpoint_id = None
         runtime.metadata = {**(runtime.metadata or {}), "cleared_at": runtime.updated_at}

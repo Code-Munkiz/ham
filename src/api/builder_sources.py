@@ -1755,8 +1755,9 @@ def _cloud_runtime_worker_entry() -> BuilderWorkerCapabilityEntry:
     provider_status = get_cloud_runtime_provider_capability_status()
     experiment_status, _ = get_cloud_runtime_experiment_status()
     status = _to_worker_status(provider_status)
-    fit = "Cloud runtime control-plane path; production sandbox lifecycle is staged behind provider gates."
-    setup = "Set HAM_BUILDER_CLOUD_RUNTIME_PROVIDER=local_mock for safe simulation in dev/test."
+    is_live_gke = provider_mode == "gcp_gke_sandbox" and provider_status == "available"
+    fit = "Cloud runtime worker for live preview provisioning and health checks."
+    setup = "Configure cloud runtime provider env vars for this deployment."
     if experiment_status == "experiment_not_enabled":
         setup = (
             "Set HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED=true, "
@@ -1781,13 +1782,12 @@ def _cloud_runtime_worker_entry() -> BuilderWorkerCapabilityEntry:
                 "GKE_NAMESPACE_PREFIX / PREVIEW_SOURCE_BUCKET / PREVIEW_RUNNER_IMAGE."
             )
         else:
-            setup = (
-                "gcp_gke_sandbox is scaffolding only: dry-run or explicit fake mode until live GKE preview lands."
-            )
+            setup = "No additional setup required for this workspace."
+    display_name = "Cloud Runtime Worker" if is_live_gke else "Cloud Runtime Worker (POC)"
     return BuilderWorkerCapabilityEntry(
         worker_kind="cloud_runtime_worker",
         provider="builder_cloud_runtime",
-        display_name="Cloud Runtime Worker (POC)",
+        display_name=display_name,
         status=status,
         capabilities=["request_runtime_job", "read_job_status"],
         environment_fit=fit,
@@ -1798,7 +1798,7 @@ def _cloud_runtime_worker_entry() -> BuilderWorkerCapabilityEntry:
             "source": "builder_runtime_worker",
             "provider_mode": provider_mode,
             "provider_status": provider_status,
-            "production_ready": False,
+            "production_ready": is_live_gke,
         },
     )
 
