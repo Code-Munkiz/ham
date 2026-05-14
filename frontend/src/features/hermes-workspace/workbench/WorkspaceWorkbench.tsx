@@ -31,7 +31,6 @@ import {
   type BuilderWorkerCapability,
   type BuilderProjectSourceRecord,
   type BuilderSourceSnapshotRecord,
-  createBuilderCloudRuntimeJob,
   createBuilderVisualEditRequest,
   deleteBuilderLocalRunProfile,
   deleteBuilderLocalPreview,
@@ -50,6 +49,7 @@ import {
   listBuilderSnapshotFiles,
   listBuilderSourceSnapshots,
   postBuilderLocalPreview,
+  requestBuilderCloudRuntime,
   saveBuilderLocalRunProfile,
 } from "@/lib/ham/api";
 import { sanitizeWorkbenchProjectAccessMessage } from "@/lib/ham/workbenchProjectMessages";
@@ -624,6 +624,14 @@ function WorkbenchPreviewPanel({
     "provider_ready",
     "provider_accepted",
   ].includes(cloudRuntimeState);
+  const activeSourceSnapshotId =
+    preview?.source_snapshot_id || cloudRuntime?.source_snapshot_id || snapshots[0]?.id || null;
+  const cloudPreviewHealthy =
+    preview?.mode === "cloud" && preview?.status === "ready" && preview?.health === "healthy";
+  const cloudRetryEnabled =
+    Boolean(ws && pid && activeSourceSnapshotId) &&
+    cloudRuntimeRequestEnabled &&
+    !cloudPreviewHealthy;
   const cloudRuntimeProviderCopy =
     cloudRuntimeState === "experiment_not_enabled"
       ? "Cloud runtime experiments are not enabled."
@@ -1279,29 +1287,43 @@ function WorkbenchPreviewPanel({
               className="text-[11px]"
               data-testid="hww-cloud-runtime-request-poc"
               disabled={
-                !ws ||
-                !pid ||
-                !cloudRuntimeRequestEnabled ||
-                cloudRuntimeJobBusy ||
-                !preview?.source_snapshot_id
+                !ws || !pid || !cloudRetryEnabled || cloudRuntimeJobBusy || !activeSourceSnapshotId
               }
               onClick={() => {
-                if (!ws || !pid || !cloudRuntimeRequestEnabled) return;
+                if (!ws || !pid || !cloudRetryEnabled || !activeSourceSnapshotId) return;
                 setCloudRuntimeJobBusy(true);
                 setCloudRuntimeJobError(null);
                 setCloudRuntimeJobNotice(null);
-                void createBuilderCloudRuntimeJob(ws, pid, {
-                  source_snapshot_id: preview?.source_snapshot_id || null,
-                  metadata: { request_source: "workbench_preview_tab" },
+                setCloudRuntimeLifecycle({
+                  phase: "queued",
+                  message: "Retry requested. Provisioning a fresh cloud preview run.",
+                  updated_at: new Date().toISOString(),
+                  provider_status: null,
+                  logs_summary: null,
+                });
+                void requestBuilderCloudRuntime(ws, pid, {
+                  source_snapshot_id: activeSourceSnapshotId,
+                  force_new: true,
+                  metadata: { request_source: "workbench_preview_retry" },
                 })
                   .then((payload) => {
-                    setCloudRuntimeLatestJob(payload.job);
-                    setCloudRuntimeLifecycle(null);
                     setCloudRuntime(payload.cloud_runtime);
-                    setPreview(payload.preview_status);
-                    setCloudRuntimeJobNotice(
-                      "Cloud runtime POC job recorded. No production sandbox/build execution was performed.",
+                    setPreview((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            mode: "cloud",
+                            status: "building",
+                            health: "unknown",
+                            message: "Retry requested. Provisioning cloud preview.",
+                            source_snapshot_id: activeSourceSnapshotId,
+                          }
+                        : prev,
                     );
+                    setCloudRuntimeJobNotice(
+                      "Retry started. HAM is provisioning a fresh cloud runtime preview.",
+                    );
+                    void refresh();
                     void refreshActivity();
                     void refreshWorkers();
                   })
@@ -1313,14 +1335,22 @@ function WorkbenchPreviewPanel({
                   });
               }}
             >
-              {cloudRuntimeJobBusy ? "Requesting…" : "Request cloud runtime POC"}
+              {cloudRuntimeJobBusy ? "Retrying…" : "Retry preview"}
             </Button>
-            {!preview?.source_snapshot_id ? (
+            {!activeSourceSnapshotId ? (
               <p
                 className="text-[11px] text-white/55"
                 data-testid="hww-cloud-runtime-source-required-copy"
               >
-                Add a project source ZIP or folder before requesting cloud runtime.
+                Add a project source ZIP or folder before retrying cloud preview.
+              </p>
+            ) : null}
+            {cloudPreviewHealthy ? (
+              <p
+                className="text-[11px] text-white/55"
+                data-testid="hww-cloud-runtime-retry-healthy-copy"
+              >
+                Preview is already healthy. Use Refresh status for polling-only checks.
               </p>
             ) : null}
             {!cloudRuntimeRequestEnabled ? (
@@ -1337,7 +1367,7 @@ function WorkbenchPreviewPanel({
             ) : null}
             {cloudRuntimeJobError ? (
               <p className="text-amber-200/90" data-testid="hww-cloud-runtime-job-error">
-                Could not request cloud runtime POC: {cloudRuntimeJobError}
+                Could not retry cloud preview: {cloudRuntimeJobError}
               </p>
             ) : null}
             {cloudRuntimeJobNotice ? (
