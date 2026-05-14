@@ -5,6 +5,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
 import shlex
@@ -67,6 +68,7 @@ from src.persistence.workspace_store import WorkspaceStore
 from src.registry.projects import ProjectRecord
 
 router = APIRouter(tags=["builder-sources"])
+_LOG = logging.getLogger(__name__)
 
 _ZIP_ERROR_MESSAGES = {
     "ZIP_TOO_LARGE": "ZIP exceeds the maximum compressed size.",
@@ -356,6 +358,36 @@ def _preview_proxy_session_ttl_seconds() -> int:
     )
 
 
+def _preview_proxy_auth_diag_enabled() -> bool:
+    raw = str(os.environ.get("HAM_BUILDER_PREVIEW_PROXY_AUTH_DIAGNOSTICS") or "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _diag_str(value: Any, *, max_len: int = 128) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return text[:max_len]
+
+
+def _emit_preview_proxy_diag(payload: dict[str, Any]) -> None:
+    if not _preview_proxy_auth_diag_enabled():
+        return
+    # Keep logs bounded and value-safe. This path intentionally logs only
+    # booleans/status enums/ids and never raw auth material.
+    safe: dict[str, Any] = {}
+    for key, value in payload.items():
+        if isinstance(value, bool):
+            safe[key] = value
+        elif value is None:
+            safe[key] = None
+        elif isinstance(value, (int, float)):
+            safe[key] = value
+        else:
+            safe[key] = _diag_str(value, max_len=180)
+    _LOG.info("preview_proxy_auth_diag %s", json.dumps(safe, ensure_ascii=True, sort_keys=True))
+
+
 def _clerk_session_cookie_name() -> str:
     raw = str(os.environ.get("HAM_CLERK_SESSION_COOKIE_NAME") or "").strip()
     return raw or "__session"
@@ -419,30 +451,30 @@ def _mint_preview_proxy_session_token(
     return f"{payload_b64}.{sig_b64}", exp
 
 
-def _decode_preview_proxy_session_token(token: str | None) -> dict[str, Any] | None:
+def _decode_preview_proxy_session_token(token: str | None) -> tuple[dict[str, Any] | None, str]:
     raw = str(token or "").strip()
     if not raw or "." not in raw:
-        return None
+        return None, "missing"
     payload_b64, sig_b64 = raw.split(".", 1)
     if not payload_b64 or not sig_b64:
-        return None
+        return None, "invalid_signature"
     expected = _sign_preview_proxy_session_token(payload_b64)
     if not hmac.compare_digest(expected, sig_b64):
-        return None
+        return None, "invalid_signature"
     try:
         payload_obj = json.loads(_b64url_decode(payload_b64).decode("utf-8"))
     except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
-        return None
+        return None, "invalid_signature"
     if not isinstance(payload_obj, dict):
-        return None
+        return None, "invalid_signature"
     exp_raw = payload_obj.get("exp")
     try:
         exp = int(exp_raw)
     except (TypeError, ValueError):
-        return None
+        return None, "invalid_signature"
     if exp < int(time.time()):
-        return None
-    return payload_obj
+        return None, "expired"
+    return payload_obj, "valid"
 
 
 def _preview_proxy_session_claim_match(
@@ -512,51 +544,331 @@ async def require_preview_proxy_ctx(
     actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
     store: Annotated[WorkspaceStore, Depends(get_workspace_store)] = None,  # type: ignore[assignment]
 ) -> WorkspaceContext:
-    if actor is not None:
-        return _require_preview_proxy_read_perm(
-            _resolve_workspace_context_or_http(actor=actor, workspace_id=workspace_id, store=store)
-        )
+    has_authorization_header = bool(str(request.headers.get("authorization") or "").strip())
+    has_cookie_header = bool(str(request.headers.get("cookie") or "").strip())
     clerk_cookie_name = _clerk_session_cookie_name()
     clerk_cookie = str(request.cookies.get(clerk_cookie_name) or "").strip()
+    preview_cookie = str(request.cookies.get(_PREVIEW_PROXY_SESSION_COOKIE_NAME) or "").strip()
+    diag: dict[str, Any] = {
+        "route": "preview_proxy_get",
+        "workspace_id": _diag_str(workspace_id),
+        "project_id": _diag_str(project_id),
+        "has_authorization_header": has_authorization_header,
+        "has_cookie_header": has_cookie_header,
+        "preview_session_cookie_present": bool(preview_cookie),
+        "clerk_session_cookie_present": bool(clerk_cookie),
+        "preview_cookie_decode_status": "missing",
+        "bearer_auth_status": "missing" if not has_authorization_header else "not_attempted",
+        "clerk_cookie_auth_status": "missing" if not clerk_cookie else "not_attempted",
+        "final_auth_decision": "denied",
+        "denial_reason": "no_auth_material",
+    }
+    cookie_actor_from_clerk: HamActor | None = None
+    if actor is not None:
+        diag["bearer_auth_status"] = "valid"
+        ctx = _require_preview_proxy_read_perm(
+            _resolve_workspace_context_or_http(actor=actor, workspace_id=workspace_id, store=store)
+        )
+        diag["final_auth_decision"] = "allowed"
+        diag["denial_reason"] = ""
+        _emit_preview_proxy_diag(diag)
+        return ctx
+    auth_header = str(request.headers.get("authorization") or "").strip()
+    if auth_header.lower().startswith("bearer "):
+        try:
+            header_actor = verify_clerk_session_jwt(auth_header[7:].strip())
+            require_ham_clerk_email_allowed(header_actor, route=f"{request.method} {request.url.path}")
+            ctx = _require_preview_proxy_read_perm(
+                _resolve_workspace_context_or_http(actor=header_actor, workspace_id=workspace_id, store=store)
+            )
+            diag["bearer_auth_status"] = "valid"
+            diag["final_auth_decision"] = "allowed"
+            diag["denial_reason"] = ""
+            _emit_preview_proxy_diag(diag)
+            return ctx
+        except HTTPException:
+            diag["bearer_auth_status"] = "invalid"
+            diag["denial_reason"] = "invalid_clerk_cookie"
+    elif has_authorization_header:
+        diag["bearer_auth_status"] = "invalid"
+        diag["denial_reason"] = "invalid_clerk_cookie"
     if clerk_cookie:
         try:
-            cookie_actor = verify_clerk_session_jwt(clerk_cookie)
-            require_ham_clerk_email_allowed(cookie_actor, route=f"{request.method} {request.url.path}")
-        except HTTPException:
-            cookie_actor = None
-        if cookie_actor is not None:
-            return _require_preview_proxy_read_perm(
-                _resolve_workspace_context_or_http(actor=cookie_actor, workspace_id=workspace_id, store=store)
+            cookie_actor_from_clerk = verify_clerk_session_jwt(clerk_cookie)
+            require_ham_clerk_email_allowed(
+                cookie_actor_from_clerk,
+                route=f"{request.method} {request.url.path}",
             )
-    cookie_token = request.cookies.get(_PREVIEW_PROXY_SESSION_COOKIE_NAME)
-    claims = _decode_preview_proxy_session_token(cookie_token)
-    if claims is None or not _preview_proxy_session_claim_match(
-        claims=claims,
-        workspace_id=workspace_id,
+            diag["clerk_cookie_auth_status"] = "valid"
+        except HTTPException:
+            cookie_actor_from_clerk = None
+            diag["clerk_cookie_auth_status"] = "invalid"
+            diag["denial_reason"] = "invalid_clerk_cookie"
+    if preview_cookie:
+        claims, decode_status = _decode_preview_proxy_session_token(preview_cookie)
+        diag["preview_cookie_decode_status"] = decode_status
+        if claims is not None:
+            if not _preview_proxy_session_claim_match(
+                claims=claims,
+                workspace_id=workspace_id,
+                project_id=project_id,
+            ):
+                # Split mismatch reason for diagnostics.
+                claim_ws = str(claims.get("workspace_id") or "").strip()
+                claim_project = str(claims.get("project_id") or "").strip()
+                if claim_ws != workspace_id:
+                    diag["preview_cookie_decode_status"] = "workspace_mismatch"
+                elif claim_project != project_id:
+                    diag["preview_cookie_decode_status"] = "project_mismatch"
+                else:
+                    diag["preview_cookie_decode_status"] = "user_mismatch"
+                diag["denial_reason"] = "ownership_mismatch"
+            else:
+                cookie_actor = _preview_proxy_actor_from_claims(claims)
+                if cookie_actor is None:
+                    diag["preview_cookie_decode_status"] = "invalid_signature"
+                    diag["denial_reason"] = "invalid_preview_cookie"
+                elif cookie_actor_from_clerk is not None and cookie_actor.user_id != cookie_actor_from_clerk.user_id:
+                    diag["preview_cookie_decode_status"] = "user_mismatch"
+                    diag["denial_reason"] = "ownership_mismatch"
+                else:
+                    try:
+                        ctx = _require_preview_proxy_read_perm(
+                            _resolve_workspace_context_or_http(
+                                actor=cookie_actor,
+                                workspace_id=workspace_id,
+                                store=store,
+                            )
+                        )
+                        diag["final_auth_decision"] = "allowed"
+                        diag["denial_reason"] = ""
+                        _emit_preview_proxy_diag(diag)
+                        return ctx
+                    except HTTPException:
+                        diag["denial_reason"] = "ownership_mismatch"
+        elif decode_status == "expired":
+            diag["denial_reason"] = "expired_preview_cookie"
+    if cookie_actor_from_clerk is not None:
+        try:
+            ctx = _require_preview_proxy_read_perm(
+                _resolve_workspace_context_or_http(
+                    actor=cookie_actor_from_clerk,
+                    workspace_id=workspace_id,
+                    store=store,
+                )
+            )
+            diag["final_auth_decision"] = "allowed"
+            diag["denial_reason"] = ""
+            _emit_preview_proxy_diag(diag)
+            return ctx
+        except HTTPException:
+            diag["denial_reason"] = "ownership_mismatch"
+    if not has_authorization_header and not preview_cookie and not clerk_cookie:
+        diag["denial_reason"] = "no_auth_material"
+    elif preview_cookie and str(diag.get("preview_cookie_decode_status") or "") in {"invalid_signature", "missing"}:
+        diag["denial_reason"] = "invalid_preview_cookie"
+    _emit_preview_proxy_diag(diag)
+    raise HTTPException(
+        status_code=401,
+        detail={
+            "error": {
+                "code": "PREVIEW_PROXY_SESSION_REQUIRED",
+                "message": "Preview authentication required. Refresh the preview session and try again.",
+            }
+        },
+    )
+
+
+def _auth_source_for_request(request: Request) -> str:
+    auth_header = str(request.headers.get("authorization") or "").strip()
+    if auth_header:
+        return "bearer"
+    if str(request.cookies.get(_clerk_session_cookie_name()) or "").strip():
+        return "session"
+    return "unknown"
+
+
+@router.post("/api/workspaces/{workspace_id}/projects/{project_id}/builder/preview-proxy/session")
+async def create_builder_preview_proxy_session(
+    project_id: str,
+    request: Request,
+    response: Response,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+) -> dict[str, Any]:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    endpoint = _cloud_proxy_endpoint_or_none(workspace_id=ctx.workspace_id, project_id=project_id)
+    if endpoint is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "code": "PREVIEW_PROXY_NOT_CONFIGURED",
+                    "message": "Cloud preview proxy endpoint is not configured for this project.",
+                }
+            },
+        )
+    token, exp = _mint_preview_proxy_session_token(
+        workspace_id=ctx.workspace_id,
         project_id=project_id,
-    ):
+        actor_user_id=ctx.actor_user_id,
+        org_id=ctx.org_id,
+        actor_email=ctx.actor_email,
+        org_role=ctx.org_role,
+    )
+    ttl = _preview_proxy_session_ttl_seconds()
+    cookie_path = _preview_proxy_cookie_path(workspace_id=ctx.workspace_id, project_id=project_id)
+    response.set_cookie(
+        key=_PREVIEW_PROXY_SESSION_COOKIE_NAME,
+        value=token,
+        max_age=ttl,
+        expires=ttl,
+        path=cookie_path,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+    )
+    _emit_preview_proxy_diag(
+        {
+            "route": "preview_proxy_session_mint",
+            "workspace_id": _diag_str(ctx.workspace_id),
+            "project_id": _diag_str(project_id),
+            "auth_source": _auth_source_for_request(request),
+            "set_cookie_attempted": True,
+            "cookie_name": _PREVIEW_PROXY_SESSION_COOKIE_NAME,
+            "cookie_path": cookie_path,
+            "cookie_secure": True,
+            "cookie_samesite": "lax",
+            "cookie_max_age_seconds": ttl,
+            "response_has_set_cookie": "set-cookie" in {k.lower() for k in response.headers.keys()},
+        }
+    )
+    expires_at = datetime.fromtimestamp(exp, tz=UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return {
+        "workspace_id": ctx.workspace_id,
+        "project_id": project_id,
+        "status": "ready",
+        "expires_at": expires_at,
+    }
+
+
+async def _serve_builder_preview_proxy(
+    project_id: str,
+    path: str,
+    request: Request,
+    ctx: Annotated[WorkspaceContext, Depends(require_preview_proxy_ctx)],
+) -> Response:
+    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
+    endpoint = _cloud_proxy_endpoint_or_none(workspace_id=ctx.workspace_id, project_id=project_id)
+    if endpoint is None:
         raise HTTPException(
-            status_code=401,
+            status_code=404,
             detail={
                 "error": {
-                    "code": "PREVIEW_PROXY_SESSION_REQUIRED",
-                    "message": "Preview authentication required. Refresh the preview session and try again.",
+                    "code": "PREVIEW_PROXY_NOT_CONFIGURED",
+                    "message": "Cloud preview proxy endpoint is not configured for this project.",
                 }
             },
         )
-    cookie_actor = _preview_proxy_actor_from_claims(claims)
-    if cookie_actor is None:
+    trusted_host = _safe_trusted_proxy_host((endpoint.metadata or {}).get("trusted_proxy_host"))
+    runtime = _runtime_session_by_id(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        runtime_session_id=endpoint.runtime_session_id,
+    )
+    allow_internal = _allows_provider_owned_internal_upstream(runtime=runtime, endpoint=endpoint)
+    upstream_base = _sanitize_cloud_proxy_upstream_url(
+        raw_url=endpoint.url,
+        trusted_host=trusted_host,
+        allow_internal=allow_internal,
+    )
+    if upstream_base is None:
         raise HTTPException(
-            status_code=401,
+            status_code=422,
             detail={
                 "error": {
-                    "code": "PREVIEW_PROXY_SESSION_REQUIRED",
-                    "message": "Preview authentication required. Refresh the preview session and try again.",
+                    "code": "PREVIEW_PROXY_UNSAFE_UPSTREAM",
+                    "message": "Configured cloud preview upstream URL is not allowed.",
                 }
             },
         )
-    return _require_preview_proxy_read_perm(
-        _resolve_workspace_context_or_http(actor=cookie_actor, workspace_id=workspace_id, store=store)
+    upstream_parts = urlsplit(upstream_base)
+    prefix = upstream_parts.path.rstrip("/")
+    suffix = "/" + path.lstrip("/") if path else "/"
+    target_path = (prefix + suffix) if prefix else suffix
+    upstream_url = urlunsplit(
+        (
+            upstream_parts.scheme,
+            upstream_parts.netloc,
+            target_path,
+            str(request.url.query or ""),
+            "",
+        )
+    )
+    headers = _build_proxy_forward_headers(request.headers)
+    method = request.method.upper()
+    try:
+        upstream_response = await _proxy_upstream_fetch(method=method, url=upstream_url, headers=headers)
+        if upstream_response.status_code in {301, 302, 303, 307, 308}:
+            location = str(upstream_response.headers.get("location") or "").strip()
+            if location:
+                redirect_url = urljoin(upstream_url, location)
+                safe_redirect = _sanitize_cloud_proxy_upstream_url(
+                    raw_url=redirect_url,
+                    trusted_host=trusted_host,
+                    allow_internal=allow_internal,
+                )
+                if safe_redirect is None:
+                    raise HTTPException(
+                        status_code=422,
+                        detail={
+                            "error": {
+                                "code": "PREVIEW_PROXY_UNSAFE_UPSTREAM",
+                                "message": "Upstream redirect target is not allowed.",
+                            }
+                        },
+                    )
+                upstream_response = await _proxy_upstream_fetch(method=method, url=safe_redirect, headers=headers)
+    except HTTPException:
+        raise
+    except httpx.TimeoutException as exc:
+        raise HTTPException(
+            status_code=504,
+            detail={
+                "error": {
+                    "code": "PREVIEW_PROXY_TIMEOUT",
+                    "message": "Cloud preview upstream timed out.",
+                }
+            },
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": {
+                    "code": "PREVIEW_PROXY_UPSTREAM_UNAVAILABLE",
+                    "message": "Cloud preview upstream is unavailable.",
+                }
+            },
+        ) from exc
+    body = upstream_response.content or b""
+    if len(body) > _PREVIEW_PROXY_MAX_BYTES:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": {
+                    "code": "PREVIEW_PROXY_UPSTREAM_UNAVAILABLE",
+                    "message": "Cloud preview upstream response exceeded size limits.",
+                }
+            },
+        )
+    response_headers: dict[str, str] = {}
+    content_type = str(upstream_response.headers.get("content-type") or "").strip()
+    if content_type:
+        response_headers["content-type"] = content_type[:240]
+    return Response(
+        content=(b"" if method == "HEAD" else body),
+        status_code=upstream_response.status_code,
+        headers=response_headers,
     )
 
 
@@ -2023,174 +2335,6 @@ async def get_builder_preview_status(
 ) -> dict[str, Any]:
     _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
     return _build_preview_status_payload(workspace_id=ctx.workspace_id, project_id=project_id)
-
-
-@router.post("/api/workspaces/{workspace_id}/projects/{project_id}/builder/preview-proxy/session")
-async def create_builder_preview_proxy_session(
-    project_id: str,
-    response: Response,
-    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
-) -> dict[str, Any]:
-    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
-    endpoint = _cloud_proxy_endpoint_or_none(workspace_id=ctx.workspace_id, project_id=project_id)
-    if endpoint is None:
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "error": {
-                    "code": "PREVIEW_PROXY_NOT_CONFIGURED",
-                    "message": "Cloud preview proxy endpoint is not configured for this project.",
-                }
-            },
-        )
-    token, exp = _mint_preview_proxy_session_token(
-        workspace_id=ctx.workspace_id,
-        project_id=project_id,
-        actor_user_id=ctx.actor_user_id,
-        org_id=ctx.org_id,
-        actor_email=ctx.actor_email,
-        org_role=ctx.org_role,
-    )
-    ttl = _preview_proxy_session_ttl_seconds()
-    cookie_path = _preview_proxy_cookie_path(workspace_id=ctx.workspace_id, project_id=project_id)
-    response.set_cookie(
-        key=_PREVIEW_PROXY_SESSION_COOKIE_NAME,
-        value=token,
-        max_age=ttl,
-        expires=ttl,
-        path=cookie_path,
-        httponly=True,
-        secure=True,
-        samesite="lax",
-    )
-    expires_at = datetime.fromtimestamp(exp, tz=UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-    return {
-        "workspace_id": ctx.workspace_id,
-        "project_id": project_id,
-        "status": "ready",
-        "expires_at": expires_at,
-    }
-
-
-async def _serve_builder_preview_proxy(
-    project_id: str,
-    path: str,
-    request: Request,
-    ctx: Annotated[WorkspaceContext, Depends(require_preview_proxy_ctx)],
-) -> Response:
-    _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
-    endpoint = _cloud_proxy_endpoint_or_none(workspace_id=ctx.workspace_id, project_id=project_id)
-    if endpoint is None:
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "error": {
-                    "code": "PREVIEW_PROXY_NOT_CONFIGURED",
-                    "message": "Cloud preview proxy endpoint is not configured for this project.",
-                }
-            },
-        )
-    trusted_host = _safe_trusted_proxy_host((endpoint.metadata or {}).get("trusted_proxy_host"))
-    runtime = _runtime_session_by_id(
-        workspace_id=ctx.workspace_id,
-        project_id=project_id,
-        runtime_session_id=endpoint.runtime_session_id,
-    )
-    allow_internal = _allows_provider_owned_internal_upstream(runtime=runtime, endpoint=endpoint)
-    upstream_base = _sanitize_cloud_proxy_upstream_url(
-        raw_url=endpoint.url,
-        trusted_host=trusted_host,
-        allow_internal=allow_internal,
-    )
-    if upstream_base is None:
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "error": {
-                    "code": "PREVIEW_PROXY_UNSAFE_UPSTREAM",
-                    "message": "Configured cloud preview upstream URL is not allowed.",
-                }
-            },
-        )
-    upstream_parts = urlsplit(upstream_base)
-    prefix = upstream_parts.path.rstrip("/")
-    suffix = "/" + path.lstrip("/") if path else "/"
-    target_path = (prefix + suffix) if prefix else suffix
-    upstream_url = urlunsplit(
-        (
-            upstream_parts.scheme,
-            upstream_parts.netloc,
-            target_path,
-            str(request.url.query or ""),
-            "",
-        )
-    )
-    headers = _build_proxy_forward_headers(request.headers)
-    method = request.method.upper()
-    try:
-        upstream_response = await _proxy_upstream_fetch(method=method, url=upstream_url, headers=headers)
-        if upstream_response.status_code in {301, 302, 303, 307, 308}:
-            location = str(upstream_response.headers.get("location") or "").strip()
-            if location:
-                redirect_url = urljoin(upstream_url, location)
-                safe_redirect = _sanitize_cloud_proxy_upstream_url(
-                    raw_url=redirect_url,
-                    trusted_host=trusted_host,
-                    allow_internal=allow_internal,
-                )
-                if safe_redirect is None:
-                    raise HTTPException(
-                        status_code=422,
-                        detail={
-                            "error": {
-                                "code": "PREVIEW_PROXY_UNSAFE_UPSTREAM",
-                                "message": "Upstream redirect target is not allowed.",
-                            }
-                        },
-                    )
-                upstream_response = await _proxy_upstream_fetch(method=method, url=safe_redirect, headers=headers)
-    except HTTPException:
-        raise
-    except httpx.TimeoutException as exc:
-        raise HTTPException(
-            status_code=504,
-            detail={
-                "error": {
-                    "code": "PREVIEW_PROXY_TIMEOUT",
-                    "message": "Cloud preview upstream timed out.",
-                }
-            },
-        ) from exc
-    except httpx.HTTPError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail={
-                "error": {
-                    "code": "PREVIEW_PROXY_UPSTREAM_UNAVAILABLE",
-                    "message": "Cloud preview upstream is unavailable.",
-                }
-            },
-        ) from exc
-    body = upstream_response.content or b""
-    if len(body) > _PREVIEW_PROXY_MAX_BYTES:
-        raise HTTPException(
-            status_code=502,
-            detail={
-                "error": {
-                    "code": "PREVIEW_PROXY_UPSTREAM_UNAVAILABLE",
-                    "message": "Cloud preview upstream response exceeded size limits.",
-                }
-            },
-        )
-    response_headers: dict[str, str] = {}
-    content_type = str(upstream_response.headers.get("content-type") or "").strip()
-    if content_type:
-        response_headers["content-type"] = content_type[:240]
-    return Response(
-        content=(b"" if method == "HEAD" else body),
-        status_code=upstream_response.status_code,
-        headers=response_headers,
-    )
 
 
 @router.api_route(
