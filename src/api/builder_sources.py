@@ -354,10 +354,58 @@ _HTML_ROOT_URL_ATTR_PATTERN = re.compile(
     r'(?P<prefix>\b(?:src|href|action|poster)\s*=\s*["\'])/(?P<path>[^"\']*)',
     flags=re.IGNORECASE,
 )
+_JS_MODULE_FROM_PATTERN = re.compile(
+    r'(?P<prefix>\bfrom\s*["\'])/(?P<path>[^"\']*)',
+    flags=re.IGNORECASE,
+)
+_JS_MODULE_IMPORT_PATTERN = re.compile(
+    r'(?P<prefix>\bimport\s*["\'])/(?P<path>[^"\']*)',
+    flags=re.IGNORECASE,
+)
+_JS_DYNAMIC_IMPORT_PATTERN = re.compile(
+    r'(?P<prefix>\bimport\(\s*["\'])/(?P<path>[^"\']*)',
+    flags=re.IGNORECASE,
+)
+_JS_NEW_URL_PATTERN = re.compile(
+    r'(?P<prefix>\bnew\s+URL\(\s*["\'])/(?P<path>[^"\']*)',
+    flags=re.IGNORECASE,
+)
+_CSS_IMPORT_PATTERN = re.compile(
+    r'(?P<prefix>@import\s+["\'])/(?P<path>[^"\']*)',
+    flags=re.IGNORECASE,
+)
+_CSS_URL_PATTERN = re.compile(
+    r'(?P<prefix>\burl\(\s*["\']?)/(?P<path>[^)"\']*)',
+    flags=re.IGNORECASE,
+)
 
 
 def _is_html_content_type(content_type: str) -> bool:
     return "text/html" in str(content_type or "").strip().lower()
+
+
+def _is_js_like_content_type(content_type: str) -> bool:
+    lowered = str(content_type or "").strip().lower()
+    return (
+        "javascript" in lowered
+        or "ecmascript" in lowered
+        or "typescript" in lowered
+        or lowered.startswith("text/jsx")
+        or lowered.startswith("application/jsx")
+    )
+
+
+def _is_css_content_type(content_type: str) -> bool:
+    return "text/css" in str(content_type or "").strip().lower()
+
+
+def _rewrite_root_absolute_path_match(match: re.Match[str], *, proxy_prefix: str) -> str:
+    raw_path = str(match.group("path") or "")
+    if raw_path.startswith("/") or raw_path.startswith("#"):
+        return match.group(0)
+    if raw_path.startswith("api/workspaces/"):
+        return match.group(0)
+    return f"{match.group('prefix')}{proxy_prefix}{raw_path.lstrip('/')}"
 
 
 def _rewrite_preview_proxy_html_links(*, html: str, proxy_prefix: str) -> str:
@@ -366,16 +414,48 @@ def _rewrite_preview_proxy_html_links(*, html: str, proxy_prefix: str) -> str:
         return html
     if not prefix.endswith("/"):
         prefix = f"{prefix}/"
+    return _HTML_ROOT_URL_ATTR_PATTERN.sub(
+        lambda match: _rewrite_root_absolute_path_match(match, proxy_prefix=prefix),
+        html,
+    )
 
-    def _replace(match: re.Match[str]) -> str:
-        raw_path = str(match.group("path") or "")
-        if raw_path.startswith("/") or raw_path.startswith("#"):
-            return match.group(0)
-        if raw_path.startswith("api/workspaces/"):
-            return match.group(0)
-        return f"{match.group('prefix')}{prefix}{raw_path.lstrip('/')}"
 
-    return _HTML_ROOT_URL_ATTR_PATTERN.sub(_replace, html)
+def _rewrite_preview_proxy_js_links(*, text: str, proxy_prefix: str) -> str:
+    prefix = str(proxy_prefix or "").strip()
+    if not prefix.startswith("/"):
+        return text
+    if not prefix.endswith("/"):
+        prefix = f"{prefix}/"
+    out = text
+    patterns = (
+        _JS_MODULE_FROM_PATTERN,
+        _JS_MODULE_IMPORT_PATTERN,
+        _JS_DYNAMIC_IMPORT_PATTERN,
+        _JS_NEW_URL_PATTERN,
+    )
+    for pattern in patterns:
+        out = pattern.sub(
+            lambda match: _rewrite_root_absolute_path_match(match, proxy_prefix=prefix),
+            out,
+        )
+    return out
+
+
+def _rewrite_preview_proxy_css_links(*, text: str, proxy_prefix: str) -> str:
+    prefix = str(proxy_prefix or "").strip()
+    if not prefix.startswith("/"):
+        return text
+    if not prefix.endswith("/"):
+        prefix = f"{prefix}/"
+    out = _CSS_IMPORT_PATTERN.sub(
+        lambda match: _rewrite_root_absolute_path_match(match, proxy_prefix=prefix),
+        text,
+    )
+    out = _CSS_URL_PATTERN.sub(
+        lambda match: _rewrite_root_absolute_path_match(match, proxy_prefix=prefix),
+        out,
+    )
+    return out
 
 
 def _preview_proxy_session_ttl_seconds() -> int:
@@ -1005,16 +1085,25 @@ async def _serve_builder_preview_proxy(
     content_type = str(upstream_response.headers.get("content-type") or "").strip()
     if content_type:
         response_headers["content-type"] = content_type[:240]
-    if method != "HEAD" and body and _is_html_content_type(content_type):
+    if method != "HEAD" and body and (
+        _is_html_content_type(content_type)
+        or _is_js_like_content_type(content_type)
+        or _is_css_content_type(content_type)
+    ):
         try:
             body_text = body.decode("utf-8")
         except UnicodeDecodeError:
             body_text = ""
         if body_text:
-            body = _rewrite_preview_proxy_html_links(
-                html=body_text,
-                proxy_prefix=_cloud_proxy_preview_url(workspace_id=ctx.workspace_id, project_id=project_id),
-            ).encode("utf-8")
+            proxy_prefix = _cloud_proxy_preview_url(workspace_id=ctx.workspace_id, project_id=project_id)
+            rewritten = body_text
+            if _is_html_content_type(content_type):
+                rewritten = _rewrite_preview_proxy_html_links(html=rewritten, proxy_prefix=proxy_prefix)
+            if _is_js_like_content_type(content_type):
+                rewritten = _rewrite_preview_proxy_js_links(text=rewritten, proxy_prefix=proxy_prefix)
+            if _is_css_content_type(content_type):
+                rewritten = _rewrite_preview_proxy_css_links(text=rewritten, proxy_prefix=proxy_prefix)
+            body = rewritten.encode("utf-8")
     return Response(
         content=(b"" if method == "HEAD" else body),
         status_code=upstream_response.status_code,

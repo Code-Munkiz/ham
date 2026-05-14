@@ -555,6 +555,82 @@ def test_proxy_root_html_rewrites_root_asset_links_to_proxy_prefix(tmp_path: Pat
     _cleanup()
 
 
+def test_proxy_module_js_rewrites_root_absolute_imports_to_proxy_prefix(tmp_path: Path, monkeypatch) -> None:
+    js_module = (
+        'import { jsx } from "/node_modules/.vite/deps/react.js?v=e3963616";'
+        '\nimport "/src/styles.css";'
+        '\nconst mod = await import("/src/App.tsx");'
+        '\nconst url = new URL("/@vite/client", import.meta.url);'
+        "\nconsole.log(jsx, mod, url);"
+    )
+
+    async def _fake_fetch(*, method: str, url: str, headers: dict[str, str]) -> httpx.Response:
+        _ = (method, url, headers)
+        return httpx.Response(
+            200,
+            content=js_module.encode("utf-8"),
+            headers={"content-type": "application/javascript; charset=utf-8"},
+        )
+
+    monkeypatch.setattr("src.api.builder_sources._proxy_upstream_fetch", _fake_fetch)
+    client, ws_id, project_id, runtime_store = _seed_context(tmp_path)
+    runtime = _seed_cloud_runtime(runtime_store, ws_id=ws_id, project_id=project_id)
+    runtime_store.upsert_preview_endpoint(
+        PreviewEndpoint(
+            workspace_id=ws_id,
+            project_id=project_id,
+            runtime_session_id=runtime.id,
+            access_mode="proxy",
+            status="ready",
+            url="https://ham-preview-123.run.app/",
+            metadata={"trusted_proxy_host": "ham-preview-123.run.app"},
+        )
+    )
+    res = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/src/main.tsx")
+    assert res.status_code == 200
+    assert res.headers.get("content-type", "").startswith("application/javascript")
+    prefix = f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/"
+    assert f'from "{prefix}node_modules/.vite/deps/react.js?v=e3963616"' in res.text
+    assert f'import "{prefix}src/styles.css"' in res.text
+    assert f'import("{prefix}src/App.tsx")' in res.text
+    assert f'new URL("{prefix}@vite/client", import.meta.url)' in res.text
+    _cleanup()
+
+
+def test_proxy_css_rewrites_root_absolute_urls_to_proxy_prefix(tmp_path: Path, monkeypatch) -> None:
+    css = '@import "/src/theme.css";\n.hero{background-image:url("/assets/hero.png")}\n'
+
+    async def _fake_fetch(*, method: str, url: str, headers: dict[str, str]) -> httpx.Response:
+        _ = (method, url, headers)
+        return httpx.Response(
+            200,
+            content=css.encode("utf-8"),
+            headers={"content-type": "text/css; charset=utf-8"},
+        )
+
+    monkeypatch.setattr("src.api.builder_sources._proxy_upstream_fetch", _fake_fetch)
+    client, ws_id, project_id, runtime_store = _seed_context(tmp_path)
+    runtime = _seed_cloud_runtime(runtime_store, ws_id=ws_id, project_id=project_id)
+    runtime_store.upsert_preview_endpoint(
+        PreviewEndpoint(
+            workspace_id=ws_id,
+            project_id=project_id,
+            runtime_session_id=runtime.id,
+            access_mode="proxy",
+            status="ready",
+            url="https://ham-preview-123.run.app/",
+            metadata={"trusted_proxy_host": "ham-preview-123.run.app"},
+        )
+    )
+    res = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/src/styles.css")
+    assert res.status_code == 200
+    assert res.headers.get("content-type", "").startswith("text/css")
+    prefix = f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/"
+    assert f'@import "{prefix}src/theme.css"' in res.text
+    assert f'url("{prefix}assets/hero.png")' in res.text
+    _cleanup()
+
+
 def test_proxy_accepts_provider_owned_internal_upstream_only_server_side(tmp_path: Path, monkeypatch) -> None:
     captured: dict[str, object] = {}
 
