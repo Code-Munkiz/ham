@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import asyncio
 import io
 import zipfile
 
 import pytest
 
-from src.ham.builder_zip_intake import ZipIntakeCaps, ZipSafetyError, validate_zip_upload
+from src.ham.builder_zip_intake import (
+    ZipIntakeCaps,
+    ZipSafetyError,
+    read_zip_upload_bytes,
+    validate_zip_upload,
+)
 
 
 def _zip_bytes(entries: dict[str, bytes]) -> bytes:
@@ -50,3 +56,32 @@ def test_validate_zip_upload_rejects_oversized_entry() -> None:
     with pytest.raises(ZipSafetyError) as exc:
         validate_zip_upload(payload, ZipIntakeCaps(max_entry_bytes=16))
     assert exc.value.code == "ZIP_ENTRY_TOO_LARGE"
+
+
+class _ChunkedFakeUpload:
+    """Minimal async ``read`` surface matching ``starlette.datastructures.UploadFile``."""
+
+    def __init__(self, total_bytes: int) -> None:
+        self._i = 0
+        self._total = total_bytes
+
+    async def read(self, n: int) -> bytes:
+        if self._i >= self._total:
+            return b""
+        take = min(n, self._total - self._i)
+        out = b"z" * take
+        self._i += len(out)
+        return out
+
+
+def test_read_zip_upload_bytes_accepts_under_cap() -> None:
+    caps = ZipIntakeCaps(max_compressed_bytes=64)
+    got = asyncio.run(read_zip_upload_bytes(_ChunkedFakeUpload(50), caps=caps))
+    assert len(got) == 50
+
+
+def test_read_zip_upload_bytes_rejects_over_cap() -> None:
+    caps = ZipIntakeCaps(max_compressed_bytes=32)
+    with pytest.raises(ZipSafetyError) as exc:
+        asyncio.run(read_zip_upload_bytes(_ChunkedFakeUpload(100), caps=caps))
+    assert exc.value.code == "ZIP_TOO_LARGE"

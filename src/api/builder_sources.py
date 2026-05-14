@@ -27,7 +27,7 @@ from src.ham.builder_runtime_worker import (
     get_cloud_runtime_provider_mode,
     get_runtime_job_lifecycle_status,
 )
-from src.ham.builder_zip_intake import ZipSafetyError, validate_zip_upload
+from src.ham.builder_zip_intake import ZipSafetyError, read_zip_upload_bytes, validate_zip_upload
 from src.ham.clerk_auth import HamActor
 from src.ham.harness_capabilities import HARNESS_CAPABILITIES
 from src.ham.worker_adapters.claude_agent_adapter import check_claude_agent_readiness
@@ -2475,7 +2475,34 @@ async def create_zip_import_job(
     file: UploadFile = File(...),
 ) -> dict[str, Any]:
     _project_in_workspace_or_404(project_id=project_id, workspace_id=ctx.workspace_id)
-    payload = await file.read()
+    try:
+        payload = await read_zip_upload_bytes(file)
+    except ZipSafetyError as exc:
+        store = get_builder_source_store()
+        created_by = actor.user_id if actor is not None else ""
+        job = store.create_import_job(
+            workspace_id=ctx.workspace_id,
+            project_id=project_id,
+            created_by=created_by,
+            phase="received",
+            status="queued",
+        )
+        job = store.mark_import_job_failed(
+            import_job_id=job.id,
+            phase="failed",
+            error_code=exc.code,
+            error_message=_safe_zip_error_message(exc.code),
+        )
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": {
+                    "code": job.error_code,
+                    "message": job.error_message,
+                },
+                "import_job": job.model_dump(mode="json"),
+            },
+        ) from exc
     store = get_builder_source_store()
     created_by = actor.user_id if actor is not None else ""
     job = store.create_import_job(
