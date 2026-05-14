@@ -168,6 +168,10 @@ INSTRUCTION_DOT_FILES = ("SWARM.md", "instructions.md")
 # fits cleanly in additional context slots. **FOR MAINTAINERS**: Monitor token usage
 # during agent runs and adjust if production workloads require different bounds.
 # 
+# KEY MAINTAINER NOTE: All size limits use character counts rather than token counts
+# to avoid hard dependencies on external tokenizers (tiktoken, huggingface). This means
+# actual token usage may vary by ~10-20% depending on content, but keeps the module
+# self-contained and faster. Character-to-token approximation uses 4 chars/token avg.
 # IMPORTANT RELATIONSHIP: MAX_TOTAL_INSTRUCTION_CHARS >= MAX_INSTRUCTION_FILE_CHARS * expected_file_count
 # and MAX_DIFF_CHARS + MAX_SUMMARY_CHARS <= MAX_TOTAL_INSTRUCTION_CHARS for balanced allocation.
 # The sum of all context payloads (instructions + git_diff + git_summary) should stay well
