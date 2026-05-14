@@ -372,3 +372,160 @@ describe("WorkspaceChatScreen composer-driven coding plan", () => {
     expect(send).toBeInTheDocument();
   });
 });
+
+describe("WorkspaceChatScreen OpenCode preferred-provider affordance", () => {
+  beforeEach(() => {
+    globalThis.ResizeObserver = class {
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    } as unknown as typeof ResizeObserver;
+    mockMatchMedia(true);
+    previewCodingConductorMock.mockReset();
+    listHamProjectsMock.mockReset();
+    listHamProjectsMock.mockImplementation(async () => ({
+      projects: [
+        {
+          id: CHAT_W1_PROJECT_ID,
+          version: "1.0.0",
+          name: "Scoped Chat",
+          root: "/repo",
+          description: "",
+          metadata: { workspace_id: "w1" },
+        },
+      ],
+    }));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const fdBuildChosen = {
+    provider: "factory_droid_build" as const,
+    label: "Low-risk pull request",
+    available: true,
+    reason: "Low-risk pull request with a minimal diff.",
+    blockers: [],
+    confidence: 0.8,
+    output_kind: "pull_request" as const,
+    requires_operator: false,
+    requires_confirmation: true,
+    will_modify_code: true,
+    will_open_pull_request: true,
+  };
+
+  const opencodeAvailable = {
+    provider: "opencode_cli" as const,
+    label: "OpenCode managed workspace build",
+    available: true,
+    reason: "Build inside a managed workspace snapshot.",
+    blockers: [],
+    confidence: 0.7,
+    output_kind: "pull_request" as const,
+    requires_operator: false,
+    requires_confirmation: true,
+    will_modify_code: true,
+    will_open_pull_request: false,
+  };
+
+  const previewWithOpencodeAlt = {
+    ...samplePreviewPayload,
+    chosen: fdBuildChosen,
+    candidates: [fdBuildChosen, opencodeAvailable],
+  };
+
+  const previewWithOpencodeChosen = {
+    ...samplePreviewPayload,
+    chosen: opencodeAvailable,
+    candidates: [opencodeAvailable, fdBuildChosen],
+  };
+
+  function assertNoForbiddenTokens(root: HTMLElement) {
+    const hay = root.textContent?.toLowerCase() ?? "";
+    for (const t of FORBIDDEN_CARD_TOKENS) {
+      expect(hay.includes(String(t).toLowerCase())).toBe(false);
+    }
+    for (const t of forbiddenExtraUserTokens()) {
+      expect(hay.includes(t)).toBe(false);
+    }
+  }
+
+  it("clicking Try with OpenCode re-fires preview with preferred_provider=opencode_cli", async () => {
+    previewCodingConductorMock
+      .mockResolvedValueOnce(previewWithOpencodeAlt)
+      .mockResolvedValueOnce(previewWithOpencodeChosen);
+    const { container } = renderChat();
+
+    await waitFor(() => expect(screen.getByTestId("hww-command-panel")).toBeInTheDocument());
+
+    const ta = container.querySelector("#hww-chat-composer") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "Refactor the auth module." } });
+    fireEvent.click(container.querySelector("[data-hww-coding-plan-action]") as HTMLElement);
+
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-hww-coding-plan="prefer-opencode-cta"]'),
+      ).not.toBeNull(),
+    );
+
+    expect(previewCodingConductorMock).toHaveBeenCalledTimes(1);
+    expect(previewCodingConductorMock).toHaveBeenNthCalledWith(1, {
+      user_prompt: "Refactor the auth module.",
+      project_id: CHAT_W1_PROJECT_ID,
+    });
+
+    const cta = container.querySelector(
+      '[data-hww-coding-plan="prefer-opencode-cta"]',
+    ) as HTMLButtonElement;
+    fireEvent.click(cta);
+
+    await waitFor(() => expect(previewCodingConductorMock).toHaveBeenCalledTimes(2));
+    expect(previewCodingConductorMock).toHaveBeenNthCalledWith(2, {
+      user_prompt: "Refactor the auth module.",
+      project_id: CHAT_W1_PROJECT_ID,
+      preferred_provider: "opencode_cli",
+    });
+
+    await waitFor(() =>
+      expect(container.querySelector('[data-hww-coding-plan="prefer-opencode-cta"]')).toBeNull(),
+    );
+    assertNoForbiddenTokens(container);
+  });
+
+  it("clears preferring state and keeps prior preview after re-preview failure", async () => {
+    previewCodingConductorMock
+      .mockResolvedValueOnce(previewWithOpencodeAlt)
+      .mockRejectedValueOnce(new Error("HAM is offline right now."));
+    const { container } = renderChat();
+
+    await waitFor(() => expect(screen.getByTestId("hww-command-panel")).toBeInTheDocument());
+
+    const ta = container.querySelector("#hww-chat-composer") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "Refactor the auth module." } });
+    fireEvent.click(container.querySelector("[data-hww-coding-plan-action]") as HTMLElement);
+
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-hww-coding-plan="prefer-opencode-cta"]'),
+      ).not.toBeNull(),
+    );
+
+    const cta = container.querySelector(
+      '[data-hww-coding-plan="prefer-opencode-cta"]',
+    ) as HTMLButtonElement;
+    fireEvent.click(cta);
+
+    await waitFor(() => expect(previewCodingConductorMock).toHaveBeenCalledTimes(2));
+
+    // Card remains visible with prior preview; CTA returns to enabled state.
+    await waitFor(() => {
+      expect(container.querySelector('[data-hww-coding-plan="card"]')).not.toBeNull();
+      const stillCta = container.querySelector(
+        '[data-hww-coding-plan="prefer-opencode-cta"]',
+      ) as HTMLButtonElement | null;
+      expect(stillCta).not.toBeNull();
+      expect(stillCta!.disabled).toBe(false);
+    });
+  });
+});

@@ -1,8 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { CodingPlanCard } from "../CodingPlanCard";
-import { FORBIDDEN_CARD_TOKENS } from "../codingPlanCardCopy";
+import {
+  FORBIDDEN_CARD_TOKENS,
+  OPENCODE_PREFERRED_CTA,
+  OPENCODE_PREFERRED_HINT,
+  OPENCODE_PREFERRED_LOADING,
+} from "../codingPlanCardCopy";
 import type { CodingConductorCandidate, CodingConductorPreviewPayload } from "@/lib/ham/api";
 
 function candidate(over: Partial<CodingConductorCandidate> = {}): CodingConductorCandidate {
@@ -237,6 +242,160 @@ describe("CodingPlanCard", () => {
       if (/(approve|launch|run|start)/.test(name)) {
         expect((b as HTMLButtonElement).disabled).toBe(true);
       }
+    }
+  });
+});
+
+describe("CodingPlanCard OpenCode preferred-provider affordance", () => {
+  function fdBuildChosen() {
+    return candidate({
+      provider: "factory_droid_build",
+      label: "Low-risk pull request",
+      output_kind: "pull_request",
+      will_modify_code: true,
+      will_open_pull_request: true,
+      reason: "Low-risk pull request with a minimal diff.",
+    });
+  }
+
+  function opencodeAvailable() {
+    return candidate({
+      provider: "opencode_cli",
+      label: "OpenCode managed workspace build",
+      output_kind: "pull_request",
+      will_modify_code: true,
+      will_open_pull_request: false,
+      reason: "Build inside a managed workspace snapshot.",
+    });
+  }
+
+  it("renders affordance when OpenCode is an available alternative and a callback is supplied", () => {
+    const chosen = fdBuildChosen();
+    const opencode = opencodeAvailable();
+    const p = payload({ chosen, candidates: [chosen, opencode] });
+    const onPreferProvider = vi.fn();
+
+    const { container } = render(
+      <CodingPlanCard payload={p} onPreferProvider={onPreferProvider} />,
+    );
+    const cta = container.querySelector(
+      '[data-hww-coding-plan="prefer-opencode-cta"]',
+    ) as HTMLButtonElement | null;
+    expect(cta).not.toBeNull();
+    expect(cta!.textContent).toContain(OPENCODE_PREFERRED_CTA);
+    const wrap = container.querySelector('[data-hww-coding-plan="opencode-affordance"]');
+    expect(wrap?.textContent).toContain(OPENCODE_PREFERRED_HINT);
+  });
+
+  it("hides affordance when OpenCode candidate is blocked", () => {
+    const chosen = fdBuildChosen();
+    const blocked = candidate({
+      provider: "opencode_cli",
+      available: false,
+      blockers: ["Managed workspace is not enabled for this project."],
+    });
+    const p = payload({ chosen, candidates: [chosen, blocked] });
+    const { container } = render(<CodingPlanCard payload={p} onPreferProvider={vi.fn()} />);
+    expect(container.querySelector('[data-hww-coding-plan="prefer-opencode-cta"]')).toBeNull();
+  });
+
+  it("hides affordance when OpenCode is already chosen", () => {
+    const chosenOc = candidate({
+      provider: "opencode_cli",
+      output_kind: "pull_request",
+      will_open_pull_request: false,
+    });
+    const p = payload({ chosen: chosenOc, candidates: [chosenOc] });
+    const { container } = render(<CodingPlanCard payload={p} onPreferProvider={vi.fn()} />);
+    expect(container.querySelector('[data-hww-coding-plan="prefer-opencode-cta"]')).toBeNull();
+  });
+
+  it("hides affordance when OpenCode is not in candidates", () => {
+    const chosen = fdBuildChosen();
+    const p = payload({ chosen, candidates: [chosen] });
+    const { container } = render(<CodingPlanCard payload={p} onPreferProvider={vi.fn()} />);
+    expect(container.querySelector('[data-hww-coding-plan="prefer-opencode-cta"]')).toBeNull();
+  });
+
+  it("hides affordance when onPreferProvider prop is not provided", () => {
+    const chosen = fdBuildChosen();
+    const opencode = opencodeAvailable();
+    const p = payload({ chosen, candidates: [chosen, opencode] });
+    const { container } = render(<CodingPlanCard payload={p} />);
+    expect(container.querySelector('[data-hww-coding-plan="prefer-opencode-cta"]')).toBeNull();
+  });
+
+  it("clicking the CTA calls onPreferProvider('opencode_cli') exactly once", () => {
+    const chosen = fdBuildChosen();
+    const opencode = opencodeAvailable();
+    const p = payload({ chosen, candidates: [chosen, opencode] });
+    const onPreferProvider = vi.fn();
+
+    const { container } = render(
+      <CodingPlanCard payload={p} onPreferProvider={onPreferProvider} />,
+    );
+    const cta = container.querySelector(
+      '[data-hww-coding-plan="prefer-opencode-cta"]',
+    ) as HTMLButtonElement;
+    fireEvent.click(cta);
+    expect(onPreferProvider).toHaveBeenCalledTimes(1);
+    expect(onPreferProvider).toHaveBeenCalledWith("opencode_cli");
+  });
+
+  it("shows busy copy and disables the CTA while preferringProvider is opencode_cli", () => {
+    const chosen = fdBuildChosen();
+    const opencode = opencodeAvailable();
+    const p = payload({ chosen, candidates: [chosen, opencode] });
+
+    const { container } = render(
+      <CodingPlanCard payload={p} onPreferProvider={vi.fn()} preferringProvider="opencode_cli" />,
+    );
+    const cta = container.querySelector(
+      '[data-hww-coding-plan="prefer-opencode-cta"]',
+    ) as HTMLButtonElement;
+    expect(cta.disabled).toBe(true);
+    expect(cta.getAttribute("aria-busy")).toBe("true");
+    expect(cta.textContent).toContain(OPENCODE_PREFERRED_LOADING);
+  });
+
+  it("preserves the never-renders-active-launch-button invariant", () => {
+    const chosen = fdBuildChosen();
+    const opencode = opencodeAvailable();
+    const p = payload({ chosen, candidates: [chosen, opencode] });
+    render(<CodingPlanCard payload={p} onPreferProvider={vi.fn()} />);
+    const buttons = screen.getAllByRole("button");
+    for (const b of buttons) {
+      const name = (b.textContent || "").toLowerCase();
+      if (/(approve|launch|run|start)/.test(name)) {
+        expect((b as HTMLButtonElement).disabled).toBe(true);
+      }
+    }
+  });
+
+  it("affordance rendered text never contains banned user-facing tokens", () => {
+    const chosen = fdBuildChosen();
+    const opencode = opencodeAvailable();
+    const p = payload({ chosen, candidates: [chosen, opencode] });
+    const { container } = render(<CodingPlanCard payload={p} onPreferProvider={vi.fn()} />);
+    const wrap = container.querySelector(
+      '[data-hww-coding-plan="opencode-affordance"]',
+    ) as HTMLElement;
+    expect(wrap).not.toBeNull();
+    const lower = wrap.textContent?.toLowerCase() ?? "";
+    for (const token of FORBIDDEN_CARD_TOKENS) {
+      expect(lower).not.toContain(token);
+    }
+    const extra = [
+      "opencode_cli",
+      "factory_droid",
+      "output_target",
+      "controlplanerun",
+      "/api/",
+      "https://",
+      "http://",
+    ];
+    for (const token of extra) {
+      expect(lower).not.toContain(token);
     }
   });
 });

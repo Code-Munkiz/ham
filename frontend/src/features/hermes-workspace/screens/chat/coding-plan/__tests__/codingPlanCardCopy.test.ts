@@ -4,6 +4,9 @@ import {
   CODING_PLAN_NO_LAUNCH_FOOTER,
   FACTORY_DROID_BUILD_MANAGED_LABEL,
   FORBIDDEN_CARD_TOKENS,
+  OPENCODE_PREFERRED_CTA,
+  OPENCODE_PREFERRED_HINT,
+  OPENCODE_PREFERRED_LOADING,
   approvalCopyForCard,
   cardLabelForCandidate,
   claudeAgentStatusCopy,
@@ -12,9 +15,11 @@ import {
   isLaunchableInThisPhase,
   outputKindCopyForCard,
   providerLabelForCard,
+  shouldShowOpenCodeAffordance,
   taskKindDisplayForCard,
 } from "../codingPlanCardCopy";
 import type {
+  CodingConductorCandidate,
   CodingConductorOutputKind,
   CodingConductorPreviewPayload,
   CodingConductorProviderKind,
@@ -148,6 +153,113 @@ describe("codingPlanCardCopy", () => {
     const lower = CODING_PLAN_NO_LAUNCH_FOOTER.toLowerCase();
     expect(lower).toContain("no action has been launched yet");
     expect(lower).toContain("later step");
+  });
+});
+
+const PREFERRED_USER_FACING_BANNED = [
+  "opencode_cli",
+  "factory_droid",
+  "output_target",
+  "controlplanerun",
+  "/api/",
+  "safe_edit_low",
+  "workflow_id",
+  "registry_revision",
+  "https://",
+  "http://",
+] as const;
+
+function makeCandidate(over: Partial<CodingConductorCandidate> = {}): CodingConductorCandidate {
+  return {
+    provider: "factory_droid_build",
+    label: "Low-risk pull request",
+    available: true,
+    reason: "Low-risk pull request with a minimal diff.",
+    blockers: [],
+    confidence: 0.8,
+    output_kind: "pull_request",
+    requires_operator: false,
+    requires_confirmation: true,
+    will_modify_code: true,
+    will_open_pull_request: true,
+    ...over,
+  };
+}
+
+describe("OpenCode preferred-provider affordance copy", () => {
+  it("locks exact string values", () => {
+    expect(OPENCODE_PREFERRED_CTA).toBe("Try with OpenCode");
+    expect(OPENCODE_PREFERRED_HINT).toBe(
+      "Build it in a managed workspace instead of opening a pull request.",
+    );
+    expect(OPENCODE_PREFERRED_LOADING).toBe("Switching to OpenCode…");
+  });
+
+  it("CTA never contains banned user-facing tokens", () => {
+    const lower = OPENCODE_PREFERRED_CTA.toLowerCase();
+    for (const token of PREFERRED_USER_FACING_BANNED) {
+      expect(lower).not.toContain(token);
+    }
+    for (const token of FORBIDDEN_CARD_TOKENS) {
+      expect(lower).not.toContain(token);
+    }
+  });
+
+  it("hint never contains banned user-facing tokens", () => {
+    const lower = OPENCODE_PREFERRED_HINT.toLowerCase();
+    for (const token of PREFERRED_USER_FACING_BANNED) {
+      expect(lower).not.toContain(token);
+    }
+    for (const token of FORBIDDEN_CARD_TOKENS) {
+      expect(lower).not.toContain(token);
+    }
+  });
+
+  it("loading copy never contains banned user-facing tokens", () => {
+    const lower = OPENCODE_PREFERRED_LOADING.toLowerCase();
+    for (const token of PREFERRED_USER_FACING_BANNED) {
+      expect(lower).not.toContain(token);
+    }
+    for (const token of FORBIDDEN_CARD_TOKENS) {
+      expect(lower).not.toContain(token);
+    }
+  });
+});
+
+describe("shouldShowOpenCodeAffordance", () => {
+  it("true when opencode is an available non-chosen candidate", () => {
+    const chosen = makeCandidate({ provider: "factory_droid_build" });
+    const opencode = makeCandidate({
+      provider: "opencode_cli",
+      label: "OpenCode managed workspace build",
+      output_kind: "pull_request",
+      will_open_pull_request: false,
+    });
+    expect(
+      shouldShowOpenCodeAffordance(makePayload({ chosen, candidates: [chosen, opencode] })),
+    ).toBe(true);
+  });
+
+  it("false when opencode candidate is blocked", () => {
+    const chosen = makeCandidate({ provider: "factory_droid_build" });
+    const opencode = makeCandidate({
+      provider: "opencode_cli",
+      available: false,
+      blockers: ["Managed workspace is not enabled for this project."],
+    });
+    expect(
+      shouldShowOpenCodeAffordance(makePayload({ chosen, candidates: [chosen, opencode] })),
+    ).toBe(false);
+  });
+
+  it("false when opencode is already the chosen provider", () => {
+    const chosen = makeCandidate({ provider: "opencode_cli" });
+    expect(shouldShowOpenCodeAffordance(makePayload({ chosen, candidates: [chosen] }))).toBe(false);
+  });
+
+  it("false when no opencode candidate is present", () => {
+    const chosen = makeCandidate({ provider: "factory_droid_build" });
+    expect(shouldShowOpenCodeAffordance(makePayload({ chosen, candidates: [chosen] }))).toBe(false);
   });
 });
 

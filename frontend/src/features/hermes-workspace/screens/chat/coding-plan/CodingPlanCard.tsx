@@ -7,11 +7,15 @@ import { cn } from "@/lib/utils";
 import {
   CODING_PLAN_LAUNCH_DISABLED_TITLE,
   CODING_PLAN_NO_LAUNCH_FOOTER,
+  OPENCODE_PREFERRED_CTA,
+  OPENCODE_PREFERRED_HINT,
+  OPENCODE_PREFERRED_LOADING,
   approvalCopyForCard,
   cardLabelForCandidate,
   confidenceBadgeForCard,
   emptyStateHeadlineForCard,
   outputKindCopyForCard,
+  shouldShowOpenCodeAffordance,
   taskKindDisplayForCard,
 } from "./codingPlanCardCopy";
 import { ManagedBuildApprovalPanel } from "./ManagedBuildApprovalPanel";
@@ -20,6 +24,8 @@ export type CodingPlanCardProps = {
   payload: CodingConductorPreviewPayload;
   userPrompt?: string;
   className?: string;
+  onPreferProvider?: (provider: "opencode_cli") => void;
+  preferringProvider?: "opencode_cli" | null;
 };
 
 function shouldShowManagedBuildApproval(payload: CodingConductorPreviewPayload): boolean {
@@ -101,13 +107,21 @@ function CandidateRow({
  * placeholder so the user understands the next step is intentional, not
  * missing. Tests assert that the placeholder is non-interactive.
  */
-export function CodingPlanCard({ payload, userPrompt, className }: CodingPlanCardProps) {
+export function CodingPlanCard({
+  payload,
+  userPrompt,
+  className,
+  onPreferProvider,
+  preferringProvider = null,
+}: CodingPlanCardProps) {
   const chosen = payload.chosen;
   const alts = payload.candidates.filter((c) => c !== chosen);
   const headline = emptyStateHeadlineForCard(payload);
   const taskLabel = taskKindDisplayForCard(payload.task_kind);
   const conf = confidenceBadgeForCard(payload.task_confidence);
   const showManagedApproval = shouldShowManagedBuildApproval(payload);
+  const showOpencodeAffordance = Boolean(onPreferProvider) && shouldShowOpenCodeAffordance(payload);
+  const opencodePreferring = preferringProvider === "opencode_cli";
 
   const [showAlternatives, setShowAlternatives] = React.useState(false);
 
@@ -182,6 +196,26 @@ export function CodingPlanCard({ payload, userPrompt, className }: CodingPlanCar
       ) : null}
 
       {chosen && chosen.blockers.length ? <CandidateBlockers blockers={chosen.blockers} /> : null}
+
+      {showOpencodeAffordance ? (
+        <div
+          className="mt-3 flex flex-wrap items-center gap-2"
+          data-hww-coding-plan="opencode-affordance"
+        >
+          <button
+            type="button"
+            onClick={() => onPreferProvider?.("opencode_cli")}
+            disabled={opencodePreferring}
+            aria-disabled={opencodePreferring}
+            aria-busy={opencodePreferring}
+            className="rounded-md border border-cyan-300/35 bg-cyan-300/[0.06] px-2.5 py-1 text-[11px] font-medium text-cyan-100 hover:bg-cyan-300/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60 disabled:cursor-not-allowed disabled:opacity-60"
+            data-hww-coding-plan="prefer-opencode-cta"
+          >
+            {opencodePreferring ? OPENCODE_PREFERRED_LOADING : OPENCODE_PREFERRED_CTA}
+          </button>
+          <span className="text-[10px] leading-snug text-white/55">{OPENCODE_PREFERRED_HINT}</span>
+        </div>
+      ) : null}
 
       {alts.length ? (
         <div className="mt-3">

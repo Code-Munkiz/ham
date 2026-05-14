@@ -54,6 +54,20 @@ export const MANAGED_BUILD_KEEP_BUILDING_CTA = "Keep building";
 export const MANAGED_BUILD_NO_PR_NOTE =
   "Managed workspace builds never open a pull request and never push to GitHub.";
 
+export const OPENCODE_PREFERRED_CTA = "Try with OpenCode";
+export const OPENCODE_PREFERRED_HINT =
+  "Build it in a managed workspace instead of opening a pull request.";
+export const OPENCODE_PREFERRED_LOADING = "Switching to OpenCode…";
+
+export function shouldShowOpenCodeAffordance(payload: CodingConductorPreviewPayload): boolean {
+  if (payload.chosen?.provider === "opencode_cli") return false;
+  const opencode = payload.candidates.find((c) => c.provider === "opencode_cli");
+  if (!opencode) return false;
+  if (!opencode.available) return false;
+  if (opencode.blockers.length > 0) return false;
+  return true;
+}
+
 const PROVIDER_LABEL: Record<CodingConductorProviderKind, string> = {
   no_agent: "Conversational answer",
   factory_droid_audit: "Read-only audit",

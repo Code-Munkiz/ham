@@ -618,6 +618,9 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [codingPlanPrompt, setCodingPlanPrompt] = React.useState<string>("");
   const [codingPlanLoading, setCodingPlanLoading] = React.useState(false);
   const [codingPlanInlineError, setCodingPlanInlineError] = React.useState<string | null>(null);
+  const [codingPlanPreferring, setCodingPlanPreferring] = React.useState<"opencode_cli" | null>(
+    null,
+  );
   const composerTextareaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const [attachments, setAttachments] = React.useState<WorkspaceComposerAttachment[]>([]);
   const attachmentsRef = React.useRef(attachments);
@@ -2781,6 +2784,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     }
     setCodingPlanLoading(true);
     setCodingPlanPreview(null);
+    setCodingPlanPreferring(null);
     try {
       const payload = await previewCodingConductor({
         user_prompt: draft,
@@ -2795,6 +2799,34 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       setCodingPlanLoading(false);
     }
   }, [input, projectId]);
+
+  const handlePreferProvider = React.useCallback(
+    async (provider: "opencode_cli") => {
+      const draft = (codingPlanPrompt || input).trim();
+      if (!draft) return;
+      if (!projectId?.trim()) return;
+      if (!codingPlanPreview) return;
+      setCodingPlanInlineError(null);
+      setCodingPlanPreferring(provider);
+      setCodingPlanLoading(true);
+      try {
+        const payload = await previewCodingConductor({
+          user_prompt: draft,
+          project_id: projectId,
+          preferred_provider: provider,
+        });
+        setCodingPlanPreview(payload);
+        setCodingPlanPrompt(draft);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Could not switch coding agent.";
+        toast.error(shortenHamApiErrorMessage(msg));
+      } finally {
+        setCodingPlanLoading(false);
+        setCodingPlanPreferring(null);
+      }
+    },
+    [codingPlanPreview, codingPlanPrompt, input, projectId],
+  );
 
   // Conversational conductor: fired automatically from send() when the user's
   // message looks like a coding/build/repo task. Unlike the manual button this
@@ -2824,6 +2856,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       setCodingPlanInlineError(null);
       setCodingPlanLoading(true);
       setCodingPlanPreview(null);
+      setCodingPlanPreferring(null);
       try {
         const payload = await previewCodingConductor({
           user_prompt: draft,
@@ -3499,7 +3532,12 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                     className={codingPlanInlineError ? "mt-2" : ""}
                     data-hww-coding-plan-card-wrap
                   >
-                    <CodingPlanCard payload={codingPlanPreview} userPrompt={codingPlanPrompt} />
+                    <CodingPlanCard
+                      payload={codingPlanPreview}
+                      userPrompt={codingPlanPrompt}
+                      onPreferProvider={handlePreferProvider}
+                      preferringProvider={codingPlanPreferring}
+                    />
                   </div>
                 ) : null}
               </div>
