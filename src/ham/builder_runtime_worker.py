@@ -27,6 +27,7 @@ from src.ham.builder_sandbox_provider import (
     runtime_preview_host,
 )
 from src.ham.gcp_preview_runtime_client import (
+    PreviewPodRef,
     build_gke_runtime_client,
 )
 from src.ham.gcp_preview_source_bundle import (
@@ -55,6 +56,26 @@ def get_cloud_runtime_provider_mode() -> CloudRuntimeProviderMode:
 def _is_experiments_enabled() -> bool:
     raw = str(os.environ.get("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED") or "").strip().lower()
     return raw in {"1", "true", "yes", "on"}
+
+
+def _is_true_env(name: str) -> bool:
+    raw = str(os.environ.get(name) or "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _gcp_gke_live_gates_ready(cfg: Any) -> bool:
+    return bool(
+        cfg.enabled
+        and not cfg.dry_run
+        and _is_true_env("HAM_BUILDER_GCP_RUNTIME_LIVE_K8S_ENABLED")
+        and _is_true_env("HAM_BUILDER_GCP_RUNTIME_LIVE_BUNDLE_UPLOAD")
+        and cfg.project_id_present
+        and cfg.region_present
+        and cfg.cluster_present
+        and cfg.namespace_prefix_present
+        and cfg.bucket_present
+        and cfg.runner_image_present
+    )
 
 
 def get_cloud_runtime_experiment_status() -> tuple[str, str]:
@@ -92,15 +113,20 @@ def get_cloud_runtime_experiment_status() -> tuple[str, str]:
                 "config_missing",
                 "GCP GKE runtime scaffold configuration is incomplete.",
             )
-        if not cfg.dry_run and not cfg.fake_mode_explicit:
+        if not cfg.dry_run and not cfg.fake_mode_explicit and not _gcp_gke_live_gates_ready(cfg):
             return (
                 "config_missing",
-                "Live GCP GKE sandbox runtime is not implemented yet; use dry-run or explicit fake mode for tests.",
+                "GCP GKE runtime live gates are incomplete.",
             )
         if cfg.dry_run:
             return (
                 "dry_run_ready",
                 "GCP GKE runtime dry-run scaffold is configured and ready.",
+            )
+        if _gcp_gke_live_gates_ready(cfg):
+            return (
+                "provider_ready",
+                "GCP GKE runtime live mode gates are configured.",
             )
         return (
             "provider_ready",
@@ -150,7 +176,7 @@ def get_cloud_runtime_provider_capability_status() -> str:
             return "disabled"
         if not gcp_gke_runtime_config_complete(cfg):
             return "unavailable"
-        if not cfg.dry_run and not cfg.fake_mode_explicit:
+        if not cfg.dry_run and not cfg.fake_mode_explicit and not _gcp_gke_live_gates_ready(cfg):
             return "unavailable"
         return "available_poc"
     return "disabled"
@@ -619,13 +645,14 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
             job.completed_at = _utc_now_iso()
             job.updated_at = job.completed_at
             return CloudRuntimeExecutionResult(job=job, runtime_session=None, usage_event=None)
-        if not cfg.dry_run and not cfg.fake_mode_explicit:
+        live_mode_requested = _gcp_gke_live_gates_ready(cfg)
+        if not cfg.dry_run and not cfg.fake_mode_explicit and not live_mode_requested:
             job.status = "unsupported"
             job.phase = "failed"
-            job.error_code = "GCP_GKE_RUNTIME_LIVE_NOT_IMPLEMENTED"
-            job.error_message = "Live GCP GKE sandbox runtime is not implemented yet."
+            job.error_code = "GCP_GKE_RUNTIME_CONFIG_MISSING"
+            job.error_message = "GCP GKE runtime live gates are incomplete."
             job.logs_summary = (
-                "No execution performed. Enable dry-run or explicit fake mode until live GKE lands."
+                "No execution performed. Configure explicit GCP live gates or use dry-run/fake mode."
             )
             job.completed_at = _utc_now_iso()
             job.updated_at = job.completed_at
@@ -799,6 +826,7 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
         gke_resource = None
         pod_status = None
         pod_logs_summary = None
+        service_name: str | None = None
         try:
             lifecycle_stage = "render_manifest"
             manifest = build_gke_preview_pod_manifest(
@@ -820,6 +848,15 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
             )
             lifecycle_stage = "collect_logs"
             pod_logs_summary = gke_client.get_pod_logs_summary(pod_ref=gke_resource, max_chars=240)
+            lifecycle_stage = "create_preview_service"
+            service_name = gke_client.create_preview_service(pod_ref=gke_resource)
+            if gke_resource is not None:
+                gke_resource = PreviewPodRef(
+                    namespace=gke_resource.namespace,
+                    pod_name=gke_resource.pod_name,
+                    service_name=service_name,
+                    labels=gke_resource.labels,
+                )
         except Exception as exc:  # pragma: no cover - defensive guard
             err_code, err_msg = gke_client.normalize_error(error=exc)
             runtime.status = "failed"
@@ -877,11 +914,71 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
                 {
                     "namespace": gke_resource.namespace if gke_resource else None,
                     "pod_name": gke_resource.pod_name if gke_resource else None,
+                    "service_name": service_name,
                     "pod_phase": pod_status.phase if pod_status else None,
                     "cleanup_status": "pending",
                 }
             ),
         }
+        if live_mode_requested:
+            runtime.status = "running"
+            runtime.health = "unknown"
+            runtime.message = (
+                "GCP GKE pod is running. Preview proxy endpoint remains pending until a safe upstream link is available."
+            )
+            runtime.updated_at = _utc_now_iso()
+            runtime.metadata = {
+                **(runtime.metadata or {}),
+                "workload_runtime": cfg.provider,
+                "runtime_resource_ref": redact_provider_metadata(
+                    {
+                        "namespace": gke_resource.namespace if gke_resource else None,
+                        "pod_name": gke_resource.pod_name if gke_resource else None,
+                        "service_name": service_name,
+                    }
+                ),
+                "health_check": {
+                    "stage": "pod_ready",
+                    "result": "pass" if (pod_status and pod_status.ready) else "unknown",
+                },
+            }
+            _set_runtime_diag(
+                job=job,
+                runtime=runtime,
+                lifecycle_stage="persist",
+                error_code=None,
+                error_message=None,
+                exception_class=None,
+                retry_count=0,
+                retryable=False,
+            )
+            runtime = runtime_store.upsert_runtime_session(runtime)
+            job.runtime_session_id = runtime.id
+            job.status = "running"
+            job.phase = "preview_pending"
+            job.error_code = None
+            job.error_message = None
+            job.logs_summary = pod_logs_summary or "GCP GKE runtime pod started; preview proxy not yet linked."
+            job.completed_at = None
+            job.updated_at = _utc_now_iso()
+            usage_event = {
+                "category": "worker_job",
+                "quantity": 1,
+                "unit": "count",
+                "attribution": {
+                    "provider": "builder_cloud_runtime",
+                    "worker_provider": "gcp_gke_sandbox",
+                    "source_snapshot_id": job.source_snapshot_id,
+                    "runtime_session_id": runtime.id,
+                },
+                "metadata": {
+                    "event_name": "gcp_gke_runtime_pod_ready_pending_proxy",
+                    "job_id": job.id,
+                    "workload_runtime": cfg.provider,
+                    "dry_run": False,
+                },
+            }
+            return CloudRuntimeExecutionResult(job=job, runtime_session=runtime, usage_event=usage_event)
         provider = build_gcp_gke_runtime_provider(config=cfg)
         lifecycle_stage = "create_sandbox"
         exception_class: str | None = None
