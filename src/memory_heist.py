@@ -271,6 +271,7 @@ DEFAULT_BROWSER_MAX_NETWORK_EVENTS = 200
 # Each logged request typically consumes 50-200 tokens depending on URLs and payloads.
 # With a max of 200 events, this bounds browser network logging to ~10-40K tokens max.
 DEFAULT_BROWSER_ALLOW_FILE_DOWNLOAD = False
+DEFAULT_BROWSER_ALLOW_FORM_SUBMIT = False
 DEFAULT_BROWSER_ADAPTER = "playwright"
 
 # Browser automation defaults: These settings govern autonomous browser interactions in agent sessions.
