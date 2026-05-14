@@ -206,6 +206,10 @@ _URL_IN_TEXT_RE = re.compile(r"https?://[^\s)]+", re.IGNORECASE)
 _STREAM_PARTIAL_NOTE = "\n\nConnection interrupted. Ask me to continue."
 _STREAM_CHECKPOINT_MIN_CHARS = 800
 _STREAM_CHECKPOINT_MIN_SEC = 1.5
+_BUILDER_STREAM_HANDOFF_MESSAGE = (
+    "I've generated the project files and started the live preview handoff. "
+    "You can watch progress in the Preview and Code tabs."
+)
 _ACTIVE_STREAM_SESSIONS: set[str] = set()
 _ACTIVE_STREAM_SESSIONS_LOCK = RLock()
 
@@ -1013,6 +1017,20 @@ def _with_interrupted_note(content: str) -> str:
     return f"{base}{_STREAM_PARTIAL_NOTE}"
 
 
+def _builder_stream_should_handoff_early(builder_intent: str, builder_meta: dict[str, Any] | None) -> bool:
+    if builder_intent != "build_or_create":
+        return False
+    meta = builder_meta or {}
+    return bool(meta.get("scaffolded") or meta.get("deduplicated"))
+
+
+def _builder_stream_handoff_text(builder_prefix: str | None) -> str:
+    prefix = str(builder_prefix or "").strip()
+    if not prefix:
+        return _BUILDER_STREAM_HANDOFF_MESSAGE
+    return f"{prefix}\n\n{_BUILDER_STREAM_HANDOFF_MESSAGE}"
+
+
 @router.get("/api/chat/capabilities")
 async def get_chat_capabilities(
     model_id: str | None = Query(None, max_length=256),
@@ -1581,6 +1599,40 @@ def post_chat_stream(
                         "X-Accel-Buffering": "no",
                     },
                 )
+
+        if _builder_stream_should_handoff_early(builder_intent, builder_meta):
+            handoff_text = _builder_stream_handoff_text(builder_prefix)
+            store.append_turns(sid, [ChatTurn(role="assistant", content=handoff_text)])
+            msgs = store.list_messages(sid)
+
+            def builder_handoff_only():
+                try:
+                    yield json.dumps({"type": "session", "session_id": sid}) + "\n"
+                    yield json.dumps({"type": "delta", "text": handoff_text}) + "\n"
+                    payload: dict[str, Any] = {
+                        "type": "done",
+                        "session_id": sid,
+                        "messages": msgs,
+                        "actions": [],
+                        "operator_result": None,
+                        "execution_mode": stream_execution_mode,
+                    }
+                    if stream_active_meta:
+                        payload["active_agent"] = stream_active_meta
+                    if builder_meta is not None:
+                        payload["builder"] = builder_meta
+                    yield json.dumps(payload) + "\n"
+                finally:
+                    release_stream_lock()
+
+            return StreamingResponse(
+                builder_handoff_only(),
+                media_type="application/x-ndjson; charset=utf-8",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                },
+            )
 
         assistant_turn_id = str(uuid4())
         llm_messages = _inject_builder_turn_system(llm_messages, builder_intent)

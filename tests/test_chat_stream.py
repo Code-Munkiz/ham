@@ -201,6 +201,34 @@ def test_chat_stream_build_intent_bypasses_operator_fallback(mock_mode: None, mo
     assert "prepare the Workbench" in done["messages"][-1]["content"]
 
 
+def test_chat_stream_build_intent_handoffs_without_long_llm_stream(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _builder_hook(**_kwargs):  # type: ignore[no-untyped-def]
+        return (
+            "I'll create the initial project source and prepare the Workbench.\n\n",
+            {"builder_intent": "build_or_create", "scaffolded": True},
+        )
+
+    def _should_not_stream(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("stream_chat_turn should not run for builder handoff")
+
+    monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _builder_hook)
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", _should_not_stream)
+
+    res = client.post(
+        "/api/chat/stream",
+        json={"messages": [{"role": "user", "content": "build me a game like Tetris"}]},
+    )
+    assert res.status_code == 200, res.text
+    events = _parse_ndjson(res.text)
+    done = [e for e in events if e.get("type") == "done"][0]
+    assistant = done["messages"][-1]["content"]
+    assert "prepare the Workbench" in assistant
+    assert "started the live preview handoff" in assistant
+    assert "Connection interrupted. Ask me to continue." not in assistant
+
+
 def test_chat_stream_local_repo_ops_not_forced_into_mission_route_when_operator_disabled(
     mock_mode: None,
     monkeypatch: pytest.MonkeyPatch,
