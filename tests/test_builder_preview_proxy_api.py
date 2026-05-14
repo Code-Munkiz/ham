@@ -20,7 +20,7 @@ from src.persistence.builder_runtime_store import (
     set_builder_runtime_store_for_tests,
 )
 from src.persistence.builder_source_store import BuilderSourceStore, set_builder_source_store_for_tests
-from src.persistence.project_store import ProjectStore, set_project_store_for_tests
+from src.persistence.project_store import ProjectStore, get_project_store, set_project_store_for_tests
 from src.persistence.workspace_store import InMemoryWorkspaceStore
 
 
@@ -144,6 +144,163 @@ def test_proxy_local_url_endpoint_is_not_proxied(tmp_path: Path) -> None:
     res = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/")
     assert res.status_code == 404
     assert res.json()["detail"]["error"]["code"] == "PREVIEW_PROXY_NOT_CONFIGURED"
+    _cleanup()
+
+
+def test_preview_proxy_session_mint_sets_http_only_cookie(tmp_path: Path) -> None:
+    client, ws_id, project_id, runtime_store = _seed_context(tmp_path)
+    runtime = _seed_cloud_runtime(runtime_store, ws_id=ws_id, project_id=project_id)
+    runtime_store.upsert_preview_endpoint(
+        PreviewEndpoint(
+            workspace_id=ws_id,
+            project_id=project_id,
+            runtime_session_id=runtime.id,
+            access_mode="proxy",
+            status="ready",
+            url="https://ham-preview-123.run.app/",
+            metadata={"trusted_proxy_host": "ham-preview-123.run.app"},
+        )
+    )
+    res = client.post(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/session")
+    assert res.status_code == 200, res.text
+    assert res.json()["status"] == "ready"
+    set_cookie = str(res.headers.get("set-cookie") or "")
+    assert "ham_preview_proxy_session=" in set_cookie
+    assert "HttpOnly" in set_cookie
+    assert "Secure" in set_cookie
+    assert "SameSite=lax" in set_cookie
+    _cleanup()
+
+
+def test_proxy_accepts_preview_session_cookie_without_authorization(tmp_path: Path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def _fake_fetch(*, method: str, url: str, headers: dict[str, str]) -> httpx.Response:
+        captured["method"] = method
+        captured["url"] = url
+        captured["headers"] = headers
+        return httpx.Response(200, content=b"<html>ok</html>", headers={"content-type": "text/html"})
+
+    monkeypatch.setattr("src.api.builder_sources._proxy_upstream_fetch", _fake_fetch)
+    client, ws_id, project_id, runtime_store = _seed_context(tmp_path)
+    runtime = _seed_cloud_runtime(runtime_store, ws_id=ws_id, project_id=project_id)
+    runtime_store.upsert_preview_endpoint(
+        PreviewEndpoint(
+            workspace_id=ws_id,
+            project_id=project_id,
+            runtime_session_id=runtime.id,
+            access_mode="proxy",
+            status="ready",
+            url="https://ham-preview-123.run.app/base",
+            metadata={"trusted_proxy_host": "ham-preview-123.run.app"},
+        )
+    )
+    mint = client.post(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/session")
+    assert mint.status_code == 200, mint.text
+    cookie = mint.cookies.get("ham_preview_proxy_session")
+    assert cookie
+
+    async def _override_actor_none() -> HamActor | None:
+        return None
+
+    client.app.dependency_overrides[get_ham_clerk_actor] = _override_actor_none
+    res = client.get(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/",
+        cookies={"ham_preview_proxy_session": cookie},
+    )
+    assert res.status_code == 200, res.text
+    assert res.text == "<html>ok</html>"
+    assert captured["method"] == "GET"
+    _cleanup()
+
+
+def test_preview_proxy_cookie_rejected_for_wrong_project(tmp_path: Path, monkeypatch) -> None:
+    async def _fake_fetch(*, method: str, url: str, headers: dict[str, str]) -> httpx.Response:
+        _ = (method, url, headers)
+        return httpx.Response(200, content=b"ok", headers={"content-type": "text/plain"})
+
+    monkeypatch.setattr("src.api.builder_sources._proxy_upstream_fetch", _fake_fetch)
+    client, ws_id, project_id, runtime_store = _seed_context(tmp_path)
+    runtime = _seed_cloud_runtime(runtime_store, ws_id=ws_id, project_id=project_id)
+    runtime_store.upsert_preview_endpoint(
+        PreviewEndpoint(
+            workspace_id=ws_id,
+            project_id=project_id,
+            runtime_session_id=runtime.id,
+            access_mode="proxy",
+            status="ready",
+            url="https://ham-preview-123.run.app/base",
+            metadata={"trusted_proxy_host": "ham-preview-123.run.app"},
+        )
+    )
+    project_store = get_project_store()
+    p2 = project_store.make_record(name="proj-b", root=str(tmp_path), metadata={"workspace_id": ws_id})
+    project_store.register(p2)
+    runtime2 = _seed_cloud_runtime(runtime_store, ws_id=ws_id, project_id=p2.id)
+    runtime_store.upsert_preview_endpoint(
+        PreviewEndpoint(
+            workspace_id=ws_id,
+            project_id=p2.id,
+            runtime_session_id=runtime2.id,
+            access_mode="proxy",
+            status="ready",
+            url="https://ham-preview-123.run.app/base",
+            metadata={"trusted_proxy_host": "ham-preview-123.run.app"},
+        )
+    )
+    mint = client.post(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/session")
+    assert mint.status_code == 200, mint.text
+    cookie = client.cookies.get("ham_preview_proxy_session")
+    assert cookie
+
+    async def _override_actor_none() -> HamActor | None:
+        return None
+
+    client.app.dependency_overrides[get_ham_clerk_actor] = _override_actor_none
+    res = client.get(
+        f"/api/workspaces/{ws_id}/projects/{p2.id}/builder/preview-proxy/",
+        cookies={"ham_preview_proxy_session": cookie},
+    )
+    assert res.status_code == 401
+    assert res.json()["detail"]["error"]["code"] == "PREVIEW_PROXY_SESSION_REQUIRED"
+    _cleanup()
+
+
+def test_preview_proxy_cookie_rejected_when_expired(tmp_path: Path, monkeypatch) -> None:
+    async def _fake_fetch(*, method: str, url: str, headers: dict[str, str]) -> httpx.Response:
+        _ = (method, url, headers)
+        return httpx.Response(200, content=b"ok", headers={"content-type": "text/plain"})
+
+    monkeypatch.setattr("src.api.builder_sources._proxy_upstream_fetch", _fake_fetch)
+    client, ws_id, project_id, runtime_store = _seed_context(tmp_path)
+    runtime = _seed_cloud_runtime(runtime_store, ws_id=ws_id, project_id=project_id)
+    runtime_store.upsert_preview_endpoint(
+        PreviewEndpoint(
+            workspace_id=ws_id,
+            project_id=project_id,
+            runtime_session_id=runtime.id,
+            access_mode="proxy",
+            status="ready",
+            url="https://ham-preview-123.run.app/base",
+            metadata={"trusted_proxy_host": "ham-preview-123.run.app"},
+        )
+    )
+    mint = client.post(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/session")
+    assert mint.status_code == 200, mint.text
+    cookie = client.cookies.get("ham_preview_proxy_session")
+    assert cookie
+
+    async def _override_actor_none() -> HamActor | None:
+        return None
+
+    client.app.dependency_overrides[get_ham_clerk_actor] = _override_actor_none
+    monkeypatch.setattr("src.api.builder_sources.time.time", lambda: 4102444800.0)
+    res = client.get(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/",
+        cookies={"ham_preview_proxy_session": cookie},
+    )
+    assert res.status_code == 401
+    assert res.json()["detail"]["error"]["code"] == "PREVIEW_PROXY_SESSION_REQUIRED"
     _cleanup()
 
 
