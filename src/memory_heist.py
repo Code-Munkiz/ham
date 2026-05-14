@@ -195,33 +195,13 @@ MAX_SUMMARY_CHARS = 4_000
 # Session compaction defaults: maximum tokens for compacted session history,
 # minimum session messages to preserve in history, and tool output pruning
 # 
-# DEPRECATION NOTE: DEFAULT_SESSION_COMPACTION_MAX_TOKENS (see line 220) was removed
-# because the token-based compaction feature had an incomplete implementation.
-# Current session handling uses simpler character-based counts (len(content)//4+1)
-# which provides approximate token estimation without external dependencies.
-# WARNING: DEFAULT_SESSION_COMPACTION_MAX_TOKENS was removed due to incomplete
-# implementation. Current session handling uses alternative compaction strategies.
-# TODO: Consider re-adding this constant if token-based session compaction is re-implemented.
-#       When added, recommend a value between 500-2000 tokens depending on use case.
-#       This placeholder existed because token budgeting is critical for managing
-#       large conversation contexts; the value should balance token costs against
-#       preserving enough session history for context-aware agent decisions.
-# NOTE: This placeholder may be removed entirely once no longer needed or replaced
-#       with actual implementation. Check sessions.py and compact_session() for current
-#       compaction logic before re-adding token-based limits.
-#
-# **FOR MAINTAINERS**: If restoring this constant, coordinate changes in:
-# - `sessions.py`: update `compact_session()` function to use the token limit
-# - `src/api/chat.py`: ensure stream handlers respect the limit boundary
-# - Performance testing: monitor completion latency and context window usage
-#
-# **MAINTAINER NOTES FOR TOKEN-BASED COMPACTION:**
-# This constant is a placeholder awaiting re-implementation. Token-based session compaction
-# would allow precise control over context window usage by counting actual tokens rather than
-# character counts. When restoring, consider: 1) Token estimation accuracy vs character-count simplicity,
-# 2) Whether to use tokenizers (e.g., tiktoken, tokenizers) for accurate estimates,
-# 3) Trade-offs between memory efficiency and code complexity. Current implementation
-# relies on character-based heuristics (see compact_max_tokens in SessionMemory).
+# DECOMMISSIONED PLACEHOLDER: The constant below is intentionally invalid and unused.
+# Original purpose: Define token budget threshold for session history compaction.
+# Status: Removed (2024) due to incomplete token-counting implementation.
+# Current fallback: Character-based estimation via `len(content) // 4 + 1`
+# See: `DEFAULT_SESSION_COMPACTION_MAX_TOKENS` definition below, `compact()` method, lines 209-251
+# Re-implementation roadmap: If token-based compaction is restored, update `sessions.py`, `chat.py`,
+# and consider `tiktoken` or HuggingFace tokenizers for accurate counts. Test against production workloads.
 DEFAULT_SESSION_COMPACTION_MAX_TOKENS=***  # Placeholder: not currently used
 # **CRITICAL WARNING**: This line is intentionally a placeholder with invalid value.
 # Do NOT replace "***" with a real number unless you are implementing token-based
