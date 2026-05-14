@@ -104,6 +104,8 @@ def _apply_gcp_gke_scaffold(
     enabled: bool = True,
     dry_run: bool = True,
     fake_mode: str | None = None,
+    live_k8s: bool = False,
+    live_bundle_upload: bool = False,
     omit_bucket: bool = False,
 ) -> None:
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "gcp_gke_sandbox")
@@ -118,6 +120,11 @@ def _apply_gcp_gke_scaffold(
     monkeypatch.setenv("HAM_BUILDER_GCP_REGION", "us-central1")
     monkeypatch.setenv("HAM_BUILDER_GKE_CLUSTER", "cluster-test")
     monkeypatch.setenv("HAM_BUILDER_GKE_NAMESPACE_PREFIX", "ham-builder-")
+    monkeypatch.setenv("HAM_BUILDER_GCP_RUNTIME_LIVE_K8S_ENABLED", "true" if live_k8s else "false")
+    monkeypatch.setenv(
+        "HAM_BUILDER_GCP_RUNTIME_LIVE_BUNDLE_UPLOAD",
+        "true" if live_bundle_upload else "false",
+    )
     if omit_bucket:
         monkeypatch.delenv("HAM_BUILDER_PREVIEW_SOURCE_BUCKET", raising=False)
     else:
@@ -400,7 +407,7 @@ def test_gcp_gke_incomplete_scaffold_reports_config_missing(tmp_path: Path, monk
         _cleanup()
 
 
-def test_gcp_gke_live_without_fake_reports_not_implemented(tmp_path: Path, monkeypatch) -> None:
+def test_gcp_gke_live_without_fake_reports_config_missing(tmp_path: Path, monkeypatch) -> None:
     _apply_gcp_gke_scaffold(monkeypatch, dry_run=False)
     client, ws_id, project_id, snap_id = _seed_context(tmp_path)
     try:
@@ -408,7 +415,7 @@ def test_gcp_gke_live_without_fake_reports_not_implemented(tmp_path: Path, monke
             f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
             json={"source_snapshot_id": snap_id},
         ).json()
-        assert body["job"]["error_code"] == "GCP_GKE_RUNTIME_LIVE_NOT_IMPLEMENTED"
+        assert body["job"]["error_code"] == "GCP_GKE_RUNTIME_CONFIG_MISSING"
     finally:
         _cleanup()
 
@@ -505,8 +512,15 @@ def test_gcp_gke_fake_failure_reports_error_without_preview(tmp_path: Path, monk
 
 
 def test_gcp_gke_live_client_gate_without_impl_fails_safely(tmp_path: Path, monkeypatch) -> None:
-    _apply_gcp_gke_scaffold(monkeypatch, dry_run=False, fake_mode="success")
-    monkeypatch.setenv("HAM_BUILDER_GCP_RUNTIME_LIVE_K8S_ENABLED", "true")
+    _apply_gcp_gke_scaffold(
+        monkeypatch,
+        dry_run=False,
+        fake_mode=None,
+        live_k8s=True,
+        live_bundle_upload=True,
+    )
+    _RecordingBundleUploader.calls = []
+    set_source_bundle_uploader_factory_for_tests(lambda: _RecordingBundleUploader())
     client, ws_id, project_id, snap_id = _seed_context(tmp_path)
     try:
         body = client.post(
@@ -514,7 +528,40 @@ def test_gcp_gke_live_client_gate_without_impl_fails_safely(tmp_path: Path, monk
             json={"source_snapshot_id": snap_id},
         ).json()
         assert body["job"]["status"] == "failed"
-        assert body["job"]["error_code"] == "GCP_GKE_RUNTIME_CLIENT_ERROR"
+        assert body["job"]["error_code"] in {"GCP_GKE_RUNTIME_CLIENT_ERROR", "GCP_GKE_RBAC_DENIED"}
+    finally:
+        _cleanup()
+
+
+def test_gcp_gke_live_gate_with_injected_runtime_client_returns_pending_proxy(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _apply_gcp_gke_scaffold(
+        monkeypatch,
+        dry_run=False,
+        fake_mode=None,
+        live_k8s=True,
+        live_bundle_upload=True,
+    )
+    _RecordingBundleUploader.calls = []
+    set_source_bundle_uploader_factory_for_tests(lambda: _RecordingBundleUploader())
+    _RecordingRuntimeClient.manifests = []
+    set_gke_runtime_client_factory_for_tests(lambda: _RecordingRuntimeClient())
+    client, ws_id, project_id, snap_id = _seed_context(tmp_path)
+    try:
+        body = client.post(
+            f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+            json={"source_snapshot_id": snap_id},
+        ).json()
+        assert body["job"]["status"] == "running"
+        assert body["runtime_session"]["status"] == "running"
+        assert body["runtime_session"]["preview_endpoint_id"] in {None, ""}
+        preview = client.get(
+            f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-status",
+            params={"source_snapshot_id": snap_id},
+        ).json()
+        assert preview["preview_url"] in {None, ""}
+        assert preview["status"] in {"building", "waiting"}
     finally:
         _cleanup()
 
