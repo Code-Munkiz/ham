@@ -85,6 +85,7 @@ def _build_react_scaffold_files(user_plain: str) -> dict[str, str]:
             ");\n"
         ),
         "src/App.tsx": (
+            "import React from \"react\";\n"
             "export default function App() {\n"
             f"  return (\n"
             f"    <main className=\"app-shell\">\n"

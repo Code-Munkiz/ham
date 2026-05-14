@@ -129,6 +129,29 @@ def test_maybe_chat_scaffold_sets_artifact_uri(tmp_path: Path, monkeypatch) -> N
     _cleanup()
 
 
+def test_chat_scaffold_app_tsx_includes_react_import_for_jsx_runtime(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    out = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_a",
+        session_id="sess_imports",
+        last_user_plain="build me a game like Tetris",
+        created_by="user_1",
+    )
+    assert out and out.get("scaffolded")
+    snap_id = str(out["source_snapshot_id"])
+    rows = store.list_source_snapshots(workspace_id="ws_a", project_id="pr_a")
+    snap = next(row for row in rows if row.id == snap_id)
+    manifest = snap.manifest or {}
+    inline_files = manifest.get("inline_files")
+    assert isinstance(inline_files, dict)
+    app_tsx = str(inline_files.get("src/App.tsx") or "")
+    assert 'import React from "react";' in app_tsx
+    _cleanup()
+
+
 def test_chat_scaffold_enqueue_idempotent(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
