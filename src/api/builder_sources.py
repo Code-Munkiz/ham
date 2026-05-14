@@ -4,6 +4,7 @@ import asyncio
 import base64
 import hashlib
 import hmac
+import inspect
 import json
 import logging
 import os
@@ -18,12 +19,12 @@ from typing import Annotated, Any, Literal, cast
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import httpx
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Header, Query, UploadFile
 from fastapi import Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from src.api.clerk_gate import get_ham_clerk_actor
+from src.api.clerk_gate import enforce_clerk_session_and_email_for_request, get_ham_clerk_actor
 from src.api.dependencies.workspace import get_workspace_store, require_perm
 from src.ham.builder_cloud_runtime_job_runner import run_persist_builder_cloud_runtime_job
 from src.ham.builder_runtime_worker import (
@@ -540,11 +541,28 @@ def _require_preview_proxy_read_perm(ctx: WorkspaceContext) -> WorkspaceContext:
     return ctx
 
 
+async def _get_ham_clerk_actor_soft(
+    request: Request,
+    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
+) -> HamActor | None:
+    override = request.app.dependency_overrides.get(get_ham_clerk_actor)
+    if override is not None:
+        maybe_actor = override()
+        if inspect.isawaitable(maybe_actor):
+            maybe_actor = await maybe_actor
+        return cast(HamActor | None, maybe_actor)
+    try:
+        route = f"{request.method} {request.url.path}"
+        return enforce_clerk_session_and_email_for_request(authorization, route=route)
+    except HTTPException:
+        return None
+
+
 async def require_preview_proxy_ctx(
     workspace_id: str,
     project_id: str,
     request: Request,
-    actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+    actor: Annotated[HamActor | None, Depends(_get_ham_clerk_actor_soft)] = None,
     store: Annotated[WorkspaceStore, Depends(get_workspace_store)] = None,  # type: ignore[assignment]
 ) -> WorkspaceContext:
     has_authorization_header = bool(str(request.headers.get("authorization") or "").strip())
