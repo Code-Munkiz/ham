@@ -233,7 +233,7 @@ def load_gcp_gke_runtime_config() -> GcpGkeRuntimeConfig:
         ),
         start_timeout_seconds=_int_env(
             "HAM_BUILDER_GCP_RUNTIME_START_TIMEOUT_SECONDS",
-            default=180,
+            default=300,
             min_value=30,
             max_value=3600,
         ),
