@@ -52,7 +52,10 @@ without exposing raw cluster URLs to browsers and **without** claiming preview s
      > /tmp/ham-preview-pod.yaml
    ```
 
-6. Manual spike continues with **`kubectl`** against an authorized cluster: apply workload identity / bundle fetch / `npm ci` steps **outside** this repo until the worker integrates Kubernetes clients.
+6. Manual spike continues with **`kubectl`** against an authorized cluster. The runner now consumes
+   `PREVIEW_SOURCE_URI`, downloads/unpacks `preview-source.zip` into `/workspace`, then executes
+   `npm ci` (when `package-lock.json` exists) or `npm install` before starting `npm run dev`.
+   Workload Identity and namespace-scoped permissions are still managed by operators outside this repo.
 
 7. Delete Pod + stale GCS prefixes after TTL verification.
 
@@ -84,8 +87,8 @@ Staging inventory notes (2026-05): Artifact Registry repos **`ham`** and **`clar
 ## 6. Preview pod lifecycle (target)
 
 1. Pod scheduled with **`runtimeClassName: gvisor`**.
-2. Init/fetch logic (manual spike first) materializes files under **`/workspace`**.
-3. **`npm ci`** (fail-fast on lockfile mismatch).
+2. Runner logic materializes files under **`/workspace`** from **`PREVIEW_SOURCE_URI`**.
+3. **`npm ci`** (if lockfile exists) or **`npm install`**.
 4. **`npm run dev -- --host 0.0.0.0 --port $PREVIEW_PORT`** (see `docker/preview-runner/entrypoint.sh`; swap command during spike if needed).
 5. Internal health probe **HTTP GET** `:3000/` (or app-specific path).
 6. TTL label **`ham.expires_at`** drives garbage collection automation later.
