@@ -685,6 +685,13 @@ class ProjectContext:
     - **Scan summary:** `file_count`, `tree` - lightweight workspace overview without full file contents.
     - **Dynamic (runtime-only):** `_relevance_results`, `_relevance_metadata` - attached during discover() for
       relevance filtering only, not serialized to cache.
+    
+    **CONSTRUCTORS AND FACTORY METHODS:**
+    Only use `ProjectContext.discover()` (class method) to construct a complete, valid instance.
+    Direct instantiation (`ProjectContext(...)`) is intentionally minimal and meant primarily for
+    testing or stub contexts. The discover() class method handles all the complex work of scanning
+    the workspace, discovering instruction files, merging config, and capturing git state. Never
+    manually set `git_*_snapshot` or `relevance_*` attributes on a directly-created instance.
     """
     cwd: Path
     current_date: str
