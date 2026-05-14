@@ -701,6 +701,11 @@ class ProjectContext:
     git_log_snapshot: str | None = None
     instruction_files: list[InstructionFile] = field(default_factory=list)
     config: ProjectConfig = field(default_factory=ProjectConfig)
+    # **FOR MAINTAINERS**: file_count and tree provide a lightweight workspace overview.
+    # file_count is the total number of indexed files (respects IGNORE_DIRS and INTERESTING_EXTENSIONS).
+    # tree is a human-readable directory tree (max_depth=3 by default) showing structure without content.
+    # Together they give agents a quick map of the repo layout without loading full file contents.
+    # Use these fields for high-level summaries in prompts; don't use them to reason about specific files.
     file_count: int = 0
     tree: str = ""
 
