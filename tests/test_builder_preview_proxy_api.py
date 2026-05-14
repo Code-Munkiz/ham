@@ -472,6 +472,89 @@ def test_proxy_safe_run_app_host_accepted_and_headers_stripped(tmp_path: Path, m
     _cleanup()
 
 
+def test_proxy_nested_module_paths_forward_and_preserve_content_type(tmp_path: Path, monkeypatch) -> None:
+    captured_urls: list[str] = []
+
+    async def _fake_fetch(*, method: str, url: str, headers: dict[str, str]) -> httpx.Response:
+        _ = (method, headers)
+        captured_urls.append(url)
+        if url.endswith("/src/main.tsx"):
+            return httpx.Response(
+                200,
+                content=b'console.log("main");',
+                headers={"content-type": "application/javascript; charset=utf-8"},
+            )
+        if url.endswith("/@vite/client"):
+            return httpx.Response(
+                200,
+                content=b'console.log("vite-client");',
+                headers={"content-type": "application/javascript"},
+            )
+        return httpx.Response(404, content=b"not-found", headers={"content-type": "text/plain"})
+
+    monkeypatch.setattr("src.api.builder_sources._proxy_upstream_fetch", _fake_fetch)
+    client, ws_id, project_id, runtime_store = _seed_context(tmp_path)
+    runtime = _seed_cloud_runtime(runtime_store, ws_id=ws_id, project_id=project_id)
+    runtime_store.upsert_preview_endpoint(
+        PreviewEndpoint(
+            workspace_id=ws_id,
+            project_id=project_id,
+            runtime_session_id=runtime.id,
+            access_mode="proxy",
+            status="ready",
+            url="https://ham-preview-123.run.app/",
+            metadata={"trusted_proxy_host": "ham-preview-123.run.app"},
+        )
+    )
+    main_res = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/src/main.tsx")
+    vite_res = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/@vite/client")
+    assert main_res.status_code == 200
+    assert main_res.headers.get("content-type", "").startswith("application/javascript")
+    assert main_res.text == 'console.log("main");'
+    assert vite_res.status_code == 200
+    assert vite_res.headers.get("content-type", "").startswith("application/javascript")
+    assert vite_res.text == 'console.log("vite-client");'
+    assert any(url.endswith("/src/main.tsx") for url in captured_urls)
+    assert any(url.endswith("/@vite/client") for url in captured_urls)
+    _cleanup()
+
+
+def test_proxy_root_html_rewrites_root_asset_links_to_proxy_prefix(tmp_path: Path, monkeypatch) -> None:
+    html = (
+        '<!doctype html><html><head>'
+        '<script type="module" src="/@vite/client"></script>'
+        '<link rel="stylesheet" href="/src/style.css">'
+        '</head><body><script type="module" src="/src/main.tsx"></script></body></html>'
+    )
+
+    async def _fake_fetch(*, method: str, url: str, headers: dict[str, str]) -> httpx.Response:
+        _ = (method, url, headers)
+        return httpx.Response(200, content=html.encode("utf-8"), headers={"content-type": "text/html; charset=utf-8"})
+
+    monkeypatch.setattr("src.api.builder_sources._proxy_upstream_fetch", _fake_fetch)
+    client, ws_id, project_id, runtime_store = _seed_context(tmp_path)
+    runtime = _seed_cloud_runtime(runtime_store, ws_id=ws_id, project_id=project_id)
+    runtime_store.upsert_preview_endpoint(
+        PreviewEndpoint(
+            workspace_id=ws_id,
+            project_id=project_id,
+            runtime_session_id=runtime.id,
+            access_mode="proxy",
+            status="ready",
+            url="https://ham-preview-123.run.app/",
+            metadata={"trusted_proxy_host": "ham-preview-123.run.app"},
+        )
+    )
+    res = client.get(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/")
+    assert res.status_code == 200
+    assert res.headers.get("content-type", "").startswith("text/html")
+    prefix = f"/api/workspaces/{ws_id}/projects/{project_id}/builder/preview-proxy/"
+    assert f'src="{prefix}@vite/client"' in res.text
+    assert f'href="{prefix}src/style.css"' in res.text
+    assert f'src="{prefix}src/main.tsx"' in res.text
+    _cleanup()
+
+
 def test_proxy_accepts_provider_owned_internal_upstream_only_server_side(tmp_path: Path, monkeypatch) -> None:
     captured: dict[str, object] = {}
 

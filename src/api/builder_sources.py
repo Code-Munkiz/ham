@@ -350,6 +350,34 @@ def _preview_proxy_cookie_path(*, workspace_id: str, project_id: str) -> str:
     return f"/api/workspaces/{workspace_id}/projects/{project_id}/builder/preview-proxy/"
 
 
+_HTML_ROOT_URL_ATTR_PATTERN = re.compile(
+    r'(?P<prefix>\b(?:src|href|action|poster)\s*=\s*["\'])/(?P<path>[^"\']*)',
+    flags=re.IGNORECASE,
+)
+
+
+def _is_html_content_type(content_type: str) -> bool:
+    return "text/html" in str(content_type or "").strip().lower()
+
+
+def _rewrite_preview_proxy_html_links(*, html: str, proxy_prefix: str) -> str:
+    prefix = str(proxy_prefix or "").strip()
+    if not prefix.startswith("/"):
+        return html
+    if not prefix.endswith("/"):
+        prefix = f"{prefix}/"
+
+    def _replace(match: re.Match[str]) -> str:
+        raw_path = str(match.group("path") or "")
+        if raw_path.startswith("/") or raw_path.startswith("#"):
+            return match.group(0)
+        if raw_path.startswith("api/workspaces/"):
+            return match.group(0)
+        return f"{match.group('prefix')}{prefix}{raw_path.lstrip('/')}"
+
+    return _HTML_ROOT_URL_ATTR_PATTERN.sub(_replace, html)
+
+
 def _preview_proxy_session_ttl_seconds() -> int:
     return _int_env(
         "HAM_BUILDER_PREVIEW_PROXY_SESSION_TTL_SECONDS",
@@ -977,6 +1005,16 @@ async def _serve_builder_preview_proxy(
     content_type = str(upstream_response.headers.get("content-type") or "").strip()
     if content_type:
         response_headers["content-type"] = content_type[:240]
+    if method != "HEAD" and body and _is_html_content_type(content_type):
+        try:
+            body_text = body.decode("utf-8")
+        except UnicodeDecodeError:
+            body_text = ""
+        if body_text:
+            body = _rewrite_preview_proxy_html_links(
+                html=body_text,
+                proxy_prefix=_cloud_proxy_preview_url(workspace_id=ctx.workspace_id, project_id=project_id),
+            ).encode("utf-8")
     return Response(
         content=(b"" if method == "HEAD" else body),
         status_code=upstream_response.status_code,
