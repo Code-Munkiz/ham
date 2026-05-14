@@ -19,6 +19,7 @@ import {
   taskKindDisplayForCard,
 } from "./codingPlanCardCopy";
 import { ManagedBuildApprovalPanel } from "./ManagedBuildApprovalPanel";
+import { ManagedOpencodeBuildApprovalPanel } from "./ManagedOpencodeBuildApprovalPanel";
 
 export type CodingPlanCardProps = {
   payload: CodingConductorPreviewPayload;
@@ -31,6 +32,19 @@ export type CodingPlanCardProps = {
 function shouldShowManagedBuildApproval(payload: CodingConductorPreviewPayload): boolean {
   const chosen = payload.chosen;
   if (!chosen || chosen.provider !== "factory_droid_build" || !chosen.available) {
+    return false;
+  }
+  const project = payload.project;
+  if (!project.found || !project.project_id) return false;
+  const target = (project.output_target || "").trim();
+  if (target !== "managed_workspace") return false;
+  if (project.has_workspace_id === false) return false;
+  return true;
+}
+
+function shouldShowOpencodeBuildApproval(payload: CodingConductorPreviewPayload): boolean {
+  const chosen = payload.chosen;
+  if (!chosen || chosen.provider !== "opencode_cli" || !chosen.available) {
     return false;
   }
   const project = payload.project;
@@ -120,6 +134,7 @@ export function CodingPlanCard({
   const taskLabel = taskKindDisplayForCard(payload.task_kind);
   const conf = confidenceBadgeForCard(payload.task_confidence);
   const showManagedApproval = shouldShowManagedBuildApproval(payload);
+  const showOpencodeApproval = shouldShowOpencodeBuildApproval(payload);
   const showOpencodeAffordance = Boolean(onPreferProvider) && shouldShowOpenCodeAffordance(payload);
   const opencodePreferring = preferringProvider === "opencode_cli";
 
@@ -242,6 +257,11 @@ export function CodingPlanCard({
 
       {showManagedApproval && payload.project.project_id ? (
         <ManagedBuildApprovalPanel
+          projectId={payload.project.project_id}
+          userPrompt={userPrompt ?? ""}
+        />
+      ) : showOpencodeApproval && payload.project.project_id ? (
+        <ManagedOpencodeBuildApprovalPanel
           projectId={payload.project.project_id}
           userPrompt={userPrompt ?? ""}
         />

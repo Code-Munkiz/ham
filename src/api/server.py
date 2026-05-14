@@ -38,6 +38,7 @@ from src.api.me import router as me_router
 from src.api.media_generation import router as media_generation_router
 from src.api.models_catalog import router as models_catalog_router
 from src.api.opencode_build import router as opencode_build_router
+from src.api.opencode_launch_proxy import router as opencode_launch_proxy_router
 from src.api.pna_middleware import private_network_access_middleware
 from src.api.project_settings import router as project_settings_router
 from src.api.project_snapshots import router as project_snapshots_router
@@ -144,6 +145,7 @@ app.include_router(droid_audit_router)
 app.include_router(droid_build_router)
 app.include_router(claude_agent_build_router)
 app.include_router(opencode_build_router)
+app.include_router(opencode_launch_proxy_router)
 app.include_router(coding_readiness_router)
 app.include_router(coding_conductor_router)
 app.include_router(models_catalog_router)

@@ -493,6 +493,51 @@ describe("WorkspaceChatScreen OpenCode preferred-provider affordance", () => {
     assertNoForbiddenTokens(container);
   });
 
+  it("renders the OpenCode managed approval panel after switching chosen to opencode_cli", async () => {
+    const previewWithOpencodeChosenManaged = {
+      ...samplePreviewPayload,
+      chosen: opencodeAvailable,
+      candidates: [opencodeAvailable, fdBuildChosen],
+      project: {
+        found: true,
+        project_id: CHAT_W1_PROJECT_ID,
+        build_lane_enabled: true,
+        has_github_repo: false,
+        output_target: "managed_workspace",
+        has_workspace_id: true,
+      },
+    };
+    previewCodingConductorMock
+      .mockResolvedValueOnce(previewWithOpencodeAlt)
+      .mockResolvedValueOnce(previewWithOpencodeChosenManaged);
+    const { container } = renderChat();
+
+    await waitFor(() => expect(screen.getByTestId("hww-command-panel")).toBeInTheDocument());
+
+    const ta = container.querySelector("#hww-chat-composer") as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: "Refactor the auth module." } });
+    fireEvent.click(container.querySelector("[data-hww-coding-plan-action]") as HTMLElement);
+
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-hww-coding-plan="prefer-opencode-cta"]'),
+      ).not.toBeNull(),
+    );
+
+    const cta = container.querySelector(
+      '[data-hww-coding-plan="prefer-opencode-cta"]',
+    ) as HTMLButtonElement;
+    fireEvent.click(cta);
+
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-hww-coding-plan="opencode-build-approval"]'),
+      ).not.toBeNull(),
+    );
+    expect(container.querySelector('[data-hww-coding-plan="launch-cta-disabled"]')).toBeNull();
+    assertNoForbiddenTokens(container);
+  });
+
   it("clears preferring state and keeps prior preview after re-preview failure", async () => {
     previewCodingConductorMock
       .mockResolvedValueOnce(previewWithOpencodeAlt)

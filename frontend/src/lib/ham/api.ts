@@ -1870,6 +1870,94 @@ export async function launchDroidBuild(
   return res.json() as Promise<DroidBuildLaunchPayload>;
 }
 
+export interface OpencodeBuildPreviewPayload {
+  kind: "opencode_build_preview";
+  project_id: string;
+  project_name: string;
+  user_prompt: string;
+  model?: string | null;
+  summary: string;
+  proposal_digest: string;
+  base_revision: string;
+  is_readonly: boolean;
+  will_open_pull_request: boolean;
+  requires_approval: boolean;
+  output_target: string;
+}
+
+export interface OpencodeBuildLaunchPayload {
+  kind: "opencode_build_launch";
+  project_id: string;
+  ok: boolean;
+  ham_run_id: string | null;
+  control_plane_status: string | null;
+  summary: string | null;
+  error_summary: string | null;
+  is_readonly: boolean;
+  will_open_pull_request: boolean;
+  requires_approval: boolean;
+  output_target?: string;
+  output_ref?: Record<string, unknown> | null;
+}
+
+export interface OpencodeBuildPreviewRequest {
+  project_id: string;
+  user_prompt: string;
+  model?: string | null;
+}
+
+export interface OpencodeBuildLaunchProxyRequest {
+  project_id: string;
+  user_prompt: string;
+  model?: string | null;
+  proposal_digest: string;
+  base_revision: string;
+  confirmed: true;
+}
+
+export async function previewOpencodeBuild(
+  body: OpencodeBuildPreviewRequest,
+): Promise<OpencodeBuildPreviewPayload> {
+  const trimmedModel = (body.model ?? "").trim();
+  const res = await hamApiFetch("/api/opencode/build/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      project_id: body.project_id.trim(),
+      user_prompt: body.user_prompt.trim(),
+      ...(trimmedModel ? { model: trimmedModel } : {}),
+    }),
+  });
+  if (!res.ok) {
+    const detail = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(shortenHamApiErrorMessage(detail));
+  }
+  return res.json() as Promise<OpencodeBuildPreviewPayload>;
+}
+
+export async function launchOpencodeBuild(
+  body: OpencodeBuildLaunchProxyRequest,
+): Promise<OpencodeBuildLaunchPayload> {
+  const trimmedModel = (body.model ?? "").trim();
+  const res = await hamApiFetch("/api/coding/opencode/launch_proxy", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      project_id: body.project_id.trim(),
+      user_prompt: body.user_prompt.trim(),
+      ...(trimmedModel ? { model: trimmedModel } : { model: null }),
+      proposal_digest: body.proposal_digest,
+      base_revision: body.base_revision,
+      confirmed: Boolean(body.confirmed),
+    }),
+  });
+  if (!res.ok) {
+    const detail = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(shortenHamApiErrorMessage(detail));
+  }
+  return res.json() as Promise<OpencodeBuildLaunchPayload>;
+}
+
 /**
  * Public preview shape for `POST /api/coding/conductor/preview` (Phase 2A).
  *

@@ -630,6 +630,37 @@ async def launch_opencode_build(  # noqa: C901
         )
     _require_opencode_exec_token(authorization)
 
+    return _run_opencode_launch_core(
+        rec=rec,
+        ham_actor=ham_actor,
+        user_prompt=body.user_prompt,
+        model=body.model,
+        proposal_digest=body.proposal_digest,
+    )
+
+
+def _run_opencode_launch_core(
+    *,
+    rec: Any,
+    ham_actor: HamActor | None,
+    user_prompt: str,
+    model: str | None,
+    proposal_digest: str,
+) -> dict[str, Any]:
+    """Shared OpenCode launch core for both the operator route and the
+    chat-side launch proxy.
+
+    Callers MUST have already passed the full gate stack: Clerk session,
+    HAM_OPENCODE_ENABLED / EXECUTION_ENABLED env flags, project lookup +
+    managed_workspace target, build approver, readiness probe CONFIGURED,
+    digest verification against the prior preview, and the in-process
+    HAM_OPENCODE_EXEC_TOKEN env check. This function performs no auth
+    decisions; it only drives workspace setup, the mission runner,
+    deletion guard, snapshot emit, ControlPlaneRun persistence, and the
+    response payload. It never logs the exec token (only its env name
+    appears in :func:`_require_opencode_exec_token`) and the response
+    payload is token-free by construction.
+    """
     ham_run_id = new_ham_run_id()
     change_id = uuid.uuid4().hex
     project_root = _project_managed_root(rec)
@@ -644,7 +675,7 @@ async def launch_opencode_build(  # noqa: C901
             rec=rec,
             ham_actor=ham_actor,
             project_root=project_root,
-            proposal_digest=body.proposal_digest,
+            proposal_digest=proposal_digest,
             setup_error=exc,
             ham_run_id=ham_run_id,
             change_id=change_id,
@@ -652,8 +683,8 @@ async def launch_opencode_build(  # noqa: C901
 
     run_result = run_opencode_mission(
         project_root=project_root,
-        user_prompt=body.user_prompt,
-        model=body.model,
+        user_prompt=user_prompt,
+        model=model,
         actor=ham_actor,
     )
 
@@ -676,7 +707,7 @@ async def launch_opencode_build(  # noqa: C901
                 rec=rec,
                 ham_actor=ham_actor,
                 project_root=project_root,
-                proposal_digest=body.proposal_digest,
+                proposal_digest=proposal_digest,
                 deleted_paths=would_be_deleted,
                 change_id=change_id,
                 ham_run_id=ham_run_id,
@@ -725,7 +756,7 @@ async def launch_opencode_build(  # noqa: C901
         rec=rec,
         ham_actor=ham_actor,
         project_root=project_root,
-        proposal_digest=body.proposal_digest,
+        proposal_digest=proposal_digest,
         change_id=change_id,
         ham_run_id=ham_run_id,
         status=status,
@@ -756,4 +787,5 @@ __all__ = [
     "compute_opencode_proposal_digest",
     "router",
     "verify_opencode_launch_against_preview",
+    "_run_opencode_launch_core",
 ]

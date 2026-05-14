@@ -372,6 +372,59 @@ describe("CodingPlanCard OpenCode preferred-provider affordance", () => {
     }
   });
 
+  it("renders ManagedOpencodeBuildApprovalPanel when chosen is opencode_cli + managed_workspace", () => {
+    const chosenOc = candidate({
+      provider: "opencode_cli",
+      output_kind: "pull_request",
+      will_modify_code: true,
+      will_open_pull_request: false,
+      reason: "Build inside a managed workspace snapshot.",
+    });
+    const p = payload({
+      chosen: chosenOc,
+      candidates: [chosenOc],
+      project: {
+        found: true,
+        project_id: "project.opencode-1",
+        build_lane_enabled: true,
+        has_github_repo: false,
+        output_target: "managed_workspace",
+        has_workspace_id: true,
+      },
+    });
+    const { container } = render(<CodingPlanCard payload={p} userPrompt="Tidy docs" />);
+    expect(
+      container.querySelector('[data-hww-coding-plan="opencode-build-approval"]'),
+    ).not.toBeNull();
+    expect(container.querySelector('[data-hww-coding-plan="managed-build-approval"]')).toBeNull();
+    expect(container.querySelector('[data-hww-coding-plan="launch-cta-disabled"]')).toBeNull();
+    expect(container.querySelector('[data-hww-coding-plan="prefer-opencode-cta"]')).toBeNull();
+  });
+
+  it("falls back to disabled placeholder when chosen is opencode_cli but workspace_id missing", () => {
+    const chosenOc = candidate({
+      provider: "opencode_cli",
+      output_kind: "pull_request",
+      will_modify_code: true,
+      will_open_pull_request: false,
+    });
+    const p = payload({
+      chosen: chosenOc,
+      candidates: [chosenOc],
+      project: {
+        found: true,
+        project_id: "project.opencode-1",
+        build_lane_enabled: true,
+        has_github_repo: false,
+        output_target: "managed_workspace",
+        has_workspace_id: false,
+      },
+    });
+    const { container } = render(<CodingPlanCard payload={p} userPrompt="x" />);
+    expect(container.querySelector('[data-hww-coding-plan="opencode-build-approval"]')).toBeNull();
+    expect(container.querySelector('[data-hww-coding-plan="launch-cta-disabled"]')).not.toBeNull();
+  });
+
   it("affordance rendered text never contains banned user-facing tokens", () => {
     const chosen = fdBuildChosen();
     const opencode = opencodeAvailable();

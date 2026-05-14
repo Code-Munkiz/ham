@@ -54,6 +54,35 @@ export const MANAGED_BUILD_KEEP_BUILDING_CTA = "Keep building";
 export const MANAGED_BUILD_NO_PR_NOTE =
   "Managed workspace builds never open a pull request and never push to GitHub.";
 
+export const OPENCODE_BUILD_APPROVAL_HEADLINE = "Review OpenCode build";
+
+export const OPENCODE_BUILD_APPROVAL_BODY =
+  "HAM will run OpenCode in a managed workspace and save the change as a snapshot you can preview.";
+
+export const OPENCODE_BUILD_APPROVAL_CHECKBOX =
+  "I approve HAM to create a managed workspace snapshot with OpenCode.";
+
+export const OPENCODE_BUILD_PREVIEW_CTA = "Preview";
+export const OPENCODE_BUILD_PREVIEW_BUSY = "Previewing…";
+export const OPENCODE_BUILD_LAUNCH_CTA = "Approve and build";
+export const OPENCODE_BUILD_LAUNCH_BUSY = "Building…";
+
+export const OPENCODE_BUILD_SUCCESS_HEADLINE = "Saved version created";
+export const OPENCODE_BUILD_FAILURE_HEADLINE = "Build did not complete";
+
+export const OPENCODE_BUILD_NO_PR_NOTE = "Managed workspace builds never open a pull request.";
+export const OPENCODE_BUILD_PREVIEW_LINK = "Preview";
+export const OPENCODE_BUILD_VIEW_CHANGES_LINK = "View changes";
+export const OPENCODE_BUILD_TECHNICAL_DETAILS_SUMMARY = "Details";
+export const OPENCODE_BUILD_KEEP_BUILDING_CTA = "Keep building";
+
+export function opencodeBuildChangedPathsLine(count: number): string {
+  if (!Number.isFinite(count) || count < 0) return "";
+  if (count === 0) return "No files changed";
+  if (count === 1) return "1 file changed";
+  return `${count} files changed`;
+}
+
 export const OPENCODE_PREFERRED_CTA = "Try with OpenCode";
 export const OPENCODE_PREFERRED_HINT =
   "Build it in a managed workspace instead of opening a pull request.";
