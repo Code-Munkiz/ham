@@ -1755,7 +1755,9 @@ def _cloud_runtime_worker_entry() -> BuilderWorkerCapabilityEntry:
     provider_status = get_cloud_runtime_provider_capability_status()
     experiment_status, _ = get_cloud_runtime_experiment_status()
     status = _to_worker_status(provider_status)
-    is_live_gke = provider_mode == "gcp_gke_sandbox" and provider_status == "available"
+    is_live_gke = provider_mode == "gcp_gke_sandbox" and provider_status in {"available", "available_poc"}
+    if is_live_gke and status == "available_poc":
+        status = "available"
     fit = "Cloud runtime worker for live preview provisioning and health checks."
     setup = "Configure cloud runtime provider env vars for this deployment."
     if experiment_status == "experiment_not_enabled":
