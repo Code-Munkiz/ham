@@ -8,9 +8,48 @@ from typing import Any
 from src.ham.clerk_auth import HamActor
 
 
-def _builder_ack_prefix(last_user_plain: str) -> str:
+def _looks_like_followup_edit(last_user_plain: str) -> bool:
+    text = (last_user_plain or "").strip().lower()
+    if not text:
+        return False
+    patterns = (
+        r"\bmake it\b",
+        r"\bmore like\b",
+        r"\bchange\b",
+        r"\bupdate\b",
+        r"\badd\b",
+        r"\bremove\b",
+        r"\btry again\b",
+        r"\bi do not see\b",
+        r"\bi don't see\b",
+        r"\bi dont see\b",
+        r"\bboard smaller\b",
+    )
+    if any(re.search(p, text) for p in patterns):
+        return True
+    return bool(re.search(r"\b(colors?|layout|style|sidebar|sound|leaderboard)\b", text))
+
+
+def _looks_like_visual_reference_request(last_user_plain: str) -> bool:
+    text = (last_user_plain or "").strip().lower()
+    if not text:
+        return False
+    if "image" not in text:
+        return False
+    return bool(
+        re.search(r"\b(like|similar to|more like|style|look)\b.{0,48}\b(image|reference)\b", text)
+    )
+
+
+def _builder_ack_prefix(last_user_plain: str, *, operation: str) -> str:
     """Generate prompt-specific builder acknowledgement copy."""
     text = (last_user_plain or "").strip().lower()
+    if operation == "update_existing_project":
+        if _looks_like_visual_reference_request(last_user_plain):
+            return (
+                "I'll update the existing project and apply the visual style from your reference as closely as I can.\n\n"
+            )
+        return "I'll update the existing project source and refresh the Workbench preview.\n\n"
     product = ""
     m = re.search(
         r"\b(?:build|create|make|generate|scaffold)\b.{0,60}\b"
@@ -84,12 +123,23 @@ def run_builder_happy_path_hook(
     if not ws or not pid or not str(last_user_plain or "").strip():
         return None, meta
     created_by = ham_actor.user_id if ham_actor is not None else ""
+    from src.persistence.builder_source_store import get_builder_source_store
+
+    source_rows = get_builder_source_store().list_project_sources(workspace_id=ws, project_id=pid)
+    has_active_snapshot = any(bool(row.active_snapshot_id) for row in source_rows)
+    operation = "build_or_create"
+    if intent != "build_or_create" and has_active_snapshot and _looks_like_followup_edit(last_user_plain):
+        operation = "update_existing_project"
+        meta["builder_intent"] = "build_or_create"
+    elif intent != "build_or_create":
+        return None, meta
     summary = maybe_chat_scaffold_for_turn(
         workspace_id=ws,
         project_id=pid,
         session_id=session_id,
         last_user_plain=last_user_plain,
         created_by=created_by,
+        operation=operation,
     )
     if not summary:
         return None, meta
@@ -109,7 +159,7 @@ def run_builder_happy_path_hook(
             if enqueue_meta:
                 meta.update(enqueue_meta)
         return (
-            _builder_ack_prefix(last_user_plain),
+            _builder_ack_prefix(last_user_plain, operation=operation),
             meta,
         )
     if summary.get("deduplicated"):
@@ -125,6 +175,11 @@ def run_builder_happy_path_hook(
             )
             if enqueue_meta:
                 meta.update(enqueue_meta)
+        if operation == "update_existing_project":
+            return (
+                "I already applied that update for the active project source and will keep the Workbench in sync.\n\n",
+                meta,
+            )
         return (
             "I already prepared this builder project source from your recent prompt and will keep the Workbench in sync.\n\n",
             meta,

@@ -1403,6 +1403,23 @@ describe("WorkspaceWorkbench", () => {
     });
   });
 
+  it("Clicking Preview tab triggers preview status refresh", async () => {
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(getBuilderPreviewStatusMock.mock.calls.length).toBeGreaterThan(0);
+    });
+    const before = getBuilderPreviewStatusMock.mock.calls.length;
+    fireEvent.click(screen.getByTestId("hww-workbench-tab-code"));
+    fireEvent.click(screen.getByTestId("hww-workbench-tab-preview"));
+    await waitFor(() => {
+      expect(getBuilderPreviewStatusMock.mock.calls.length).toBeGreaterThan(before);
+    });
+  });
+
   it("Preview error state shows safe copy", async () => {
     getBuilderPreviewStatusMock.mockRejectedValue(new Error("HTTP 500"));
     render(
@@ -1414,6 +1431,28 @@ describe("WorkspaceWorkbench", () => {
       expect(screen.getByTestId("hww-preview-state-error")).toBeInTheDocument();
     });
     expect(screen.queryByTestId("hww-preview-iframe")).toBeNull();
+  });
+
+  it("Preview proxy upstream errors render friendly copy instead of raw JSON blob", async () => {
+    getBuilderPreviewStatusMock.mockRejectedValueOnce(
+      new Error(
+        "{\"detail\":{\"error\":{\"code\":\"PREVIEW_PROXY_UPSTREAM_UNAVAILABLE\",\"message\":\"Cloud preview upstream is unavailable.\"}}}",
+      ),
+    );
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-state-error")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("hww-preview-state-error")).toHaveTextContent(
+      "Preview is still warming up. HAM will keep retrying until it is ready.",
+    );
+    expect(screen.getByTestId("hww-preview-state-error").textContent || "").not.toContain(
+      "PREVIEW_PROXY_UPSTREAM_UNAVAILABLE",
+    );
   });
 
   it("Unknown project errors render safe guidance copy", async () => {

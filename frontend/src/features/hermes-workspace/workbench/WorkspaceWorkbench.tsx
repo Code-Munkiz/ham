@@ -84,6 +84,7 @@ export function WorkspaceWorkbench({
   const [activeTab, setActiveTab] = React.useState<WorkspaceWorkbenchTabId>("preview");
   const [projectSourceOpen, setProjectSourceOpen] = React.useState(false);
   const [sourceRefreshKey, setSourceRefreshKey] = React.useState(0);
+  const [previewTabRefreshKey, setPreviewTabRefreshKey] = React.useState(0);
   const tabStripRef = React.useRef<HTMLDivElement | null>(null);
   const [workbenchTabBarMode, setWorkbenchTabBarMode] = React.useState<"labeled" | "icons">(
     "labeled",
@@ -138,6 +139,9 @@ export function WorkspaceWorkbench({
                 aria-label={tab.label}
                 title={tab.label}
                 onClick={() => {
+                  if (tab.id === "preview") {
+                    setPreviewTabRefreshKey((k) => k + 1);
+                  }
                   setActiveTab(tab.id);
                 }}
                 className={cn(
@@ -242,6 +246,7 @@ export function WorkspaceWorkbench({
             workspaceId={workspaceId}
             projectId={projectId}
             sourceRefreshKey={sourceRefreshKey}
+            previewTabRefreshKey={previewTabRefreshKey}
           />
         ) : null}
         {activeTab === "code" ? (
@@ -291,6 +296,13 @@ function sanitizePreviewFetchError(message: string | null): string | null {
   if (/\b404\b/i.test(raw) || /HTTP\s*404/i.test(raw)) {
     return "Preview status is not available yet.";
   }
+  if (
+    /PREVIEW_PROXY_UPSTREAM_UNAVAILABLE/i.test(raw) ||
+    /PREVIEW_PROXY_TIMEOUT/i.test(raw) ||
+    /PREVIEW_PROXY_NOT_CONFIGURED/i.test(raw)
+  ) {
+    return "Preview is still warming up. HAM will keep retrying until it is ready.";
+  }
   return raw;
 }
 
@@ -311,10 +323,12 @@ function WorkbenchPreviewPanel({
   workspaceId = null,
   projectId = null,
   sourceRefreshKey = 0,
+  previewTabRefreshKey = 0,
 }: {
   workspaceId?: string | null;
   projectId?: string | null;
   sourceRefreshKey?: number;
+  previewTabRefreshKey?: number;
 }) {
   const PREVIEW_AUTOPOLL_MS = 2500;
   const [preview, setPreview] = React.useState<BuilderPreviewStatus | null>(null);
@@ -378,6 +392,8 @@ function WorkbenchPreviewPanel({
   });
   const [snapshots, setSnapshots] = React.useState<BuilderSourceSnapshotRecord[]>([]);
   const [previewViewport, setPreviewViewport] = React.useState<"desktop" | "mobile">("desktop");
+  const [iframeProxyError, setIframeProxyError] = React.useState<string | null>(null);
+  const [iframeReloadNonce, setIframeReloadNonce] = React.useState(0);
 
   React.useEffect(() => {
     const ws = workspaceId?.trim() || "";
@@ -620,6 +636,8 @@ function WorkbenchPreviewPanel({
     | "error" = "no_source";
   if (!ws || !pid) {
     previewPhase = "no_project";
+  } else if (iframeProxyError) {
+    previewPhase = "starting";
   } else if (preview?.status === "error") {
     previewPhase = "error";
   } else if (error) {
@@ -691,6 +709,7 @@ function WorkbenchPreviewPanel({
   const canRenderPreviewIframe =
     preview?.status === "ready" &&
     Boolean(previewUrl) &&
+    !iframeProxyError &&
     (!cloudPreviewProxyNeedsSession ||
       (previewProxySessionKey === previewProxySessionCandidateKey && !previewProxySessionError));
   const shouldAutoPollPreview =
@@ -699,6 +718,7 @@ function WorkbenchPreviewPanel({
       preview?.status === "building" ||
       (preview?.status === "not_connected" && hasBackendSource) ||
       cloudRuntimeLatestJob?.status === "queued" ||
+      Boolean(iframeProxyError) ||
       cloudRuntimeLatestJob?.status === "running");
 
   React.useEffect(() => {
@@ -722,6 +742,22 @@ function WorkbenchPreviewPanel({
     preview?.runtime_session_id,
     cloudRuntimeLatestJob?.id,
   ]);
+
+  React.useEffect(() => {
+    if (!previewTabRefreshKey) return;
+    void refreshPreviewRuntimeStatus({ includeLifecycle: false });
+  }, [previewTabRefreshKey, refreshPreviewRuntimeStatus]);
+
+  React.useEffect(() => {
+    setIframeProxyError(null);
+  }, [preview?.runtime_session_id, preview?.preview_endpoint_id, previewUrl]);
+
+  React.useEffect(() => {
+    if (!iframeProxyError) return;
+    if (preview?.status !== "ready" || !previewUrl) return;
+    setIframeReloadNonce((n) => n + 1);
+    setIframeProxyError(null);
+  }, [iframeProxyError, preview?.status, previewUrl]);
 
   React.useEffect(() => {
     if (!cloudPreviewProxyNeedsSession || !previewProxySessionCandidateKey || !ws || !pid) {
@@ -979,6 +1015,7 @@ function WorkbenchPreviewPanel({
               data-testid="hww-preview-frame-wrap"
             >
               <iframe
+                key={`${previewUrl || "preview"}|${preview?.runtime_session_id || ""}|${preview?.preview_endpoint_id || ""}|${iframeReloadNonce}`}
                 title="App preview"
                 src={previewUrl}
                 className={cn(
@@ -987,6 +1024,28 @@ function WorkbenchPreviewPanel({
                 )}
                 data-testid="hww-preview-iframe"
                 sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+                onLoad={(event) => {
+                  const frame = event.currentTarget;
+                  try {
+                    const doc = frame.contentDocument;
+                    const frameText = String(doc?.body?.innerText || "").trim();
+                    const contentType = String(doc?.contentType || "").toLowerCase();
+                    if (
+                      /PREVIEW_PROXY_[A-Z_]+/.test(frameText) ||
+                      (contentType.includes("application/json") &&
+                        (frameText.includes("PREVIEW_PROXY_") ||
+                          frameText.includes("upstream is unavailable")))
+                    ) {
+                      setIframeProxyError(frameText.slice(0, 240) || "PREVIEW_PROXY_UPSTREAM_UNAVAILABLE");
+                      void refreshPreviewRuntimeStatus({ includeLifecycle: false });
+                      return;
+                    }
+                    setIframeProxyError(null);
+                  } catch {
+                    // Cross-origin restrictions should not apply for same-origin preview proxy,
+                    // but keep this tolerant in case browser sandbox policies vary.
+                  }
+                }}
               />
               {visualEditModeActive ? (
                 <button

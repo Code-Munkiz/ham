@@ -193,6 +193,67 @@ def test_chat_scaffold_tetris_prompt_generates_playable_game_sources(tmp_path: P
     _cleanup()
 
 
+def test_chat_scaffold_tetris_reference_prompt_applies_style_profile(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    out = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_a",
+        session_id="sess_style_ref",
+        last_user_plain="ham make me a game like tetris like the one in the image",
+        created_by="user_1",
+    )
+    assert out and out.get("scaffolded")
+    assert out.get("style_profile_id") == "neon_space_glass"
+    assert out.get("reference_requested") is True
+    snap_id = str(out["source_snapshot_id"])
+    rows = store.list_source_snapshots(workspace_id="ws_a", project_id="pr_a")
+    snap = next(row for row in rows if row.id == snap_id)
+    manifest = snap.manifest or {}
+    inline_files = manifest.get("inline_files")
+    assert isinstance(inline_files, dict)
+    app_tsx = str(inline_files.get("src/App.tsx") or "")
+    styles_css = str(inline_files.get("src/styles.css") or "")
+    assert "Neon glass arena tuned from your style reference." in app_tsx
+    assert "--ham-bg-start: #1c1140;" in styles_css
+    assert "--ham-panel-border: #5340b8;" in styles_css
+    assert "image was analyzed" not in app_tsx.lower()
+    _cleanup()
+
+
+def test_builder_hook_followup_edit_updates_existing_project_snapshot(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    first = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_a",
+        session_id="sess_iter",
+        last_user_plain="build me a game like Tetris",
+        created_by="user_1",
+    )
+    assert first and first.get("scaffolded") is True
+    first_snapshot = str(first.get("source_snapshot_id") or "")
+
+    prefix, meta = run_builder_happy_path_hook(
+        workspace_id="ws_a",
+        project_id="pr_a",
+        session_id="sess_iter",
+        last_user_plain="make the board smaller and change the colors",
+        ham_actor=None,
+    )
+    assert prefix is not None
+    assert "update the existing project" in prefix.lower()
+    assert meta.get("scaffolded") is True
+    assert meta.get("builder_operation") == "update_existing_project"
+    second_snapshot = str(meta.get("source_snapshot_id") or "")
+    assert second_snapshot and second_snapshot != first_snapshot
+    source_rows = store.list_project_sources(workspace_id="ws_a", project_id="pr_a")
+    assert source_rows and source_rows[0].active_snapshot_id == second_snapshot
+    _cleanup()
+
+
 def test_chat_scaffold_enqueue_idempotent(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
