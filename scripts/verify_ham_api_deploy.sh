@@ -15,6 +15,9 @@ set -euo pipefail
 BASE="${1:?Usage: $0 <HAM_API_BASE_URL> [Origin URL]}"
 ORIGIN="${2:-http://localhost:3000}"
 BASE="${BASE%/}"
+GCP_PROJECT="${HAM_VERIFY_GCP_PROJECT:-clarity-staging-488201}"
+GCP_REGION="${HAM_VERIFY_GCP_REGION:-us-central1}"
+CLOUD_RUN_SERVICE="${HAM_VERIFY_CLOUD_RUN_SERVICE:-ham-api}"
 
 CLERK_AUTH_CURL=()
 if [[ -n "${HAM_VERIFY_CLERK_SESSION_JWT:-}" ]]; then
@@ -39,6 +42,73 @@ if cap.get("project_agent_profiles_read") is not True:
 ' 2>/dev/null; then
   echo "Capability check failed. Body:" >&2
   echo "$status_body" >&2
+  exit 1
+fi
+
+echo "== Verify Cloud Run live preview runtime flags (${CLOUD_RUN_SERVICE}, ${GCP_REGION}, ${GCP_PROJECT})"
+if ! command -v gcloud >/dev/null 2>&1; then
+  echo "gcloud CLI is required for runtime flag verification; install/configure gcloud and re-run." >&2
+  exit 1
+fi
+runtime_payload="$(gcloud run services describe "${CLOUD_RUN_SERVICE}" \
+  --project "${GCP_PROJECT}" \
+  --region "${GCP_REGION}" \
+  --format=json)"
+if [[ -z "${runtime_payload}" ]]; then
+  echo "Could not load Cloud Run service metadata for runtime flag verification." >&2
+  exit 1
+fi
+if ! RUNTIME_PAYLOAD="${runtime_payload}" python3 -c '
+import json, os, sys
+
+service = json.loads(os.environ["RUNTIME_PAYLOAD"])
+status = service.get("status") or {}
+spec = service.get("spec") or {}
+template = ((spec.get("template") or {}).get("spec") or {})
+containers = template.get("containers") or []
+if not containers:
+    print("Cloud Run service has no containers in spec.template.spec.", file=sys.stderr)
+    raise SystemExit(1)
+env = {}
+for row in containers[0].get("env") or []:
+    name = row.get("name")
+    if not name:
+        continue
+    if "value" in row:
+        env[name] = str(row.get("value"))
+
+required = {
+    "HAM_BUILDER_GCP_RUNTIME_ENABLED": "true",
+    "HAM_BUILDER_GCP_RUNTIME_DRY_RUN": "false",
+    "HAM_BUILDER_GCP_RUNTIME_LIVE_K8S_ENABLED": "true",
+    "HAM_BUILDER_GCP_RUNTIME_LIVE_BUNDLE_UPLOAD": "true",
+    "HAM_BUILDER_PREVIEW_PROXY_AUTH_DIAGNOSTICS": "1",
+}
+drift = []
+for key, expected in required.items():
+    actual = env.get(key)
+    if actual != expected:
+        drift.append((key, expected, actual))
+
+latest_ready = status.get("latestReadyRevisionName") or "unknown"
+traffic = status.get("traffic") or []
+active_traffic = "unknown"
+if traffic:
+    row = traffic[0]
+    rev = row.get("revisionName", "unknown")
+    pct = row.get("percent", "?")
+    active_traffic = f"{rev}:{pct}"
+print(f"latest_ready_revision={latest_ready}")
+print(f"active_traffic={active_traffic}")
+
+if drift:
+    print("Runtime env drift detected:", file=sys.stderr)
+    for key, expected, actual in drift:
+        print(f"- {key}: expected {expected!r}, got {actual!r}", file=sys.stderr)
+    print("Refusing deploy verification because live preview runtime is not in expected live mode.", file=sys.stderr)
+    raise SystemExit(1)
+print("runtime env guard OK")
+'; then
   exit 1
 fi
 
