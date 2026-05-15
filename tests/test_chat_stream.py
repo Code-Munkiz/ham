@@ -81,6 +81,43 @@ def test_chat_stream_mock_yields_session_delta_done(mock_mode: None) -> None:
     assert "Mock assistant reply" in msgs[-1]["content"]
 
 
+def test_chat_stream_releases_lock_when_execution_mode_raises(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: _claim_stream_session must not stick if setup after claim raises."""
+
+    seed = client.post(
+        "/api/chat/stream",
+        json={"messages": [{"role": "user", "content": "seed session for lock test"}]},
+    )
+    assert seed.status_code == 200, seed.text
+    sid = str(_parse_ndjson(seed.text)[0]["session_id"])
+
+    calls = {"n": 0}
+
+    def _boom_once(**kwargs):  # type: ignore[no-untyped-def]
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("simulated post-claim execution-mode failure")
+        return kwargs["execution_mode"]
+
+    monkeypatch.setattr("src.api.chat._apply_browser_bridge_for_turn", _boom_once)
+
+    with pytest.raises(RuntimeError, match="simulated post-claim execution-mode failure"):
+        client.post(
+            "/api/chat/stream",
+            json={"session_id": sid, "messages": [{"role": "user", "content": "hello"}]},
+        )
+
+    res_ok = client.post(
+        "/api/chat/stream",
+        json={"session_id": sid, "messages": [{"role": "user", "content": "hello again"}]},
+    )
+    assert res_ok.status_code == 200, res_ok.text
+    events = _parse_ndjson(res_ok.text)
+    assert events[0]["type"] == "session"
+
+
 @pytest.mark.parametrize(
     ("prompt", "expected_intent", "expected_reason_code"),
     [

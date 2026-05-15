@@ -1529,12 +1529,18 @@ def post_chat_stream(
             _release_stream_session(sid)
             stream_lock_claimed = False
 
-    stream_execution_mode = _execution_mode_payload(body_eff, last_user_plain=last_user_plain)
-    stream_execution_mode = _apply_browser_bridge_for_turn(
-        execution_mode=stream_execution_mode,
-        body=body_eff,
-        last_user_plain=last_user_plain,
-    )
+    # Claim runs before streaming; any failure below must release or the
+    # session id stays stuck in _ACTIVE_STREAM_SESSIONS (409 forever for that chat).
+    try:
+        stream_execution_mode = _execution_mode_payload(body_eff, last_user_plain=last_user_plain)
+        stream_execution_mode = _apply_browser_bridge_for_turn(
+            execution_mode=stream_execution_mode,
+            body=body_eff,
+            last_user_plain=last_user_plain,
+        )
+    except Exception:
+        release_stream_lock()
+        raise
 
     try:
         if (
