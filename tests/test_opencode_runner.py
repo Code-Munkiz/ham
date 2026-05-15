@@ -169,6 +169,143 @@ def test_event_consumer_handles_session_error() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Global SSE session filtering
+# ---------------------------------------------------------------------------
+
+
+def test_filter_events_for_session_skips_foreign_session_payloads() -> None:
+    from src.ham.opencode_runner.event_consumer import filter_events_for_session
+
+    sid = "sess_target"
+    stream = [
+        {"type": "server.connected"},
+        {"type": "message.part.updated", "sessionID": "other", "part": {"text": "x"}},
+        {"type": "message.part.updated", "sessionID": sid, "part": {"text": "ok"}},
+        {"type": "session.idle", "sessionID": "other"},
+        {"type": "session.idle", "sessionID": sid},
+    ]
+    out = list(filter_events_for_session(iter(stream), sid))
+    texts = []
+    for e in out:
+        if e["type"] == "message.part.updated":
+            texts.append(((e["part"] or {}).get("text") or "").strip())
+    assert texts == ["ok"]
+    idle_ids = [e.get("sessionID") for e in out if e["type"] == "session.idle"]
+    assert idle_ids == [sid]
+
+
+def test_runner_global_sse_subscribed_before_prompt_async(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Production path opens ``GET /global/event`` before ``prompt_async``."""
+    from src.ham.opencode_runner.runner import GLOBAL_SSE_EVENT_PATH
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", _AUTH_CANARY)
+    handle = _FakeHandle()
+    seq: list[tuple[str, str]] = []
+    sse_body = (
+        b'data: {"type":"server.connected"}\n\n'
+        b'data: {"type":"session.idle","sessionID":"sess_abc"}\n\n'
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        meth = request.method.upper()
+        path = request.url.path
+        seq.append((meth, path))
+        if path == "/global/health":
+            return httpx.Response(200, json={"healthy": True, "version": "test"})
+        if path == "/session" and meth == "POST":
+            return httpx.Response(200, json={"id": "sess_abc", "title": "t"})
+        if path.startswith("/auth/") and meth == "PUT":
+            return httpx.Response(200, json=True)
+        if meth == "GET" and path == GLOBAL_SSE_EVENT_PATH:
+            return httpx.Response(
+                200,
+                headers={"Content-Type": "text/event-stream"},
+                content=sse_body,
+            )
+        if path.endswith("/prompt_async") and meth == "POST":
+            return httpx.Response(204)
+        if path.endswith("/abort") or path == "/instance/dispose":
+            return httpx.Response(200, json=True)
+        return httpx.Response(404, json={"error": path})
+
+    result = run_opencode_mission(
+        project_root=tmp_path,
+        user_prompt="tidy",
+        spawner=_mock_spawner_factory(handle),
+        http_client_factory=_http_factory(handler),
+        # Explicitly exercise the threaded global SSE subscriber (second client).
+        event_stream_factory=None,
+    )
+    assert result.status == "success"
+    ge_idx = next(i for i, (m, p) in enumerate(seq) if m == "GET" and p == GLOBAL_SSE_EVENT_PATH)
+    pr_idx = next(
+        i for i, (m, p) in enumerate(seq) if m == "POST" and p.endswith("/prompt_async")
+    )
+    assert ge_idx < pr_idx
+
+
+def test_runner_server_connected_without_idle_session_no_completion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", _AUTH_CANARY)
+    events = [{"type": "server.connected"}]
+    result = run_opencode_mission(
+        project_root=tmp_path,
+        user_prompt="tidy",
+        spawner=_mock_spawner_factory(_FakeHandle()),
+        http_client_factory=_http_factory(_basic_handler_factory()),
+        event_stream_factory=lambda _c, _s: iter(events),
+    )
+    assert result.status == "session_no_completion"
+    assert result.error_kind == "session_no_completion"
+
+
+def test_runner_ignores_session_error_for_foreign_session_then_completes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", _AUTH_CANARY)
+    events = [
+        {"type": "server.connected"},
+        {"type": "session.error", "sessionID": "other", "message": "boom"},
+        {"type": "session.idle", "sessionID": "sess_abc"},
+    ]
+    result = run_opencode_mission(
+        project_root=tmp_path,
+        user_prompt="tidy",
+        spawner=_mock_spawner_factory(_FakeHandle()),
+        http_client_factory=_http_factory(_basic_handler_factory()),
+        event_stream_factory=lambda _c, _s: iter(events),
+    )
+    assert result.status == "success"
+
+
+def test_runner_matching_session_error_is_runner_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", _AUTH_CANARY)
+    events = [
+        {"type": "server.connected"},
+        {"type": "session.error", "sessionID": "sess_abc", "message": "bad llm"},
+    ]
+    result = run_opencode_mission(
+        project_root=tmp_path,
+        user_prompt="tidy",
+        spawner=_mock_spawner_factory(_FakeHandle()),
+        http_client_factory=_http_factory(_basic_handler_factory()),
+        event_stream_factory=lambda _c, _s: iter(events),
+    )
+    assert result.status == "runner_error"
+    assert result.error_kind == "session_error"
+    assert "bad llm" in (result.error_summary or "")
+
+
+# ---------------------------------------------------------------------------
 # Workspace isolation
 # ---------------------------------------------------------------------------
 

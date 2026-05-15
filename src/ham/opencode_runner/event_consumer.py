@@ -10,7 +10,7 @@ the event-type vocabulary.
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -63,6 +63,7 @@ class SessionError(_Base):
     type: Literal["session.error"] = "session.error"
     message: str | None = None
     error_kind: str | None = None
+    sessionID: str | None = None  # noqa: N815 — mirror upstream camelCase.
 
 
 class UnknownEvent(_Base):
@@ -105,6 +106,51 @@ def parse_event(raw: dict[str, Any]) -> _Base:
         return UnknownEvent(**raw)
 
 
+def extract_raw_event_session_id(raw: Mapping[str, Any]) -> str | None:
+    """Best-effort session id extraction from an decoded SSE payload dict."""
+
+    for key in ("sessionID", "session_id"):
+        raw_val = raw.get(key)
+        if raw_val is not None and str(raw_val).strip():
+            return str(raw_val).strip()
+    sess = raw.get("session")
+    if isinstance(sess, dict):
+        sid = sess.get("id")
+        if sid is not None and str(sid).strip():
+            return str(sid).strip()
+    return None
+
+
+def raw_event_matches_active_session(raw: Mapping[str, Any], session_id: str) -> bool:
+    """Return True when a global-stream event belongs to ``session_id``.
+
+    ``server.connected`` has no stable session discriminator and must pass
+    through. When no session discriminator is present, the event still passes
+    (backward compatibility with payloads that omit the field).
+    """
+    desired = session_id.strip()
+    typ = str(raw.get("type") or "").strip()
+    if typ == "server.connected":
+        return True
+    extracted = extract_raw_event_session_id(raw)
+    if extracted is None:
+        return True
+    return extracted == desired
+
+
+def filter_events_for_session(
+    stream: Iterable[dict[str, Any]],
+    session_id: str,
+) -> Iterator[dict[str, Any]]:
+    """Filter a global SSE stream down to ``session_id`` (plus ``server.connected``)."""
+
+    for raw in stream:
+        if not isinstance(raw, dict):
+            continue
+        if raw_event_matches_active_session(raw, session_id):
+            yield raw
+
+
 def consume_events(stream: Iterable[dict[str, Any]]) -> Iterator[_Base]:
     """Yield :class:`_Base`-typed events from any iterable of dicts.
 
@@ -125,5 +171,8 @@ __all__ = [
     "ToolCallStart",
     "UnknownEvent",
     "consume_events",
+    "extract_raw_event_session_id",
+    "filter_events_for_session",
     "parse_event",
+    "raw_event_matches_active_session",
 ]

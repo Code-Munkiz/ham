@@ -15,11 +15,14 @@ never invoked from the test process.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import queue
 import shutil
+import threading
 import time
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +35,7 @@ from .event_consumer import (
     SessionError,
     UnknownEvent,
     consume_events,
+    filter_events_for_session,
 )
 from .http_client import HttpClientFactory, OpenCodeServeClient
 from .permission_broker import (
@@ -149,32 +153,83 @@ def _poll_health(
     return False
 
 
-def _make_default_event_stream(
-    client: OpenCodeServeClient, _session_id: str
-) -> Iterable[dict[str, Any]]:
-    """Yield decoded SSE messages from ``GET /event``.
+# OpenCode ``opencode serve`` exposes a global subscription at this path per
+# upstream mintdocs + server tables; legacy ``GET /event`` terminates after
+# one ``server.connected`` frame and does not deliver session lifecycle events.
+GLOBAL_SSE_EVENT_PATH = "/global/event"
 
-    Production reads ``client.client.stream(...)``. Tests pass their own
-    factory; the default is gated behind a lazy import so it doesn't run
-    in test environments.
-    """
-    import json
 
-    with client.client.stream("GET", "/event") as response:
-        for line in response.iter_lines():
-            if not line or not line.strip():
-                continue
-            if line.startswith(":"):
-                continue
-            if line.startswith("data:"):
-                payload = line.split(":", 1)[1].strip()
-                try:
-                    yield json.loads(payload)
-                except Exception as exc:  # noqa: BLE001
-                    _LOG.debug(
-                        "opencode_runner.sse_decode_failed %s",
-                        type(exc).__name__,
-                    )
+def _decode_sse_data_line(line: str) -> dict[str, Any] | None:
+    if not line or not line.strip():
+        return None
+    if line.startswith(":"):
+        return None
+    if line.startswith("data:"):
+        payload = line.split(":", 1)[1].strip()
+        try:
+            decoded_any: Any = json.loads(payload)
+        except json.JSONDecodeError:
+            _LOG.debug("opencode_runner.sse_decode_failed JSONDecodeError")
+            return None
+        if isinstance(decoded_any, dict):
+            return decoded_any
+        return None
+    return None
+
+
+def _timed_sse_queue_iterator(
+    q: queue.Queue[dict[str, Any] | None],
+    *,
+    deadline_s: float,
+) -> Iterator[dict[str, Any]]:
+    """Drain ``q`` until a ``None`` sentinel, timeout, or ``deadline_s`` elapses."""
+
+    deadline_abs = time.monotonic() + deadline_s
+    while True:
+        remaining = deadline_abs - time.monotonic()
+        if remaining <= 0:
+            break
+        timeout_s = max(min(remaining, 1.0), 1e-6)
+        try:
+            item = q.get(timeout=timeout_s)
+        except queue.Empty:
+            continue
+        if item is None:
+            break
+        yield item
+
+
+def _sse_reader_worker(
+    stream_client: OpenCodeServeClient,
+    q: queue.Queue[dict[str, Any] | None],
+    errors: list[BaseException],
+) -> None:
+    """Background pump: subscribe to ``GET /global/event`` and enqueue payloads."""
+
+    try:
+        with stream_client.client.stream(
+            "GET",
+            GLOBAL_SSE_EVENT_PATH,
+            headers={"Accept": "text/event-stream"},
+        ) as response:
+            response.raise_for_status()
+            for line_raw in response.iter_lines():
+                if line_raw is None:
+                    continue
+                line_str = (
+                    line_raw.decode("utf-8", errors="replace")
+                    if isinstance(line_raw, (bytes, bytearray))
+                    else str(line_raw)
+                )
+                decoded = _decode_sse_data_line(line_str)
+                if decoded is None:
+                    continue
+                q.put(decoded)
+    except Exception as exc:  # noqa: BLE001
+        errors.append(exc)
+        _LOG.debug("opencode_runner.global_sse_reader_raised %s", type(exc).__name__)
+    finally:
+        q.put(None)
 
 
 def _handle_permission_request(
@@ -468,6 +523,8 @@ def run_opencode_mission(  # noqa: C901
 
     process: ServeProcess | None = None
     client: OpenCodeServeClient | None = None
+    sse_thread: threading.Thread | None = None
+    stream_dup_client: OpenCodeServeClient | None = None
     try:
         _LOG.info(
             "opencode_runner.serve_spawn_attempted %s",
@@ -563,6 +620,35 @@ def run_opencode_mission(  # noqa: C901
                 error_summary="OpenCode session response did not include an id.",
             )
 
+        sse_reader_errors: list[BaseException] = []
+        if event_stream_factory is not None:
+            filtered_event_stream = filter_events_for_session(
+                event_stream_factory(client, session_id),
+                session_id,
+            )
+        else:
+            stream_dup_client = OpenCodeServeClient.open(
+                base_url=process.base_url,
+                auth=isolated.basic_auth(),
+                client_factory=http_client_factory,
+            )
+            sse_queue: queue.Queue[dict[str, Any] | None] = queue.Queue()
+            sse_thread = threading.Thread(
+                target=_sse_reader_worker,
+                kwargs={
+                    "stream_client": stream_dup_client,
+                    "q": sse_queue,
+                    "errors": sse_reader_errors,
+                },
+                name="ham-opencode-global-sse",
+                daemon=True,
+            )
+            sse_thread.start()
+            filtered_event_stream = filter_events_for_session(
+                _timed_sse_queue_iterator(sse_queue, deadline_s=deadline_s),
+                session_id,
+            )
+
         try:
             client.prompt_async(
                 session_id,
@@ -584,14 +670,20 @@ def run_opencode_mission(  # noqa: C901
                 ),
             )
 
-        stream_factory = event_stream_factory or _make_default_event_stream
-        event_stream = stream_factory(client, session_id)
+        if sse_reader_errors:
+            _LOG.warning(
+                "opencode_runner.global_sse_reader_failed %s",
+                _safe_log_fields(
+                    log_context,
+                    {"err": type(sse_reader_errors[0]).__name__},
+                ),
+            )
 
         result = _consume_run(
             client=client,
             session_id=session_id,
             project_root=project_root,
-            event_stream=event_stream,
+            event_stream=filtered_event_stream,
             deadline_s=deadline_s,
             permission_timeout_s=permission_timeout_s,
             log_context=log_context,
@@ -630,6 +722,13 @@ def run_opencode_mission(  # noqa: C901
             ),
         )
     finally:
+        if stream_dup_client is not None:
+            try:
+                stream_dup_client.close()
+            except Exception as exc:  # noqa: BLE001
+                _LOG.debug("opencode_runner.sse_client_close_raised %s", type(exc).__name__)
+        if sse_thread is not None and sse_thread.is_alive():
+            sse_thread.join(timeout=5.0)
         if client is not None:
             try:
                 client.close()
@@ -640,4 +739,4 @@ def run_opencode_mission(  # noqa: C901
         _cleanup_xdg(isolated.xdg_data_home, isolated.xdg_config_home)
 
 
-__all__ = ["run_opencode_mission"]
+__all__ = ["GLOBAL_SSE_EVENT_PATH", "run_opencode_mission"]

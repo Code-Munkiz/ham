@@ -220,9 +220,11 @@ In order of milestones:
 2. **Per-run credential injection** via `PUT /auth/:id` after server
    startup; the plaintext key never touches disk thanks to the
    ephemeral XDG redirection.
-3. **SSE permission interception**: HAM consumes `GET /event` and
-   answers `session.permission.requested` events itself, routing the
-   decision through Hermes policy.
+3. **SSE permission interception**: HAM consumes the global stream
+   `GET /global/event` (SSE) **before** dispatching `POST .../prompt_async`,
+   filters events to the active `session_id`, and answers
+   `session.permission.requested` events itself, routing the decision
+   through Hermes policy.
 4. **HAM-enforced deletion guard at the snapshot boundary**:
    `compute_deleted_paths_against_parent(common)` runs before
    `emit_managed_workspace_snapshot(common)`; deletions are rejected
@@ -291,12 +293,14 @@ deletion guard is mirrored bit-for-bit for the OpenCode path.
 4. poll GET /global/health for up to 30 s (500 ms intervals)
 5. PUT /auth/<provider> with HAM-resolved creds for each present env key
 6. POST /session  -> session_id
-7. POST /session/<id>/prompt_async with the user's prompt
-8. consume GET /event SSE; broker each session.permission.requested
+7. open GET /global/event (second httpx Client) and start decoding SSE
+   into a bounded queue filtered to session_id before any prompt dispatch
+8. POST /session/<id>/prompt_async with the user's prompt
+9. drain the queued SSE iterator; broker each session.permission.requested
    through the deny-by-default policy below
-9. on session.idle (or HAM-side deadline), POST /session/<id>/abort
+10. on session.idle (or HAM-side deadline), POST /session/<id>/abort
    then POST /instance/dispose, then SIGTERM → SIGKILL the process
-10. reap orphan children; remove XDG tempdirs; return OpenCodeRunResult
+11. reap orphan children; remove XDG tempdirs; return OpenCodeRunResult
 ```
 
 All credential resolution happens inside `build_isolated_env`. Env
