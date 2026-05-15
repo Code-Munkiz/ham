@@ -118,3 +118,10 @@ HAM_CORS_ORIGIN_REGEX: "https://.*\\.vercel\\.app"
 #     `build_outcome`, plus all Cursor + Droid run history.
 # Setting the env vars above does NOT make these durable. Treat any Build Lane router (P3/P4/P5) as
 # blocked on durable-backend code work for both stores; the runner-side P2 work has no such dependency.
+
+# --- OpenCode managed-workspace lane (optional) ---
+# Plain flags + default model live in this file; deploy script default --set-secrets must include
+# HAM_OPENCODE_EXEC_TOKEN=ham-opencode-exec-token:latest (see scripts/deploy_ham_api_cloud_run.sh).
+# HAM_OPENCODE_ENABLED: "1"
+# HAM_OPENCODE_EXECUTION_ENABLED: "1"
+# HAM_OPENCODE_DEFAULT_MODEL: "anthropic/claude-sonnet-4-6"
