@@ -1476,7 +1476,9 @@ describe("WorkspaceWorkbench", () => {
   });
 
   it("Unknown project errors render safe guidance copy", async () => {
-    getBuilderPreviewStatusMock.mockRejectedValue(new Error("Unknown project_id 'project.app-f53b52'."));
+    getBuilderPreviewStatusMock.mockRejectedValue(
+      new Error("Unknown project_id 'project.app-f53b52'."),
+    );
     render(
       <MemoryRouter>
         <WorkspaceWorkbench projectId="project.app-f53b52" workspaceId="ws_abc" />
