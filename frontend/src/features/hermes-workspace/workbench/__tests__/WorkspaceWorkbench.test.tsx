@@ -492,6 +492,57 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getAllByText("Cloud runtime provisioning").length).toBeGreaterThan(0);
   });
 
+  it("Activity stream runtime events trigger preview status refresh", async () => {
+    let callbacks: { onActivity: (payload: any) => void; onOpen?: () => void } | null = null;
+    subscribeBuilderActivityStreamMock.mockImplementation(
+      (
+        _workspaceId: string,
+        _projectId: string,
+        cb: { onActivity: (payload: any) => void; onOpen?: () => void },
+      ) => {
+        callbacks = cb;
+        cb.onOpen?.();
+        return { close: vi.fn() };
+      },
+    );
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(getBuilderPreviewStatusMock).toHaveBeenCalled();
+    });
+    const before = getBuilderPreviewStatusMock.mock.calls.length;
+    act(() => {
+      callbacks?.onActivity({
+        workspace_id: "ws_abc",
+        project_id: "proj_abc",
+        connection_state: "live",
+        stream_cursor: "2:act_runtime",
+        items: [
+          {
+            id: "act_runtime",
+            kind: "runtime_status",
+            status: "running",
+            title: "Cloud runtime provisioning",
+            message: "Cloud runtime provider accepted request.",
+            timestamp: "2026-01-01T00:00:01Z",
+            source_id: null,
+            snapshot_id: "ssnp_1",
+            import_job_id: null,
+            runtime_session_id: "rtms_1",
+            preview_endpoint_id: null,
+            metadata: {},
+          },
+        ],
+      });
+    });
+    await waitFor(() => {
+      expect(getBuilderPreviewStatusMock.mock.calls.length).toBeGreaterThan(before);
+    });
+  });
+
   it("Activity stream fallback shows offline state when stream errors", async () => {
     subscribeBuilderActivityStreamMock.mockImplementation(
       (
@@ -1116,6 +1167,86 @@ describe("WorkspaceWorkbench", () => {
       expect(screen.getByTestId("hww-preview-iframe")).toBeInTheDocument();
     });
     expect(screen.getByTestId("hww-preview-open-new-tab")).not.toBeDisabled();
+  });
+
+  it("Preview auto-switches to iframe when status becomes ready without manual refresh", async () => {
+    let callbacks: { onActivity: (payload: any) => void; onOpen?: () => void } | null = null;
+    subscribeBuilderActivityStreamMock.mockImplementation(
+      (
+        _workspaceId: string,
+        _projectId: string,
+        cb: { onActivity: (payload: any) => void; onOpen?: () => void },
+      ) => {
+        callbacks = cb;
+        cb.onOpen?.();
+        return { close: vi.fn() };
+      },
+    );
+    getBuilderPreviewStatusMock.mockReset();
+    getBuilderPreviewStatusMock.mockResolvedValueOnce({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      mode: "local",
+      status: "waiting",
+      health: "unknown",
+      preview_url: null,
+      message: "Preview is preparing.",
+      updated_at: "2026-01-01T00:00:00Z",
+      source_snapshot_id: "ssnp_1",
+      runtime_session_id: "rtms_1",
+      preview_endpoint_id: null,
+      logs_hint: null,
+    });
+    getBuilderPreviewStatusMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      mode: "local",
+      status: "ready",
+      health: "healthy",
+      preview_url: "http://127.0.0.1:3000/",
+      message: "Preview is ready.",
+      updated_at: "2026-01-01T00:00:02Z",
+      source_snapshot_id: "ssnp_1",
+      runtime_session_id: "rtms_1",
+      preview_endpoint_id: "prve_1",
+      logs_hint: null,
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(getBuilderPreviewStatusMock).toHaveBeenCalled();
+    });
+    act(() => {
+      callbacks?.onActivity({
+        workspace_id: "ws_abc",
+        project_id: "proj_abc",
+        connection_state: "live",
+        stream_cursor: "2:act_preview_ready",
+        items: [
+          {
+            id: "act_preview_ready",
+            kind: "preview_connected",
+            status: "ready",
+            title: "Preview ready",
+            message: "Preview connected.",
+            timestamp: "2026-01-01T00:00:02Z",
+            source_id: null,
+            snapshot_id: "ssnp_1",
+            import_job_id: null,
+            runtime_session_id: "rtms_1",
+            preview_endpoint_id: "prve_1",
+            metadata: {},
+          },
+        ],
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-iframe")).toBeInTheDocument();
+    });
+    expect(getBuilderPreviewStatusMock.mock.calls.length).toBeGreaterThan(1);
   });
 
   it("Preview iframe fills and stays contained in preview canvas", async () => {

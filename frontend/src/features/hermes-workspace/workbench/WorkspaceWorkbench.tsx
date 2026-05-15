@@ -316,6 +316,7 @@ function WorkbenchPreviewPanel({
   projectId?: string | null;
   sourceRefreshKey?: number;
 }) {
+  const PREVIEW_AUTOPOLL_MS = 2500;
   const [preview, setPreview] = React.useState<BuilderPreviewStatus | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -485,6 +486,46 @@ function WorkbenchPreviewPanel({
     }
   }, [workspaceId, projectId]);
 
+  const refreshPreviewRuntimeStatus = React.useCallback(
+    async (opts?: { includeLifecycle?: boolean }) => {
+      const ws = workspaceId?.trim() || "";
+      const pid = projectId?.trim() || "";
+      if (!ws || !pid) {
+        setPreview(null);
+        setCloudRuntime(null);
+        setCloudRuntimeLatestJob(null);
+        setCloudRuntimeLifecycle(null);
+        return;
+      }
+      const includeLifecycle = opts?.includeLifecycle !== false;
+      try {
+        const previewPayload = await getBuilderPreviewStatus(ws, pid);
+        const cloudPayload = await getBuilderCloudRuntime(ws, pid);
+        const cloudJobsPayload = await listBuilderCloudRuntimeJobs(ws, pid);
+        setPreview(previewPayload);
+        setCloudRuntime(cloudPayload);
+        const latestJob = cloudJobsPayload.jobs?.[0] || null;
+        setCloudRuntimeLatestJob(latestJob);
+        if (includeLifecycle && latestJob?.id) {
+          const jobStatus = await getBuilderCloudRuntimeJobStatus(ws, pid, latestJob.id);
+          setCloudRuntimeLifecycle(jobStatus.lifecycle);
+        } else if (!latestJob) {
+          setCloudRuntimeLifecycle(null);
+        }
+        setCloudRuntimeError(null);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setError(msg);
+        setPreview(null);
+        setCloudRuntime(null);
+        setCloudRuntimeLatestJob(null);
+        setCloudRuntimeLifecycle(null);
+        setCloudRuntimeError(msg);
+      }
+    },
+    [workspaceId, projectId],
+  );
+
   const refresh = React.useCallback(async () => {
     const ws = workspaceId?.trim() || "";
     const pid = projectId?.trim() || "";
@@ -501,20 +542,7 @@ function WorkbenchPreviewPanel({
     setLoading(true);
     setError(null);
     try {
-      const previewPayload = await getBuilderPreviewStatus(ws, pid);
-      const cloudPayload = await getBuilderCloudRuntime(ws, pid);
-      const cloudJobsPayload = await listBuilderCloudRuntimeJobs(ws, pid);
-      setPreview(previewPayload);
-      setCloudRuntime(cloudPayload);
-      const latestJob = cloudJobsPayload.jobs?.[0] || null;
-      setCloudRuntimeLatestJob(latestJob);
-      if (latestJob?.id) {
-        const jobStatus = await getBuilderCloudRuntimeJobStatus(ws, pid, latestJob.id);
-        setCloudRuntimeLifecycle(jobStatus.lifecycle);
-      } else {
-        setCloudRuntimeLifecycle(null);
-      }
-      setCloudRuntimeError(null);
+      await refreshPreviewRuntimeStatus({ includeLifecycle: true });
       await refreshActivity();
       await refreshRunProfile();
       await refreshVisualEditRequests();
@@ -537,6 +565,7 @@ function WorkbenchPreviewPanel({
     refreshRunProfile,
     refreshVisualEditRequests,
     refreshWorkers,
+    refreshPreviewRuntimeStatus,
   ]);
 
   React.useEffect(() => {
@@ -557,6 +586,15 @@ function WorkbenchPreviewPanel({
         setActivity(payload.items || []);
         setActivityError(null);
         setActivityStreamState("live");
+        const shouldRefreshPreview =
+          (payload.items || []).some((item) =>
+            ["runtime_status", "preview_connected", "preview_error", "source_snapshot"].includes(
+              item.kind,
+            ),
+          ) || (payload.items || []).length > 0;
+        if (shouldRefreshPreview) {
+          void refreshPreviewRuntimeStatus({ includeLifecycle: false });
+        }
       },
       onHeartbeat: () => setActivityStreamState("live"),
       onError: () => {
@@ -566,7 +604,7 @@ function WorkbenchPreviewPanel({
       },
     });
     return () => sub.close();
-  }, [workspaceId, projectId, refreshActivity]);
+  }, [workspaceId, projectId, refreshActivity, refreshPreviewRuntimeStatus]);
 
   const previewUrl = normalizePreviewUrl(preview);
   const ws = workspaceId?.trim() || "";
@@ -655,6 +693,35 @@ function WorkbenchPreviewPanel({
     Boolean(previewUrl) &&
     (!cloudPreviewProxyNeedsSession ||
       (previewProxySessionKey === previewProxySessionCandidateKey && !previewProxySessionError));
+  const shouldAutoPollPreview =
+    Boolean(ws && pid && !loading) &&
+    ((preview?.status === "waiting" && hasBackendSource) ||
+      preview?.status === "building" ||
+      (preview?.status === "not_connected" && hasBackendSource) ||
+      cloudRuntimeLatestJob?.status === "queued" ||
+      cloudRuntimeLatestJob?.status === "running");
+
+  React.useEffect(() => {
+    if (!shouldAutoPollPreview) return;
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      void refreshPreviewRuntimeStatus({ includeLifecycle: false });
+    };
+    tick();
+    const intervalId = window.setInterval(tick, PREVIEW_AUTOPOLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [
+    shouldAutoPollPreview,
+    refreshPreviewRuntimeStatus,
+    sourceRefreshKey,
+    preview?.source_snapshot_id,
+    preview?.runtime_session_id,
+    cloudRuntimeLatestJob?.id,
+  ]);
 
   React.useEffect(() => {
     if (!cloudPreviewProxyNeedsSession || !previewProxySessionCandidateKey || !ws || !pid) {
