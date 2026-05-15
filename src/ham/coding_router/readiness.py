@@ -29,6 +29,7 @@ from src.ham.coding_router.opencode_provider import (
 from src.ham.coding_router.types import (
     ProjectFlags,
     ProviderReadiness,
+    WorkspaceAgentPolicy,
     WorkspaceReadiness,
 )
 
@@ -270,11 +271,63 @@ def _project_flags(project_id: str | None) -> ProjectFlags:
 # ---------------------------------------------------------------------------
 
 
+# Normie-safe blocker for workspace policy gate.
+_BLOCKER_POLICY_DISABLED = (
+    "This builder is not enabled for this workspace. Update builder settings to turn it on."
+)
+
+# Maps provider kind → which WorkspaceAgentPolicy flag gates it.
+# factory_droid_audit and factory_droid_build share the allow_factory_droid flag.
+_POLICY_ALLOW_FLAG: dict[str, str] = {
+    "factory_droid_audit": "allow_factory_droid",
+    "factory_droid_build": "allow_factory_droid",
+    "claude_agent": "allow_claude_agent",
+    "opencode_cli": "allow_opencode",
+    "cursor_cloud": "allow_cursor",
+}
+
+
+def _apply_workspace_policy(
+    providers: tuple[ProviderReadiness, ...],
+    policy: WorkspaceAgentPolicy | None,
+) -> tuple[ProviderReadiness, ...]:
+    """Demote providers that the workspace policy has disabled.
+
+    When a provider is disabled by policy it stays in the list as a blocked
+    candidate (so the chat card can render "blocked because…") but its
+    ``available`` flag is set to ``False`` and a normie-safe policy blocker
+    is appended. ``no_agent`` is always allowed regardless of policy.
+    """
+    if policy is None:
+        return providers
+
+    result: list[ProviderReadiness] = []
+    for p in providers:
+        flag_name = _POLICY_ALLOW_FLAG.get(p.provider)
+        if flag_name is None:
+            result.append(p)
+            continue
+        allowed = getattr(policy, flag_name, True)
+        if allowed:
+            result.append(p)
+        else:
+            result.append(
+                ProviderReadiness(
+                    provider=p.provider,
+                    available=False,
+                    blockers=(*p.blockers, _BLOCKER_POLICY_DISABLED),
+                    operator_signals=p.operator_signals,
+                )
+            )
+    return tuple(result)
+
+
 def collate_readiness(
     *,
     actor: HamActor | None = None,
     project_id: str | None = None,
     include_operator_details: bool = False,
+    workspace_policy: WorkspaceAgentPolicy | None = None,
 ) -> WorkspaceReadiness:
     """Build a :class:`WorkspaceReadiness` snapshot for the calling context.
 
@@ -283,6 +336,10 @@ def collate_readiness(
     responsible for setting :attr:`WorkspaceReadiness.is_operator` to match —
     this collator does not authenticate; it just refuses to populate
     operator-only signals when ``include_operator_details=False``.
+
+    ``workspace_policy`` carries workspace-level allow/deny flags for each
+    provider. When ``None``, no policy is applied and platform readiness alone
+    determines availability (preserving pre-settings behavior).
     """
     providers: tuple[ProviderReadiness, ...] = (
         _build_no_agent_readiness(),
@@ -290,13 +347,10 @@ def collate_readiness(
         _build_build_readiness(include_operator_details=include_operator_details),
         _build_cursor_readiness(include_operator_details=include_operator_details),
         _build_claude_readiness(actor, include_operator_details=include_operator_details),
-        _build_claude_agent_readiness(
-            actor, include_operator_details=include_operator_details
-        ),
-        _build_opencode_readiness(
-            actor, include_operator_details=include_operator_details
-        ),
+        _build_claude_agent_readiness(actor, include_operator_details=include_operator_details),
+        _build_opencode_readiness(actor, include_operator_details=include_operator_details),
     )
+    providers = _apply_workspace_policy(providers, workspace_policy)
     return WorkspaceReadiness(
         is_operator=include_operator_details,
         providers=providers,

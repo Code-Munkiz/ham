@@ -25,9 +25,11 @@ import os
 from src.ham.coding_router.types import (
     Candidate,
     CodingTask,
+    PreferenceMode,
     ProjectFlags,
     ProviderKind,
     ProviderReadiness,
+    WorkspaceAgentPolicy,
     WorkspaceReadiness,
 )
 
@@ -253,10 +255,57 @@ def _approveable_first(c: Candidate) -> tuple[int, float]:
     return (blocked, -c.confidence)
 
 
+# Confidence boost applied to the preferred provider kind per preference_mode.
+# Applied only to approve-able (unblocked) candidates; never bypasses blockers.
+_PREFERENCE_BOOST: dict[PreferenceMode, tuple[ProviderKind, float]] = {
+    "prefer_open_custom": ("opencode_cli", 0.15),
+    "prefer_premium_reasoning": ("claude_agent", 0.15),
+    "prefer_connected_repo": ("cursor_cloud", 0.15),
+}
+
+
+def _apply_preference_boosts(
+    candidates: list[Candidate],
+    workspace_policy: WorkspaceAgentPolicy | None,
+) -> list[Candidate]:
+    """Adjust confidence of the preferred provider kind without bypassing blockers.
+
+    ``recommended`` mode (and absent policy) applies no boost — let platform
+    readiness and task-fit confidence decide. Other modes add a small boost to
+    the nominated provider kind so it surfaces first among approve-able options.
+    """
+    if workspace_policy is None or workspace_policy.preference_mode == "recommended":
+        return candidates
+
+    boost_spec = _PREFERENCE_BOOST.get(workspace_policy.preference_mode)
+    if boost_spec is None:
+        return candidates
+
+    target_provider, boost = boost_spec
+    result: list[Candidate] = []
+    for c in candidates:
+        if c.provider == target_provider and not c.blockers:
+            result.append(
+                Candidate(
+                    provider=c.provider,
+                    confidence=min(1.0, c.confidence + boost),
+                    reason=c.reason,
+                    blockers=c.blockers,
+                    requires_operator=c.requires_operator,
+                    requires_confirmation=c.requires_confirmation,
+                    will_open_pull_request=c.will_open_pull_request,
+                )
+            )
+        else:
+            result.append(c)
+    return result
+
+
 def recommend(
     task: CodingTask,
     readiness: WorkspaceReadiness,
     project: ProjectFlags | None = None,
+    workspace_policy: WorkspaceAgentPolicy | None = None,
 ) -> list[Candidate]:
     """Return a ranked list of :class:`Candidate` rows for ``task``.
 
@@ -264,6 +313,10 @@ def recommend(
     that want to display alternatives can show the rest. Candidates with
     non-empty ``blockers`` are demoted but still returned so the UI can
     render them with a "blocked because…" pill.
+
+    ``workspace_policy`` carries the workspace's allow/deny flags and
+    preference mode. When ``None``, no policy boosts are applied and all
+    platform-ready providers are considered (pre-settings behavior).
     """
     proj = project if project is not None else readiness.project
     table = _BASE_CONFIDENCE.get(task.kind, {})
@@ -297,6 +350,7 @@ def recommend(
         )
 
     out = _demote_opencode_when_ineligible(out, readiness, proj)
+    out = _apply_preference_boosts(out, workspace_policy)
     out.sort(key=_approveable_first)
     return out
 

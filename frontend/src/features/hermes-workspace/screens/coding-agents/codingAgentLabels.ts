@@ -103,6 +103,35 @@ export const CODING_AGENT_LABELS = {
   opencodeProviderName: "OpenCode",
   opencodeReadinessNotConfigured: "OpenCode is not configured on this host yet.",
   opencodeReadinessReady: "Ready when configured",
+
+  // Builder settings panel
+  settingsPanelTitle: "Builder settings",
+  settingsPanelSubtitle: "Choose which builders HAM may use and how it picks among them.",
+  settingsFactoryDroidLabel: "Controlled managed builder",
+  settingsFactoryDroidDescription: "Let HAM choose Factory Droid for controlled, auditable builds.",
+  settingsClaudeAgentLabel: "Premium reasoning builder",
+  settingsClaudeAgentDescription:
+    "Let HAM choose Claude Agent for complex edits requiring deep codebase reasoning.",
+  settingsOpencodeLabel: "Open / bring-your-own-model builder",
+  settingsOpencodeDescription:
+    "Let HAM choose OpenCode when you have model access configured. Requires model credentials.",
+  settingsCursorLabel: "Connected repo builder",
+  settingsCursorDescription:
+    "Let HAM choose Cursor for connected repository pull-request workflows.",
+
+  settingsPreferenceModeLabel: "How should HAM choose?",
+  settingsPreferenceModeRecommended: "Let HAM choose the best builder",
+  settingsPreferenceModeOpenCustom: "Prefer open / bring-your-own-model builder",
+  settingsPreferenceModePremiumReasoning: "Prefer premium reasoning builder",
+  settingsPreferenceModeConnectedRepo: "Prefer connected repo builder",
+
+  settingsStatusReady: "Ready",
+  settingsStatusNeedsModelAccess: "Needs model access",
+  settingsStatusNeedsConnectedRepo: "Needs connected repo",
+  settingsStatusNotAvailable: "Not available on this host",
+
+  settingsSaveError: "Couldn't save builder settings. Try again.",
+  settingsLoadError: "Couldn't load builder settings.",
 } as const;
 
 export type CodingAgentLabels = typeof CODING_AGENT_LABELS;

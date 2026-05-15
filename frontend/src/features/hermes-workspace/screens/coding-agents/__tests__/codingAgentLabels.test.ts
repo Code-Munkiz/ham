@@ -43,6 +43,42 @@ describe("CODING_AGENT_LABELS — locked product copy", () => {
     expect(CODING_AGENT_LABELS.comingSoonNote.toLowerCase()).not.toContain("opencode_cli");
   });
 
+  it("settings panel labels use normie-friendly copy", () => {
+    expect(CODING_AGENT_LABELS.settingsPanelTitle).toBe("Builder settings");
+    expect(CODING_AGENT_LABELS.settingsFactoryDroidLabel).toBe("Controlled managed builder");
+    expect(CODING_AGENT_LABELS.settingsClaudeAgentLabel).toBe("Premium reasoning builder");
+    expect(CODING_AGENT_LABELS.settingsOpencodeLabel).toBe("Open / bring-your-own-model builder");
+    expect(CODING_AGENT_LABELS.settingsCursorLabel).toBe("Connected repo builder");
+    expect(CODING_AGENT_LABELS.settingsPreferenceModeRecommended).toBe(
+      "Let HAM choose the best builder",
+    );
+  });
+
+  it("settings labels never expose provider ids, env vars, or internal workflow ids", () => {
+    const settingsKeys = Object.keys(CODING_AGENT_LABELS).filter((k) => k.startsWith("settings"));
+    const settingsBanned = [
+      "opencode_cli",
+      "factory_droid_build",
+      "factory_droid_audit",
+      "claude_agent",
+      "cursor_cloud",
+      "HAM_",
+      "safe_edit_low",
+      "ControlPlaneRun",
+      "output_target",
+      "/api/",
+    ];
+    for (const key of settingsKeys) {
+      const value = CODING_AGENT_LABELS[key as keyof typeof CODING_AGENT_LABELS];
+      for (const term of settingsBanned) {
+        expect(
+          value.toLowerCase().includes(term.toLowerCase()),
+          `settings label ${key} leaks internal term ${term}: ${value}`,
+        ).toBe(false);
+      }
+    }
+  });
+
   it("uses friendly copy for audit failure / no-project / load-failed states", () => {
     expect(CODING_AGENT_LABELS.auditNoProjectTitle.toLowerCase()).toContain("project");
     expect(CODING_AGENT_LABELS.auditDeploymentNotReady.toLowerCase()).toContain("deployment");

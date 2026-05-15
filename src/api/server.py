@@ -16,6 +16,7 @@ from src.api.capability_library import router as capability_library_router
 from src.api.chat import router as chat_router
 from src.api.claude_agent_build import router as claude_agent_build_router
 from src.api.clerk_gate import get_ham_clerk_actor
+from src.api.coding_agent_access_settings import router as coding_agent_access_settings_router
 from src.api.coding_agents import router as coding_agents_router
 from src.api.coding_conductor import router as coding_conductor_router
 from src.api.coding_readiness import router as coding_readiness_router
@@ -179,6 +180,7 @@ if _workspace_routes_enabled:
     app.include_router(me_router)
     app.include_router(workspaces_router)
     app.include_router(workspace_chat_composer_preference_router)
+    app.include_router(coding_agent_access_settings_router)
 
 _store = RunStore()
 

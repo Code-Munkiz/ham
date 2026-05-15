@@ -15,6 +15,19 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+PreferenceMode = Literal[
+    "recommended",
+    "prefer_open_custom",
+    "prefer_premium_reasoning",
+    "prefer_connected_repo",
+]
+
+ModelSourcePreference = Literal[
+    "ham_default",
+    "connected_tools_byok",
+    "workspace_default",
+]
+
 ProviderKind = Literal[
     "no_agent",
     "factory_droid_audit",
@@ -127,6 +140,30 @@ class WorkspaceReadiness:
 
 
 @dataclass(frozen=True)
+class WorkspaceAgentPolicy:
+    """Workspace-configured coding-agent access policy.
+
+    Separates platform availability (env/secrets/runtime, checked in
+    readiness.py) from workspace-level permission (what HAM may choose for
+    this workspace). All fields default to the safest inclusive posture so
+    callers that do not pass a policy get the existing pre-settings behavior.
+
+    ``allow_opencode`` defaults to ``False`` because OpenCode requires
+    explicit workspace model access to be useful.  All other providers
+    default to ``True`` so the workspace can be narrowed, not widened.
+    """
+
+    allow_factory_droid: bool = True
+    allow_claude_agent: bool = True
+    allow_opencode: bool = False
+    allow_cursor: bool = True
+    preference_mode: PreferenceMode = "recommended"
+    model_source_preference: ModelSourcePreference = "ham_default"
+    updated_at: str | None = None
+    updated_by: str | None = None
+
+
+@dataclass(frozen=True)
 class Candidate:
     """Recommender output row.
 
@@ -148,9 +185,12 @@ class Candidate:
 __all__ = [
     "Candidate",
     "CodingTask",
+    "ModelSourcePreference",
+    "PreferenceMode",
     "ProjectFlags",
     "ProviderKind",
     "ProviderReadiness",
     "TaskKind",
+    "WorkspaceAgentPolicy",
     "WorkspaceReadiness",
 ]

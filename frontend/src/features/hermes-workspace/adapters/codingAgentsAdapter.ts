@@ -1,13 +1,10 @@
 /**
  * Coding Agents — frontend adapter.
  *
- * The first actionable Coding Agents MVP. Action-first surface that drives
- * the already-shipped Cursor Cloud Agent endpoints behind normie-friendly
- * labels. No new backend shapes; no provider-neutral launch endpoint; no
- * Factory Droid / Claude Code / OpenCode runtime.
- *
- * The adapter exposes only product-truth helpers (readiness, status, launch
- * normalization) to keep the screen thin and the contract testable.
+ * Exposes product-truth helpers (readiness, status, launch normalization, and
+ * workspace builder settings) to keep screens thin and contracts testable.
+ * Never exposes provider enum strings, env var names, runner URLs, or
+ * workflow ids to the screen layer.
  */
 
 import {
@@ -397,6 +394,104 @@ export async function launchDroidAuditFlow(
       errorMessage: userFacingDroidPreviewFailureMessage(raw),
       payload: null,
     };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Workspace coding-agent access settings
+// ---------------------------------------------------------------------------
+
+/** Preference mode — how HAM picks among enabled builders. */
+export type PreferenceMode =
+  | "recommended"
+  | "prefer_open_custom"
+  | "prefer_premium_reasoning"
+  | "prefer_connected_repo";
+
+/** Model source preference for OpenCode / Claude Agent. */
+export type ModelSourcePreference = "ham_default" | "connected_tools_byok" | "workspace_default";
+
+/** Shape returned by GET/PATCH /api/workspaces/{id}/coding-agent-access-settings. */
+export interface CodingAgentAccessSettings {
+  kind: "ham_coding_agent_access_settings";
+  workspace_id: string;
+  allow_factory_droid: boolean;
+  allow_claude_agent: boolean;
+  allow_opencode: boolean;
+  allow_cursor: boolean;
+  preference_mode: PreferenceMode;
+  model_source_preference: ModelSourcePreference;
+  updated_at: string | null;
+  updated_by: string | null;
+}
+
+/** Partial update body sent to PATCH. */
+export interface CodingAgentAccessSettingsPatch {
+  allow_factory_droid?: boolean;
+  allow_claude_agent?: boolean;
+  allow_opencode?: boolean;
+  allow_cursor?: boolean;
+  preference_mode?: PreferenceMode;
+  model_source_preference?: ModelSourcePreference;
+}
+
+/** Default settings returned when no workspace_id is provided or fetch fails. */
+export const DEFAULT_CODING_AGENT_SETTINGS: CodingAgentAccessSettings = {
+  kind: "ham_coding_agent_access_settings",
+  workspace_id: "",
+  allow_factory_droid: true,
+  allow_claude_agent: true,
+  allow_opencode: false,
+  allow_cursor: true,
+  preference_mode: "recommended",
+  model_source_preference: "ham_default",
+  updated_at: null,
+  updated_by: null,
+};
+
+export async function fetchCodingAgentAccessSettings(
+  workspaceId: string,
+): Promise<
+  { ok: true; settings: CodingAgentAccessSettings } | { ok: false; errorMessage: string }
+> {
+  if (!workspaceId.trim()) {
+    return { ok: true, settings: { ...DEFAULT_CODING_AGENT_SETTINGS, workspace_id: workspaceId } };
+  }
+  try {
+    const res = await hamApiFetch(
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/coding-agent-access-settings`,
+    );
+    if (!res.ok) return { ok: false, errorMessage: CODING_AGENT_LABELS.settingsLoadError };
+    const body = (await res.json()) as CodingAgentAccessSettings;
+    return { ok: true, settings: body };
+  } catch {
+    return { ok: false, errorMessage: CODING_AGENT_LABELS.settingsLoadError };
+  }
+}
+
+export async function patchCodingAgentAccessSettings(
+  workspaceId: string,
+  patch: CodingAgentAccessSettingsPatch,
+): Promise<
+  { ok: true; settings: CodingAgentAccessSettings } | { ok: false; errorMessage: string }
+> {
+  if (!workspaceId.trim()) {
+    return { ok: false, errorMessage: CODING_AGENT_LABELS.settingsSaveError };
+  }
+  try {
+    const res = await hamApiFetch(
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/coding-agent-access-settings`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      },
+    );
+    if (!res.ok) return { ok: false, errorMessage: CODING_AGENT_LABELS.settingsSaveError };
+    const body = (await res.json()) as CodingAgentAccessSettings;
+    return { ok: true, settings: body };
+  } catch {
+    return { ok: false, errorMessage: CODING_AGENT_LABELS.settingsSaveError };
   }
 }
 

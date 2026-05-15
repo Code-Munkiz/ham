@@ -21,20 +21,26 @@ from src.ham.coding_router.recommend import recommend
 from src.ham.coding_router.types import (
     Candidate,
     CodingTask,
+    ModelSourcePreference,
+    PreferenceMode,
     ProjectFlags,
     ProviderKind,
     ProviderReadiness,
     TaskKind,
+    WorkspaceAgentPolicy,
     WorkspaceReadiness,
 )
 
 __all__ = [
     "Candidate",
     "CodingTask",
+    "ModelSourcePreference",
+    "PreferenceMode",
     "ProjectFlags",
     "ProviderKind",
     "ProviderReadiness",
     "TaskKind",
+    "WorkspaceAgentPolicy",
     "WorkspaceReadiness",
     "classify_task",
     "collate_readiness",

@@ -1220,8 +1220,8 @@ def test_preview_operator_diagnostics_opencode_eligible(
     body = res.json()
     assert body["is_operator"] is True
     diag = body["provider_diagnostics"]["opencode_cli"]
-    assert diag["gate_states"]["HAM_OPENCODE_ENABLED"] is True
-    assert diag["gate_states"]["HAM_OPENCODE_EXECUTION_ENABLED"] is True
+    assert diag["gate_states"]["opencode_enabled"] is True
+    assert diag["gate_states"]["opencode_execution_enabled"] is True
     assert diag["readiness_available"] is True
     assert diag["project_found"] is True
     assert diag["is_managed_workspace"] is True
@@ -1266,7 +1266,7 @@ def test_preview_operator_diagnostics_opencode_gates_disabled(
     body = res.json()
     assert body["is_operator"] is True
     diag = body["provider_diagnostics"]["opencode_cli"]
-    assert diag["gate_states"]["HAM_OPENCODE_ENABLED"] is False
+    assert diag["gate_states"]["opencode_enabled"] is False
     assert diag["exclusion_reason"] == "opencode:gates_disabled"
     assert diag["project_found"] is True
     assert diag["is_managed_workspace"] is True
@@ -1299,8 +1299,8 @@ def test_preview_operator_diagnostics_opencode_not_managed_workspace(
     assert res.status_code == 200, res.text
     body = res.json()
     diag = body["provider_diagnostics"]["opencode_cli"]
-    assert diag["gate_states"]["HAM_OPENCODE_ENABLED"] is True
-    assert diag["gate_states"]["HAM_OPENCODE_EXECUTION_ENABLED"] is True
+    assert diag["gate_states"]["opencode_enabled"] is True
+    assert diag["gate_states"]["opencode_execution_enabled"] is True
     assert diag["readiness_available"] is True
     assert diag["is_managed_workspace"] is False
     assert diag["exclusion_reason"] == "opencode:not_managed_workspace"
@@ -1366,5 +1366,5 @@ def test_preview_operator_diagnostics_no_secrets(
     assert "provider_diagnostics" in body
     diag = body["provider_diagnostics"]["opencode_cli"]
     # gate_states values must be booleans, not the actual env string values.
-    assert isinstance(diag["gate_states"]["HAM_OPENCODE_ENABLED"], bool)
-    assert isinstance(diag["gate_states"]["HAM_OPENCODE_EXECUTION_ENABLED"], bool)
+    assert isinstance(diag["gate_states"]["opencode_enabled"], bool)
+    assert isinstance(diag["gate_states"]["opencode_execution_enabled"], bool)

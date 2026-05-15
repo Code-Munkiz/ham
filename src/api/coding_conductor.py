@@ -34,6 +34,7 @@ from pydantic import BaseModel, ConfigDict, Field
 _LOG = logging.getLogger(__name__)
 
 from src.api.clerk_gate import get_ham_clerk_actor
+from src.api.coding_agent_access_settings import load_workspace_agent_policy
 from src.ham.clerk_auth import HamActor
 from src.ham.clerk_operator import actor_is_workspace_operator
 from src.ham.coding_router import (
@@ -42,7 +43,7 @@ from src.ham.coding_router import (
     collate_readiness,
     recommend,
 )
-from src.ham.coding_router.types import ProjectFlags, ProviderKind, WorkspaceReadiness
+from src.ham.coding_router.types import ProjectFlags, ProviderKind, WorkspaceAgentPolicy, WorkspaceReadiness
 
 router = APIRouter(
     prefix="/api/coding/conductor",
@@ -262,8 +263,8 @@ def _build_opencode_operator_diagnostics(
     return {
         "provider": "opencode_cli",
         "gate_states": {
-            "HAM_OPENCODE_ENABLED": gate_enabled,
-            "HAM_OPENCODE_EXECUTION_ENABLED": execution_enabled,
+            "opencode_enabled": gate_enabled,
+            "opencode_execution_enabled": execution_enabled,
         },
         "readiness_available": readiness_available,
         "readiness_blockers": readiness_blockers,
@@ -286,6 +287,10 @@ class ConductorPreviewBody(BaseModel):
 
     user_prompt: str = Field(min_length=1, max_length=12_000)
     project_id: str | None = Field(default=None, max_length=180)
+    # workspace_id is used to load workspace-level coding-agent access settings
+    # (allow/deny flags and preference mode). Optional for backward compatibility;
+    # when absent the conductor uses platform-readiness defaults only.
+    workspace_id: str | None = Field(default=None, max_length=180)
     # Optional forward-compatibility hook. The conductor only re-orders
     # approve-able candidates; preferred_provider can NEVER bypass blockers
     # or force-enable a disabled provider. Per project policy, Factory Droid
@@ -316,14 +321,16 @@ async def post_coding_conductor_preview(
         )
 
     is_op = actor_is_workspace_operator(ham_actor)
+    workspace_policy: WorkspaceAgentPolicy | None = load_workspace_agent_policy(body.workspace_id)
     task = classify_task(body.user_prompt, project_id=body.project_id)
     snapshot = collate_readiness(
         actor=ham_actor,
         project_id=body.project_id,
         include_operator_details=is_op,
+        workspace_policy=workspace_policy,
     )
 
-    candidates = recommend(task, snapshot)
+    candidates = recommend(task, snapshot, workspace_policy=workspace_policy)
     candidates = _apply_preferred_override(candidates, body.preferred_provider)
     chosen = _pick_chosen(candidates, task.kind)
 
