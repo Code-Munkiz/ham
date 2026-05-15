@@ -63,9 +63,7 @@ function SignInRecoveryRoute() {
   return (
     <div className="mx-auto my-12 max-w-md rounded-xl border border-white/15 bg-black/30 p-6 text-white">
       <h1 className="text-sm font-semibold">Sign in required</h1>
-      <p className="mt-2 text-sm text-white/80">
-        Continue to the workspace by signing in.
-      </p>
+      <p className="mt-2 text-sm text-white/80">Continue to the workspace by signing in.</p>
       <div className="mt-4 flex gap-2">
         <button
           type="button"

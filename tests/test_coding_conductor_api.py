@@ -853,9 +853,7 @@ def test_preview_emits_diagnostic_info_log_with_safe_shape(
         "preview_id=",
     )
     for token in forbidden_in_log:
-        assert token not in msg, (
-            f"diagnostic line leaks {token!r}: {msg}"
-        )
+        assert token not in msg, f"diagnostic line leaks {token!r}: {msg}"
 
 
 def test_preview_diagnostic_log_for_no_agent_fallback_is_redacted(
@@ -965,13 +963,14 @@ def test_preview_managed_workspace_feature_includes_opencode_candidate_when_read
     assert body["chosen"]["provider"] == "factory_droid_build"
 
 
-def test_preview_opencode_not_in_candidates_when_output_target_github_pr(
+def test_preview_opencode_blocked_when_output_target_github_pr(
     monkeypatch: pytest.MonkeyPatch,
     isolated_store: ProjectStore,
     normie_actor: HamActor,
     tmp_path: Path,
     cleanup_overrides: None,
 ) -> None:
+    """output_target=github_pr → opencode_cli appears as blocked candidate, not absent."""
     _make_opencode_ready(monkeypatch)
     rec = _register_project(
         isolated_store,
@@ -988,18 +987,26 @@ def test_preview_opencode_not_in_candidates_when_output_target_github_pr(
     )
     assert res.status_code == 200, res.text
     body = res.json()
-    providers = {c["provider"] for c in body["candidates"]}
-    assert "opencode_cli" not in providers
+    oc = next((c for c in body["candidates"] if c["provider"] == "opencode_cli"), None)
+    assert oc is not None, "opencode_cli must appear as a blocked candidate, not be absent"
+    assert oc["available"] is False
+    assert oc["blockers"], (
+        "opencode_cli must carry a blocker when output_target != managed_workspace"
+    )
+    assert any("managed workspace" in b.lower() for b in oc["blockers"])
+    # Never chosen when blocked.
+    assert body["chosen"] is None or body["chosen"]["provider"] != "opencode_cli"
+    _assert_no_secret_leakage(res.text)
 
 
-def test_preview_opencode_not_in_candidates_when_env_disabled(
+def test_preview_opencode_blocked_when_env_disabled(
     monkeypatch: pytest.MonkeyPatch,
     isolated_store: ProjectStore,
     normie_actor: HamActor,
     tmp_path: Path,
     cleanup_overrides: None,
 ) -> None:
-    """Readiness probe configured but env gates not set → opencode_cli absent."""
+    """Env gates not set → opencode_cli appears as blocked candidate, not absent."""
     from src.ham.worker_adapters import opencode_adapter as _opencode_adapter
 
     monkeypatch.delenv("HAM_OPENCODE_ENABLED", raising=False)
@@ -1027,8 +1034,13 @@ def test_preview_opencode_not_in_candidates_when_env_disabled(
     )
     assert res.status_code == 200, res.text
     body = res.json()
-    providers = {c["provider"] for c in body["candidates"]}
-    assert "opencode_cli" not in providers
+    oc = next((c for c in body["candidates"] if c["provider"] == "opencode_cli"), None)
+    assert oc is not None, "opencode_cli must appear as a blocked candidate, not be absent"
+    assert oc["available"] is False
+    assert oc["blockers"], "opencode_cli must carry a blocker when env gates are off"
+    # Never chosen when blocked.
+    assert body["chosen"] is None or body["chosen"]["provider"] != "opencode_cli"
+    _assert_no_secret_leakage(res.text)
 
 
 def test_preview_opencode_preferred_provider_promotes_when_approveable(
@@ -1067,6 +1079,11 @@ def test_preview_opencode_preferred_provider_cannot_bypass_managed_workspace_gat
     tmp_path: Path,
     cleanup_overrides: None,
 ) -> None:
+    """preferred_provider=opencode_cli must not bypass blockers.
+
+    When output_target=github_pr, opencode_cli appears as blocked in candidates
+    but preferred_provider must not promote it to chosen.
+    """
     _make_opencode_ready(monkeypatch)
     rec = _register_project(
         isolated_store,
@@ -1084,8 +1101,12 @@ def test_preview_opencode_preferred_provider_cannot_bypass_managed_workspace_gat
     )
     assert res.status_code == 200, res.text
     body = res.json()
-    providers = {c["provider"] for c in body["candidates"]}
-    assert "opencode_cli" not in providers
+    # opencode_cli appears in candidates but is blocked.
+    oc = next((c for c in body["candidates"] if c["provider"] == "opencode_cli"), None)
+    assert oc is not None, "opencode_cli must be visible as a blocked candidate"
+    assert oc["available"] is False
+    assert oc["blockers"]
+    # preferred_provider must not promote a blocked candidate.
     if body["chosen"] is not None:
         assert body["chosen"]["provider"] != "opencode_cli"
 
@@ -1097,6 +1118,9 @@ def test_preview_body_never_leaks_opencode_env_names(
     tmp_path: Path,
     cleanup_overrides: None,
 ) -> None:
+    # Require Clerk auth so normie_actor is not auto-promoted to operator.
+    monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "true")
+    monkeypatch.setenv("HAM_WORKSPACE_OPERATOR_EMAILS", "operator@example.test")
     _make_opencode_ready(monkeypatch)
     monkeypatch.setenv("HAM_OPENCODE_EXEC_TOKEN", "test-opencode-exec-token-canary")
     monkeypatch.setenv("XDG_DATA_HOME", "/tmp/should-not-appear")
@@ -1129,6 +1153,218 @@ def test_preview_body_never_leaks_opencode_env_names(
             "test-opencode-exec-token-canary",
         ):
             assert forbidden not in blob, f"response leaks {forbidden!r}: {blob}"
-            assert forbidden.lower() not in lower, (
-                f"response leaks {forbidden!r}: {blob}"
-            )
+            assert forbidden.lower() not in lower, f"response leaks {forbidden!r}: {blob}"
+
+
+# ---------------------------------------------------------------------------
+# Operator diagnostics — provider_diagnostics.opencode_cli
+# ---------------------------------------------------------------------------
+
+
+def test_preview_normie_receives_no_provider_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    normie_actor: HamActor,
+    tmp_path: Path,
+    cleanup_overrides: None,
+) -> None:
+    """Non-operator responses must not include provider_diagnostics."""
+    # Require Clerk auth so normie_actor is not auto-promoted to operator.
+    monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "true")
+    monkeypatch.setenv("HAM_WORKSPACE_OPERATOR_EMAILS", "operator@example.test")
+    _make_opencode_ready(monkeypatch)
+    rec = _register_project(
+        isolated_store,
+        name="p_diag_normie",
+        root=tmp_path,
+        build_lane_enabled=True,
+        output_target="managed_workspace",
+        workspace_id="ws_diag_normie",
+    )
+    res = _post(
+        _client(normie_actor),
+        user_prompt="Build a new feature for the chat panel.",
+        project_id=rec.id,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["is_operator"] is False
+    assert "provider_diagnostics" not in body
+
+
+def test_preview_operator_diagnostics_opencode_eligible(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    operator_actor: HamActor,
+    tmp_path: Path,
+    cleanup_overrides: None,
+) -> None:
+    """When OpenCode is eligible, diagnostics must report opencode:eligible."""
+    monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "true")
+    monkeypatch.setenv("HAM_WORKSPACE_OPERATOR_EMAILS", "operator@example.test")
+    _make_opencode_ready(monkeypatch)
+    rec = _register_project(
+        isolated_store,
+        name="p_diag_eligible",
+        root=tmp_path,
+        build_lane_enabled=True,
+        output_target="managed_workspace",
+        workspace_id="ws_diag_eligible",
+    )
+    res = _post(
+        _client(operator_actor),
+        user_prompt="Build a new feature for the chat panel.",
+        project_id=rec.id,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["is_operator"] is True
+    diag = body["provider_diagnostics"]["opencode_cli"]
+    assert diag["gate_states"]["HAM_OPENCODE_ENABLED"] is True
+    assert diag["gate_states"]["HAM_OPENCODE_EXECUTION_ENABLED"] is True
+    assert diag["readiness_available"] is True
+    assert diag["project_found"] is True
+    assert diag["is_managed_workspace"] is True
+    assert diag["exclusion_reason"] == "opencode:eligible"
+
+
+def test_preview_operator_diagnostics_opencode_gates_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    operator_actor: HamActor,
+    tmp_path: Path,
+    cleanup_overrides: None,
+) -> None:
+    """When gates are off, diagnostics must report opencode:gates_disabled."""
+    from src.ham.worker_adapters import opencode_adapter as _opencode_adapter
+
+    monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "true")
+    monkeypatch.setenv("HAM_WORKSPACE_OPERATOR_EMAILS", "operator@example.test")
+    monkeypatch.delenv("HAM_OPENCODE_ENABLED", raising=False)
+    monkeypatch.delenv("HAM_OPENCODE_EXECUTION_ENABLED", raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-opencode-canary")
+    monkeypatch.setattr(
+        _opencode_adapter.shutil,
+        "which",
+        lambda name: "/usr/local/bin/opencode" if name == "opencode" else None,
+    )
+    _opencode_adapter.reset_opencode_readiness_cache()
+    rec = _register_project(
+        isolated_store,
+        name="p_diag_gates_off",
+        root=tmp_path,
+        build_lane_enabled=True,
+        output_target="managed_workspace",
+        workspace_id="ws_diag_gates_off",
+    )
+    res = _post(
+        _client(operator_actor),
+        user_prompt="Build a new feature for the chat panel.",
+        project_id=rec.id,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["is_operator"] is True
+    diag = body["provider_diagnostics"]["opencode_cli"]
+    assert diag["gate_states"]["HAM_OPENCODE_ENABLED"] is False
+    assert diag["exclusion_reason"] == "opencode:gates_disabled"
+    assert diag["project_found"] is True
+    assert diag["is_managed_workspace"] is True
+
+
+def test_preview_operator_diagnostics_opencode_not_managed_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    operator_actor: HamActor,
+    tmp_path: Path,
+    cleanup_overrides: None,
+) -> None:
+    """When output_target=github_pr, diagnostics must report opencode:not_managed_workspace."""
+    monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "true")
+    monkeypatch.setenv("HAM_WORKSPACE_OPERATOR_EMAILS", "operator@example.test")
+    _make_opencode_ready(monkeypatch)
+    rec = _register_project(
+        isolated_store,
+        name="p_diag_not_managed",
+        root=tmp_path,
+        build_lane_enabled=True,
+        github_repo="Code-Munkiz/ham",
+        output_target="github_pr",
+    )
+    res = _post(
+        _client(operator_actor),
+        user_prompt="Build a new feature for the chat panel.",
+        project_id=rec.id,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    diag = body["provider_diagnostics"]["opencode_cli"]
+    assert diag["gate_states"]["HAM_OPENCODE_ENABLED"] is True
+    assert diag["gate_states"]["HAM_OPENCODE_EXECUTION_ENABLED"] is True
+    assert diag["readiness_available"] is True
+    assert diag["is_managed_workspace"] is False
+    assert diag["exclusion_reason"] == "opencode:not_managed_workspace"
+
+
+def test_preview_operator_diagnostics_opencode_project_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    operator_actor: HamActor,
+    cleanup_overrides: None,
+) -> None:
+    """When project_id is missing, diagnostics must report opencode:project_not_found."""
+    monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "true")
+    monkeypatch.setenv("HAM_WORKSPACE_OPERATOR_EMAILS", "operator@example.test")
+    _make_opencode_ready(monkeypatch)
+    res = _post(
+        _client(operator_actor),
+        user_prompt="Build a new feature for the chat panel.",
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    diag = body["provider_diagnostics"]["opencode_cli"]
+    assert diag["project_found"] is False
+    assert diag["exclusion_reason"] == "opencode:project_not_found"
+
+
+def test_preview_operator_diagnostics_no_secrets(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    operator_actor: HamActor,
+    tmp_path: Path,
+    cleanup_overrides: None,
+) -> None:
+    """provider_diagnostics must never contain secret values, tokens, or env values."""
+    monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "true")
+    monkeypatch.setenv("HAM_WORKSPACE_OPERATOR_EMAILS", "operator@example.test")
+    _make_opencode_ready(monkeypatch)
+    monkeypatch.setenv("HAM_OPENCODE_EXEC_TOKEN", "test-opencode-exec-token-secret")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-opencode-canary-secret")
+    rec = _register_project(
+        isolated_store,
+        name="p_diag_secrets",
+        root=tmp_path,
+        build_lane_enabled=True,
+        output_target="managed_workspace",
+        workspace_id="ws_diag_secrets",
+    )
+    res = _post(
+        _client(operator_actor),
+        user_prompt="Build a new feature for the chat panel.",
+        project_id=rec.id,
+    )
+    assert res.status_code == 200, res.text
+    blob = res.text
+    # No secret values.
+    assert "test-opencode-exec-token-secret" not in blob
+    assert "test-opencode-canary-secret" not in blob
+    assert "test-opencode-canary" not in blob
+    # No env variable values (only bool presence flags are allowed).
+    assert "opencode serve" not in blob.lower()
+    # Diagnostics are present (operator gets them).
+    body = res.json()
+    assert "provider_diagnostics" in body
+    diag = body["provider_diagnostics"]["opencode_cli"]
+    # gate_states values must be booleans, not the actual env string values.
+    assert isinstance(diag["gate_states"]["HAM_OPENCODE_ENABLED"], bool)
+    assert isinstance(diag["gate_states"]["HAM_OPENCODE_EXECUTION_ENABLED"], bool)

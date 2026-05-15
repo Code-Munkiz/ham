@@ -476,9 +476,10 @@ def test_recommend_opencode_never_overtakes_factory_droid_build(
     assert any(c.provider == "opencode_cli" for c in out)
 
 
-def test_recommend_opencode_excluded_when_output_target_is_github_pr(
+def test_recommend_opencode_blocked_when_output_target_is_github_pr(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """output_target=github_pr → opencode_cli appears as a blocked candidate, not absent."""
     monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
     monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
     proj = _project(found=True, has_github_repo=True, output_target="github_pr")
@@ -487,13 +488,22 @@ def test_recommend_opencode_excluded_when_output_target_is_github_pr(
         _readiness_with_opencode_available(project=proj),
         project=proj,
     )
-    for c in out:
-        assert c.provider != "opencode_cli", c.provider
+    oc = _provider_candidate(out, "opencode_cli")
+    assert oc is not None, "opencode_cli must appear as a blocked candidate, not be absent"
+    assert oc.blockers, "opencode_cli must have a blocker when output_target != managed_workspace"
+    assert any("managed workspace" in b.lower() for b in oc.blockers)
+    assert oc.confidence < 1.0
+    # Must rank below any approve-able candidate.
+    approveable_idx = next((i for i, c in enumerate(out) if not c.blockers), None)
+    oc_idx = next(i for i, c in enumerate(out) if c.provider == "opencode_cli")
+    if approveable_idx is not None:
+        assert approveable_idx < oc_idx
 
 
-def test_recommend_opencode_excluded_when_env_gates_off(
+def test_recommend_opencode_blocked_when_env_gates_off(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Env gates disabled → opencode_cli appears as blocked candidate, not absent."""
     monkeypatch.delenv("HAM_OPENCODE_ENABLED", raising=False)
     monkeypatch.delenv("HAM_OPENCODE_EXECUTION_ENABLED", raising=False)
     proj = _managed_project()
@@ -502,8 +512,43 @@ def test_recommend_opencode_excluded_when_env_gates_off(
         _readiness_with_opencode_available(project=proj),
         project=proj,
     )
-    for c in out:
-        assert c.provider != "opencode_cli", c.provider
+    oc = _provider_candidate(out, "opencode_cli")
+    assert oc is not None, "opencode_cli must appear as a blocked candidate, not be absent"
+    assert oc.blockers, "opencode_cli must have a blocker when env gates are off"
+
+
+def test_recommend_opencode_blocked_when_readiness_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """readiness.available=False → opencode_cli appears as blocked candidate."""
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    proj = _managed_project()
+    out = recommend(
+        classify_task("Build a new feature.", project_id=proj.project_id),
+        _readiness_with_opencode_available(opencode_available=False, project=proj),
+        project=proj,
+    )
+    oc = _provider_candidate(out, "opencode_cli")
+    assert oc is not None, "opencode_cli must appear as a blocked candidate, not be absent"
+    assert oc.blockers, "opencode_cli must have a blocker when readiness.available=False"
+
+
+def test_recommend_opencode_blocked_when_project_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """project.found=False → opencode_cli appears as blocked candidate."""
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    proj = _managed_project(found=False)
+    out = recommend(
+        classify_task("Build a new feature.", project_id=None),
+        _readiness_with_opencode_available(project=proj),
+        project=proj,
+    )
+    oc = _provider_candidate(out, "opencode_cli")
+    assert oc is not None, "opencode_cli must appear as a blocked candidate, not be absent"
+    assert oc.blockers, "opencode_cli must have a blocker when project is not found"
 
 
 @pytest.mark.parametrize(

@@ -296,37 +296,67 @@ def recommend(
             )
         )
 
-    out = _exclude_opencode_when_ineligible(out, readiness, proj)
+    out = _demote_opencode_when_ineligible(out, readiness, proj)
     out.sort(key=_approveable_first)
     return out
 
 
-def _exclude_opencode_when_ineligible(
+def _demote_opencode_when_ineligible(
     candidates: list[Candidate],
     readiness: WorkspaceReadiness,
     project: ProjectFlags,
 ) -> list[Candidate]:
-    """Drop ``opencode_cli`` from the candidate list when the lane is ineligible.
+    """Ensure ``opencode_cli`` has blockers when ineligible; keep it in the list.
 
-    OpenCode appears in the recommender output only when **all** of the
-    following are true:
+    OpenCode is fully eligible only when **all** of the following are true:
 
     - ``HAM_OPENCODE_ENABLED`` is truthy
     - ``HAM_OPENCODE_EXECUTION_ENABLED`` is truthy
     - the opencode_cli readiness row reports ``available=True``
     - the project's ``output_target`` is ``managed_workspace``
 
-    Otherwise the candidate is filtered out entirely. This is
-    defence-in-depth on top of the per-provider blocker copy; even if a
-    future readiness builder regresses, the recommender refuses to surface
-    opencode_cli to the chat card while any gate is off.
+    When ineligible, the candidate stays in the list with at least one
+    eligibility blocker so the chat card can render "blocked because…" copy
+    rather than silently hiding OpenCode. In production the readiness row
+    and project-blocker helpers already supply the right blockers, so this
+    function only needs to add a fallback gate-level blocker when no other
+    blocker is present (defence-in-depth for manually constructed snapshots).
     """
-    gate_on = _truthy_env("HAM_OPENCODE_ENABLED") and _truthy_env("HAM_OPENCODE_EXECUTION_ENABLED")
+    gate_enabled = _truthy_env("HAM_OPENCODE_ENABLED")
+    execution_enabled = _truthy_env("HAM_OPENCODE_EXECUTION_ENABLED")
     oc_row = _readiness_for(readiness, "opencode_cli")
     target = (project.output_target or "").strip()
-    if gate_on and oc_row.available and target == "managed_workspace":
+
+    if gate_enabled and execution_enabled and oc_row.available and target == "managed_workspace":
         return candidates
-    return [c for c in candidates if c.provider != "opencode_cli"]
+
+    result: list[Candidate] = []
+    for c in candidates:
+        if c.provider != "opencode_cli":
+            result.append(c)
+            continue
+        if c.blockers:
+            # Blockers already supplied by readiness or project helpers; keep as-is.
+            result.append(c)
+            continue
+        # Defence-in-depth: add a gate-level blocker when none is present.
+        blocker = (
+            "OpenCode is not enabled for this host yet."
+            if not (gate_enabled and execution_enabled)
+            else "OpenCode is not ready for this project yet."
+        )
+        result.append(
+            Candidate(
+                provider=c.provider,
+                confidence=c.confidence,
+                reason=c.reason,
+                blockers=(blocker,),
+                requires_operator=c.requires_operator,
+                requires_confirmation=c.requires_confirmation,
+                will_open_pull_request=c.will_open_pull_request,
+            )
+        )
+    return result
 
 
 __all__ = ["recommend"]

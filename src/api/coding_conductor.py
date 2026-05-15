@@ -24,6 +24,7 @@ Hard guarantees (locked by tests):
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from typing import Annotated, Any
 
@@ -41,7 +42,7 @@ from src.ham.coding_router import (
     collate_readiness,
     recommend,
 )
-from src.ham.coding_router.types import ProviderKind
+from src.ham.coding_router.types import ProjectFlags, ProviderKind, WorkspaceReadiness
 
 router = APIRouter(
     prefix="/api/coding/conductor",
@@ -203,6 +204,79 @@ def _recommendation_reason(
 
 
 # ---------------------------------------------------------------------------
+# Operator-only diagnostics helpers
+# ---------------------------------------------------------------------------
+
+
+def _truthy_env_conductor(name: str) -> bool:
+    return (os.environ.get(name) or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _opencode_exclusion_reason(
+    gate_enabled: bool,
+    execution_enabled: bool,
+    readiness_available: bool,
+    project: ProjectFlags,
+) -> str:
+    """Return the exact reason code explaining OpenCode's eligibility state.
+
+    Codes are stable strings operators can grep in logs / dashboards.
+    """
+    if not gate_enabled or not execution_enabled:
+        return "opencode:gates_disabled"
+    if not readiness_available:
+        return "opencode:readiness_unavailable"
+    if not project.found:
+        return "opencode:project_not_found"
+    target = (project.output_target or "").strip()
+    if target != "managed_workspace":
+        return "opencode:not_managed_workspace"
+    return "opencode:eligible"
+
+
+def _build_opencode_operator_diagnostics(
+    readiness: WorkspaceReadiness,
+    project: ProjectFlags,
+) -> dict[str, Any]:
+    """Safe operator-only diagnostics for opencode_cli eligibility.
+
+    Never exposes env values, secrets, tokens, or URLs. Shows env gate
+    names as boolean presence flags so operators can diagnose which gate
+    is blocking OpenCode without a browser console fetch.
+    """
+    gate_enabled = _truthy_env_conductor("HAM_OPENCODE_ENABLED")
+    execution_enabled = _truthy_env_conductor("HAM_OPENCODE_EXECUTION_ENABLED")
+
+    oc_readiness = next(
+        (p for p in readiness.providers if p.provider == "opencode_cli"),
+        None,
+    )
+    readiness_available = bool(oc_readiness and oc_readiness.available)
+    readiness_blockers = list(oc_readiness.blockers) if oc_readiness else []
+
+    target = (project.output_target or "").strip()
+    exclusion_reason = _opencode_exclusion_reason(
+        gate_enabled, execution_enabled, readiness_available, project
+    )
+
+    return {
+        "provider": "opencode_cli",
+        "gate_states": {
+            "HAM_OPENCODE_ENABLED": gate_enabled,
+            "HAM_OPENCODE_EXECUTION_ENABLED": execution_enabled,
+        },
+        "readiness_available": readiness_available,
+        "readiness_blockers": readiness_blockers,
+        "project_found": project.found,
+        "project_id": project.project_id,
+        "has_workspace_id": project.has_workspace_id,
+        "output_target": project.output_target,
+        "is_managed_workspace": target == "managed_workspace",
+        "exclusion_reason": exclusion_reason,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Request / response models
 # ---------------------------------------------------------------------------
 
@@ -286,7 +360,7 @@ async def post_coding_conductor_preview(
         chosen is not None and chosen.requires_confirmation,
     )
 
-    return {
+    response: dict[str, Any] = {
         "kind": "coding_conductor_preview",
         "preview_id": str(uuid.uuid4()),
         "task_kind": task.kind,
@@ -307,6 +381,11 @@ async def post_coding_conductor_preview(
         },
         "is_operator": is_op,
     }
+    if is_op:
+        response["provider_diagnostics"] = {
+            "opencode_cli": _build_opencode_operator_diagnostics(snapshot, snapshot.project),
+        }
+    return response
 
 
 __all__ = ["router"]

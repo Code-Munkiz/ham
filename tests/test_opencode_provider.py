@@ -264,6 +264,7 @@ def test_opencode_launch_shim_cannot_execute_cli(
 def test_recommender_never_recommends_opencode_while_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """When gates are off, opencode_cli may appear in candidates but must always be blocked."""
     monkeypatch.delenv(OPENCODE_ENABLED_ENV_NAME, raising=False)
     snap = collate_readiness(actor=None, project_id=None, include_operator_details=False)
     for prompt in (
@@ -275,7 +276,11 @@ def test_recommender_never_recommends_opencode_while_disabled(
         task = classify_task(prompt)
         candidates = recommend(task, snap)
         for c in candidates:
-            assert c.provider != "opencode_cli", (prompt, c.provider)
+            if c.provider == "opencode_cli":
+                assert c.blockers, f"opencode_cli must be blocked when env gates are off ({prompt})"
+        # opencode_cli must never be the recommend (chosen) candidate.
+        approveable = [c for c in candidates if not c.blockers]
+        assert all(c.provider != "opencode_cli" for c in approveable), (prompt, approveable)
 
 
 # ---------------------------------------------------------------------------
@@ -286,6 +291,7 @@ def test_recommender_never_recommends_opencode_while_disabled(
 def test_recommender_never_recommends_opencode_when_readiness_not_configured(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """When readiness is unavailable, opencode_cli appears blocked, never as chosen."""
     monkeypatch.setenv(OPENCODE_ENABLED_ENV_NAME, "1")
     _patch_which_absent(monkeypatch)
     snap = collate_readiness(actor=None, project_id=None, include_operator_details=False)
@@ -302,7 +308,12 @@ def test_recommender_never_recommends_opencode_when_readiness_not_configured(
         task = classify_task(prompt)
         candidates = recommend(task, snap)
         for c in candidates:
-            assert c.provider != "opencode_cli", (prompt, c.provider)
+            if c.provider == "opencode_cli":
+                assert c.blockers, (
+                    f"opencode_cli must be blocked when readiness is unavailable ({prompt})"
+                )
+        approveable = [c for c in candidates if not c.blockers]
+        assert all(c.provider != "opencode_cli" for c in approveable), (prompt, approveable)
 
 
 # ---------------------------------------------------------------------------
@@ -313,25 +324,22 @@ def test_recommender_never_recommends_opencode_when_readiness_not_configured(
 def test_factory_droid_and_claude_agent_recommendations_unaffected(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Snapshot the recommender's full per-task candidate ordering when the
-    OpenCode lane is disabled.
+    """Snapshot the recommender's candidate ordering when OpenCode lane is disabled.
 
-    Locks: the same set of provider candidates (minus opencode_cli) appears,
-    in the same order, for representative single_file_edit / feature /
-    audit / refactor / fix tasks — i.e. the Mission 1 patch only adds the
-    opencode_cli row to shared tables and never reorders existing rows.
+    Locks: the same non-opencode providers appear (in the same order) for
+    representative tasks, and opencode_cli is never approve-able. The
+    exclusion-guard now demotes rather than drops opencode_cli, so it may
+    appear in candidates but must always be blocked and must always rank
+    behind the approve-able candidates.
     """
     monkeypatch.delenv(OPENCODE_ENABLED_ENV_NAME, raising=False)
     monkeypatch.delenv("CLAUDE_AGENT_ENABLED", raising=False)
     snap = collate_readiness(actor=None, project_id=None, include_operator_details=False)
 
     cases: tuple[tuple[str, tuple[str, ...]], ...] = (
-        # Audit lane — only factory_droid_audit lives in this table, so the
-        # full candidate list is just [factory_droid_audit, no_agent fallback].
+        # Audit lane — opencode_cli not in audit table, so never appears.
         ("Audit this repo for security issues.", ("factory_droid_audit", "no_agent")),
-        # Single-file edit — claude_code, claude_agent, cursor_cloud are the
-        # historical entries; opencode_cli must NOT appear because the
-        # exclusion guard drops it while disabled.
+        # Single-file edit — expected non-opencode providers.
         (
             "Tweak the import order in this file.",
             ("claude_code", "claude_agent", "cursor_cloud", "no_agent"),
@@ -342,11 +350,16 @@ def test_factory_droid_and_claude_agent_recommendations_unaffected(
     for prompt, expected in cases:
         task = classify_task(prompt)
         candidates = recommend(task, snap)
-        providers = tuple(c.provider for c in candidates)
-        # opencode_cli must never appear post-patch.
-        assert "opencode_cli" not in providers, (prompt, providers)
-        # The ordered set of providers per task is unchanged from pre-patch.
-        assert set(providers) == set(expected), (prompt, providers, expected)
+        non_oc = [c for c in candidates if c.provider != "opencode_cli"]
+        # Non-opencode providers are unchanged from pre-patch.
+        assert set(c.provider for c in non_oc) == set(expected), (
+            prompt,
+            [c.provider for c in candidates],
+            expected,
+        )
+        # Any opencode_cli candidate must be blocked and ranked last.
+        approveable = [c for c in candidates if not c.blockers]
+        assert all(c.provider != "opencode_cli" for c in approveable), (prompt, approveable)
 
 
 # ---------------------------------------------------------------------------
@@ -483,10 +496,10 @@ def test_recommender_promotes_opencode_when_all_gates_pass_and_managed_workspace
         assert not oc[0].blockers, (prompt, oc[0].blockers)
 
 
-def test_recommender_drops_opencode_when_output_target_is_github_pr(
+def test_recommender_blocks_opencode_when_output_target_is_github_pr(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Full env gates + CONFIGURED readiness + project output_target=github_pr → no opencode."""
+    """Full env gates + CONFIGURED readiness + project output_target=github_pr → opencode blocked."""
     from src.ham.coding_router.types import ProjectFlags, WorkspaceReadiness
 
     monkeypatch.setenv(OPENCODE_ENABLED_ENV_NAME, "1")
@@ -514,4 +527,14 @@ def test_recommender_drops_opencode_when_output_target_is_github_pr(
         task = classify_task(prompt)
         candidates = recommend(task, snap, project=github_proj)
         for c in candidates:
-            assert c.provider != "opencode_cli", (prompt, c.provider)
+            if c.provider == "opencode_cli":
+                assert c.blockers, (
+                    f"opencode_cli must be blocked when output_target=github_pr ({prompt})"
+                )
+                assert any("managed workspace" in b.lower() for b in c.blockers), (
+                    prompt,
+                    c.blockers,
+                )
+        # Never approve-able.
+        approveable = [c for c in candidates if not c.blockers]
+        assert all(c.provider != "opencode_cli" for c in approveable), (prompt, approveable)
