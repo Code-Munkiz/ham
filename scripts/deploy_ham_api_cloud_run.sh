@@ -36,7 +36,8 @@ CPU="${CPU:-2}"
 # Create secrets first or deploy will fail on missing ids.
 # ham-cursor-agent-launch-token → HAM_CURSOR_AGENT_LAUNCH_TOKEN (see docs/DEPLOY_CLOUD_RUN.md).
 # ham-droid-runner-token → HAM_DROID_RUNNER_TOKEN (Cloud Run bearer to ham-droid-runner-1 RFC1918 host).
-SECRETS="${SET_SECRETS:-CURSOR_API_KEY=ham-cursor-api-key:latest,HERMES_GATEWAY_API_KEY=ham-hermes-gateway-api-key:latest,HAM_CURSOR_AGENT_LAUNCH_TOKEN=ham-cursor-agent-launch-token:latest,HAM_TRANSCRIPTION_API_KEY=ham-transcription-api-key:latest,HAM_DROID_RUNNER_TOKEN=ham-droid-runner-token:latest,HAM_CONNECTED_TOOLS_CREDENTIAL_ENCRYPTION_KEY=ham-connected-tools-credential-encryption-key:latest}"
+# ham-opencode-exec-token → HAM_OPENCODE_EXEC_TOKEN (OpenCode build/launch Bearer gate).
+SECRETS="${SET_SECRETS:-CURSOR_API_KEY=ham-cursor-api-key:latest,HERMES_GATEWAY_API_KEY=ham-hermes-gateway-api-key:latest,HAM_CURSOR_AGENT_LAUNCH_TOKEN=ham-cursor-agent-launch-token:latest,HAM_TRANSCRIPTION_API_KEY=ham-transcription-api-key:latest,HAM_DROID_RUNNER_TOKEN=ham-droid-runner-token:latest,HAM_CONNECTED_TOOLS_CREDENTIAL_ENCRYPTION_KEY=ham-connected-tools-credential-encryption-key:latest,HAM_OPENCODE_EXEC_TOKEN=ham-opencode-exec-token:latest}"
 
 # Guardrail: required secret env bindings that MUST appear in the resolved SECRETS string.
 # Adding a new required name here will block future deploys until the operator wires the secret.
@@ -50,6 +51,7 @@ REQUIRED_SECRET_ENVS=(
   HAM_TRANSCRIPTION_API_KEY
   HAM_DROID_RUNNER_TOKEN
   HAM_CONNECTED_TOOLS_CREDENTIAL_ENCRYPTION_KEY
+  HAM_OPENCODE_EXEC_TOKEN
 )
 
 if [[ "${ALLOW_SECRET_DROP:-0}" != "1" ]]; then
@@ -74,7 +76,8 @@ if [[ "${ALLOW_SECRET_DROP:-0}" != "1" ]]; then
     echo "                 HAM_CURSOR_AGENT_LAUNCH_TOKEN=ham-cursor-agent-launch-token:latest,\\" >&2
     echo "                 HAM_TRANSCRIPTION_API_KEY=ham-transcription-api-key:latest,\\" >&2
     echo "                 HAM_DROID_RUNNER_TOKEN=ham-droid-runner-token:latest,\\" >&2
-    echo "                 HAM_CONNECTED_TOOLS_CREDENTIAL_ENCRYPTION_KEY=ham-connected-tools-credential-encryption-key:latest'" >&2
+    echo "                 HAM_CONNECTED_TOOLS_CREDENTIAL_ENCRYPTION_KEY=ham-connected-tools-credential-encryption-key:latest,\\" >&2
+    echo "                 HAM_OPENCODE_EXEC_TOKEN=ham-opencode-exec-token:latest'" >&2
     echo "" >&2
     echo "  Or rely on the script default by leaving SET_SECRETS unset." >&2
     echo "" >&2
