@@ -183,7 +183,9 @@ Chat **`cursor_agent_launch`** requires a Ham **operator bearer** separate from 
 
 4. **Deploy** with **`HAM_CURSOR_AGENT_LAUNCH_TOKEN=ham-cursor-agent-launch-token:latest`** in **`--set-secrets`** alongside Cursor and Hermes keys. The default in **`scripts/deploy_ham_api_cloud_run.sh`** includes this mapping.
 
-5. **Browser:** paste the **same** secret value in the Cloud Agent launch field (or retrieve the current version locally with `gcloud secrets versions access latest --secret=ham-cursor-agent-launch-token --project="${PROJECT_ID}"`).
+5. **OpenCode readiness** on Cloud Run also requires **`ANTHROPIC_API_KEY`** mounted from **`anthropic-api-key:latest`** (same secret many stacks already use for Anthropic-compatible paths). The deploy script default **`--set-secrets`** list includes **`ANTHROPIC_API_KEY=anthropic-api-key:latest`** alongside **`HAM_OPENCODE_*`** bindings so OpenCode **`check_opencode_readiness`** can report **configured**.
+
+6. **Browser:** paste the **same** secret value in the Cloud Agent launch field (or retrieve the current version locally with `gcloud secrets versions access latest --secret=ham-cursor-agent-launch-token --project="${PROJECT_ID}"`).
 
 ## Transcription key (`HAM_TRANSCRIPTION_API_KEY`)
 

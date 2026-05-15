@@ -122,6 +122,8 @@ HAM_CORS_ORIGIN_REGEX: "https://.*\\.vercel\\.app"
 # --- OpenCode managed-workspace lane (optional) ---
 # Plain flags + default model live in this file; deploy script default --set-secrets must include
 # HAM_OPENCODE_EXEC_TOKEN=ham-opencode-exec-token:latest (see scripts/deploy_ham_api_cloud_run.sh).
+# OpenCode readiness also requires provider auth via env (Secret Manager binding), e.g.
+# ANTHROPIC_API_KEY=anthropic-api-key:latest alongside the gates above.
 # HAM_OPENCODE_ENABLED: "1"
 # HAM_OPENCODE_EXECUTION_ENABLED: "1"
 # HAM_OPENCODE_DEFAULT_MODEL: "anthropic/claude-sonnet-4-6"
