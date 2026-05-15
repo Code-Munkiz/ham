@@ -181,6 +181,22 @@ describe("HamWorkspaceTopbarPill", () => {
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
+  it("offers sign-in recovery from setup-needed details when Clerk is configured", () => {
+    const openSignIn = vi.fn();
+    mockUseHamWorkspace.mockReturnValue(
+      baseCtx({
+        hostedAuth: { clerkConfigured: true, isLoaded: true, isSignedIn: false },
+        openSignIn,
+      }),
+    );
+
+    renderWithRouter(<HamWorkspaceTopbarPill />);
+    fireEvent.click(screen.getByRole("button", { name: /setup needed/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^sign in$/i }));
+
+    expect(openSignIn).toHaveBeenCalledTimes(1);
+  });
+
   it("points auth-required details toward sign-in", () => {
     const openSignIn = vi.fn();
     mockUseHamWorkspace.mockReturnValue(

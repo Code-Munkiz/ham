@@ -12,7 +12,7 @@ import Landing from "./pages/Landing";
 
 import { AgentProvider } from "./lib/ham/AgentContext";
 import { WorkspaceProvider } from "./lib/ham/WorkspaceContext";
-import { HamWorkspaceProvider } from "./lib/ham/HamWorkspaceContext";
+import { HamWorkspaceProvider, useHamWorkspace } from "./lib/ham/HamWorkspaceContext";
 import { ClerkAccessBridge } from "./lib/ham/ClerkAccessBridge";
 import { getHamDesktopConfig, isHamDesktopShell } from "./lib/ham/desktopConfig";
 import { WorkspaceApp } from "./features/hermes-workspace";
@@ -46,6 +46,46 @@ function RedirectWithSearch({ to }: { to: string }) {
   return <Navigate to={`${to}${search}`} replace />;
 }
 
+function SignInRecoveryRoute() {
+  const { hostedAuth, openSignIn, state } = useHamWorkspace();
+  React.useEffect(() => {
+    if (hostedAuth?.clerkConfigured && openSignIn && state.status !== "ready") {
+      openSignIn();
+    }
+  }, [hostedAuth, openSignIn, state.status]);
+
+  if (!hostedAuth?.clerkConfigured) {
+    return <Navigate to="/workspace/chat" replace />;
+  }
+  if (state.status === "ready") {
+    return <Navigate to="/workspace/chat" replace />;
+  }
+  return (
+    <div className="mx-auto my-12 max-w-md rounded-xl border border-white/15 bg-black/30 p-6 text-white">
+      <h1 className="text-sm font-semibold">Sign in required</h1>
+      <p className="mt-2 text-sm text-white/80">
+        Continue to the workspace by signing in.
+      </p>
+      <div className="mt-4 flex gap-2">
+        <button
+          type="button"
+          onClick={() => openSignIn?.()}
+          className="rounded-lg border border-sky-300/25 bg-sky-400/20 px-3 py-1.5 text-xs font-semibold text-sky-50 transition hover:bg-sky-400/30"
+        >
+          Sign in
+        </button>
+        <button
+          type="button"
+          onClick={() => window.location.assign("/workspace/chat")}
+          className="rounded-lg border border-white/14 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/[0.15]"
+        >
+          Back to workspace
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function AppRoutes() {
   const useHash = getHamDesktopConfig()?.useHashRouter === true;
   const Router = useHash ? HashRouter : BrowserRouter;
@@ -56,6 +96,7 @@ function AppRoutes() {
           <Route path="/" element={<HomeRoute />} />
           <Route path="/overview" element={<Navigate to="/workspace/operations" replace />} />
           <Route path="/chat" element={<Navigate to="/workspace/chat" replace />} />
+          <Route path="/sign-in" element={<SignInRecoveryRoute />} />
           <Route path="/legacy-chat" element={<LegacyChatRedirect />} />
           <Route path="/workspace/*" element={<WorkspaceApp />} />
           <Route path="/droids" element={<Navigate to="/workspace/operations" replace />} />

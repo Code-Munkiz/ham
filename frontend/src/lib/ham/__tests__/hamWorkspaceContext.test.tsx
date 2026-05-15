@@ -5,7 +5,7 @@
  * jsdom for hook composition with the provider.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { MemoryRouter } from "react-router-dom";
 
@@ -286,6 +286,30 @@ describe("WorkspaceGate network diagnostics UI", () => {
     expect(screen.queryByText(/API endpoint/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Failed to fetch/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^refresh$/i })).toBeInTheDocument();
+  });
+});
+
+describe("WorkspaceGate auth recovery", () => {
+  it("shows a sign-in action for setup_needed when Clerk is configured", async () => {
+    mockedGetMe.mockRejectedValue(
+      new HamWorkspaceApiError(401, "HAM_WORKSPACE_AUTH_REQUIRED", "sign in again"),
+    );
+    const openSignIn = vi.fn();
+    render(
+      <HamWorkspaceProvider
+        hostedAuth={{ clerkConfigured: true, isLoaded: true, isSignedIn: true }}
+        openSignIn={openSignIn}
+      >
+        <WorkspaceGate>
+          <div data-testid="child">child</div>
+        </WorkspaceGate>
+      </HamWorkspaceProvider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Workspace unavailable")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^sign in$/i }));
+    expect(openSignIn).toHaveBeenCalledTimes(1);
   });
 });
 

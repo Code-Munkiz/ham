@@ -60,6 +60,7 @@ export function WorkspaceGate({ children, loadingFallback }: WorkspaceGateProps)
         <WorkspaceSetupMessage
           mode="setup_needed"
           onRetry={() => void ctx.refresh()}
+          onSignIn={clerkConfigured ? openSignIn : undefined}
           showDeveloperHint={showLocalDevHint}
         />
       );

@@ -292,7 +292,8 @@ export function HamWorkspaceTopbarPill({ className }: HamWorkspaceTopbarPillProp
               </details>
             ) : null}
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              {ctx.state.status === "auth_required" && clerkConfigured ? (
+              {(ctx.state.status === "auth_required" || ctx.state.status === "setup_needed") &&
+              clerkConfigured ? (
                 <button
                   type="button"
                   onClick={() => ctx.openSignIn?.()}
