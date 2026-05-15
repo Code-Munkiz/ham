@@ -16,7 +16,7 @@ import type {
   HamMediaJobStatusResponse,
 } from "./types";
 import type { HermesGatewaySnapshot } from "./hermesGateway";
-import { getRegisteredClerkSessionToken } from "./clerkSession";
+import { clearClerkSessionTokenCache, getRegisteredClerkSessionToken } from "./clerkSession";
 import { getHamDesktopConfig } from "./desktopConfig";
 
 function normalizeApiBaseOrigin(raw: string): string {
@@ -87,11 +87,14 @@ export async function hamApiErrorDetailMessage(res: Response): Promise<string | 
 }
 
 /** If `Authorization` is unset and the dashboard has a Clerk publishable key, attach the session JWT. */
-export async function mergeClerkAuthBearerIfNeeded(headers: Headers): Promise<void> {
+export async function mergeClerkAuthBearerIfNeeded(
+  headers: Headers,
+  opts?: { forceRefresh?: boolean },
+): Promise<void> {
   if (headers.has("Authorization")) return;
   const pk = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined)?.trim();
   if (!pk) return;
-  const tok = (await getRegisteredClerkSessionToken())?.trim();
+  const tok = (await getRegisteredClerkSessionToken({ forceRefresh: opts?.forceRefresh }))?.trim();
   if (tok) headers.set("Authorization", `Bearer ${tok}`);
 }
 
@@ -163,9 +166,29 @@ export async function applyHamOperatorSecretHeaders(
  */
 export async function hamApiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const url = apiUrl(path);
-  const headers = new Headers(init.headers as HeadersInit | undefined);
-  await mergeClerkAuthBearerIfNeeded(headers);
-  return fetch(url, { ...init, headers });
+  const baseHeaders = new Headers(init.headers as HeadersInit | undefined);
+  const hasExplicitAuthHeader = baseHeaders.has("Authorization");
+  const method = String(init.method || "GET").toUpperCase();
+  const isSafeMethod = method === "GET" || method === "HEAD" || method === "OPTIONS";
+  const isBuilderPath = path.includes("/builder/");
+  const runOnce = async (opts?: { forceRefresh?: boolean }): Promise<Response> => {
+    const headers = new Headers(init.headers as HeadersInit | undefined);
+    await mergeClerkAuthBearerIfNeeded(headers, opts);
+    return fetch(url, {
+      ...init,
+      headers,
+      credentials: init.credentials ?? "include",
+    });
+  };
+  const first = await runOnce({ forceRefresh: false });
+  const shouldAuthRetry =
+    !hasExplicitAuthHeader &&
+    ((first.status === 401 || first.status === 429) ||
+      (isSafeMethod && isBuilderPath && first.status === 502));
+  if (!shouldAuthRetry) return first;
+  clearClerkSessionTokenCache();
+  await new Promise<void>((resolve) => setTimeout(resolve, 350));
+  return runOnce({ forceRefresh: true });
 }
 
 /** Workspace → Connected Tools discovery (`GET /api/workspace/tools`). Uses Ham API origin / Clerk like other workspace routes. */

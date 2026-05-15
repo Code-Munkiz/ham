@@ -290,6 +290,20 @@ function isProjectNotFoundError(message: string | null): boolean {
   return text.includes("unknown project_id") || text.includes("project_not_found");
 }
 
+function isSessionAuthInterruption(message: string | null): boolean {
+  const text = (message || "").toLowerCase();
+  return (
+    text.includes("clerk_session_required") ||
+    text.includes("ham_workspace_auth_required") ||
+    text.includes("too many requests") ||
+    text.includes("http 429") ||
+    text.includes("session token") ||
+    text.includes("signature has expired") ||
+    /(^|\\b)401(\\b|$)/.test(text) ||
+    text.includes("http 401")
+  );
+}
+
 function sanitizePreviewFetchError(message: string | null): string | null {
   const raw = (message || "").trim();
   if (!raw) return null;
@@ -394,6 +408,9 @@ function WorkbenchPreviewPanel({
   const [previewViewport, setPreviewViewport] = React.useState<"desktop" | "mobile">("desktop");
   const [iframeProxyError, setIframeProxyError] = React.useState<string | null>(null);
   const [iframeReloadNonce, setIframeReloadNonce] = React.useState(0);
+  const [authSessionRefreshing, setAuthSessionRefreshing] = React.useState(false);
+  const previewAuthBackoffUntilRef = React.useRef(0);
+  const activityDrivenPreviewRefreshAtRef = React.useRef(0);
 
   React.useEffect(() => {
     const ws = workspaceId?.trim() || "";
@@ -503,7 +520,7 @@ function WorkbenchPreviewPanel({
   }, [workspaceId, projectId]);
 
   const refreshPreviewRuntimeStatus = React.useCallback(
-    async (opts?: { includeLifecycle?: boolean }) => {
+    async (opts?: { includeLifecycle?: boolean; forceRefresh?: boolean }) => {
       const ws = workspaceId?.trim() || "";
       const pid = projectId?.trim() || "";
       if (!ws || !pid) {
@@ -511,6 +528,12 @@ function WorkbenchPreviewPanel({
         setCloudRuntime(null);
         setCloudRuntimeLatestJob(null);
         setCloudRuntimeLifecycle(null);
+        setAuthSessionRefreshing(false);
+        previewAuthBackoffUntilRef.current = 0;
+        return;
+      }
+      const forceRefresh = opts?.forceRefresh === true;
+      if (!forceRefresh && previewAuthBackoffUntilRef.current > Date.now()) {
         return;
       }
       const includeLifecycle = opts?.includeLifecycle !== false;
@@ -528,9 +551,19 @@ function WorkbenchPreviewPanel({
         } else if (!latestJob) {
           setCloudRuntimeLifecycle(null);
         }
+        setError(null);
+        setAuthSessionRefreshing(false);
+        previewAuthBackoffUntilRef.current = 0;
         setCloudRuntimeError(null);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
+        if (isSessionAuthInterruption(msg)) {
+          setAuthSessionRefreshing(true);
+          previewAuthBackoffUntilRef.current = Date.now() + 4_000;
+          setCloudRuntimeError("Session refreshing... re-establishing secure preview checks.");
+          return;
+        }
+        setAuthSessionRefreshing(false);
         setError(msg);
         setPreview(null);
         setCloudRuntime(null);
@@ -609,7 +642,11 @@ function WorkbenchPreviewPanel({
             ),
           ) || (payload.items || []).length > 0;
         if (shouldRefreshPreview) {
-          void refreshPreviewRuntimeStatus({ includeLifecycle: false });
+          const now = Date.now();
+          if (now - activityDrivenPreviewRefreshAtRef.current >= 1_200) {
+            activityDrivenPreviewRefreshAtRef.current = now;
+            void refreshPreviewRuntimeStatus({ includeLifecycle: false });
+          }
         }
       },
       onHeartbeat: () => setActivityStreamState("live"),
@@ -637,6 +674,8 @@ function WorkbenchPreviewPanel({
   if (!ws || !pid) {
     previewPhase = "no_project";
   } else if (iframeProxyError) {
+    previewPhase = "starting";
+  } else if (authSessionRefreshing) {
     previewPhase = "starting";
   } else if (preview?.status === "error") {
     previewPhase = "error";
@@ -719,6 +758,7 @@ function WorkbenchPreviewPanel({
       (preview?.status === "not_connected" && hasBackendSource) ||
       cloudRuntimeLatestJob?.status === "queued" ||
       Boolean(iframeProxyError) ||
+      authSessionRefreshing ||
       cloudRuntimeLatestJob?.status === "running");
 
   React.useEffect(() => {
@@ -849,7 +889,9 @@ function WorkbenchPreviewPanel({
                     : "Starting preview environment…",
                 subtitle:
                   preview?.mode === "cloud"
-                    ? "Source files are visible in the Code tab."
+                    ? authSessionRefreshing
+                      ? "Session refreshing... HAM will retry authenticated preview polling."
+                      : "Source files are visible in the Code tab."
                     : activity[0]?.title
                       ? `Latest: ${activity[0].title}`
                       : "Provisioning or waiting for a preview URL.",
