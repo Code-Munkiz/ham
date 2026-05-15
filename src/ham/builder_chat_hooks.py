@@ -41,14 +41,16 @@ def _looks_like_visual_reference_request(last_user_plain: str) -> bool:
     )
 
 
-def _builder_ack_prefix(last_user_plain: str, *, operation: str) -> str:
+def _builder_ack_prefix(
+    last_user_plain: str,
+    *,
+    operation: str = "build_or_create",
+) -> str:
     """Generate prompt-specific builder acknowledgement copy."""
     text = (last_user_plain or "").strip().lower()
     if operation == "update_existing_project":
         if _looks_like_visual_reference_request(last_user_plain):
-            return (
-                "I'll update the existing project and apply the visual style from your reference as closely as I can.\n\n"
-            )
+            return "I'll update the existing project and apply the visual style from your reference as closely as I can.\n\n"
         return "I'll update the existing project source and refresh the Workbench preview.\n\n"
     product = ""
     m = re.search(
@@ -128,7 +130,11 @@ def run_builder_happy_path_hook(
     source_rows = get_builder_source_store().list_project_sources(workspace_id=ws, project_id=pid)
     has_active_snapshot = any(bool(row.active_snapshot_id) for row in source_rows)
     operation = "build_or_create"
-    if intent != "build_or_create" and has_active_snapshot and _looks_like_followup_edit(last_user_plain):
+    if (
+        intent != "build_or_create"
+        and has_active_snapshot
+        and _looks_like_followup_edit(last_user_plain)
+    ):
         operation = "update_existing_project"
         meta["builder_intent"] = "build_or_create"
     elif intent != "build_or_create":
@@ -164,7 +170,9 @@ def run_builder_happy_path_hook(
         )
     if summary.get("deduplicated"):
         if sid:
-            from src.ham.builder_chat_cloud_runtime import maybe_enqueue_chat_scaffold_cloud_runtime_job
+            from src.ham.builder_chat_cloud_runtime import (
+                maybe_enqueue_chat_scaffold_cloud_runtime_job,
+            )
 
             enqueue_meta = maybe_enqueue_chat_scaffold_cloud_runtime_job(
                 workspace_id=ws,

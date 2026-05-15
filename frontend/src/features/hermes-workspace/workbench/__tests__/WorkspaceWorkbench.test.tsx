@@ -1436,7 +1436,7 @@ describe("WorkspaceWorkbench", () => {
   it("Preview proxy upstream errors render friendly copy instead of raw JSON blob", async () => {
     getBuilderPreviewStatusMock.mockRejectedValueOnce(
       new Error(
-        "{\"detail\":{\"error\":{\"code\":\"PREVIEW_PROXY_UPSTREAM_UNAVAILABLE\",\"message\":\"Cloud preview upstream is unavailable.\"}}}",
+        '{"detail":{"error":{"code":"PREVIEW_PROXY_UPSTREAM_UNAVAILABLE","message":"Cloud preview upstream is unavailable."}}}',
       ),
     );
     render(

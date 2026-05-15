@@ -1036,7 +1036,9 @@ function WorkbenchPreviewPanel({
                         (frameText.includes("PREVIEW_PROXY_") ||
                           frameText.includes("upstream is unavailable")))
                     ) {
-                      setIframeProxyError(frameText.slice(0, 240) || "PREVIEW_PROXY_UPSTREAM_UNAVAILABLE");
+                      setIframeProxyError(
+                        frameText.slice(0, 240) || "PREVIEW_PROXY_UPSTREAM_UNAVAILABLE",
+                      );
                       void refreshPreviewRuntimeStatus({ includeLifecycle: false });
                       return;
                     }
