@@ -182,6 +182,11 @@ def test_chat_scaffold_tetris_prompt_generates_playable_game_sources(tmp_path: P
     assert "Line clear scoring, levels, and game over + restart" in readme
     assert ".board {" in styles_css
     assert ".game-over {" in styles_css
+    assert "height: 100dvh;" in styles_css
+    assert "overflow: hidden;" in styles_css
+    assert "aspect-ratio: 1 / 2;" in styles_css
+    assert "grid-template-columns: minmax(150px, 190px) minmax(0, 1fr) minmax(150px, 190px);" in styles_css
+    assert "grid-template-columns: 220px 1fr 220px;" not in styles_css
     assert "hmr: false" in vite_config
     assert '"dev": "vite build && vite preview"' in package_json
     assert "Scaffold created from your chat request." not in app_tsx
