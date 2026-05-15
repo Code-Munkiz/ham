@@ -20,6 +20,14 @@ def _looks_like_followup_edit(last_user_plain: str) -> bool:
         r"\badd\b",
         r"\bremove\b",
         r"\btry again\b",
+        r"\benhance\b",
+        r"\bboring\b",
+        r"\bpolish\b",
+        r"\brefine\b",
+        r"\biterate\b",
+        r"\bmake it better\b",
+        r"\bmake it more\b",
+        r"\bnot how\b.{0,32}\bimage\b.{0,24}\blooked\b",
         r"\bi do not see\b",
         r"\bi don't see\b",
         r"\bi dont see\b",
@@ -27,17 +35,28 @@ def _looks_like_followup_edit(last_user_plain: str) -> bool:
     )
     if any(re.search(p, text) for p in patterns):
         return True
-    return bool(re.search(r"\b(colors?|layout|style|sidebar|sound|leaderboard)\b", text))
+    return bool(
+        re.search(
+            r"\b(colors?|layout|style|sidebar|sound|leaderboard|particles?|glow|neon|image|reference)\b",
+            text,
+        )
+    )
 
 
 def _looks_like_visual_reference_request(last_user_plain: str) -> bool:
     text = (last_user_plain or "").strip().lower()
     if not text:
         return False
-    if "image" not in text:
-        return False
+    if "image" in text and re.search(
+        r"\b(like|similar to|more like|style|look)\b.{0,48}\b(image|reference)\b", text
+    ):
+        return True
+    # Messages can include only "like this" while dashboard metadata appends:
+    # [User attached N image(s) in the dashboard.]
+    if "user attached" in text and "image" in text:
+        return bool(re.search(r"\b(like this|similar to this|more like this|look like this)\b", text))
     return bool(
-        re.search(r"\b(like|similar to|more like|style|look)\b.{0,48}\b(image|reference)\b", text)
+        re.search(r"\b(one in the image|the image|reference style|reference look)\b", text)
     )
 
 
@@ -61,9 +80,14 @@ def _builder_ack_prefix(
     if m:
         noun = m.group(1).strip()
         qualifier = ""
+        if _looks_like_visual_reference_request(last_user_plain):
+            qualifier = "Reference-style "
         qm = re.search(r"\b(like|similar to|clone of|style)\s+(\w[\w\s]{0,30})", text)
         if qm:
-            qualifier = f"{qm.group(2).strip().title()}-style "
+            candidate = qm.group(2).strip()
+            # Avoid awkward acknowledgements like "One In The Image I Gave You-style".
+            if not re.search(r"\b(image|reference|this|that|one)\b", candidate):
+                qualifier = f"{candidate.title()}-style "
         elif re.search(r"\b(tetris|snake|pong|chess|sudoku|wordle)\b", text):
             found = re.search(r"\b(tetris|snake|pong|chess|sudoku|wordle)\b", text)
             if found:

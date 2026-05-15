@@ -254,6 +254,83 @@ def test_builder_hook_followup_edit_updates_existing_project_snapshot(tmp_path: 
     _cleanup()
 
 
+def test_builder_hook_enhance_prompt_routes_to_update_existing_project(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    first = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_a",
+        session_id="sess_enhance",
+        last_user_plain="build me a game like Tetris",
+        created_by="user_1",
+    )
+    assert first and first.get("scaffolded") is True
+
+    prefix, meta = run_builder_happy_path_hook(
+        workspace_id="ws_a",
+        project_id="pr_a",
+        session_id="sess_enhance",
+        last_user_plain="the tetris game looks boring, enhance it",
+        ham_actor=None,
+    )
+    assert prefix is not None
+    assert "update the existing project" in prefix.lower()
+    assert meta.get("builder_operation") == "update_existing_project"
+    assert meta.get("scaffolded") is True
+    _cleanup()
+
+
+def test_chat_scaffold_update_carries_forward_reference_style_profile(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    first = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_a",
+        session_id="sess_style_carry",
+        last_user_plain="ham make me a game like tetris like the one in the image",
+        created_by="user_1",
+    )
+    assert first and first.get("scaffolded") is True
+    assert first.get("style_profile_id") == "neon_space_glass"
+    second = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_a",
+        session_id="sess_style_carry",
+        last_user_plain="enhance it and make it more polished",
+        created_by="user_1",
+        operation="update_existing_project",
+    )
+    assert second and second.get("scaffolded") is True
+    # Follow-up enhancement should not regress back to generic style.
+    assert second.get("style_profile_id") in {"neon_space_glass", "cyber_arcade", "compact_reference_game"}
+    _cleanup()
+
+
+def test_chat_scaffold_title_strips_dashboard_attachment_marker(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    out = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_a",
+        session_id="sess_attached",
+        last_user_plain="ham make me a tetris game that looks like this\n[User attached 1 image(s) in the dashboard (1 image(s)).]",
+        created_by="user_1",
+    )
+    assert out and out.get("scaffolded")
+    snap_id = str(out["source_snapshot_id"])
+    rows = store.list_source_snapshots(workspace_id="ws_a", project_id="pr_a")
+    snap = next(row for row in rows if row.id == snap_id)
+    manifest = snap.manifest or {}
+    inline_files = manifest.get("inline_files")
+    assert isinstance(inline_files, dict)
+    app_tsx = str(inline_files.get("src/App.tsx") or "")
+    assert "User attached" not in app_tsx
+    _cleanup()
+
+
 def test_chat_scaffold_enqueue_idempotent(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "cloud_run_poc")
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED", "true")
@@ -336,7 +413,7 @@ def test_chat_scaffold_fingerprint_version_busts_old_dedupe(tmp_path: Path, monk
     )
     assert first and first.get("scaffolded") is True
     first_snapshot = str(first.get("source_snapshot_id") or "")
-    monkeypatch.setattr("src.ham.builder_chat_scaffold._CHAT_SCAFFOLD_FINGERPRINT_VERSION", "v3")
+    monkeypatch.setattr("src.ham.builder_chat_scaffold._CHAT_SCAFFOLD_FINGERPRINT_VERSION", "v4")
     second = maybe_chat_scaffold_for_turn(
         workspace_id="ws_a",
         project_id="pr_a",

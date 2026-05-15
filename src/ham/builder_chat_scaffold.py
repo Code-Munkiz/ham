@@ -21,14 +21,30 @@ from src.persistence.builder_source_store import (
 )
 
 _MANIFEST_KIND_INLINE = "inline_text_bundle"
-_CHAT_SCAFFOLD_FINGERPRINT_VERSION = "v2"
+_CHAT_SCAFFOLD_FINGERPRINT_VERSION = "v3"
 _MAX_TOTAL_TEXT = 200_000
 _MAX_FILE_BYTES = 60_000
 _MAX_FILES = 24
 
 
+def _strip_dashboard_attachment_tail(user_plain: str) -> str:
+    text = str(user_plain or "").strip()
+    if not text:
+        return ""
+    # Chat plain-text summaries can append:
+    # [User attached N file(s)/image(s) in the dashboard (...)].
+    text = re.sub(
+        r"\s*\[user attached\s+\d+\s+(?:file|image)\(s\)\s+in\s+the\s+dashboard(?:\s*\([^]]*\))?\.\]\s*$",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return text.strip()
+
+
 def _sanitize_title(user_plain: str) -> str:
-    words = re.sub(r"[^\w\s-]", " ", user_plain, flags=re.UNICODE).split()
+    cleaned = _strip_dashboard_attachment_tail(user_plain)
+    words = re.sub(r"[^\w\s-]", " ", cleaned, flags=re.UNICODE).split()
     title = " ".join(words[:12]).strip()
     if not title:
         return "HAM Builder App"
@@ -36,15 +52,22 @@ def _sanitize_title(user_plain: str) -> str:
 
 
 def _is_tetris_prompt(user_plain: str) -> bool:
-    lowered = str(user_plain or "").strip().lower()
+    lowered = _strip_dashboard_attachment_tail(user_plain).lower()
     return "tetris" in lowered
 
 
 def _looks_like_reference_style_request(user_plain: str) -> bool:
     low = str(user_plain or "").strip().lower()
-    if "image(s)" in low or "image" in low:
-        if re.search(r"\b(like|similar to|more like|style|look)\b.{0,48}\b(image|reference)\b", low):
-            return True
+    if ("image(s)" in low or "image" in low) and re.search(
+        r"\b(like|similar to|more like|style|look)\b.{0,48}\b(image|reference)\b",
+        low,
+    ):
+        return True
+    if "user attached" in low and "image" in low and re.search(
+        r"\b(like this|similar to this|more like this|look like this)\b",
+        low,
+    ):
+        return True
     return bool(
         re.search(
             r"\b(like the image|like one in the image|similar to the image|the one in the image|reference style)\b",
@@ -53,23 +76,85 @@ def _looks_like_reference_style_request(user_plain: str) -> bool:
     )
 
 
-def _derive_tetris_style_profile(user_plain: str) -> dict[str, Any]:
+def _derive_tetris_style_profile(
+    user_plain: str,
+    *,
+    previous_style_profile_id: str | None = None,
+    previous_reference_requested: bool = False,
+) -> dict[str, Any]:
     low = str(user_plain or "").strip().lower()
+    cleaned_low = _strip_dashboard_attachment_tail(user_plain).lower()
     style_tokens = {
-        "space": "space" in low,
-        "neon": "neon" in low,
-        "glass": "glass" in low,
-        "cyber": "cyber" in low,
-        "dark": "dark" in low,
-        "arcade": "arcade" in low,
-        "manus": "manus" in low,
+        "space": "space" in cleaned_low or "cosmic" in cleaned_low,
+        "neon": "neon" in cleaned_low or "glow" in cleaned_low,
+        "glass": "glass" in cleaned_low,
+        "cyber": "cyber" in cleaned_low,
+        "dark": "dark" in cleaned_low,
+        "arcade": "arcade" in cleaned_low,
+        "manus": "manus" in cleaned_low,
         "reference": _looks_like_reference_style_request(low),
     }
     board_scale = 1.0
-    if re.search(r"\b(board smaller|smaller board|shrink the board|reduce board size)\b", low):
+    if re.search(r"\b(board smaller|smaller board|shrink the board|reduce board size)\b", cleaned_low):
         board_scale = 0.86
-    style_requested = any(style_tokens.values())
-    if style_requested:
+    compact_requested = bool(
+        re.search(
+            r"\b(board smaller|compact|smaller|no scrolling|without scrolling|controls visible|remove (the )?sidebar)\b",
+            cleaned_low,
+        )
+    )
+    correction_requested = bool(
+        re.search(r"\b(try again|not how.*image looked|more like the image)\b", cleaned_low)
+    )
+    carry_forward_style = bool(
+        previous_style_profile_id
+        and re.search(r"\b(enhance|polish|refine|make it better|make it more)\b", cleaned_low)
+    )
+
+    style_profile_id = "generic_dark"
+    if correction_requested or compact_requested:
+        style_profile_id = "compact_reference_game"
+    elif style_tokens["cyber"] or style_tokens["arcade"]:
+        style_profile_id = "cyber_arcade"
+    elif style_tokens["reference"] or style_tokens["space"] or style_tokens["neon"] or style_tokens["glass"]:
+        style_profile_id = "neon_space_glass"
+    elif carry_forward_style:
+        style_profile_id = str(previous_style_profile_id or "generic_dark")
+
+    reference_requested = bool(style_tokens["reference"] or previous_reference_requested or correction_requested)
+    style_requested = any(style_tokens.values()) or carry_forward_style or correction_requested or compact_requested
+
+    if style_profile_id == "compact_reference_game":
+        return {
+            "id": "compact_reference_game",
+            "subtitle": "Reference-style compact arena with balanced HUD.",
+            "bg_start": "#1a1238",
+            "bg_mid": "#080c22",
+            "bg_end": "#04060f",
+            "panel_border": "#5a54cb",
+            "panel_bg": "rgba(12, 14, 34, 0.74)",
+            "board_border": "#7a70ff",
+            "board_bg": "rgba(7, 11, 30, 0.93)",
+            "board_scale": min(board_scale, 0.84),
+            "style_requested": style_requested,
+            "reference_requested": reference_requested,
+        }
+    if style_profile_id == "cyber_arcade":
+        return {
+            "id": "cyber_arcade",
+            "subtitle": "Cyber arcade styling with high-contrast controls.",
+            "bg_start": "#1a0732",
+            "bg_mid": "#080713",
+            "bg_end": "#04040b",
+            "panel_border": "#ff4ec2",
+            "panel_bg": "rgba(22, 10, 32, 0.76)",
+            "board_border": "#31c9ff",
+            "board_bg": "rgba(5, 12, 25, 0.92)",
+            "board_scale": board_scale,
+            "style_requested": style_requested,
+            "reference_requested": reference_requested,
+        }
+    if style_profile_id == "neon_space_glass":
         return {
             "id": "neon_space_glass",
             "subtitle": "Neon glass arena tuned from your style reference.",
@@ -81,11 +166,11 @@ def _derive_tetris_style_profile(user_plain: str) -> dict[str, Any]:
             "board_border": "#4d3eb7",
             "board_bg": "rgba(9, 10, 30, 0.94)",
             "board_scale": board_scale,
-            "style_requested": True,
-            "reference_requested": bool(style_tokens["reference"]),
+            "style_requested": style_requested,
+            "reference_requested": reference_requested,
         }
     return {
-        "id": "classic_builder",
+        "id": "generic_dark",
         "subtitle": "Playable preview generated by HAM.",
         "bg_start": "#0b1530",
         "bg_mid": "#040711",
@@ -95,8 +180,8 @@ def _derive_tetris_style_profile(user_plain: str) -> dict[str, Any]:
         "board_border": "#14305d",
         "board_bg": "rgba(3, 10, 22, 0.92)",
         "board_scale": board_scale,
-        "style_requested": False,
-        "reference_requested": False,
+        "style_requested": style_requested,
+        "reference_requested": reference_requested,
     }
 
 
@@ -654,16 +739,27 @@ def _build_tetris_scaffold_files(
     }
 
 
-def _build_react_scaffold_files(user_plain: str) -> tuple[dict[str, str], dict[str, Any]]:
+def _build_react_scaffold_files(
+    user_plain: str,
+    *,
+    previous_style_profile_id: str | None = None,
+    previous_reference_requested: bool = False,
+    previous_template: str | None = None,
+) -> tuple[dict[str, str], dict[str, Any]]:
     title = _sanitize_title(user_plain)
     safe_pkg = re.sub(r"[^a-z0-9-]", "-", title.lower())[:40].strip("-") or "ham-builder-app"
-    if _is_tetris_prompt(user_plain):
-        style_profile = _derive_tetris_style_profile(user_plain)
+    use_tetris_template = _is_tetris_prompt(user_plain) or str(previous_template or "").strip().lower() == "tetris"
+    if use_tetris_template:
+        style_profile = _derive_tetris_style_profile(
+            user_plain,
+            previous_style_profile_id=previous_style_profile_id,
+            previous_reference_requested=previous_reference_requested,
+        )
         return (
             _build_tetris_scaffold_files(title=title, safe_pkg=safe_pkg, style_profile=style_profile),
             {
                 "template": "tetris",
-                "style_profile_id": str(style_profile.get("id") or "classic_builder"),
+                "style_profile_id": str(style_profile.get("id") or "generic_dark"),
                 "style_requested": bool(style_profile.get("style_requested")),
                 "reference_requested": bool(style_profile.get("reference_requested")),
             },
@@ -725,9 +821,6 @@ def _build_react_scaffold_files(user_plain: str) -> tuple[dict[str, str], dict[s
             "        Scaffold created from your chat request. HAM will attach a cloud preview when the preview\n"
             "        environment is ready. Use the Code tab to browse source files.\n"
             "      </p>\n"
-            "      <p className=\"muted developer-hint\">\n"
-            "        Developer: you may run <code>npm install</code> and <code>npm run dev</code> locally if needed.\n"
-            "      </p>\n"
             "    </main>\n"
             "  );\n"
             "}\n"
@@ -752,15 +845,24 @@ def _build_react_scaffold_files(user_plain: str) -> tuple[dict[str, str], dict[s
             f"# {title}\n\n"
             "This is a small Vite + React scaffold produced by HAM chat.\n\n"
             "- **Preview:** HAM attaches a cloud preview when the preview environment is ready (see the Workbench Preview tab).\n"
-            "- **Code:** Source files are listed under the Workbench Code tab.\n\n"
-            "### Developer (optional)\n\n"
-            "For local debugging you can run `npm install` and `npm run dev` on your machine.\n"
+            "- **Code:** Source files are listed under the Workbench Code tab.\n"
         ),
     }, {"template": "react_scaffold", "style_profile_id": "default"})
 
 
-def _bounded_files(user_plain: str) -> tuple[dict[str, str], dict[str, Any]]:
-    raw, scaffold_meta = _build_react_scaffold_files(user_plain)
+def _bounded_files(
+    user_plain: str,
+    *,
+    previous_style_profile_id: str | None = None,
+    previous_reference_requested: bool = False,
+    previous_template: str | None = None,
+) -> tuple[dict[str, str], dict[str, Any]]:
+    raw, scaffold_meta = _build_react_scaffold_files(
+        user_plain,
+        previous_style_profile_id=previous_style_profile_id,
+        previous_reference_requested=previous_reference_requested,
+        previous_template=previous_template,
+    )
     if len(raw) > _MAX_FILES:
         raise ValueError("too_many_files")
     out: dict[str, str] = {}
@@ -856,7 +958,41 @@ def maybe_chat_scaffold_for_turn(
             "source_snapshot_id": existing_snapshot_id,
         }
 
-    files, scaffold_meta = _bounded_files(last_user_plain)
+    store = get_builder_source_store()
+    source_rows_existing = store.list_project_sources(workspace_id=ws, project_id=pid)
+    source_snapshots_existing = store.list_source_snapshots(workspace_id=ws, project_id=pid)
+    previous_style_profile_id: str | None = None
+    previous_reference_requested = False
+    previous_template: str | None = None
+    if operation == "update_existing_project":
+        preferred_source = next(
+            (row for row in source_rows_existing if str(row.kind or "").strip().lower() == "chat_scaffold"),
+            source_rows_existing[0] if source_rows_existing else None,
+        )
+        active_snapshot_id = str(getattr(preferred_source, "active_snapshot_id", "") or "").strip()
+        if active_snapshot_id:
+            previous_snapshot = next(
+                (snap for snap in source_snapshots_existing if str(snap.id or "").strip() == active_snapshot_id),
+                None,
+            )
+            if previous_snapshot is not None:
+                prev_meta = previous_snapshot.metadata or {}
+                previous_template = str(prev_meta.get("template") or "").strip() or None
+                previous_style_profile_id = str(prev_meta.get("style_profile_id") or "").strip() or None
+                previous_reference_requested = bool(prev_meta.get("reference_requested"))
+        if previous_style_profile_id is None and preferred_source is not None:
+            src_meta = preferred_source.metadata or {}
+            previous_style_profile_id = str(src_meta.get("style_profile_id") or "").strip() or None
+            previous_reference_requested = bool(
+                previous_reference_requested or src_meta.get("reference_requested")
+            )
+
+    files, scaffold_meta = _bounded_files(
+        last_user_plain,
+        previous_style_profile_id=previous_style_profile_id,
+        previous_reference_requested=previous_reference_requested,
+        previous_template=previous_template,
+    )
     entries_manifest: list[dict[str, Any]] = []
     total_bytes = 0
     for path, text in sorted(files.items()):
@@ -876,8 +1012,6 @@ def maybe_chat_scaffold_for_turn(
         project_id=pid,
         files=files,
     )
-    store = get_builder_source_store()
-
     job = store.create_import_job(
         workspace_id=ws,
         project_id=pid,
@@ -937,6 +1071,9 @@ def maybe_chat_scaffold_for_turn(
             "chat_scaffold": "1",
             "import_job_id": job.id,
             "operation": operation,
+            "style_profile_id": scaffold_meta.get("style_profile_id"),
+            "style_requested": scaffold_meta.get("style_requested"),
+            "reference_requested": scaffold_meta.get("reference_requested"),
         }
     else:
         source = ProjectSource(
@@ -947,7 +1084,14 @@ def maybe_chat_scaffold_for_turn(
             display_name="Chat scaffold",
             origin_ref="ham_chat",
             created_by=created_by,
-            metadata={"chat_scaffold": "1", "import_job_id": job.id, "operation": operation},
+            metadata={
+                "chat_scaffold": "1",
+                "import_job_id": job.id,
+                "operation": operation,
+                "style_profile_id": scaffold_meta.get("style_profile_id"),
+                "style_requested": scaffold_meta.get("style_requested"),
+                "reference_requested": scaffold_meta.get("reference_requested"),
+            },
         )
     source = store.upsert_project_source(source)
 
