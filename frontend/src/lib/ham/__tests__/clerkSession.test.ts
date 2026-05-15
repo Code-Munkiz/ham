@@ -28,7 +28,11 @@ describe("clerkSession token caching and single-flight", () => {
 
     expect(getter).toHaveBeenCalledTimes(1);
     resolveToken?.("jwt_shared");
-    await expect(Promise.all([p1, p2, p3])).resolves.toEqual(["jwt_shared", "jwt_shared", "jwt_shared"]);
+    await expect(Promise.all([p1, p2, p3])).resolves.toEqual([
+      "jwt_shared",
+      "jwt_shared",
+      "jwt_shared",
+    ]);
     expect(getter).toHaveBeenCalledTimes(1);
   });
 
@@ -42,14 +46,13 @@ describe("clerkSession token caching and single-flight", () => {
   });
 
   it("forceRefresh bypasses cache and fetches a fresh token", async () => {
-    const getter = vi
-      .fn()
-      .mockResolvedValueOnce("jwt_first")
-      .mockResolvedValueOnce("jwt_second");
+    const getter = vi.fn().mockResolvedValueOnce("jwt_first").mockResolvedValueOnce("jwt_second");
     registerClerkSessionGetter(getter);
 
     await expect(getRegisteredClerkSessionToken()).resolves.toBe("jwt_first");
-    await expect(getRegisteredClerkSessionToken({ forceRefresh: true })).resolves.toBe("jwt_second");
+    await expect(getRegisteredClerkSessionToken({ forceRefresh: true })).resolves.toBe(
+      "jwt_second",
+    );
     expect(getter).toHaveBeenCalledTimes(2);
   });
 });

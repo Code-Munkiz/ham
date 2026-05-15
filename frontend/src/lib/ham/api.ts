@@ -183,7 +183,8 @@ export async function hamApiFetch(path: string, init: RequestInit = {}): Promise
   const first = await runOnce({ forceRefresh: false });
   const shouldAuthRetry =
     !hasExplicitAuthHeader &&
-    ((first.status === 401 || first.status === 429) ||
+    (first.status === 401 ||
+      first.status === 429 ||
       (isSafeMethod && isBuilderPath && first.status === 502));
   if (!shouldAuthRetry) return first;
   clearClerkSessionTokenCache();
