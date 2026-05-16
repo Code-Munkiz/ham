@@ -22,7 +22,7 @@ Other markdown under `docs/` (for example [`HAM_HARDENING_REMEDIATION.md`](HAM_H
 
 ---
 
-Canonical architecture and agent context live at the repo root: [`VISION.md`](../VISION.md), [`AGENTS.md`](../AGENTS.md), [`SWARM.md`](../SWARM.md), [`GAPS.md`](../GAPS.md).
+Canonical architecture and agent context live at the repo root: [`VISION.md`](../VISION.md), [`AGENTS.md`](../AGENTS.md), [`SWARM.md`](../SWARM.md), [`GAPS.md`](../GAPS.md), [`PRODUCT_DIRECTION.md`](../PRODUCT_DIRECTION.md) (product lens; same freshness allowlist as [`scripts/check_docs_freshness.py`](../scripts/check_docs_freshness.py)).
 
 **Operating model (three lanes):** [`HAM_THREE_LANE_ARCHITECTURE.md`](HAM_THREE_LANE_ARCHITECTURE.md) — how the web app, desktop app, and cloud/hosted-agent lanes divide responsibilities. Finish-line product-truth checklist per lane: [`HAM_THREE_LANE_FINISH_LINE.md`](HAM_THREE_LANE_FINISH_LINE.md).
 
