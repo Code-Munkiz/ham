@@ -447,11 +447,15 @@ export function ContextMeterCluster({
             ref={floatingWrapRef}
             data-hww-diagnostics-hud="floating"
             data-hww-diagnostics-placement={diagPos.placement}
-            className="pointer-events-auto z-[200]"
+            className="pointer-events-none z-[200]"
             style={{ position: "fixed", top: diagPos.top, left: diagPos.left }}
             role="presentation"
           >
-            <ContextDiagnosticsHudPanel payload={payload} enabled={Boolean(payload?.enabled)} />
+            <ContextDiagnosticsHudPanel
+              payload={payload}
+              enabled={Boolean(payload?.enabled)}
+              className="pointer-events-auto"
+            />
           </div>,
           document.body,
         )
