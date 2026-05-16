@@ -611,4 +611,5 @@ export interface ControlPlaneRunPublic {
   last_observed_at: string | null;
   last_provider_status: string | null;
   audit_ref: ControlPlaneAuditRef | null;
+  output_ref: Record<string, unknown> | null;
 }

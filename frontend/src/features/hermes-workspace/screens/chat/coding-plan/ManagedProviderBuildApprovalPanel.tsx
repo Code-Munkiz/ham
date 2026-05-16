@@ -1,11 +1,13 @@
 import * as React from "react";
 
-import { shortenHamApiErrorMessage } from "@/lib/ham/api";
+import { fetchControlPlaneRun, shortenHamApiErrorMessage } from "@/lib/ham/api";
 import {
   assertManagedBuildSmokePreflight,
   SmokePreflightError,
 } from "@/lib/ham/managedBuildSmokePreflight";
 import { cn } from "@/lib/utils";
+
+const POLL_INTERVAL_MS = 3000;
 
 export type ManagedProviderBuildOutputRef = Record<string, unknown> | null | undefined;
 
@@ -19,9 +21,11 @@ export interface ManagedProviderBuildPreviewLike {
 }
 
 export interface ManagedProviderBuildLaunchLike {
-  ok: boolean;
+  ok: boolean | null;
   error_summary: string | null;
   output_ref?: ManagedProviderBuildOutputRef;
+  ham_run_id?: string | null;
+  control_plane_status?: string | null;
 }
 
 export interface ManagedProviderBuildCopy {
@@ -72,6 +76,10 @@ export interface ManagedProviderBuildConfig<
   }) => Promise<L>;
   changedPathsLine: (count: number) => string;
   model?: string | null;
+  runningHeadline?: string;
+  runningNote?: string;
+  normieFailMessageForStatusReason?: (statusReason: string) => string | null;
+  pollIntervalMs?: number;
 }
 
 export interface ManagedProviderBuildApprovalPanelProps<
@@ -92,6 +100,7 @@ type PanelState<
   | { phase: "previewing" }
   | { phase: "previewed"; preview: P; approved: boolean }
   | { phase: "launching"; preview: P }
+  | { phase: "running"; hamRunId: string; preview: P }
   | { phase: "succeeded"; result: L }
   | { phase: "failed"; message: string };
 
@@ -164,6 +173,10 @@ export function ManagedProviderBuildApprovalPanel<
         base_revision: preview.base_revision,
         confirmed: true,
       });
+      if (result.control_plane_status === "running" && result.ham_run_id) {
+        setState({ phase: "running", hamRunId: result.ham_run_id, preview });
+        return;
+      }
       if (!result.ok) {
         setState({
           phase: "failed",
@@ -189,6 +202,49 @@ export function ManagedProviderBuildApprovalPanel<
   const handleReset = React.useCallback(() => {
     setState({ phase: "idle" });
   }, []);
+
+  const pollingRunId = state.phase === "running" ? state.hamRunId : null;
+
+  React.useEffect(() => {
+    if (!pollingRunId) return;
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    const pollMs = config.pollIntervalMs ?? POLL_INTERVAL_MS;
+
+    const tick = async () => {
+      if (cancelled) return;
+      try {
+        const run = await fetchControlPlaneRun(pollingRunId);
+        if (cancelled) return;
+        if (run.status === "succeeded") {
+          setState({
+            phase: "succeeded",
+            result: {
+              ok: true,
+              error_summary: null,
+              output_ref: run.output_ref ?? null,
+            } as L,
+          });
+        } else if (run.status === "failed" || run.status === "cancelled") {
+          const normie = config.normieFailMessageForStatusReason?.(run.status_reason);
+          const fallback =
+            shortenHamApiErrorMessage(run.error_summary || "") || copy.failureFallbackMessage;
+          setState({ phase: "failed", message: normie || fallback });
+        } else {
+          timeoutId = setTimeout(tick, pollMs);
+        }
+      } catch {
+        if (!cancelled) timeoutId = setTimeout(tick, pollMs * 2);
+      }
+    };
+
+    timeoutId = setTimeout(tick, pollMs);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [pollingRunId, config, copy.failureFallbackMessage]);
 
   const isPreviewing = state.phase === "previewing";
   const isLaunching = state.phase === "launching";
@@ -219,7 +275,9 @@ export function ManagedProviderBuildApprovalPanel<
           ? copy.successHeadline
           : state.phase === "failed"
             ? copy.failureHeadline
-            : copy.headline}
+            : state.phase === "running"
+              ? (config.runningHeadline ?? copy.headline)
+              : copy.headline}
       </h4>
 
       {state.phase === "idle" || isPreviewing ? (
@@ -291,6 +349,16 @@ export function ManagedProviderBuildApprovalPanel<
               </button>
             )}
           </div>
+        </div>
+      ) : null}
+
+      {state.phase === "running" ? (
+        <div
+          className="mt-2 grid gap-1.5 text-[11px] text-white/75"
+          data-hww-coding-plan={`${prefix}-running`}
+        >
+          <p className="leading-snug">{config.runningNote}</p>
+          <p className="text-[10px] text-white/50">Checking build status…</p>
         </div>
       ) : null}
 
