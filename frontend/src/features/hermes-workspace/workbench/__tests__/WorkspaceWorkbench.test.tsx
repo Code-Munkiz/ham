@@ -1558,6 +1558,56 @@ describe("WorkspaceWorkbench", () => {
     expect(canvas).toHaveClass("overflow-hidden");
   });
 
+  it("Cloud preview iframe remounts when source_snapshot_id changes while proxy URL/session/endpoint stay stable", async () => {
+    const previewUrlPath =
+      "/api/workspaces/ws_abc/projects/proj_abc/builder/preview-proxy/";
+    getBuilderPreviewStatusMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      mode: "cloud",
+      status: "ready",
+      health: "healthy",
+      preview_url: previewUrlPath,
+      message: "Preview is ready via authenticated cloud proxy.",
+      updated_at: "2026-01-01T00:00:00Z",
+      source_snapshot_id: "ssnp_calc_initial",
+      runtime_session_id: "rtms_cloud_stable",
+      preview_endpoint_id: "prve_cloud_stable",
+      logs_hint: null,
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(createBuilderPreviewProxySessionMock).toHaveBeenCalledWith("ws_abc", "proj_abc");
+    });
+    const firstIframe = await screen.findByTestId("hww-preview-iframe");
+    const firstSrc = firstIframe.getAttribute("src");
+
+    getBuilderPreviewStatusMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      mode: "cloud",
+      status: "ready",
+      health: "healthy",
+      preview_url: previewUrlPath,
+      message: "Preview is ready via authenticated cloud proxy.",
+      updated_at: "2026-01-01T00:00:01Z",
+      source_snapshot_id: "ssnp_calc_follow_up",
+      runtime_session_id: "rtms_cloud_stable",
+      preview_endpoint_id: "prve_cloud_stable",
+      logs_hint: null,
+    });
+    fireEvent.click(screen.getByTestId("hww-preview-refresh"));
+    await waitFor(() => {
+      const second = screen.getByTestId("hww-preview-iframe");
+      expect(second).not.toBe(firstIframe);
+      expect(second.getAttribute("src")).toBe(firstSrc);
+    });
+  });
+
   it("Cloud preview normalizes proxy path to same-origin /api route", async () => {
     getBuilderPreviewStatusMock.mockResolvedValue({
       project_id: "proj_abc",

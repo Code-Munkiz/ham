@@ -792,7 +792,12 @@ function WorkbenchPreviewPanel({
 
   React.useEffect(() => {
     setIframeProxyError(null);
-  }, [preview?.runtime_session_id, preview?.preview_endpoint_id, previewUrl]);
+  }, [
+    preview?.runtime_session_id,
+    preview?.preview_endpoint_id,
+    preview?.source_snapshot_id,
+    previewUrl,
+  ]);
 
   React.useEffect(() => {
     if (!iframeProxyError) return;
@@ -1069,7 +1074,7 @@ function WorkbenchPreviewPanel({
               data-testid="hww-preview-frame-wrap"
             >
               <iframe
-                key={`${previewUrl || "preview"}|${preview?.runtime_session_id || ""}|${preview?.preview_endpoint_id || ""}|${iframeReloadNonce}`}
+                key={`${previewUrl || "preview"}|${preview?.runtime_session_id || ""}|${preview?.preview_endpoint_id || ""}|${preview?.source_snapshot_id || ""}|${iframeReloadNonce}`}
                 title="App preview"
                 src={previewUrl}
                 className={cn(
