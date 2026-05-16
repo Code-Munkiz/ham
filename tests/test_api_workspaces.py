@@ -355,6 +355,8 @@ def test_archive_succeeds_with_phrase() -> None:
         "preview_endpoints_removed",
         "cloud_runtime_jobs_removed",
         "runtime_cleanup_requested",
+        "local_builder_artifact_dirs_removed",
+        "gcs_preview_bundles_deleted",
     }
     assert set(purge.keys()) == expected_keys
     assert isinstance(purge["runtime_cleanup_requested"], bool)

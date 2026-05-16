@@ -1,12 +1,17 @@
 """Best-effort tenant cleanup when archiving a workspace (metadata + local JSON stores).
 
-Does **not** call external GKE/Cloud Run preview teardown; summaries expose
-``runtime_cleanup_requested`` so operators know asynchronous cleanup may be needed.
+Also deletes local builder ZIP artifacts rooted at ``HAM_BUILDER_SOURCE_ARTIFACT_DIR`` and
+(best-effort) GCS preview bundle objects under ``builder-preview-runtime/{workspace}/``.
+Asynchronous preview/GKE teardown may still be required; summaries expose ``runtime_cleanup_requested``.
 """
 
 from __future__ import annotations
 
+import logging
+import os
+import shutil
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from src.persistence.builder_runtime_job_store import BuilderRuntimeJobStore, get_builder_runtime_job_store
@@ -14,6 +19,63 @@ from src.persistence.builder_runtime_store import BuilderRuntimeStore, get_build
 from src.persistence.builder_source_store import BuilderSourceStore, get_builder_source_store
 from src.persistence.chat_session_store import build_chat_session_store
 from src.persistence.project_store import get_project_store
+
+_LOG = logging.getLogger(__name__)
+
+
+def _builder_source_artifact_base() -> Path:
+    raw = (os.environ.get("HAM_BUILDER_SOURCE_ARTIFACT_DIR") or "").strip()
+    if raw:
+        return Path(raw).expanduser().resolve()
+    return (Path.home() / ".ham" / "builder-source-artifacts").resolve()
+
+
+def purge_local_workspace_builder_artifact_tree(*, workspace_id: str) -> int:
+    """Remove `{artifact_base}/{workspace_id}` (bundles live under `{ws}/{project}` zip files)."""
+
+    ws = workspace_id.strip()
+    if not ws:
+        return 0
+    root = (_builder_source_artifact_base() / ws).resolve()
+    base_resolved = _builder_source_artifact_base().resolve()
+    try:
+        root.relative_to(base_resolved)
+    except ValueError:
+        return 0
+    if root.is_dir():
+        shutil.rmtree(root, ignore_errors=True)
+        return 1
+    return 0
+
+
+def purge_gcs_builder_preview_bundle_prefix(*, workspace_id: str, bucket_override: str | None = None) -> int:
+    """Best-effort delete objects under ``builder-preview-runtime/{safe_ws}/`` if GCS deps/bucket configured."""
+
+    ws = workspace_id.strip()
+    bucket = (
+        bucket_override
+        if bucket_override is not None
+        else str(os.environ.get("HAM_BUILDER_PREVIEW_SOURCE_BUCKET") or "").strip()
+    )
+    if not ws or not bucket:
+        return 0
+    safe_ws = ws.replace("/", "-").replace("\\", "-").strip("-") or "ws"
+    prefix = f"builder-preview-runtime/{safe_ws}/"
+    try:
+        from google.cloud import storage  # type: ignore[import-not-found]
+
+        deleted = 0
+        bucket_ref = storage.Client().bucket(bucket)
+        for blob in bucket_ref.list_blobs(prefix=prefix):
+            try:
+                blob.delete()
+                deleted += 1
+            except Exception:  # noqa: BLE001
+                continue
+        return deleted
+    except Exception as exc:  # noqa: BLE001
+        _LOG.info("purge_gcs_builder_preview_bundle_prefix: skipped (%s)", type(exc).__name__)
+        return 0
 
 
 @dataclass(frozen=True)
@@ -27,6 +89,8 @@ class WorkspacePurgeSummary:
     preview_endpoints_removed: int
     cloud_runtime_jobs_removed: int
     runtime_cleanup_requested: bool
+    local_builder_artifact_dirs_removed: int
+    gcs_preview_bundles_deleted: int
 
     def as_public_dict(self) -> dict[str, Any]:
         return {
@@ -39,6 +103,8 @@ class WorkspacePurgeSummary:
             "preview_endpoints_removed": self.preview_endpoints_removed,
             "cloud_runtime_jobs_removed": self.cloud_runtime_jobs_removed,
             "runtime_cleanup_requested": self.runtime_cleanup_requested,
+            "local_builder_artifact_dirs_removed": self.local_builder_artifact_dirs_removed,
+            "gcs_preview_bundles_deleted": self.gcs_preview_bundles_deleted,
         }
 
 
@@ -145,6 +211,8 @@ def purge_workspace_associated_records(*, workspace_id: str) -> WorkspacePurgeSu
     proj_rm = purge_builder_projects_for_workspace(workspace_id=workspace_id)
 
     runtime_cleanup_requested = bool(cr_jobs_rm or sess_rm)
+    artifact_dirs_removed = purge_local_workspace_builder_artifact_tree(workspace_id=workspace_id)
+    gcs_deleted = purge_gcs_builder_preview_bundle_prefix(workspace_id=workspace_id)
 
     return WorkspacePurgeSummary(
         chats_deleted=chats_deleted,
@@ -156,4 +224,6 @@ def purge_workspace_associated_records(*, workspace_id: str) -> WorkspacePurgeSu
         preview_endpoints_removed=pe_rm,
         cloud_runtime_jobs_removed=cr_jobs_rm,
         runtime_cleanup_requested=runtime_cleanup_requested,
+        local_builder_artifact_dirs_removed=artifact_dirs_removed,
+        gcs_preview_bundles_deleted=gcs_deleted,
     )

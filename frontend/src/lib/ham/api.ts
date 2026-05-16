@@ -18,6 +18,7 @@ import type {
 import type { HermesGatewaySnapshot } from "./hermesGateway";
 import { clearClerkSessionTokenCache, getRegisteredClerkSessionToken } from "./clerkSession";
 import { getHamDesktopConfig } from "./desktopConfig";
+import { sanitizeWorkbenchProjectAccessMessage } from "./workbenchProjectMessages";
 
 function normalizeApiBaseOrigin(raw: string): string {
   let base = raw.replace(/\/+$/, "");
@@ -84,6 +85,49 @@ export async function hamApiErrorDetailMessage(res: Response): Promise<string | 
   } catch {
     return null;
   }
+}
+
+async function structuredErrorCodeFromResponse(res: Response): Promise<string | null> {
+  try {
+    const ct = res.headers.get("content-type") || "";
+    if (!ct.includes("application/json")) return null;
+    const body = (await res.clone().json()) as { detail?: { error?: { code?: string | null } } };
+    const c = body?.detail?.error?.code;
+    return typeof c === "string" ? c : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Builder/workspace-scoped read failed (Workbench preview/status); callers can inspect `.code`. */
+export class HamBuilderScopedReadError extends Error {
+  readonly status: number;
+  readonly code: string | null;
+
+  constructor(message: string, status: number, code: string | null) {
+    super(message);
+    this.name = "HamBuilderScopedReadError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export function shouldResetHamWorkbenchProjectSelection(err: unknown): boolean {
+  return (
+    err instanceof HamBuilderScopedReadError &&
+    err.status === 404 &&
+    err.code === "PROJECT_NOT_FOUND"
+  );
+}
+
+async function throwBuilderScopedReadFailure(res: Response, label: string): Promise<never> {
+  const raw = await hamApiErrorDetailMessage(res);
+  const code = await structuredErrorCodeFromResponse(res);
+  throw new HamBuilderScopedReadError(
+    sanitizeWorkbenchProjectAccessMessage(raw || `${label}: HTTP ${res.status}`),
+    res.status,
+    code,
+  );
 }
 
 /** If `Authorization` is unset and the dashboard has a Clerk publishable key, attach the session JWT. */
@@ -869,7 +913,7 @@ export async function getBuilderPreviewStatus(
     `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/preview-status`,
   );
   if (!res.ok) {
-    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+    await throwBuilderScopedReadFailure(res, "preview-status");
   }
   return res.json() as Promise<BuilderPreviewStatus>;
 }
@@ -1214,7 +1258,7 @@ export async function getBuilderCloudRuntime(
     `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/cloud-runtime`,
   );
   if (!res.ok) {
-    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+    await throwBuilderScopedReadFailure(res, "builder-cloud-runtime");
   }
   return res.json() as Promise<BuilderCloudRuntimeStatus>;
 }
@@ -1294,7 +1338,7 @@ export async function listBuilderCloudRuntimeJobs(
     `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/cloud-runtime/jobs`,
   );
   if (!res.ok) {
-    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+    await throwBuilderScopedReadFailure(res, "builder-cloud-runtime-jobs");
   }
   return res.json() as Promise<{
     workspace_id: string;

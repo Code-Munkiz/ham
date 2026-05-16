@@ -108,7 +108,7 @@ export interface HamWorkspaceProviderProps {
   openSignIn?: () => void;
 }
 
-const HamWorkspaceContext = React.createContext<HamWorkspaceContextValue | null>(null);
+export const HamWorkspaceContext = React.createContext<HamWorkspaceContextValue | null>(null);
 
 // ---------------------------------------------------------------------------
 // Helpers (pure)

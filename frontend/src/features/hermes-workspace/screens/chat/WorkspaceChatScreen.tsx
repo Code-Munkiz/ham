@@ -3788,6 +3788,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           projectId={projectId}
           workspaceId={activeWorkspaceId}
           workbenchRefreshSignal={workbenchBounce}
+          onStaleBuilderProject={() => {
+            setProjectId(null);
+            setHamProjectId(null);
+          }}
         />
       </div>
     </div>

@@ -14,6 +14,11 @@ def _looks_like_followup_edit(last_user_plain: str) -> bool:
         return False
     patterns = (
         r"\bmake it\b",
+        r"\bi want\b",
+        r"\bi'd like\b",
+        r"\bi need\b",
+        r"\binstead\b",
+        r"\bas well\b",
         r"\bmore like\b",
         r"\bchange\b",
         r"\bupdate\b",
@@ -41,6 +46,71 @@ def _looks_like_followup_edit(last_user_plain: str) -> bool:
             text,
         )
     )
+
+
+def _looks_like_literal_explain_only(last_user_plain: str) -> bool:
+    """Pure Q&A phrasing that should not drive builder updates when mis-detected."""
+    text = (last_user_plain or "").strip().lower()
+    if not text:
+        return False
+    return bool(
+        re.search(
+            r"^\s*(what is|what are|what's|explain|describe|define|why is|why does|how does|how do)\b",
+            text,
+        )
+    )
+
+
+def _looks_like_active_app_iteration(last_user_plain: str) -> bool:
+    """Feature / polish requests on an existing Workbench app (not a brand-new product build)."""
+    text = (last_user_plain or "").strip().lower()
+    if not text or _looks_like_literal_explain_only(last_user_plain):
+        return False
+    if re.search(
+        r"\b(i want|i'd like|i need|please)\b.{0,160}\b(show|see|display|keep|make|add|change|update|improve|fix)\b",
+        text,
+    ):
+        return True
+    if re.search(
+        r"^\s*(nice\s+job|looks\s+great|great\s+job|love\s+it|perfect|thanks|thank\s+you)\b",
+        text,
+    ) and re.search(r"\b(make|show|add|change|update|keep|improve|try)\b", text):
+        return True
+    if re.search(
+        r"\b(show|display|visible|stay|persist|reflect|mirror|equation|expression|formula|digits?|numbers?|typing|typed|history|tape|flow)\b",
+        text,
+    ) and (
+        re.search(
+            r"\b(the|this|my)\s+(app|calculator|buttons?|preview|screen|ui|equation|numbers|keyboard|controls)\b",
+            text,
+        )
+        or re.search(r"\bas i type\b", text)
+        or re.search(r"\b(calculator|calc)\b", text)
+    ):
+        return True
+    return False
+
+
+def _looks_like_discrete_new_product_request(last_user_plain: str) -> bool:
+    """User is asking for a different standalone product/build (respect even if one exists)."""
+    text = (last_user_plain or "").strip().lower()
+    if not text:
+        return False
+    if re.search(r"\banother\s+(app|project|dashboard|site|saas|clone|tracker|portal|tool|game)\b", text):
+        return True
+    if re.search(
+        r"\b(new|brand[- ]new|fresh)\s+(app|project|dashboard|site|saas|landing|clone|tracker|portal|tool|game)\b",
+        text,
+    ):
+        return True
+    if re.search(r"\b(from scratch|start over|scratch project|new project)\b", text):
+        return True
+    if re.search(
+        r"\b(build|create|make|generate|scaffold|spin up)\b.{0,120}\b(app|dashboard|saas|landing|website|site|tracker|portal|clone|tool|game|calculator)\b",
+        text,
+    ):
+        return True
+    return False
 
 
 def _looks_like_visual_reference_request(last_user_plain: str) -> bool:
@@ -153,15 +223,15 @@ def run_builder_happy_path_hook(
 
     source_rows = get_builder_source_store().list_project_sources(workspace_id=ws, project_id=pid)
     has_active_snapshot = any(bool(row.active_snapshot_id) for row in source_rows)
-    operation = "build_or_create"
-    if (
-        intent != "build_or_create"
-        and has_active_snapshot
-        and _looks_like_followup_edit(last_user_plain)
-    ):
-        operation = "update_existing_project"
-        meta["builder_intent"] = "build_or_create"
-    elif intent != "build_or_create":
+    wants_update = _looks_like_followup_edit(last_user_plain) or _looks_like_active_app_iteration(
+        last_user_plain
+    )
+    discrete_new = intent == "build_or_create" and _looks_like_discrete_new_product_request(
+        last_user_plain
+    )
+    forced_update = bool(has_active_snapshot and wants_update and not discrete_new)
+    operation = "update_existing_project" if forced_update else "build_or_create"
+    if not forced_update and intent != "build_or_create":
         return None, meta
     summary = maybe_chat_scaffold_for_turn(
         workspace_id=ws,

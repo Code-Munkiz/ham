@@ -53,6 +53,7 @@ import {
   postBuilderLocalPreview,
   requestBuilderCloudRuntime,
   saveBuilderLocalRunProfile,
+  shouldResetHamWorkbenchProjectSelection,
 } from "@/lib/ham/api";
 import { sanitizeWorkbenchProjectAccessMessage } from "@/lib/ham/workbenchProjectMessages";
 import { cn } from "@/lib/utils";
@@ -65,6 +66,8 @@ export type WorkspaceWorkbenchProps = {
   workspaceId?: string | null;
   /** Bumped from chat when builder scaffold runs so workbench refetches sources. */
   workbenchRefreshSignal?: number;
+  /** Called once when APIs confirm `{ code: PROJECT_NOT_FOUND }` for this routing (stale deletes). */
+  onStaleBuilderProject?: () => void;
 };
 
 export type WorkspaceWorkbenchTabId = "preview" | "code" | "database" | "storage" | "settings";
@@ -81,6 +84,7 @@ export function WorkspaceWorkbench({
   projectId = null,
   workspaceId = null,
   workbenchRefreshSignal = 0,
+  onStaleBuilderProject,
 }: WorkspaceWorkbenchProps) {
   const [activeTab, setActiveTab] = React.useState<WorkspaceWorkbenchTabId>("preview");
   const [projectSourceOpen, setProjectSourceOpen] = React.useState(false);
@@ -255,6 +259,7 @@ export function WorkspaceWorkbench({
             projectId={projectId}
             sourceRefreshKey={sourceRefreshKey}
             previewTabRefreshKey={previewTabRefreshKey}
+            onStaleBuilderProject={onStaleBuilderProject}
           />
         ) : null}
         {activeTab === "code" ? (
@@ -347,11 +352,13 @@ function WorkbenchPreviewPanel({
   projectId = null,
   sourceRefreshKey = 0,
   previewTabRefreshKey = 0,
+  onStaleBuilderProject,
 }: {
   workspaceId?: string | null;
   projectId?: string | null;
   sourceRefreshKey?: number;
   previewTabRefreshKey?: number;
+  onStaleBuilderProject?: () => void;
 }) {
   const PREVIEW_AUTOPOLL_MS = 2500;
   const [preview, setPreview] = React.useState<BuilderPreviewStatus | null>(null);
@@ -420,6 +427,16 @@ function WorkbenchPreviewPanel({
   const [authSessionRefreshing, setAuthSessionRefreshing] = React.useState(false);
   const previewAuthBackoffUntilRef = React.useRef(0);
   const activityDrivenPreviewRefreshAtRef = React.useRef(0);
+  const staleScopeNotifiedRef = React.useRef(false);
+  const staleBuilderCbRef = React.useRef(onStaleBuilderProject);
+
+  React.useEffect(() => {
+    staleBuilderCbRef.current = onStaleBuilderProject;
+  }, [onStaleBuilderProject]);
+
+  React.useEffect(() => {
+    staleScopeNotifiedRef.current = false;
+  }, [workspaceId, projectId]);
 
   React.useEffect(() => {
     const ws = workspaceId?.trim() || "";
@@ -571,6 +588,10 @@ function WorkbenchPreviewPanel({
           previewAuthBackoffUntilRef.current = Date.now() + 4_000;
           setCloudRuntimeError("Session refreshing... re-establishing secure preview checks.");
           return;
+        }
+        if (shouldResetHamWorkbenchProjectSelection(e) && !staleScopeNotifiedRef.current) {
+          staleScopeNotifiedRef.current = true;
+          staleBuilderCbRef.current?.();
         }
         setAuthSessionRefreshing(false);
         setError(msg);

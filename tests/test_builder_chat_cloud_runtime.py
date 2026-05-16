@@ -405,6 +405,65 @@ def test_builder_hook_enhance_prompt_routes_to_update_existing_project(tmp_path:
     _cleanup()
 
 
+def test_builder_hook_calculator_i_want_show_equation_updates_and_emits_working_line(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    first = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc",
+        session_id="sess_calc_flow",
+        last_user_plain="ham build me a calculator",
+        created_by="user_1",
+    )
+    assert first and first.get("scaffolded") is True
+    sid1 = str(first.get("source_snapshot_id") or "")
+    snap1 = next(
+        row for row in store.list_source_snapshots(workspace_id="ws_a", project_id="pr_calc") if row.id == sid1
+    )
+    m1 = snap1.metadata or {}
+    assert str(m1.get("template")) == "calculator"
+    assert m1.get("calculator_live_equation_working_line") is not True
+
+    prefix2, meta2 = run_builder_happy_path_hook(
+        workspace_id="ws_a",
+        project_id="pr_calc",
+        session_id="sess_calc_flow",
+        last_user_plain="change the calculator buttons to light blue",
+        ham_actor=None,
+    )
+    assert prefix2 is not None
+    assert meta2.get("builder_operation") == "update_existing_project"
+    sid2 = str(meta2.get("source_snapshot_id") or "")
+    assert sid2 != sid1
+
+    prefix3, meta3 = run_builder_happy_path_hook(
+        workspace_id="ws_a",
+        project_id="pr_calc",
+        session_id="sess_calc_flow",
+        last_user_plain="I want the calculator app to show the numbers as I type for example 8 * 9 = 72",
+        ham_actor=None,
+    )
+    assert prefix3 is not None
+    assert meta3.get("builder_operation") == "update_existing_project"
+    sid3 = str(meta3.get("source_snapshot_id") or "")
+    assert sid3 != sid2
+    snap3 = next(
+        row for row in store.list_source_snapshots(workspace_id="ws_a", project_id="pr_calc") if row.id == sid3
+    )
+    m3 = snap3.metadata or {}
+    assert m3.get("calculator_live_equation_working_line") is True
+    assert m3.get("calculator_light_blue_digits") is True
+    mf3 = snap3.manifest or {}
+    raw_files = mf3.get("inline_files")
+    assert isinstance(raw_files, dict)
+    body = str(raw_files.get("src/App.tsx") or "")
+    assert "equation-working" in body
+    _cleanup()
+
+
 def test_chat_scaffold_update_carries_forward_reference_style_profile(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
     store = BuilderSourceStore(store_path=tmp_path / "sources.json")

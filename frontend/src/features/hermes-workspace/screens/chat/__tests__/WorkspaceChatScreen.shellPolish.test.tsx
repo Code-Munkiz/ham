@@ -10,9 +10,13 @@ const { mockUseHamWorkspace, fetchChatSessionMock } = vi.hoisted(() => ({
   fetchChatSessionMock: vi.fn(),
 }));
 
-vi.mock("@/lib/ham/HamWorkspaceContext", () => ({
-  useHamWorkspace: mockUseHamWorkspace,
-}));
+vi.mock("@/lib/ham/HamWorkspaceContext", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/ham/HamWorkspaceContext")>();
+  return {
+    ...actual,
+    useHamWorkspace: mockUseHamWorkspace,
+  };
+});
 
 vi.mock("../../hooks/useManagedMissionFeedLiveStream", () => ({
   useManagedMissionFeedLiveStream: () => ({

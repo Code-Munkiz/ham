@@ -6,9 +6,13 @@ const { mockUseHamWorkspace } = vi.hoisted(() => ({
   mockUseHamWorkspace: vi.fn(),
 }));
 
-vi.mock("@/lib/ham/HamWorkspaceContext", () => ({
-  useHamWorkspace: mockUseHamWorkspace,
-}));
+vi.mock("@/lib/ham/HamWorkspaceContext", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/ham/HamWorkspaceContext")>();
+  return {
+    ...actual,
+    useHamWorkspace: mockUseHamWorkspace,
+  };
+});
 
 vi.mock("../screens/terminal/WorkspaceTerminalView", () => ({
   WorkspaceTerminalView: () => null,
@@ -117,6 +121,8 @@ function purgeZero(): HamWorkspacePurgeSummary {
     preview_endpoints_removed: 0,
     cloud_runtime_jobs_removed: 0,
     runtime_cleanup_requested: false,
+    local_builder_artifact_dirs_removed: 0,
+    gcs_preview_bundles_deleted: 0,
   };
 }
 

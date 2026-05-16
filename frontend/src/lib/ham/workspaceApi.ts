@@ -92,6 +92,8 @@ export interface HamWorkspacePurgeSummary {
   preview_endpoints_removed: number;
   cloud_runtime_jobs_removed: number;
   runtime_cleanup_requested: boolean;
+  local_builder_artifact_dirs_removed: number;
+  gcs_preview_bundles_deleted: number;
 }
 
 export interface HamArchiveWorkspaceBody {

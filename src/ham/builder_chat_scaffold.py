@@ -746,12 +746,154 @@ def _build_tetris_scaffold_files(
     }
 
 
+
+
+def _calculator_app_tsx(
+    *,
+    main_class_attr: str,
+    history_panel_block: str,
+    show_equation_working_line: bool,
+) -> str:
+    working_hooks = ""
+    equation_dom = ""
+    if show_equation_working_line:
+        working_hooks = """
+  const workingEquation = React.useMemo(() => {
+    const rhsRaw = typeof display === "string" ? display.trim() : String(display);
+    const rhsDisp = rhsRaw === "" || rhsRaw === "Error" ? "" : rhsRaw;
+    if (left !== null && op !== null && !replace) {
+      const tail = `${left} ${op} ${rhsDisp}`;
+      return tail.trim();
+    }
+    if (left !== null && op !== null && replace) {
+      const tail = `${left} ${op}`;
+      return rhsDisp.trim() ? `${tail} ${rhsDisp}`.trim() : tail.trim();
+    }
+    return "";
+  }, [display, left, op, replace]);
+
+"""
+        equation_dom = (
+            '        <div className="equation-working" aria-live="polite">\n'
+            "          {workingEquation || '\\u00a0'}\n"
+            "        </div>\n"
+        )
+    return (
+        'import React, { useMemo, useState } from "react";\n'
+        "\n"
+        'type Op = "+" | "-" | "*" | "/" | null;\n'
+        "\n"
+        "function compute(left: number, right: number, op: Op): number {\n"
+        '  if (op === "+") return left + right;\n'
+        '  if (op === "-") return left - right;\n'
+        '  if (op === "*") return left * right;\n'
+        '  if (op === "/") return right === 0 ? Number.NaN : left / right;\n'
+        "  return right;\n"
+        "}\n"
+        "\n"
+        "export default function App() {\n"
+        '  const [display, setDisplay] = useState("0");\n'
+        "  const [left, setLeft] = useState<number | null>(null);\n"
+        "  const [op, setOp] = useState<Op>(null);\n"
+        "  const [replace, setReplace] = useState(false);\n"
+        '  const [history, setHistory] = useState<string[]>([]);\n'
+        "\n"
+        "  const value = useMemo(() => Number(display), [display]);\n"
+        f"{working_hooks}"
+        "\n"
+        "  function inputDigit(d: string) {\n"
+        "    setDisplay((prev) => {\n"
+        '      if (replace || prev === "0") {\n'
+        "        setReplace(false);\n"
+        "        return d;\n"
+        "      }\n"
+        "      return prev + d;\n"
+        "    });\n"
+        "  }\n"
+        "\n"
+        "  function inputDot() {\n"
+        "    setDisplay((prev) => {\n"
+        "      if (replace) {\n"
+        "        setReplace(false);\n"
+        '        return "0.";\n'
+        "      }\n"
+        '      return prev.includes(".") ? prev : `${prev}.`;\n'
+        "    });\n"
+        "  }\n"
+        "\n"
+        "  function clearAll() {\n"
+        '    setDisplay("0");\n'
+        "    setLeft(null);\n"
+        "    setOp(null);\n"
+        "    setReplace(false);\n"
+        "  }\n"
+        "\n"
+        '  function choose(next: Exclude<Op, null>) {\n'
+        "    if (left === null) {\n"
+        "      setLeft(value);\n"
+        "      setOp(next);\n"
+        "      setReplace(true);\n"
+        "      return;\n"
+        "    }\n"
+        "    const out = compute(left, value, op);\n"
+        "    setLeft(out);\n"
+        '    setDisplay(String(Number.isFinite(out) ? out : "Error"));\n'
+        "    setOp(next);\n"
+        "    setReplace(true);\n"
+        "  }\n"
+        "\n"
+        "  function evaluate() {\n"
+        "    if (left === null || op === null) return;\n"
+        "    const out = compute(left, value, op);\n"
+        '    const expr = `${left} ${op} ${value} = ${Number.isFinite(out) ? out : "Error"}`;\n'
+        '    setDisplay(String(Number.isFinite(out) ? out : "Error"));\n'
+        "    setLeft(null);\n"
+        "    setOp(null);\n"
+        "    setReplace(true);\n"
+        "    setHistory((prev) => [expr, ...prev].slice(0, 8));\n"
+        "  }\n"
+        "\n"
+        "  return (\n"
+        f'    <main className="{main_class_attr}">\n'
+        '      <section className="calc-shell">\n'
+        "        <h1>Calculator</h1>\n"
+        "        <p className=\"muted\">A clean four-function calculator scaffold.</p>\n"
+        f"{equation_dom}"
+        '        <div className="display" aria-live="polite">{display}</div>\n'
+        '        <div className="keypad">\n'
+        '          <button type="button" onClick={clearAll} className="ham-key-clear">AC</button>\n'
+        '          <button type="button" onClick={() => choose("/")} className="ham-key-op">/</button>\n'
+        '          <button type="button" onClick={() => choose("*")} className="ham-key-op">*</button>\n'
+        '          <button type="button" onClick={() => choose("-")} className="ham-key-op">-</button>\n'
+        '          <button type="button" onClick={() => inputDigit("7")} className="ham-key-digit">7</button>\n'
+        '          <button type="button" onClick={() => inputDigit("8")} className="ham-key-digit">8</button>\n'
+        '          <button type="button" onClick={() => inputDigit("9")} className="ham-key-digit">9</button>\n'
+        '          <button type="button" onClick={() => choose("+")} className="ham-key-op">+</button>\n'
+        '          <button type="button" onClick={() => inputDigit("4")} className="ham-key-digit">4</button>\n'
+        '          <button type="button" onClick={() => inputDigit("5")} className="ham-key-digit">5</button>\n'
+        '          <button type="button" onClick={() => inputDigit("6")} className="ham-key-digit">6</button>\n'
+        '          <button type="button" onClick={evaluate} className="ham-key-eq">=</button>\n'
+        '          <button type="button" onClick={() => inputDigit("1")} className="ham-key-digit">1</button>\n'
+        '          <button type="button" onClick={() => inputDigit("2")} className="ham-key-digit">2</button>\n'
+        '          <button type="button" onClick={() => inputDigit("3")} className="ham-key-digit">3</button>\n'
+        '          <button type="button" onClick={() => inputDigit("0")} className="ham-key-digit ham-key-zero">0</button>\n'
+        '          <button type="button" onClick={inputDot} className="ham-key-digit">.</button>\n'
+        "        </div>\n"
+        f"{history_panel_block}"
+        "      </section>\n"
+        "    </main>\n"
+        "  );\n"
+        "}\n"
+    )
+
+
 def _build_react_scaffold_files(
     user_plain: str,
     *,
     previous_style_profile_id: str | None = None,
     previous_reference_requested: bool = False,
     previous_template: str | None = None,
+    previous_calculator_meta: dict[str, Any] | None = None,
 ) -> tuple[dict[str, str], dict[str, Any]]:
     title = _sanitize_title(user_plain)
     safe_pkg = re.sub(r"[^a-z0-9-]", "-", title.lower())[:40].strip("-") or "ham-builder-app"
@@ -773,8 +915,11 @@ def _build_react_scaffold_files(
         )
     use_calculator_template = _is_calculator_prompt(user_plain) or str(previous_template or "").strip().lower() == "calculator"
     if use_calculator_template:
+        pcm = dict(previous_calculator_meta or {})
         lowered = _strip_dashboard_attachment_tail(user_plain).lower()
-        include_history = bool(re.search(r"\bhistory\b", lowered))
+        include_history = bool(re.search(r"\bhistory\b", lowered)) or bool(
+            pcm.get("calculator_history_enabled"),
+        )
         large_buttons = bool(
             re.search(r"\b(larger|bigger|large)\s+buttons?\b", lowered)
             or re.search(r"\bbuttons?\s+(larger|bigger|large)\b", lowered)
@@ -782,8 +927,10 @@ def _build_react_scaffold_files(
             or re.search(r"\bbigger\s+buttons\b", lowered)
             or re.search(r"\bmuch\s+larger\b", lowered)
             or (re.search(r"\bsize\b", lowered) and re.search(r"\b(increase|big|large|bigger)\b", lowered))
+        ) or bool(pcm.get("calculator_large_buttons"))
+        polished = bool(re.search(r"\b(polished|modern|clean|sleek)\b", lowered)) or bool(
+            pcm.get("calculator_polished"),
         )
-        polished = bool(re.search(r"\b(polished|modern|clean|sleek)\b", lowered))
         digit_area_color = False
         if re.search(r"\b(light\s+)?(blue|cyan|sky|azure)\b", lowered):
             digit_area_color = True
@@ -792,6 +939,15 @@ def _build_react_scaffold_files(
             lowered,
         ) and re.search(r"\b(color|colour|style|hue|shade)\b", lowered):
             digit_area_color = True
+        digit_area_color = bool(digit_area_color or pcm.get("calculator_light_blue_digits"))
+        prev_live_working = bool(pcm.get("calculator_live_equation_working_line"))
+        live_working_requested = bool(
+            re.search(
+                r"\b(as i type|equation|expression|formula|numbers as|numbers still|typing|typed|typed out|see the flow|=+\s*\d+)\b",
+                lowered,
+            )
+        )
+        show_equation_working_line = prev_live_working or live_working_requested
         keypad_css_digit_block = ""
         if digit_area_color:
             keypad_css_digit_block = (
@@ -822,14 +978,16 @@ def _build_react_scaffold_files(
             if include_history
             else ""
         )
-        readme_extras = ""
-        if digit_area_color or large_buttons:
-            lines: list[str] = []
-            if digit_area_color:
-                lines.append("- Light blue styling on digit keys when requested.")
-            if large_buttons:
-                lines.append("- Larger keypad sizing when requested.")
-            readme_extras = "\n".join(lines) + "\n"
+        readme_extra_lines: list[str] = []
+        if digit_area_color:
+            readme_extra_lines.append("- Light blue styling on digit keys when requested.")
+        if large_buttons:
+            readme_extra_lines.append("- Larger keypad sizing when requested.")
+        if include_history:
+            readme_extra_lines.append("- Equation tape / history listing when requested.")
+        if show_equation_working_line:
+            readme_extra_lines.append("- Live working equation line while composing input.")
+        readme_extras = "\n".join(readme_extra_lines) + ("\n" if readme_extra_lines else "")
         return (
             {
                 "package.json": json.dumps(
@@ -878,110 +1036,10 @@ def _build_react_scaffold_files(
                     "  </React.StrictMode>,\n"
                     ");\n"
                 ),
-                "src/App.tsx": (
-                    "import React, { useMemo, useState } from \"react\";\n"
-                    "\n"
-                    "type Op = \"+\" | \"-\" | \"*\" | \"/\" | null;\n"
-                    "\n"
-                    "function compute(left: number, right: number, op: Op): number {\n"
-                    "  if (op === \"+\") return left + right;\n"
-                    "  if (op === \"-\") return left - right;\n"
-                    "  if (op === \"*\") return left * right;\n"
-                    "  if (op === \"/\") return right === 0 ? Number.NaN : left / right;\n"
-                    "  return right;\n"
-                    "}\n"
-                    "\n"
-                    "export default function App() {\n"
-                    "  const [display, setDisplay] = useState(\"0\");\n"
-                    "  const [left, setLeft] = useState<number | null>(null);\n"
-                    "  const [op, setOp] = useState<Op>(null);\n"
-                    "  const [replace, setReplace] = useState(false);\n"
-                    f"  const [history, setHistory] = useState<string[]>({ '[]' if include_history else '[]' });\n"
-                    "\n"
-                    "  const value = useMemo(() => Number(display), [display]);\n"
-                    "\n"
-                    "  function inputDigit(d: string) {\n"
-                    "    setDisplay((prev) => {\n"
-                    "      if (replace || prev === \"0\") {\n"
-                    "        setReplace(false);\n"
-                    "        return d;\n"
-                    "      }\n"
-                    "      return prev + d;\n"
-                    "    });\n"
-                    "  }\n"
-                    "\n"
-                    "  function inputDot() {\n"
-                    "    setDisplay((prev) => {\n"
-                    "      if (replace) {\n"
-                    "        setReplace(false);\n"
-                    "        return \"0.\";\n"
-                    "      }\n"
-                    "      return prev.includes(\".\") ? prev : `${prev}.`;\n"
-                    "    });\n"
-                    "  }\n"
-                    "\n"
-                    "  function clearAll() {\n"
-                    "    setDisplay(\"0\");\n"
-                    "    setLeft(null);\n"
-                    "    setOp(null);\n"
-                    "    setReplace(false);\n"
-                    "  }\n"
-                    "\n"
-                    "  function choose(next: Exclude<Op, null>) {\n"
-                    "    if (left === null) {\n"
-                    "      setLeft(value);\n"
-                    "      setOp(next);\n"
-                    "      setReplace(true);\n"
-                    "      return;\n"
-                    "    }\n"
-                    "    const out = compute(left, value, op);\n"
-                    "    setLeft(out);\n"
-                    "    setDisplay(String(Number.isFinite(out) ? out : \"Error\"));\n"
-                    "    setOp(next);\n"
-                    "    setReplace(true);\n"
-                    "  }\n"
-                    "\n"
-                    "  function evaluate() {\n"
-                    "    if (left === null || op === null) return;\n"
-                    "    const out = compute(left, value, op);\n"
-                    "    const expr = `${left} ${op} ${value} = ${Number.isFinite(out) ? out : \"Error\"}`;\n"
-                    "    setDisplay(String(Number.isFinite(out) ? out : \"Error\"));\n"
-                    "    setLeft(null);\n"
-                    "    setOp(null);\n"
-                    "    setReplace(true);\n"
-                    "    setHistory((prev) => [expr, ...prev].slice(0, 8));\n"
-                    "  }\n"
-                    "\n"
-                    "  return (\n"
-                    f"    <main className=\"{main_class_attr}\">\n"
-                    "      <section className=\"calc-shell\">\n"
-                    "        <h1>Calculator</h1>\n"
-                    "        <p className=\"muted\">A clean four-function calculator scaffold.</p>\n"
-                    "        <div className=\"display\" aria-live=\"polite\">{display}</div>\n"
-                    "        <div className=\"keypad\">\n"
-                    "          <button type=\"button\" onClick={clearAll} className=\"ham-key-clear\">AC</button>\n"
-                    "          <button type=\"button\" onClick={() => choose(\"/\")} className=\"ham-key-op\">/</button>\n"
-                    "          <button type=\"button\" onClick={() => choose(\"*\")} className=\"ham-key-op\">*</button>\n"
-                    "          <button type=\"button\" onClick={() => choose(\"-\")} className=\"ham-key-op\">-</button>\n"
-                    "          <button type=\"button\" onClick={() => inputDigit(\"7\")} className=\"ham-key-digit\">7</button>\n"
-                    "          <button type=\"button\" onClick={() => inputDigit(\"8\")} className=\"ham-key-digit\">8</button>\n"
-                    "          <button type=\"button\" onClick={() => inputDigit(\"9\")} className=\"ham-key-digit\">9</button>\n"
-                    "          <button type=\"button\" onClick={() => choose(\"+\")} className=\"ham-key-op\">+</button>\n"
-                    "          <button type=\"button\" onClick={() => inputDigit(\"4\")} className=\"ham-key-digit\">4</button>\n"
-                    "          <button type=\"button\" onClick={() => inputDigit(\"5\")} className=\"ham-key-digit\">5</button>\n"
-                    "          <button type=\"button\" onClick={() => inputDigit(\"6\")} className=\"ham-key-digit\">6</button>\n"
-                    "          <button type=\"button\" onClick={evaluate} className=\"ham-key-eq\">=</button>\n"
-                    "          <button type=\"button\" onClick={() => inputDigit(\"1\")} className=\"ham-key-digit\">1</button>\n"
-                    "          <button type=\"button\" onClick={() => inputDigit(\"2\")} className=\"ham-key-digit\">2</button>\n"
-                    "          <button type=\"button\" onClick={() => inputDigit(\"3\")} className=\"ham-key-digit\">3</button>\n"
-                    "          <button type=\"button\" onClick={() => inputDigit(\"0\")} className=\"ham-key-digit ham-key-zero\">0</button>\n"
-                    "          <button type=\"button\" onClick={inputDot} className=\"ham-key-digit\">.</button>\n"
-                    "        </div>\n"
-                    f"{history_panel_block}"
-                    "      </section>\n"
-                    "    </main>\n"
-                    "  );\n"
-                    "}\n"
+                "src/App.tsx": _calculator_app_tsx(
+                    main_class_attr=main_class_attr,
+                    history_panel_block=history_panel_block,
+                    show_equation_working_line=show_equation_working_line,
                 ),
                 "src/styles.css": (
                     ":root {\n"
@@ -1008,7 +1066,19 @@ def _build_react_scaffold_files(
                     "}\n"
                     ".calc-shell h1 { margin: 0; font-size: 1.25rem; }\n"
                     ".muted { margin: 0.25rem 0 0.8rem; color: rgba(231, 237, 247, 0.72); }\n"
-                    ".display {\n"
+                    + (
+                        ".equation-working {\n"
+                        "  width: 100%;\n"
+                        "  text-align: right;\n"
+                        "  font-size: 0.92rem;\n"
+                        "  color: rgba(231, 237, 247, 0.9);\n"
+                        "  min-height: 1.15rem;\n"
+                        "  margin-bottom: 0.25rem;\n"
+                        "}\n"
+                        if show_equation_working_line
+                        else ""
+                    )
+                    + ".display {\n"
                     "  width: 100%;\n"
                     "  text-align: right;\n"
                     "  border-radius: 12px;\n"
@@ -1062,12 +1132,17 @@ def _build_react_scaffold_files(
             {
                 "template": "calculator",
                 "style_profile_id": "default",
-                "style_requested": polished or large_buttons or include_history or digit_area_color,
+                "style_requested": polished
+                or large_buttons
+                or include_history
+                or digit_area_color
+                or show_equation_working_line,
                 "reference_requested": False,
                 "calculator_history_enabled": include_history,
                 "calculator_large_buttons": large_buttons,
                 "calculator_light_blue_digits": digit_area_color,
                 "calculator_polished": polished,
+                "calculator_live_equation_working_line": show_equation_working_line,
             },
         )
     return ({
@@ -1162,12 +1237,14 @@ def _bounded_files(
     previous_style_profile_id: str | None = None,
     previous_reference_requested: bool = False,
     previous_template: str | None = None,
+    previous_calculator_meta: dict[str, Any] | None = None,
 ) -> tuple[dict[str, str], dict[str, Any]]:
     raw, scaffold_meta = _build_react_scaffold_files(
         user_plain,
         previous_style_profile_id=previous_style_profile_id,
         previous_reference_requested=previous_reference_requested,
         previous_template=previous_template,
+        previous_calculator_meta=dict(previous_calculator_meta or {}),
     )
     if len(raw) > _MAX_FILES:
         raise ValueError("too_many_files")
@@ -1270,22 +1347,34 @@ def maybe_chat_scaffold_for_turn(
     previous_style_profile_id: str | None = None
     previous_reference_requested = False
     previous_template: str | None = None
+    previous_calculator_meta: dict[str, Any] = {}
     if operation == "update_existing_project":
         preferred_source = next(
             (row for row in source_rows_existing if str(row.kind or "").strip().lower() == "chat_scaffold"),
             source_rows_existing[0] if source_rows_existing else None,
         )
         active_snapshot_id = str(getattr(preferred_source, "active_snapshot_id", "") or "").strip()
+        previous_snapshot_obj: SourceSnapshot | None = None
         if active_snapshot_id:
-            previous_snapshot = next(
+            previous_snapshot_obj = next(
                 (snap for snap in source_snapshots_existing if str(snap.id or "").strip() == active_snapshot_id),
                 None,
             )
-            if previous_snapshot is not None:
-                prev_meta = previous_snapshot.metadata or {}
+            if previous_snapshot_obj is not None:
+                prev_meta = previous_snapshot_obj.metadata or {}
                 previous_template = str(prev_meta.get("template") or "").strip() or None
                 previous_style_profile_id = str(prev_meta.get("style_profile_id") or "").strip() or None
                 previous_reference_requested = bool(prev_meta.get("reference_requested"))
+                if str(prev_meta.get("template") or "").strip().lower() == "calculator":
+                    for ck in (
+                        "calculator_history_enabled",
+                        "calculator_large_buttons",
+                        "calculator_light_blue_digits",
+                        "calculator_polished",
+                        "calculator_live_equation_working_line",
+                    ):
+                        if ck in prev_meta:
+                            previous_calculator_meta[ck] = prev_meta[ck]
         if previous_style_profile_id is None and preferred_source is not None:
             src_meta = preferred_source.metadata or {}
             previous_style_profile_id = str(src_meta.get("style_profile_id") or "").strip() or None
@@ -1298,6 +1387,7 @@ def maybe_chat_scaffold_for_turn(
         previous_style_profile_id=previous_style_profile_id,
         previous_reference_requested=previous_reference_requested,
         previous_template=previous_template,
+        previous_calculator_meta=previous_calculator_meta,
     )
     entries_manifest: list[dict[str, Any]] = []
     total_bytes = 0
