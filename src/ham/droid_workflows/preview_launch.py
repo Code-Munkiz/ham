@@ -28,7 +28,7 @@ from src.persistence.control_plane_run import (
     ControlPlaneAuditRef,
     ControlPlaneProviderAuditRef,
     ControlPlaneRun,
-    ControlPlaneRunStore,
+    ControlPlaneRunStoreProtocol,
     DroidBuildOutcome,
     cap_error_summary,
     cap_summary,
@@ -411,7 +411,7 @@ def _droid_control_plane_audit_ref(project_root: Path) -> ControlPlaneAuditRef:
 
 
 def _persist_droid_control_plane_run(
-    store: ControlPlaneRunStore,
+    store: ControlPlaneRunStoreProtocol,
     *,
     project_id: str,
     workflow_id: str,
@@ -474,9 +474,9 @@ def execute_droid_workflow(
     project_id: str | None = None,
     proposal_digest: str | None = None,
     created_by: dict[str, Any] | None = None,
-    control_plane_run_store: ControlPlaneRunStore | None = None,
+    control_plane_run_store: ControlPlaneRunStoreProtocol | None = None,
 ) -> DroidLaunchResult:
-    st = control_plane_run_store or ControlPlaneRunStore()
+    st = control_plane_run_store or get_control_plane_run_store()
     digest_key = (proposal_digest or "").strip() or ("0" * 64)
     pid_s = (project_id or "").strip()
 
@@ -795,7 +795,7 @@ def _decide_build_status(
 
 
 def _persist_droid_build_control_plane_run(
-    store: ControlPlaneRunStore,
+    store: ControlPlaneRunStoreProtocol,
     *,
     project_id: str,
     workflow_id: str,
@@ -859,7 +859,7 @@ def execute_droid_build_workflow_remote(
     project_id: str,
     proposal_digest: str,
     created_by: dict[str, Any] | None = None,
-    control_plane_run_store: ControlPlaneRunStore | None = None,
+    control_plane_run_store: ControlPlaneRunStoreProtocol | None = None,
     output_target: str = "github_pr",
     workspace_id: str | None = None,
 ) -> DroidBuildExecutionResult:

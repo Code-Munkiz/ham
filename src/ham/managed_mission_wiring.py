@@ -11,7 +11,7 @@ from src.ham.managed_deploy_approval_policy import (
     ManagedDeployApprovalMode,
     mission_deploy_approval_mode_from_project_metadata,
 )
-from src.persistence.control_plane_run import ControlPlaneRunStore, utc_now_iso
+from src.persistence.control_plane_run import get_control_plane_run_store, utc_now_iso
 from src.persistence.managed_mission import (
     ManagedMission,
     ManagedMissionStore,
@@ -132,7 +132,7 @@ def try_control_plane_ham_run_id(*, agent_id: str) -> str | None:
     if not agent_id.strip():
         return None
     try:
-        run = ControlPlaneRunStore().find_by_provider_and_external(
+        run = get_control_plane_run_store().find_by_provider_and_external(
             provider="cursor_cloud_agent",
             external_id=agent_id,
         )

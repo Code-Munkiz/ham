@@ -62,7 +62,7 @@ from src.ham.settings_write import (
     settings_writes_enabled,
 )
 from src.memory_heist import discover_config
-from src.persistence.control_plane_run import ControlPlaneRunStore
+from src.persistence.control_plane_run import get_control_plane_run_store
 from src.persistence.managed_mission import ManagedMission
 from src.persistence.project_store import ProjectStore
 from src.persistence.run_store import RunRecord, RunStore
@@ -522,7 +522,7 @@ def _mission_project_id(mission: ManagedMission) -> str | None:
     if not hid:
         return None
     try:
-        run = ControlPlaneRunStore().get(hid)
+        run = get_control_plane_run_store().get(hid)
     except ValueError:
         return None
     if run is None:

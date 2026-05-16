@@ -17,7 +17,7 @@ from src.ham.hermes_gateway.cache import TtlCache
 from src.ham.hermes_gateway.dto import DEFAULT_CACHE_TTL_S, GATEWAY_SNAPSHOT_SCHEMA_VERSION
 from src.ham.hermes_runtime_inventory import build_runtime_inventory
 from src.ham.hermes_skills_live import build_skills_installed_overlay
-from src.persistence.control_plane_run import ControlPlaneRunStore
+from src.persistence.control_plane_run import get_control_plane_run_store
 from src.persistence.project_store import get_project_store
 from src.persistence.run_store import RunStore
 from src.registry.droids import DEFAULT_DROID_REGISTRY
@@ -151,7 +151,7 @@ def _future_placeholders() -> list[dict[str, Any]]:
 class HermesGatewayBroker:
     def __init__(self) -> None:
         self._cache = TtlCache()
-        self._cp_store = ControlPlaneRunStore()
+        self._cp_store = get_control_plane_run_store()
 
     def build_snapshot(
         self,

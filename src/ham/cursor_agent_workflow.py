@@ -22,10 +22,11 @@ from src.persistence.control_plane_run import (
     ControlPlaneAuditRef,
     ControlPlaneProviderAuditRef,
     ControlPlaneRun,
-    ControlPlaneRunStore,
+    ControlPlaneRunStoreProtocol,
     cap_error_summary,
     cap_last_provider_status,
     cap_summary,
+    get_control_plane_run_store,
     map_cursor_raw_status,
     new_ham_run_id,
     utc_now_iso,
@@ -523,7 +524,7 @@ def run_cursor_agent_launch(
     proposal_digest: str,
     project_root_for_mirror: str | None,
     created_by: dict[str, Any] | None = None,
-    control_plane_run_store: ControlPlaneRunStore | None = None,
+    control_plane_run_store: ControlPlaneRunStoreProtocol | None = None,
     mission_handling: str | None = None,
 ) -> tuple[bool, dict[str, Any], str | None, str | None]:
     """
@@ -532,7 +533,7 @@ def run_cursor_agent_launch(
     On failure after commit, ok is False and a **failed** ControlPlaneRun row is still created
     when a durable run record is possible.
     """
-    st_global = control_plane_run_store or ControlPlaneRunStore()
+    st_global = control_plane_run_store or get_control_plane_run_store()
     mh = (mission_handling or "").strip().lower() or "direct"
     is_managed = mh == "managed"
     prompt_text = effective_cursor_launch_task_prompt(
@@ -701,10 +702,10 @@ def run_cursor_agent_status(
     project_id: str,
     agent_id: str,
     project_root_for_mirror: str | None,
-    control_plane_run_store: ControlPlaneRunStore | None = None,
+    control_plane_run_store: ControlPlaneRunStoreProtocol | None = None,
 ) -> tuple[bool, dict[str, Any], str | None, str | None]:
     """Return (ok, payload, blocking_reason, ham_run_id) — ``ham_run_id`` is set when a run row is updated."""
-    st_global = control_plane_run_store or ControlPlaneRunStore()
+    st_global = control_plane_run_store or get_control_plane_run_store()
     pr_root: str | None = None
     if project_root_for_mirror and str(project_root_for_mirror).strip():
         p = Path(project_root_for_mirror).expanduser().resolve()

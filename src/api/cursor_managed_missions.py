@@ -44,7 +44,11 @@ from src.integrations.cursor_sdk_bridge_client import (
     stream_cursor_sdk_bridge_events,
 )
 from src.persistence.cursor_credentials import get_effective_cursor_api_key
-from src.persistence.control_plane_run import ControlPlaneRunStore, utc_now_iso
+from src.persistence.control_plane_run import (
+    get_control_plane_run_store,
+    set_control_plane_run_store_for_tests as _set_global_cp_store_for_tests,
+    utc_now_iso,
+)
 from src.persistence.managed_mission import (
     ManagedMission,
     ManagedMissionStore,
@@ -63,20 +67,16 @@ _MAX_MISSION_REVIEW_CONTEXT_CHARS = 6_000
 _MISSION_HERMES_STALE_SECONDS_DEFAULT = 900
 
 _store = ManagedMissionStore()
-_cp_store_singleton: ControlPlaneRunStore | None = None
 
 
-def set_control_plane_run_store_for_tests(store: ControlPlaneRunStore | None) -> None:
-    """Test hook: replace process-global control-plane store used by managed mission correlation."""
-    global _cp_store_singleton
-    _cp_store_singleton = store
+def set_control_plane_run_store_for_tests(store: object | None) -> None:
+    """Test hook: delegates to the global control-plane run store singleton so that
+    managed-mission correlation and the read API both see the same injected store."""
+    _set_global_cp_store_for_tests(store)  # type: ignore[arg-type]
 
 
-def _control_plane_store() -> ControlPlaneRunStore:
-    global _cp_store_singleton
-    if _cp_store_singleton is None:
-        _cp_store_singleton = ControlPlaneRunStore()
-    return _cp_store_singleton
+def _control_plane_store():  # type: ignore[return]
+    return get_control_plane_run_store()
 
 
 def _require_managed_mission_write_token(authorization: str | None) -> None:
