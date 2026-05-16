@@ -3613,7 +3613,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                   : null
               }
               chatCapabilities={chatCapabilities}
-              contextMetersEnabled={chatCapabilities?.context_meters_enabled === true}
+              contextMetersEnabled={false}
               contextMetersPayload={contextMetersPayload}
               generateImage={composerGenerateImage}
               generateVideo={composerGenerateVideo}
