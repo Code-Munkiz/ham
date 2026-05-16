@@ -344,8 +344,8 @@ def test_factory_droid_and_claude_agent_recommendations_unaffected(
             "Tweak the import order in this file.",
             ("claude_code", "claude_agent", "cursor_cloud", "no_agent"),
         ),
-        ("Refactor this module's structure.", ("cursor_cloud", "no_agent")),
-        ("Build a new feature for the chat panel.", ("cursor_cloud", "no_agent")),
+        ("Refactor this module's structure.", ("cursor_cloud", "claude_agent", "no_agent")),
+        ("Build a new feature for the chat panel.", ("cursor_cloud", "claude_agent", "no_agent")),
     )
     for prompt, expected in cases:
         task = classify_task(prompt)

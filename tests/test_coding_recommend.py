@@ -32,6 +32,7 @@ from src.ham.coding_router.types import (
     ProjectFlags,
     ProviderKind,
     ProviderReadiness,
+    WorkspaceAgentPolicy,
     WorkspaceReadiness,
 )
 
@@ -596,3 +597,264 @@ def test_recommend_opencode_output_never_leaks_internals(
         "opencode serve",
     ):
         assert forbidden not in blob, blob
+
+
+# ---------------------------------------------------------------------------
+# Routing matrix alignment (managed_workspace defaults + claude_agent breadth)
+# ---------------------------------------------------------------------------
+
+
+def _readiness_managed_opencode_eligible(
+    *,
+    claude_agent_ok: bool = False,
+    project: ProjectFlags | None = None,
+) -> WorkspaceReadiness:
+    """Readiness snapshot for a managed_workspace scenario with OpenCode eligible.
+
+    Cursor is present at the platform level but its project blocker (no GitHub
+    repo) will be added by the recommender, so it ends up blocked in practice.
+    """
+    base_proj = project or _managed_project()
+    providers = (
+        ProviderReadiness(provider="no_agent", available=True),
+        ProviderReadiness(provider="factory_droid_audit", available=False, blockers=("runner",)),
+        ProviderReadiness(provider="factory_droid_build", available=False, blockers=("runner",)),
+        ProviderReadiness(
+            provider="cursor_cloud", available=True
+        ),  # project blocker added by recommender
+        ProviderReadiness(provider="claude_code", available=False, blockers=("sdk",)),
+        ProviderReadiness(
+            provider="claude_agent",
+            available=claude_agent_ok,
+            blockers=() if claude_agent_ok else ("Claude Agent SDK not configured.",),
+        ),
+        ProviderReadiness(provider="opencode_cli", available=True),
+    )
+    return WorkspaceReadiness(
+        is_operator=False,
+        providers=providers,
+        project=base_proj,
+    )
+
+
+@pytest.mark.parametrize(
+    "prompt,task_kind",
+    [
+        ("Build a new feature for the chat panel.", "feature"),
+        ("Fix the failing test in the runner.", "fix"),
+        ("Refactor the chat router for clarity.", "refactor"),
+        ("Migrate all callers to the new helper function.", "multi_file_edit"),
+    ],
+)
+def test_opencode_is_default_open_builder_for_managed_workspace(
+    monkeypatch: pytest.MonkeyPatch, prompt: str, task_kind: str
+) -> None:
+    """OpenCode is the first approve-able candidate for managed_workspace build tasks.
+
+    Cursor is platform-ready but blocked by the managed_workspace project (no GitHub
+    repo). With OpenCode eligible and Factory Droid not configured, opencode_cli
+    must be the top approve-able candidate in recommended mode.
+    """
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    proj = _managed_project()
+    out = recommend(
+        classify_task(prompt, project_id=proj.project_id),
+        _readiness_managed_opencode_eligible(project=proj),
+        project=proj,
+    )
+    approveable = [c for c in out if not c.blockers]
+    assert approveable, f"task={task_kind}: no approve-able candidates: {[c.provider for c in out]}"
+    assert approveable[0].provider == "opencode_cli", (
+        f"task={task_kind}: expected opencode_cli first, got {approveable[0].provider}; "
+        f"candidates={[(c.provider, c.confidence, bool(c.blockers)) for c in out]}"
+    )
+    assert approveable[0].confidence >= 0.6, approveable[0].confidence
+
+
+@pytest.mark.parametrize(
+    "prompt,task_kind",
+    [
+        ("Build a new feature for the chat panel.", "feature"),
+        ("Fix the failing test in the runner.", "fix"),
+        ("Refactor the chat router for clarity.", "refactor"),
+        ("Migrate all callers to the new helper function.", "multi_file_edit"),
+        ("Tweak this file's import order", "single_file_edit"),
+    ],
+)
+def test_claude_agent_appears_in_build_and_edit_task_kinds(
+    monkeypatch: pytest.MonkeyPatch, prompt: str, task_kind: str
+) -> None:
+    """claude_agent must be a candidate in all build/edit task kinds.
+
+    This locks the routing matrix so prefer_premium_reasoning has a meaningful
+    effect across all coding task kinds — not just single_file_edit.
+    """
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    proj = _managed_project()
+    out = recommend(
+        classify_task(prompt, project_id=proj.project_id),
+        _readiness_managed_opencode_eligible(claude_agent_ok=True, project=proj),
+        project=proj,
+    )
+    providers = {c.provider for c in out}
+    assert "claude_agent" in providers, (
+        f"task={task_kind}: claude_agent missing from candidates; got {providers}"
+    )
+
+
+def test_prefer_premium_reasoning_makes_claude_agent_win_feature_task(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With prefer_premium_reasoning policy, claude_agent tops opencode_cli for feature tasks."""
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    proj = _managed_project()
+    policy = WorkspaceAgentPolicy(
+        allow_opencode=True,
+        allow_claude_agent=True,
+        preference_mode="prefer_premium_reasoning",
+    )
+    out = recommend(
+        classify_task("Build a new feature for the chat panel.", project_id=proj.project_id),
+        _readiness_managed_opencode_eligible(claude_agent_ok=True, project=proj),
+        project=proj,
+        workspace_policy=policy,
+    )
+    approveable = [c for c in out if not c.blockers]
+    assert approveable, "no approve-able candidates"
+    assert approveable[0].provider == "claude_agent", (
+        f"expected claude_agent first with prefer_premium_reasoning; "
+        f"got {[(c.provider, c.confidence) for c in approveable]}"
+    )
+    # Boosted confidence must exceed opencode_cli base.
+    assert approveable[0].confidence > 0.65
+
+
+def test_prefer_open_custom_makes_opencode_win_feature_task(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With prefer_open_custom policy, opencode_cli wins strongly for feature tasks."""
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    proj = _managed_project()
+    policy = WorkspaceAgentPolicy(
+        allow_opencode=True,
+        allow_claude_agent=True,
+        preference_mode="prefer_open_custom",
+    )
+    out = recommend(
+        classify_task("Build a new feature for the chat panel.", project_id=proj.project_id),
+        _readiness_managed_opencode_eligible(claude_agent_ok=True, project=proj),
+        project=proj,
+        workspace_policy=policy,
+    )
+    approveable = [c for c in out if not c.blockers]
+    assert approveable, "no approve-able candidates"
+    assert approveable[0].provider == "opencode_cli", (
+        f"expected opencode_cli first with prefer_open_custom; "
+        f"got {[(c.provider, c.confidence) for c in approveable]}"
+    )
+    assert approveable[0].confidence > 0.65
+
+
+def test_prefer_connected_repo_boosts_cursor_for_refactor_when_repo_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With prefer_connected_repo policy and GitHub repo, cursor_cloud wins refactor."""
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    proj = _project(found=True, has_github_repo=True, output_target="github_pr")
+    policy = WorkspaceAgentPolicy(
+        allow_opencode=True,
+        preference_mode="prefer_connected_repo",
+    )
+    readiness = _readiness_with_opencode_available(cursor=True, project=proj)
+    out = recommend(
+        classify_task("Refactor the chat router for clarity.", project_id=proj.project_id),
+        readiness,
+        project=proj,
+        workspace_policy=policy,
+    )
+    approveable = [c for c in out if not c.blockers]
+    assert approveable, "no approve-able candidates"
+    assert approveable[0].provider == "cursor_cloud", (
+        f"expected cursor_cloud first with prefer_connected_repo; "
+        f"got {[(c.provider, c.confidence) for c in approveable]}"
+    )
+    # Boosted confidence must exceed opencode_cli for github_pr project (where opencode is blocked).
+    assert approveable[0].confidence > 0.8
+
+
+def test_factory_droid_still_wins_audit_tasks_regardless_of_opencode_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Factory Droid audit wins audit/security_review/architecture tasks regardless of OpenCode."""
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    proj = _project(found=True)
+    for prompt in (
+        "Audit the persistence layer.",
+        "Run a security review on the API.",
+        "Do an architecture report for src/api.",
+    ):
+        out = recommend(
+            classify_task(prompt, project_id=proj.project_id),
+            _readiness(audit=True, project=proj),
+            project=proj,
+        )
+        approveable = [c for c in out if not c.blockers]
+        assert approveable, f"no approve-able for {prompt!r}"
+        assert approveable[0].provider == "factory_droid_audit", (
+            f"{prompt!r}: expected factory_droid_audit, got {approveable[0].provider}"
+        )
+
+
+def test_factory_droid_build_wins_controlled_tasks_over_opencode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Factory Droid Build wins doc_fix/comments_only/format_only/typo_only over OpenCode."""
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    proj = _managed_project()
+    for prompt in (
+        "Polish the README docs.",
+        "Add docstrings to ham_run_id helpers.",
+        "Run prettier on the frontend.",
+        "Fix typos in the README.",
+    ):
+        out = recommend(
+            classify_task(prompt, project_id=proj.project_id),
+            _readiness_with_opencode_available(build=True, project=proj),
+            project=proj,
+        )
+        approveable = [c for c in out if not c.blockers]
+        assert approveable, f"no approve-able for {prompt!r}"
+        assert approveable[0].provider == "factory_droid_build", (
+            f"{prompt!r}: expected factory_droid_build, got {approveable[0].provider}; "
+            f"all={[(c.provider, c.confidence, bool(c.blockers)) for c in out]}"
+        )
+
+
+def test_preference_cannot_make_blocked_opencode_win(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """prefer_open_custom must not unblock opencode_cli when env gates are off."""
+    monkeypatch.delenv("HAM_OPENCODE_ENABLED", raising=False)
+    monkeypatch.delenv("HAM_OPENCODE_EXECUTION_ENABLED", raising=False)
+    proj = _managed_project()
+    policy = WorkspaceAgentPolicy(allow_opencode=True, preference_mode="prefer_open_custom")
+    out = recommend(
+        classify_task("Build a new feature.", project_id=proj.project_id),
+        _readiness_managed_opencode_eligible(project=proj),
+        project=proj,
+        workspace_policy=policy,
+    )
+    oc = _provider_candidate(out, "opencode_cli")
+    assert oc is not None, "opencode_cli must remain in candidates (blocked, not absent)"
+    assert oc.blockers, "opencode_cli must stay blocked when env gates are off"
+    # opencode_cli must NOT be the top approve-able candidate
+    approveable = [c for c in out if not c.blockers]
+    if approveable:
+        assert approveable[0].provider != "opencode_cli"

@@ -46,7 +46,7 @@ _REASON: dict[ProviderKind, str] = {
     "factory_droid_build": "Low-risk pull request with a minimal diff.",
     "cursor_cloud": "Repo-wide context; opens a pull request you review.",
     "claude_code": "Single-file local edit handled directly on this host.",
-    "claude_agent": "Single-file edit handled by Claude Agent against the managed workspace.",
+    "claude_agent": "Managed workspace edit handled by Claude Agent using premium reasoning.",
     "opencode_cli": "OpenCode managed-workspace edit using your own model.",
 }
 
@@ -124,28 +124,38 @@ _BASE_CONFIDENCE: dict[str, dict[ProviderKind, float]] = {
         "factory_droid_build": 0.85,
         "opencode_cli": 0.45,
     },
+    # Build / code-mutation tasks.
+    # Cursor leads for connected-repo (github_pr) projects where a repo is
+    # configured.  OpenCode is the default open builder for managed_workspace
+    # projects when platform readiness + model access + workspace policy allow
+    # it.  Claude Agent is a meaningful alternative when prefer_premium_reasoning
+    # is active; its preference boost then lifts it above OpenCode.
     "feature": {
         "cursor_cloud": 0.8,
-        "opencode_cli": 0.55,
+        "opencode_cli": 0.65,  # default open managed-workspace builder
+        "claude_agent": 0.6,   # meaningful for prefer_premium_reasoning
     },
     "fix": {
         "cursor_cloud": 0.7,
+        "opencode_cli": 0.6,   # default open managed-workspace fixer
+        "claude_agent": 0.55,  # meaningful for prefer_premium_reasoning
         "claude_code": 0.5,
-        "opencode_cli": 0.45,
     },
     "refactor": {
         "cursor_cloud": 0.8,
-        "opencode_cli": 0.55,
+        "opencode_cli": 0.65,  # default open managed-workspace refactorer
+        "claude_agent": 0.55,  # meaningful for prefer_premium_reasoning
     },
     "multi_file_edit": {
         "cursor_cloud": 0.85,
-        "opencode_cli": 0.55,
+        "opencode_cli": 0.65,  # default open managed-workspace multi-file editor
+        "claude_agent": 0.5,   # meaningful for prefer_premium_reasoning
     },
     "single_file_edit": {
         "claude_code": 0.7,
         "claude_agent": 0.6,
         "cursor_cloud": 0.5,
-        "opencode_cli": 0.45,
+        "opencode_cli": 0.5,   # slightly raised; competitive for managed-workspace
     },
     "unknown": {
         "no_agent": 0.4,
