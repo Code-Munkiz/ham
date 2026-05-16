@@ -109,7 +109,9 @@ export function WorkspaceHamProjectProvider({ children }: { children: React.Reac
   );
 
   return (
-    <WorkspaceHamProjectContext.Provider value={value}>{children}</WorkspaceHamProjectContext.Provider>
+    <WorkspaceHamProjectContext.Provider value={value}>
+      {children}
+    </WorkspaceHamProjectContext.Provider>
   );
 }
 

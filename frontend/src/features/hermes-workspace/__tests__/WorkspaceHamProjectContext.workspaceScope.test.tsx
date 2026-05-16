@@ -3,10 +3,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import type { HamWorkspaceContextValue } from "@/lib/ham/HamWorkspaceContext";
 import { HamWorkspaceContext } from "@/lib/ham/HamWorkspaceContext";
 import type { HamWorkspaceSummary } from "@/lib/ham/workspaceApi";
-import {
-  WorkspaceHamProjectProvider,
-  useWorkspaceHamProject,
-} from "../WorkspaceHamProjectContext";
+import { WorkspaceHamProjectProvider, useWorkspaceHamProject } from "../WorkspaceHamProjectContext";
 
 const MAP_KEY = "hww.workspaceHamProjectIds.v1";
 
@@ -62,10 +59,7 @@ function readyCtx(workspaceId: string | null): HamWorkspaceContextValue {
   };
 }
 
-function ScopedProbe(props: {
-  ws: string | null;
-  label: string;
-}) {
+function ScopedProbe(props: { ws: string | null; label: string }) {
   return (
     <HamWorkspaceContext.Provider value={readyCtx(props.ws)}>
       <WorkspaceHamProjectProvider>

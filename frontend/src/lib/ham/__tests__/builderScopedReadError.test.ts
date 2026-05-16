@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  HamBuilderScopedReadError,
-  shouldResetHamWorkbenchProjectSelection,
-} from "@/lib/ham/api";
+import { HamBuilderScopedReadError, shouldResetHamWorkbenchProjectSelection } from "@/lib/ham/api";
 
 describe("shouldResetHamWorkbenchProjectSelection", () => {
   it("fires only for PROJECT_NOT_FOUND on 404", () => {
