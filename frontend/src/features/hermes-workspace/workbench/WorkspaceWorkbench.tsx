@@ -729,6 +729,13 @@ function WorkbenchPreviewPanel({
   ].includes(cloudRuntimeState);
   const activeSourceSnapshotId =
     preview?.source_snapshot_id || cloudRuntime?.source_snapshot_id || snapshots[0]?.id || null;
+  const newestListedSnapshotId = snapshots[0]?.id ?? null;
+  /** Chat follow-up uploads a newer snapshot before preview-runtime metadata catches up — keep polling. */
+  const previewBehindLatestListedSnapshot =
+    Boolean(ws && pid && hasBackendSource) &&
+    Boolean(newestListedSnapshotId && preview?.source_snapshot_id) &&
+    newestListedSnapshotId !== preview?.source_snapshot_id &&
+    preview?.status !== "error";
   const cloudPreviewHealthy =
     preview?.mode === "cloud" && preview?.status === "ready" && preview?.health === "healthy";
   const cloudRetryEnabled =
@@ -761,7 +768,8 @@ function WorkbenchPreviewPanel({
       cloudRuntimeLatestJob?.status === "queued" ||
       Boolean(iframeProxyError) ||
       authSessionRefreshing ||
-      cloudRuntimeLatestJob?.status === "running");
+      cloudRuntimeLatestJob?.status === "running" ||
+      previewBehindLatestListedSnapshot);
 
   React.useEffect(() => {
     if (!shouldAutoPollPreview) return;
@@ -783,6 +791,7 @@ function WorkbenchPreviewPanel({
     preview?.source_snapshot_id,
     preview?.runtime_session_id,
     cloudRuntimeLatestJob?.id,
+    newestListedSnapshotId,
   ]);
 
   React.useEffect(() => {

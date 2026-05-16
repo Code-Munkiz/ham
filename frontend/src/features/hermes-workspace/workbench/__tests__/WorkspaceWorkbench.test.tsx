@@ -1558,6 +1558,231 @@ describe("WorkspaceWorkbench", () => {
     expect(canvas).toHaveClass("overflow-hidden");
   });
 
+  it("keeps polling preview-status when newest listed snapshot leads preview snapshot on ready cloud preview", async () => {
+    const previewProxyPath = "/api/workspaces/ws_abc/projects/proj_abc/builder/preview-proxy/";
+    listBuilderProjectSourcesMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      sources: [
+        {
+          id: "psrc_1",
+          project_id: "proj_abc",
+          workspace_id: "ws_abc",
+          kind: "chat_scaffold",
+          status: "ready",
+          display_name: "Chat scaffold",
+          origin_ref: "ham_chat",
+          active_snapshot_id: "ssnp_new",
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+          created_by: "user_a",
+          metadata: {},
+        },
+      ],
+    });
+    listBuilderSourceSnapshotsMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      source_snapshots: [
+        {
+          id: "ssnp_new",
+          project_id: "proj_abc",
+          workspace_id: "ws_abc",
+          project_source_id: "psrc_1",
+          status: "materialized",
+          digest_sha256: "def",
+          size_bytes: 200,
+          artifact_uri: "builder-artifact://bzip_new",
+          manifest: {},
+          created_at: "2026-01-01T00:05:00Z",
+          created_by: "user_a",
+          metadata: {},
+        },
+        {
+          id: "ssnp_old",
+          project_id: "proj_abc",
+          workspace_id: "ws_abc",
+          project_source_id: "psrc_1",
+          status: "materialized",
+          digest_sha256: "abc",
+          size_bytes: 100,
+          artifact_uri: "builder-artifact://bzip_old",
+          manifest: {},
+          created_at: "2026-01-01T00:00:00Z",
+          created_by: "user_a",
+          metadata: {},
+        },
+      ],
+    });
+    getBuilderCloudRuntimeMock.mockResolvedValue({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      mode: "cloud",
+      status: "provider_ready",
+      message: "Cloud runtime provider is configured for experimentation.",
+      updated_at: "2026-01-01T00:00:00Z",
+      runtime_session_id: "rtms_cloud_stable",
+      source_snapshot_id: "ssnp_old",
+      metadata: {},
+    });
+    listBuilderCloudRuntimeJobsMock.mockResolvedValue({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      jobs: [
+        {
+          id: "crjb_done",
+          workspace_id: "ws_abc",
+          project_id: "proj_abc",
+          source_snapshot_id: "ssnp_old",
+          runtime_session_id: "rtms_cloud_stable",
+          status: "succeeded",
+          phase: "completed",
+          provider: "cloud_run_poc",
+          requested_by: "user_a",
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:10Z",
+          completed_at: "2026-01-01T00:00:10Z",
+          error_code: null,
+          error_message: null,
+          logs_summary: "done",
+          metadata: {},
+        },
+      ],
+    });
+    getBuilderPreviewStatusMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      mode: "cloud",
+      status: "ready",
+      health: "healthy",
+      preview_url: previewProxyPath,
+      message: "Preview is ready via authenticated cloud proxy.",
+      updated_at: "2026-01-01T00:00:00Z",
+      source_snapshot_id: "ssnp_old",
+      runtime_session_id: "rtms_cloud_stable",
+      preview_endpoint_id: "prve_cloud_stable",
+      logs_hint: null,
+    });
+
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+
+    await screen.findByTestId("hww-preview-iframe");
+    await new Promise((r) => setTimeout(r, 200));
+    const baseline = getBuilderPreviewStatusMock.mock.calls.length;
+
+    await waitFor(
+      () => expect(getBuilderPreviewStatusMock.mock.calls.length).toBeGreaterThan(baseline),
+      { timeout: 8000 },
+    );
+  });
+
+  it("cloud preview iframe remounts automatically when polled preview adopts newer source_snapshot_id (no Refresh status click)", async () => {
+    const previewProxyPath = "/api/workspaces/ws_abc/projects/proj_abc/builder/preview-proxy/";
+    listBuilderProjectSourcesMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      sources: [
+        {
+          id: "psrc_1",
+          project_id: "proj_abc",
+          workspace_id: "ws_abc",
+          kind: "chat_scaffold",
+          status: "ready",
+          display_name: "Chat scaffold",
+          origin_ref: "ham_chat",
+          active_snapshot_id: "ssnp_new",
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+          created_by: "user_a",
+          metadata: {},
+        },
+      ],
+    });
+    listBuilderSourceSnapshotsMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      source_snapshots: [
+        {
+          id: "ssnp_new",
+          project_id: "proj_abc",
+          workspace_id: "ws_abc",
+          project_source_id: "psrc_1",
+          status: "materialized",
+          digest_sha256: "def",
+          size_bytes: 200,
+          artifact_uri: "builder-artifact://bzip_new",
+          manifest: {},
+          created_at: "2026-01-01T00:05:00Z",
+          created_by: "user_a",
+          metadata: {},
+        },
+      ],
+    });
+    getBuilderCloudRuntimeMock.mockResolvedValue({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      mode: "cloud",
+      status: "provider_ready",
+      message: "Cloud runtime provider is configured for experimentation.",
+      updated_at: "2026-01-01T00:00:00Z",
+      runtime_session_id: "rtms_cloud_stable",
+      source_snapshot_id: null,
+      metadata: {},
+    });
+    listBuilderCloudRuntimeJobsMock.mockResolvedValue({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      jobs: [],
+    });
+
+    let previewCalls = 0;
+    const cloudReadyPayload = {
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      mode: "cloud" as const,
+      status: "ready" as const,
+      health: "healthy" as const,
+      preview_url: previewProxyPath,
+      message: "Preview is ready via authenticated cloud proxy.",
+      updated_at: "2026-01-01T00:00:00Z",
+      runtime_session_id: "rtms_cloud_stable",
+      preview_endpoint_id: "prve_cloud_stable",
+      logs_hint: null as string | null,
+    };
+    getBuilderPreviewStatusMock.mockImplementation(async () => {
+      previewCalls += 1;
+      return {
+        ...cloudReadyPayload,
+        source_snapshot_id: previewCalls < 5 ? "ssnp_old" : "ssnp_new",
+        updated_at: `2026-01-01T00:00:${String(previewCalls).padStart(2, "0")}Z`,
+      };
+    });
+
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(getBuilderPreviewStatusMock.mock.calls.length).toBeGreaterThanOrEqual(1);
+    });
+
+    const firstIframe = await screen.findByTestId("hww-preview-iframe");
+
+    await waitFor(
+      () => {
+        const second = screen.getByTestId("hww-preview-iframe");
+        expect(second).not.toBe(firstIframe);
+      },
+      { timeout: 20000 },
+    );
+  }, 25000);
+
   it("Cloud preview iframe remounts when source_snapshot_id changes while proxy URL/session/endpoint stay stable", async () => {
     const previewUrlPath = "/api/workspaces/ws_abc/projects/proj_abc/builder/preview-proxy/";
     getBuilderPreviewStatusMock.mockResolvedValue({
