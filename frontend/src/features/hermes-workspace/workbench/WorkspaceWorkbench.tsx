@@ -324,6 +324,9 @@ function sanitizePreviewFetchError(message: string | null): string | null {
   if (/\b404\b/i.test(raw) || /HTTP\s*404/i.test(raw)) {
     return "Preview status is not available yet.";
   }
+  if (/\b502\b/i.test(raw) || /\bBAD_GATEWAY\b/i.test(raw)) {
+    return "Preview is still preparing (runtime warming). HAM keeps retrying with backoff.";
+  }
   if (
     /PREVIEW_PROXY_UPSTREAM_UNAVAILABLE/i.test(raw) ||
     /PREVIEW_PROXY_TIMEOUT/i.test(raw) ||

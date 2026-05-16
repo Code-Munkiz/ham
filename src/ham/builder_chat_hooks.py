@@ -12,6 +12,15 @@ def _looks_like_followup_edit(last_user_plain: str) -> bool:
     text = (last_user_plain or "").strip().lower()
     if not text:
         return False
+    # Explicit UI/chrome polish ("make the buttons larger and blue").
+    if re.search(
+        r"\b(make|change|update|adjust)\b.{0,60}\b"
+        r"(buttons?|digits?|numbers?|keys?|keyboard|controls?|pad)\b",
+        text,
+    ):
+        return True
+    if re.search(r"\blarger\b.{0,32}\band\b.{0,32}\bblue\b", text):
+        return True
     patterns = (
         r"\bmake it\b",
         r"\bi want\b",
@@ -86,6 +95,12 @@ def _looks_like_active_app_iteration(last_user_plain: str) -> bool:
         )
         or re.search(r"\bas i type\b", text)
         or re.search(r"\b(calculator|calc)\b", text)
+    ):
+        return True
+    # "Yeah just keep working on this current app…" iteration phrasing.
+    if re.search(
+        r"\b(keep\s+working|keep\s+going)\b.{0,100}\b(this|current|the)\s+(app|preview|calculator)",
+        text,
     ):
         return True
     return False
@@ -212,8 +227,8 @@ def run_builder_happy_path_hook(
     from src.ham.builder_chat_intent import classify_builder_chat_intent
     from src.ham.builder_chat_scaffold import maybe_chat_scaffold_for_turn
 
-    intent = classify_builder_chat_intent(last_user_plain)
-    meta: dict[str, Any] = {"builder_intent": intent}
+    base_intent = classify_builder_chat_intent(last_user_plain)
+    meta: dict[str, Any] = {"builder_intent": base_intent}
     ws = (workspace_id or "").strip()
     pid = (project_id or "").strip()
     if not ws or not pid or not str(last_user_plain or "").strip():
@@ -226,12 +241,18 @@ def run_builder_happy_path_hook(
     wants_update = _looks_like_followup_edit(last_user_plain) or _looks_like_active_app_iteration(
         last_user_plain
     )
-    discrete_new = intent == "build_or_create" and _looks_like_discrete_new_product_request(
+    discrete_new = base_intent == "build_or_create" and _looks_like_discrete_new_product_request(
         last_user_plain
     )
     forced_update = bool(has_active_snapshot and wants_update and not discrete_new)
     operation = "update_existing_project" if forced_update else "build_or_create"
-    if not forced_update and intent != "build_or_create":
+    intent_out: str = (
+        "build_or_create"
+        if forced_update or base_intent == "build_or_create"
+        else str(base_intent)
+    )
+    meta["builder_intent"] = intent_out
+    if not forced_update and intent_out != "build_or_create":
         return None, meta
     summary = maybe_chat_scaffold_for_turn(
         workspace_id=ws,

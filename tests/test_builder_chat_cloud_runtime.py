@@ -464,6 +464,40 @@ def test_builder_hook_calculator_i_want_show_equation_updates_and_emits_working_
     _cleanup()
 
 
+def test_builder_hook_make_buttons_larger_and_blue_routes_to_update(tmp_path: Path, monkeypatch) -> None:
+    """Short 'make … larger/blue' must still force builder update_existing_project scaffolding."""
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    first = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc2",
+        session_id="sess_blue",
+        last_user_plain="ham build me a calculator",
+        created_by="user_1",
+    )
+    assert first and first.get("scaffolded") is True
+    sid_first = str(first.get("source_snapshot_id") or "")
+
+    prefix, meta = run_builder_happy_path_hook(
+        workspace_id="ws_a",
+        project_id="pr_calc2",
+        session_id="sess_blue",
+        last_user_plain="ham make the buttons larger and blue",
+        ham_actor=None,
+    )
+    assert prefix is not None
+    assert meta.get("builder_operation") == "update_existing_project"
+    sid2 = str(meta.get("source_snapshot_id") or "")
+    assert sid2 and sid2 != sid_first
+    assert meta.get("builder_intent") == "build_or_create"
+    snap2 = next(
+        row for row in store.list_source_snapshots(workspace_id="ws_a", project_id="pr_calc2") if row.id == sid2
+    )
+    assert isinstance(snap2.manifest, dict)
+    _cleanup()
+
+
 def test_chat_scaffold_update_carries_forward_reference_style_profile(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
     store = BuilderSourceStore(store_path=tmp_path / "sources.json")

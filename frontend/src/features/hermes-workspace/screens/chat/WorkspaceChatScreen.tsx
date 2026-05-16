@@ -1443,6 +1443,16 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     };
   }, [modelId]);
 
+  /** Drop stale routed project IDs before async workspace→project resolves (avoid cross-workspace polling). */
+  React.useLayoutEffect(() => {
+    const ws = activeWorkspaceId?.trim() || "";
+    if (!ws) {
+      setProjectId(null);
+      return;
+    }
+    setProjectId(hamProjectId ?? null);
+  }, [activeWorkspaceId, hamProjectId]);
+
   React.useEffect(() => {
     let cancelled = false;
     const ws = activeWorkspaceId?.trim() || "";

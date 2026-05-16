@@ -1,6 +1,21 @@
 import { describe, expect, it } from "vitest";
 
-import { inspectCodingIntent, isLikelyCodingIntent } from "../codingIntent";
+import {
+  inspectCodingIntent,
+  isLikelyCodingIntent,
+  looksLikeWorkbenchHostedAppIteration,
+} from "../codingIntent";
+
+describe("looksLikeWorkbenchHostedAppIteration", () => {
+  it("flags hosted-app polish prompts", () => {
+    expect(looksLikeWorkbenchHostedAppIteration("ham make the buttons larger and blue")).toBe(true);
+    expect(
+      looksLikeWorkbenchHostedAppIteration(
+        "yeah just keep working on this current app and make the buttons larger — skip coding plan",
+      ),
+    ).toBe(true);
+  });
+});
 
 describe("isLikelyCodingIntent", () => {
   describe("positive matches", () => {
@@ -28,6 +43,19 @@ describe("isLikelyCodingIntent", () => {
       it(`matches: ${text} (${why})`, () => {
         expect(isLikelyCodingIntent(text)).toBe(true);
         expect(inspectCodingIntent(text).reason).toBe("match");
+      });
+    }
+  });
+
+  describe("workbench-hosted app iteration (suppress auto conductor)", () => {
+    const cases = [
+      "ham make the buttons larger and blue",
+      "yeah just keep working on this current app — make buttons larger please",
+      "nice job, tweak the calculator keyboard spacing again",
+    ];
+    for (const text of cases) {
+      it(`rejects conductor for hosted-app iteration: ${JSON.stringify(text)}`, () => {
+        expect(isLikelyCodingIntent(text)).toBe(false);
       });
     }
   });

@@ -1073,6 +1073,9 @@ export function subscribeBuilderActivityStream(
 
   void (async () => {
     let errorBackoffMs = 900;
+    let consecutiveFailures = 0;
+    /** Stop infinite SSE reconnect loops during long-lived auth outages. */
+    const MAX_ACTIVITY_SSE_FAILURE_CYCLES = 24;
     while (!ctl.cancelled) {
       ctl.ac = new AbortController();
       const signal = ctl.ac.signal;
@@ -1086,6 +1089,7 @@ export function subscribeBuilderActivityStream(
         }
         callbacks.onOpen?.();
         errorBackoffMs = 900;
+        consecutiveFailures = 0;
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let carry = "";
@@ -1149,6 +1153,8 @@ export function subscribeBuilderActivityStream(
           (e instanceof DOMException && e.name === "AbortError") ||
           (e instanceof Error && e.name === "AbortError");
         if (aborted) break;
+        consecutiveFailures++;
+        if (consecutiveFailures >= MAX_ACTIVITY_SSE_FAILURE_CYCLES) break;
         callbacks.onError?.();
         await new Promise<void>((r) => setTimeout(r, errorBackoffMs));
         errorBackoffMs = Math.min(8500, Math.floor(errorBackoffMs * 1.55));

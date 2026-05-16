@@ -54,6 +54,24 @@ const POSITIVE_NOUNS =
 const BUILDER_PROMPT =
   /\b(build|create|make|generate|scaffold|turn)\b.{0,80}\b(app|application|website|site|game|dashboard|landing page|tracker|portal|saas)\b/i;
 
+/** Iterating the hosted Builder app UX (distinct from repo / Hermes codebase edits). */
+const WORKBENCH_HOSTED_APP_SURFACE =
+  /\b(buttons?|digits?|numbers?|keyboard|controls?|calculator|spacing|equation|formula|tape|typing|styled|layouts?|padding|margins|apps?|preview|current\s+app)\b/i;
+const WORKBENCH_HOSTED_APP_VERB_OR_COLOR =
+  /\b(make|change|update|adjust|improve|tweak|larger|smaller|bigger|better|preserve|yeah|nice job|looks great|keep\s+working|deep|again|blue|green|rounded|tailwind)\b/i;
+const REPO_CODING_HARD_SIGNAL =
+  /\b(pull request|open a pr\b|@\w+\/\w+|jest|vitest|cypress|ruff\b|flake8|migrate the schema|postgresql|sequelize|prisma|opentelemetry|graphql|openapi|kubernetes|dockerfile\b|pnpm-lock|Cargo\.toml)\b/i;
+
+/** True when firing `previewCodingConductor` side-by-side chat would distract from Builder iteration. */
+export function looksLikeWorkbenchHostedAppIteration(rawText: string | null | undefined): boolean {
+  const text = String(rawText || "").trim();
+  if (!text) return false;
+  if (REPO_CODING_HARD_SIGNAL.test(text) && !WORKBENCH_HOSTED_APP_SURFACE.test(text)) {
+    return false;
+  }
+  return WORKBENCH_HOSTED_APP_SURFACE.test(text) && WORKBENCH_HOSTED_APP_VERB_OR_COLOR.test(text);
+}
+
 export interface CodingIntentDetail {
   matches: boolean;
   reason:
@@ -95,6 +113,7 @@ export function inspectCodingIntent(rawText: string | null | undefined): CodingI
  */
 export function isLikelyCodingIntent(rawText: string | null | undefined): boolean {
   const text = String(rawText || "").trim();
+  if (looksLikeWorkbenchHostedAppIteration(text)) return false;
   if (BUILDER_PROMPT.test(text)) return false;
   return inspectCodingIntent(rawText).matches;
 }
