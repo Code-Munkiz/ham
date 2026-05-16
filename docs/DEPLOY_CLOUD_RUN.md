@@ -279,6 +279,22 @@ In **http** mode Ham sends **`Authorization: Bearer <key>`** to Hermes. If **`HE
 
 After deploy, Cloud Run prints the **service URL**.
 
+## Builder env drift preflight (check-only)
+
+Use this before Builder live acceptance to catch non-secret env drift without mutating Cloud Run:
+
+```bash
+python scripts/check_ham_cloud_run_builder_env.py
+```
+
+Deploy guardrails for routine backend releases:
+
+- Use image-only deploys when env values are unchanged.
+- Do **not** use `--set-env-vars` for normal releases (it replaces plain env on the new revision).
+- Do **not** rely on full env-file redeploys for normal backend releases.
+- If env values must change, use targeted `gcloud run services update ... --update-env-vars KEY=VALUE`.
+- Run the preflight after backend deploys and before Builder A/B/C/D live acceptance.
+
 ## OpenRouter key (`OPENROUTER_API_KEY`)
 
 - **Mount via Secret Manager** as **`OPENROUTER_API_KEY`** (see **`--set-secrets`** / **`--update-secrets`** above). The value must be **only** the raw key (**one line**, no `Bearer ` prefix, no shell commands). Pasting a whole terminal snippet into the secret produces **`UPSTREAM_REJECTED`** from OpenRouter; Ham also treats malformed values as **not chat-ready** in **`GET /api/models`** (see `openrouter_api_key_is_plausible` in `src/llm_client.py`).
