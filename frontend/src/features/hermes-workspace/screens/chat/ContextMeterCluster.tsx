@@ -454,7 +454,7 @@ export function ContextMeterCluster({
             <ContextDiagnosticsHudPanel
               payload={payload}
               enabled={Boolean(payload?.enabled)}
-              className="pointer-events-auto"
+              className="pointer-events-none"
             />
           </div>,
           document.body,
