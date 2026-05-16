@@ -852,7 +852,8 @@ function WorkbenchPreviewPanel({
           : cloudRuntimeState === "provider_ready" || cloudRuntimeState === "provider_accepted"
             ? "Cloud runtime experiment provider is ready."
             : "Cloud runtime experiments are disabled by default.";
-  const cloudRuntimeReady = cloudRuntimeState === "provider_ready" || cloudRuntimeState === "provider_accepted";
+  const cloudRuntimeReady =
+    cloudRuntimeState === "provider_ready" || cloudRuntimeState === "provider_accepted";
   const cloudRuntimePrimaryCopy = cloudRuntimeReady
     ? "Cloud preview runtime is ready."
     : "Cloud preview runtime status is shown below.";
@@ -1473,9 +1474,7 @@ function WorkbenchPreviewPanel({
             <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
               Cloud preview runtime
             </p>
-            <p className="text-[11px] text-white/60">
-              {cloudRuntimePrimaryCopy}
-            </p>
+            <p className="text-[11px] text-white/60">{cloudRuntimePrimaryCopy}</p>
             <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-refresh-copy">
               {cloudRuntimeSecondaryCopy}
             </p>
@@ -1651,9 +1650,7 @@ function WorkbenchPreviewPanel({
             <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
               Optional coding workers
             </p>
-            <p className="text-[11px] text-white/60">
-              {optionalWorkerIntroCopy}
-            </p>
+            <p className="text-[11px] text-white/60">{optionalWorkerIntroCopy}</p>
             {workersError ? (
               <p className="text-amber-200/90" data-testid="hww-worker-capability-error">
                 Could not load worker capabilities: {workersError}
@@ -1975,7 +1972,12 @@ function WorkbenchCodePanel({
   const [snapshots, setSnapshots] = React.useState<BuilderSourceSnapshotRecord[]>([]);
   const [sources, setSources] = React.useState<BuilderProjectSourceRecord[]>([]);
   const [files, setFiles] = React.useState<
-    Array<{ path: string; size_bytes: number; type?: "file" | "directory"; language?: string | null }>
+    Array<{
+      path: string;
+      size_bytes: number;
+      type?: "file" | "directory";
+      language?: string | null;
+    }>
   >([]);
   const [activeSnapshotId, setActiveSnapshotId] = React.useState<string | null>(null);
   const [selectedPath, setSelectedPath] = React.useState<string | null>(null);
@@ -2000,7 +2002,9 @@ function WorkbenchCodePanel({
       const fileRows = rows.filter((f) => f.type !== "directory");
       setFiles(rows);
       const nextPath =
-        selectedPath && fileRows.some((f) => f.path === selectedPath) ? selectedPath : (fileRows[0]?.path ?? null);
+        selectedPath && fileRows.some((f) => f.path === selectedPath)
+          ? selectedPath
+          : (fileRows[0]?.path ?? null);
       setSelectedPath(nextPath);
       setActiveSnapshotId(snapId);
       if (!nextPath) {
@@ -2070,7 +2074,10 @@ function WorkbenchCodePanel({
   const ws = workspaceId?.trim() || "";
   const pid = projectId?.trim() || "";
   const activeSnapId =
-    activeSnapshotId || sources.find((s) => s.active_snapshot_id)?.active_snapshot_id || snapshots[0]?.id || null;
+    activeSnapshotId ||
+    sources.find((s) => s.active_snapshot_id)?.active_snapshot_id ||
+    snapshots[0]?.id ||
+    null;
 
   React.useEffect(() => {
     if (!ws || !pid || !activeSnapId || !selectedPath) {
@@ -2177,7 +2184,10 @@ function WorkbenchCodePanel({
             </p>
             {selectedPath ? (
               <>
-                <p className="mt-1 text-[10px] text-white/50" data-testid="hww-code-active-file-path">
+                <p
+                  className="mt-1 text-[10px] text-white/50"
+                  data-testid="hww-code-active-file-path"
+                >
                   {selectedPath}
                 </p>
                 <pre

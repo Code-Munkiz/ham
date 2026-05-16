@@ -555,7 +555,9 @@ describe("WorkspaceWorkbench", () => {
         mode: "edit",
       });
     });
-    expect(screen.getByTestId("hww-code-file-chat-changed")).toHaveTextContent("client/src/App.tsx");
+    expect(screen.getByTestId("hww-code-file-chat-changed")).toHaveTextContent(
+      "client/src/App.tsx",
+    );
   });
 
   it("Preview shows not-connected state and no iframe", async () => {
@@ -951,7 +953,8 @@ describe("WorkspaceWorkbench", () => {
           status: "disabled",
           capabilities: ["status_stream", "event_projection"],
           environment_fit: "Optional local/bridge telemetry path for Cursor-native status streams.",
-          required_setup: "Enable HAM_CURSOR_SDK_BRIDGE_ENABLED and configure provider credentials.",
+          required_setup:
+            "Enable HAM_CURSOR_SDK_BRIDGE_ENABLED and configure provider credentials.",
           settings_href: null,
           last_checked_at: "2026-01-01T00:00:00Z",
           metadata: { bridge_enabled: false },
