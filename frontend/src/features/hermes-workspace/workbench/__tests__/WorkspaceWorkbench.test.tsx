@@ -1559,8 +1559,7 @@ describe("WorkspaceWorkbench", () => {
   });
 
   it("Cloud preview iframe remounts when source_snapshot_id changes while proxy URL/session/endpoint stay stable", async () => {
-    const previewUrlPath =
-      "/api/workspaces/ws_abc/projects/proj_abc/builder/preview-proxy/";
+    const previewUrlPath = "/api/workspaces/ws_abc/projects/proj_abc/builder/preview-proxy/";
     getBuilderPreviewStatusMock.mockResolvedValue({
       project_id: "proj_abc",
       workspace_id: "ws_abc",
