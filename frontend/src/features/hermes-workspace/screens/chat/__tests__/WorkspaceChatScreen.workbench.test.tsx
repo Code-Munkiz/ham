@@ -175,6 +175,21 @@ describe("WorkspaceChatScreen workbench shell", () => {
     expect(screen.queryByTestId("hww-chat-split-resizer")).not.toBeInTheDocument();
   });
 
+  it("keeps split row scrollable and workbench slot bounded on constrained viewports", async () => {
+    mockMatchMedia(false);
+    renderChat();
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-workbench")).toBeInTheDocument();
+    });
+    const splitRow = screen.getByTestId("hww-chat-split-row");
+    expect(splitRow.className).toContain("overflow-y-auto");
+
+    const workbenchSlot = screen.getByTestId("hww-workbench-panel-slot");
+    expect(workbenchSlot.className).toContain("min-h-[min(260px,48vh)]");
+    expect(workbenchSlot.className).toContain("max-h-[48vh]");
+    expect(workbenchSlot.className).toContain("shrink-0");
+  });
+
   it("switches workbench tabs locally", async () => {
     renderChat();
     await waitFor(() => {
@@ -182,7 +197,9 @@ describe("WorkspaceChatScreen workbench shell", () => {
     });
     expect(screen.getByTestId("hww-preview-state-no-project")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("hww-workbench-tab-code"));
-    expect(await screen.findByText("Explorer placeholder — no repo mounted.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Select a workspace and project to browse generated source."),
+    ).toBeInTheDocument();
   });
 
   it("does not surface a header inspector toggle (workbench stays mounted)", async () => {

@@ -3388,7 +3388,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     <div
       ref={chatSplitRowRef}
       data-testid="hww-chat-split-row"
-      className="flex min-h-0 w-full min-w-0 flex-1 flex-col md:flex-row"
+      className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-y-hidden"
     >
       <div
         data-testid="hww-command-panel"
@@ -3748,8 +3748,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       <div
         data-testid="hww-workbench-panel-slot"
         className={cn(
-          "relative z-0 flex min-h-0 w-full min-w-0 flex-col overflow-x-hidden",
-          "min-h-[260px] max-h-[48vh] md:max-h-none md:h-full md:min-h-0 md:min-w-[420px] md:flex-1",
+          "relative z-0 flex min-h-0 w-full min-w-0 shrink-0 flex-col overflow-x-hidden",
+          "min-h-[min(260px,48vh)] max-h-[48vh] md:max-h-none md:h-full md:min-h-0 md:min-w-[420px] md:flex-1 md:shrink",
         )}
       >
         <WorkspaceWorkbench
