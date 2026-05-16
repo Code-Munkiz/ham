@@ -342,8 +342,9 @@ describe("WorkspaceShell workspace sidebar", () => {
   });
 
   it("workspace delete confirms with phrase and invokes archiveWorkspaceById", async () => {
-    const archiveWorkspaceById = vi.fn(async (): Promise<HamArchiveWorkspaceResponse> =>
-      archiveResponse(ws("ws_b", "Beta", ["workspace:admin"])),
+    const archiveWorkspaceById = vi.fn(
+      async (): Promise<HamArchiveWorkspaceResponse> =>
+        archiveResponse(ws("ws_b", "Beta", ["workspace:admin"])),
     );
     const alpha = ws("ws_a", "Alpha", ["workspace:admin"]);
     const beta = ws("ws_b", "Beta", ["workspace:admin"]);

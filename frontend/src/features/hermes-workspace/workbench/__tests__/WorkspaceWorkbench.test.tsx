@@ -420,22 +420,14 @@ describe("WorkspaceWorkbench", () => {
   it("workbenchRefreshSignal on Preview tab triggers an extra preview-status refetch", async () => {
     const { rerender } = render(
       <MemoryRouter>
-        <WorkspaceWorkbench
-          workspaceId="ws_abc"
-          projectId="proj_abc"
-          workbenchRefreshSignal={0}
-        />
+        <WorkspaceWorkbench workspaceId="ws_abc" projectId="proj_abc" workbenchRefreshSignal={0} />
       </MemoryRouter>,
     );
     await waitFor(() => expect(getBuilderPreviewStatusMock).toHaveBeenCalled());
     const afterMount = getBuilderPreviewStatusMock.mock.calls.length;
     rerender(
       <MemoryRouter>
-        <WorkspaceWorkbench
-          workspaceId="ws_abc"
-          projectId="proj_abc"
-          workbenchRefreshSignal={1}
-        />
+        <WorkspaceWorkbench workspaceId="ws_abc" projectId="proj_abc" workbenchRefreshSignal={1} />
       </MemoryRouter>,
     );
     await waitFor(() =>

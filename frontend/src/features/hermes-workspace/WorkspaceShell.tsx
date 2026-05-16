@@ -93,10 +93,7 @@ function WorkspaceArchiveDialog({
           "fixed left-1/2 top-1/2 z-[465] max-h-[min(90vh,720px)] w-[min(calc(100vw-2rem),26rem)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-white/[0.12] bg-[#050e14]/98 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.55)]",
         )}
       >
-        <p
-          id="hww-workspace-archive-title"
-          className="text-[13px] font-semibold text-white/[0.92]"
-        >
+        <p id="hww-workspace-archive-title" className="text-[13px] font-semibold text-white/[0.92]">
           Delete this workspace and its built apps?
         </p>
         <p className="mt-2 text-[12px] leading-relaxed text-white/55">
@@ -340,7 +337,9 @@ function WorkspaceSideNav({
                     : "border-white/[0.04] bg-black/20 text-white/70 hover:border-white/10 hover:bg-white/[0.04]",
                 )}
               >
-                <p className="truncate text-[11px] font-medium leading-snug text-white/85">{w.name}</p>
+                <p className="truncate text-[11px] font-medium leading-snug text-white/85">
+                  {w.name}
+                </p>
                 {w.slug ? (
                   <p className="mt-0.5 truncate text-[10px] text-white/45">{w.slug}</p>
                 ) : null}
@@ -353,7 +352,9 @@ function WorkspaceSideNav({
                       data-testid={`hww-workspace-row-menu-${w.workspace_id}`}
                       className={cn(
                         "inline-flex shrink-0 items-center justify-center rounded-lg border px-1.5 py-1 text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white/90",
-                        active ? "border-white/15 bg-white/[0.06]" : "border-white/[0.06] bg-black/20",
+                        active
+                          ? "border-white/15 bg-white/[0.06]"
+                          : "border-white/[0.06] bg-black/20",
                       )}
                       aria-label={`Actions for workspace ${w.name}`}
                       onClick={(ev) => {

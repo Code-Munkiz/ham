@@ -816,12 +816,7 @@ function WorkbenchPreviewPanel({
     }
     const prev = previousPreviewSnapshotIdRef.current;
     previousPreviewSnapshotIdRef.current = cur;
-    if (
-      prev !== undefined &&
-      prev !== null &&
-      cur !== null &&
-      cur !== prev
-    ) {
+    if (prev !== undefined && prev !== null && cur !== null && cur !== prev) {
       setIframeReloadNonce((n) => n + 1);
       setIframeProxyError(null);
     }
