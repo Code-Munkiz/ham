@@ -76,6 +76,27 @@ export const OPENCODE_BUILD_VIEW_CHANGES_LINK = "View changes";
 export const OPENCODE_BUILD_TECHNICAL_DETAILS_SUMMARY = "Details";
 export const OPENCODE_BUILD_KEEP_BUILDING_CTA = "Keep building";
 
+export const OPENCODE_BUILD_RUNNING_HEADLINE = "HAM is building with OpenCode";
+export const OPENCODE_BUILD_RUNNING_NOTE =
+  "This usually takes 1–2 minutes. You can navigate away — the build continues in the background.";
+
+const OPENCODE_STATUS_REASON_MESSAGES: Record<string, string> = {
+  "opencode:timeout": "The build timed out before finishing. No changes were saved.",
+  "opencode:session_no_completion":
+    "OpenCode worked on the task but did not produce a complete result.",
+  "opencode:runner_error": "An internal error stopped the build. No changes were made.",
+  "opencode:permission_denied": "HAM blocked the build — a required permission was not granted.",
+  "opencode:output_requires_review": "The output needs review before it can be saved.",
+  "opencode:workspace_setup_failed": "The workspace could not be prepared for this build.",
+  "opencode:serve_unavailable": "The OpenCode service was not available. Try again in a moment.",
+  "opencode:provider_not_configured": "OpenCode is not fully configured for this project.",
+};
+
+export function normieFailMessageForOpencode(reason: string | null | undefined): string | null {
+  if (!reason) return null;
+  return OPENCODE_STATUS_REASON_MESSAGES[reason] ?? null;
+}
+
 export function opencodeBuildChangedPathsLine(count: number): string {
   if (!Number.isFinite(count) || count < 0) return "";
   if (count === 0) return "No files changed";

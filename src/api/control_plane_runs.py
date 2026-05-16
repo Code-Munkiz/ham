@@ -72,6 +72,7 @@ def _public_run(r: ControlPlaneRun) -> dict[str, Any]:
         "audit_ref": r.audit_ref.model_dump(mode="json", exclude_none=True)
         if r.audit_ref
         else None,
+        "output_ref": r.output_ref if r.output_ref else None,
     }
 
 

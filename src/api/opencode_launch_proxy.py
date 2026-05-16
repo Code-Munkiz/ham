@@ -39,9 +39,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.api.clerk_gate import get_ham_clerk_actor
@@ -50,6 +51,8 @@ from src.api.droid_build import _require_build_approver
 from src.api.opencode_build import (
     HOSTED_CLOUD_RUN_DEFAULT_HTTP_DEADLINE_S,
     OPENCODE_REGISTRY_REVISION,
+    _persist_opencode_initial_running_run,
+    _project_managed_root,
     _run_opencode_launch_core,
     _truthy_env,
     effective_opencode_launch_deadline_s,
@@ -64,6 +67,7 @@ from src.ham.worker_adapters.opencode_adapter import (
     OpenCodeStatus,
     check_opencode_readiness,
 )
+from src.persistence.control_plane_run import new_ham_run_id
 from src.persistence.project_store import get_project_store
 from src.persistence.workspace_store import WorkspaceStore
 
@@ -198,13 +202,60 @@ def _require_proxy_env_token() -> None:
         )
 
 
+async def _run_opencode_proxy_background(
+    *,
+    rec: Any,
+    ham_actor: HamActor | None,
+    user_prompt: str,
+    model: str | None,
+    proposal_digest: str,
+    ham_run_id: str,
+    change_id: str,
+) -> None:
+    """Background task: drive the OpenCode run after the HTTP response is sent.
+
+    Runs ``_run_opencode_launch_core`` in a thread so the event loop is not
+    blocked. Any exception from the core (highly unlikely — it has its own
+    top-level catch) is logged rather than swallowed silently.
+    """
+    try:
+        await asyncio.to_thread(
+            _run_opencode_launch_core,
+            rec=rec,
+            ham_actor=ham_actor,
+            user_prompt=user_prompt,
+            model=model,
+            proposal_digest=proposal_digest,
+            ham_run_id=ham_run_id,
+            change_id=change_id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        _LOG.error(
+            "opencode_launch_proxy.background_task_raised ham_run_id=%s err=%s",
+            ham_run_id,
+            type(exc).__name__,
+        )
+
+
 @router.post("/launch_proxy")
 async def launch_opencode_build_proxy(
     body: OpencodeLaunchProxyBody,
     ham_actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
     workspace_store: Annotated[WorkspaceStore, Depends(get_workspace_store)],
+    background_tasks: BackgroundTasks,
 ) -> dict[str, Any]:
-    """Browser-callable OpenCode launch with token-free request shape."""
+    """Browser-callable OpenCode launch — returns immediately with ham_run_id.
+
+    The full gate stack is validated synchronously (fast).  Once all gates
+    pass, a ``ControlPlaneRun`` with ``status="running"`` is persisted and
+    the HTTP response is returned immediately so the browser is never kept
+    waiting for the full OpenCode runtime.
+
+    The actual OpenCode mission runs in a ``BackgroundTask`` (via
+    ``asyncio.to_thread``) and overwrites the running row with the terminal
+    status when it finishes.  Callers poll
+    ``GET /api/control-plane-runs/{ham_run_id}`` for completion.
+    """
     if not body.confirmed:
         raise HTTPException(
             status_code=400,
@@ -243,30 +294,66 @@ async def launch_opencode_build_proxy(
 
     _require_proxy_env_token()
 
+    # Pre-validate the managed workspace path (may raise 422) before returning.
+    project_root = _project_managed_root(rec)
+
+    # Pre-allocate identifiers so the HTTP response carries ham_run_id
+    # before the OpenCode run finishes.
+    ham_run_id = new_ham_run_id()
+    change_id = uuid.uuid4().hex
+
     deadline_s = effective_opencode_launch_deadline_s()
     _LOG.info(
-        "opencode_launch_proxy.launch_proxy_started project_id=%s launch_deadline_seconds=%s launch_timeout_before_cloud_run_deadline=%s",
+        "opencode_launch_proxy.launch_proxy_accepted project_id=%s ham_run_id=%s "
+        "launch_deadline_seconds=%s launch_timeout_before_cloud_run_deadline=%s",
         rec.id,
+        ham_run_id,
         deadline_s,
         deadline_s < HOSTED_CLOUD_RUN_DEFAULT_HTTP_DEADLINE_S,
     )
-    _LOG.info(
-        "opencode_launch_proxy.launch_thread_started project_id=%s",
-        rec.id,
+
+    # Persist initial running row so polling is possible immediately.
+    _persist_opencode_initial_running_run(
+        rec=rec,
+        ham_actor=ham_actor,
+        project_root=project_root,
+        proposal_digest=body.proposal_digest,
+        ham_run_id=ham_run_id,
+        change_id=change_id,
     )
 
-    return await asyncio.to_thread(
-        _run_opencode_launch_core,
+    # Schedule the actual OpenCode mission as a background task so the HTTP
+    # response is returned without blocking on the full run duration.
+    background_tasks.add_task(
+        _run_opencode_proxy_background,
         rec=rec,
         ham_actor=ham_actor,
         user_prompt=body.user_prompt,
         model=body.model,
         proposal_digest=body.proposal_digest,
+        ham_run_id=ham_run_id,
+        change_id=change_id,
     )
+
+    return {
+        "kind": "opencode_build_launch",
+        "project_id": rec.id,
+        "ok": None,
+        "ham_run_id": ham_run_id,
+        "control_plane_status": "running",
+        "summary": None,
+        "error_summary": None,
+        "is_readonly": False,
+        "will_open_pull_request": False,
+        "requires_approval": True,
+        "output_target": "managed_workspace",
+        "output_ref": None,
+    }
 
 
 __all__ = [
     "OPENCODE_REGISTRY_REVISION",
     "OpencodeLaunchProxyBody",
+    "_run_opencode_proxy_background",
     "router",
 ]

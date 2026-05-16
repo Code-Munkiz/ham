@@ -8,6 +8,7 @@ import {
 } from "@/lib/ham/api";
 
 import {
+  normieFailMessageForOpencode,
   OPENCODE_BUILD_APPROVAL_BODY,
   OPENCODE_BUILD_APPROVAL_CHECKBOX,
   OPENCODE_BUILD_APPROVAL_HEADLINE,
@@ -19,6 +20,8 @@ import {
   OPENCODE_BUILD_PREVIEW_BUSY,
   OPENCODE_BUILD_PREVIEW_CTA,
   OPENCODE_BUILD_PREVIEW_LINK,
+  OPENCODE_BUILD_RUNNING_HEADLINE,
+  OPENCODE_BUILD_RUNNING_NOTE,
   OPENCODE_BUILD_SUCCESS_HEADLINE,
   OPENCODE_BUILD_TECHNICAL_DETAILS_SUMMARY,
   OPENCODE_BUILD_VIEW_CHANGES_LINK,
@@ -84,6 +87,9 @@ function buildOpencodeConfig(
       }),
     changedPathsLine: opencodeBuildChangedPathsLine,
     model: model ?? null,
+    runningHeadline: OPENCODE_BUILD_RUNNING_HEADLINE,
+    runningNote: OPENCODE_BUILD_RUNNING_NOTE,
+    normieFailMessageForStatusReason: normieFailMessageForOpencode,
   };
 }
 

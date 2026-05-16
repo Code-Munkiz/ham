@@ -1933,7 +1933,7 @@ export interface OpencodeBuildPreviewPayload {
 export interface OpencodeBuildLaunchPayload {
   kind: "opencode_build_launch";
   project_id: string;
-  ok: boolean;
+  ok: boolean | null;
   ham_run_id: string | null;
   control_plane_status: string | null;
   summary: string | null;
@@ -2114,6 +2114,23 @@ export async function fetchDroidAuditRuns(
   }
   const body = (await res.json()) as { runs?: Array<import("./types").ControlPlaneRunPublic> };
   return Array.isArray(body.runs) ? body.runs : [];
+}
+
+/** Read a single ControlPlaneRun by id — used for OpenCode async job polling. */
+export async function fetchControlPlaneRun(
+  hamRunId: string,
+  opts?: { signal?: AbortSignal },
+): Promise<import("./types").ControlPlaneRunPublic> {
+  const res = await hamApiFetch(`/api/control-plane-runs/${encodeURIComponent(hamRunId.trim())}`, {
+    signal: opts?.signal,
+  });
+  if (!res.ok) {
+    const detail = (await readFastApiDetail(res)) ?? `HTTP ${res.status}`;
+    throw new Error(shortenHamApiErrorMessage(detail));
+  }
+  const body = (await res.json()) as { run?: import("./types").ControlPlaneRunPublic };
+  if (!body.run) throw new Error("Malformed control-plane run response.");
+  return body.run;
 }
 
 export type VercelHookMapping = {
