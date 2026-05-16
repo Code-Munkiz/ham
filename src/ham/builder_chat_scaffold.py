@@ -21,7 +21,7 @@ from src.persistence.builder_source_store import (
 )
 
 _MANIFEST_KIND_INLINE = "inline_text_bundle"
-_CHAT_SCAFFOLD_FINGERPRINT_VERSION = "v3"
+_CHAT_SCAFFOLD_FINGERPRINT_VERSION = "v4"
 _MAX_TOTAL_TEXT = 200_000
 _MAX_FILE_BYTES = 60_000
 _MAX_FILES = 24
@@ -54,6 +54,13 @@ def _sanitize_title(user_plain: str) -> str:
 def _is_tetris_prompt(user_plain: str) -> bool:
     lowered = _strip_dashboard_attachment_tail(user_plain).lower()
     return "tetris" in lowered
+
+
+def _is_calculator_prompt(user_plain: str) -> bool:
+    lowered = _strip_dashboard_attachment_tail(user_plain).lower()
+    return bool(
+        re.search(r"\b(calculator|calc app|math app|four function calculator)\b", lowered)
+    )
 
 
 def _looks_like_reference_style_request(user_plain: str) -> bool:
@@ -762,6 +769,261 @@ def _build_react_scaffold_files(
                 "style_profile_id": str(style_profile.get("id") or "generic_dark"),
                 "style_requested": bool(style_profile.get("style_requested")),
                 "reference_requested": bool(style_profile.get("reference_requested")),
+            },
+        )
+    use_calculator_template = _is_calculator_prompt(user_plain) or str(previous_template or "").strip().lower() == "calculator"
+    if use_calculator_template:
+        lowered = _strip_dashboard_attachment_tail(user_plain).lower()
+        include_history = bool(re.search(r"\bhistory\b", lowered))
+        large_buttons = bool(
+            re.search(r"\b(larger|bigger|large)\s+buttons?\b", lowered)
+            or re.search(r"\bbuttons?\s+(larger|bigger|large)\b", lowered)
+        )
+        polished = bool(re.search(r"\b(polished|modern|clean|sleek)\b", lowered))
+        history_panel_block = (
+            "        {history.length > 0 ? (\n"
+            "          <aside className=\"history\">\n"
+            "            <h2>History</h2>\n"
+            "            <ul>\n"
+            "              {history.map((item, idx) => (\n"
+            "                <li key={`${item}-${idx}`}>{item}</li>\n"
+            "              ))}\n"
+            "            </ul>\n"
+            "          </aside>\n"
+            "        ) : null}\n"
+            if include_history
+            else ""
+        )
+        return (
+            {
+                "package.json": json.dumps(
+                    {
+                        "name": safe_pkg,
+                        "private": True,
+                        "version": "0.0.1",
+                        "type": "module",
+                        "scripts": {
+                            "dev": "vite",
+                            "build": "vite build",
+                            "preview": "vite preview",
+                        },
+                        "dependencies": {"react": "^18.3.1", "react-dom": "^18.3.1"},
+                        "devDependencies": {
+                            "@vitejs/plugin-react": "^4.3.4",
+                            "typescript": "^5.6.3",
+                            "vite": "^5.4.11",
+                        },
+                    },
+                    indent=2,
+                )
+                + "\n",
+                "index.html": (
+                    "<!doctype html>\n"
+                    '<html lang="en">\n'
+                    "  <head>\n"
+                    '    <meta charset="UTF-8" />\n'
+                    f"    <title>{title}</title>\n"
+                    '    <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n'
+                    "  </head>\n"
+                    "  <body>\n"
+                    '    <div id="root"></div>\n'
+                    '    <script type="module" src="/src/main.tsx"></script>\n'
+                    "  </body>\n"
+                    "</html>\n"
+                ),
+                "src/main.tsx": (
+                    "import React from \"react\";\n"
+                    "import ReactDOM from \"react-dom/client\";\n"
+                    "import App from \"./App\";\n"
+                    "import \"./styles.css\";\n"
+                    "ReactDOM.createRoot(document.getElementById(\"root\")!).render(\n"
+                    "  <React.StrictMode>\n"
+                    "    <App />\n"
+                    "  </React.StrictMode>,\n"
+                    ");\n"
+                ),
+                "src/App.tsx": (
+                    "import React, { useMemo, useState } from \"react\";\n"
+                    "\n"
+                    "type Op = \"+\" | \"-\" | \"*\" | \"/\" | null;\n"
+                    "\n"
+                    "function compute(left: number, right: number, op: Op): number {\n"
+                    "  if (op === \"+\") return left + right;\n"
+                    "  if (op === \"-\") return left - right;\n"
+                    "  if (op === \"*\") return left * right;\n"
+                    "  if (op === \"/\") return right === 0 ? Number.NaN : left / right;\n"
+                    "  return right;\n"
+                    "}\n"
+                    "\n"
+                    "export default function App() {\n"
+                    "  const [display, setDisplay] = useState(\"0\");\n"
+                    "  const [left, setLeft] = useState<number | null>(null);\n"
+                    "  const [op, setOp] = useState<Op>(null);\n"
+                    "  const [replace, setReplace] = useState(false);\n"
+                    f"  const [history, setHistory] = useState<string[]>({ '[]' if include_history else '[]' });\n"
+                    "\n"
+                    "  const value = useMemo(() => Number(display), [display]);\n"
+                    "\n"
+                    "  function inputDigit(d: string) {\n"
+                    "    setDisplay((prev) => {\n"
+                    "      if (replace || prev === \"0\") {\n"
+                    "        setReplace(false);\n"
+                    "        return d;\n"
+                    "      }\n"
+                    "      return prev + d;\n"
+                    "    });\n"
+                    "  }\n"
+                    "\n"
+                    "  function inputDot() {\n"
+                    "    setDisplay((prev) => {\n"
+                    "      if (replace) {\n"
+                    "        setReplace(false);\n"
+                    "        return \"0.\";\n"
+                    "      }\n"
+                    "      return prev.includes(\".\") ? prev : `${prev}.`;\n"
+                    "    });\n"
+                    "  }\n"
+                    "\n"
+                    "  function clearAll() {\n"
+                    "    setDisplay(\"0\");\n"
+                    "    setLeft(null);\n"
+                    "    setOp(null);\n"
+                    "    setReplace(false);\n"
+                    "  }\n"
+                    "\n"
+                    "  function choose(next: Exclude<Op, null>) {\n"
+                    "    if (left === null) {\n"
+                    "      setLeft(value);\n"
+                    "      setOp(next);\n"
+                    "      setReplace(true);\n"
+                    "      return;\n"
+                    "    }\n"
+                    "    const out = compute(left, value, op);\n"
+                    "    setLeft(out);\n"
+                    "    setDisplay(String(Number.isFinite(out) ? out : \"Error\"));\n"
+                    "    setOp(next);\n"
+                    "    setReplace(true);\n"
+                    "  }\n"
+                    "\n"
+                    "  function evaluate() {\n"
+                    "    if (left === null || op === null) return;\n"
+                    "    const out = compute(left, value, op);\n"
+                    "    const expr = `${left} ${op} ${value} = ${Number.isFinite(out) ? out : \"Error\"}`;\n"
+                    "    setDisplay(String(Number.isFinite(out) ? out : \"Error\"));\n"
+                    "    setLeft(null);\n"
+                    "    setOp(null);\n"
+                    "    setReplace(true);\n"
+                    "    setHistory((prev) => [expr, ...prev].slice(0, 8));\n"
+                    "  }\n"
+                    "\n"
+                    "  return (\n"
+                    "    <main className=\"calc-page\">\n"
+                    "      <section className=\"calc-shell\">\n"
+                    "        <h1>Calculator</h1>\n"
+                    "        <p className=\"muted\">A clean four-function calculator scaffold.</p>\n"
+                    "        <div className=\"display\" aria-live=\"polite\">{display}</div>\n"
+                    "        <div className=\"keypad\">\n"
+                    "          <button onClick={clearAll}>AC</button>\n"
+                    "          <button onClick={() => choose(\"/\")}>/</button>\n"
+                    "          <button onClick={() => choose(\"*\")}>*</button>\n"
+                    "          <button onClick={() => choose(\"-\")}>-</button>\n"
+                    "          <button onClick={() => inputDigit(\"7\")}>7</button>\n"
+                    "          <button onClick={() => inputDigit(\"8\")}>8</button>\n"
+                    "          <button onClick={() => inputDigit(\"9\")}>9</button>\n"
+                    "          <button onClick={() => choose(\"+\")}>+</button>\n"
+                    "          <button onClick={() => inputDigit(\"4\")}>4</button>\n"
+                    "          <button onClick={() => inputDigit(\"5\")}>5</button>\n"
+                    "          <button onClick={() => inputDigit(\"6\")}>6</button>\n"
+                    "          <button onClick={evaluate} className=\"eq\">=</button>\n"
+                    "          <button onClick={() => inputDigit(\"1\")}>1</button>\n"
+                    "          <button onClick={() => inputDigit(\"2\")}>2</button>\n"
+                    "          <button onClick={() => inputDigit(\"3\")}>3</button>\n"
+                    "          <button onClick={() => inputDigit(\"0\")} className=\"zero\">0</button>\n"
+                    "          <button onClick={inputDot}>.</button>\n"
+                    "        </div>\n"
+                    f"{history_panel_block}"
+                    "      </section>\n"
+                    "    </main>\n"
+                    "  );\n"
+                    "}\n"
+                ),
+                "src/styles.css": (
+                    ":root {\n"
+                    "  font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif;\n"
+                    "  color: #e7edf7;\n"
+                    "  background: #050d15;\n"
+                    "}\n"
+                    "* { box-sizing: border-box; }\n"
+                    "body { margin: 0; min-height: 100vh; }\n"
+                    ".calc-page {\n"
+                    "  min-height: 100vh;\n"
+                    "  display: grid;\n"
+                    "  place-items: center;\n"
+                    f"  background: {'radial-gradient(circle at top, #163047, #050d15 55%)' if polished else 'linear-gradient(180deg, #10202f 0%, #050d15 75%)'};\n"
+                    "  padding: 1.25rem;\n"
+                    "}\n"
+                    ".calc-shell {\n"
+                    "  width: min(100%, 420px);\n"
+                    "  border: 1px solid rgba(255, 255, 255, 0.12);\n"
+                    "  border-radius: 18px;\n"
+                    f"  background: {'rgba(8, 16, 26, 0.9)' if polished else 'rgba(9, 17, 28, 0.86)'};\n"
+                    "  padding: 1rem;\n"
+                    f"  box-shadow: {'0 20px 50px rgba(0,0,0,0.45)' if polished else '0 14px 30px rgba(0,0,0,0.38)'};\n"
+                    "}\n"
+                    ".calc-shell h1 { margin: 0; font-size: 1.25rem; }\n"
+                    ".muted { margin: 0.25rem 0 0.8rem; color: rgba(231, 237, 247, 0.72); }\n"
+                    ".display {\n"
+                    "  width: 100%;\n"
+                    "  text-align: right;\n"
+                    "  border-radius: 12px;\n"
+                    "  border: 1px solid rgba(255, 255, 255, 0.12);\n"
+                    "  background: rgba(0, 0, 0, 0.25);\n"
+                    "  padding: 0.85rem;\n"
+                    "  font-size: 2rem;\n"
+                    "  margin-bottom: 0.85rem;\n"
+                    "}\n"
+                    ".keypad {\n"
+                    "  display: grid;\n"
+                    "  grid-template-columns: repeat(4, minmax(0, 1fr));\n"
+                    "  gap: 0.55rem;\n"
+                    "}\n"
+                    ".keypad button {\n"
+                    f"  min-height: {'3.1rem' if large_buttons else '2.55rem'};\n"
+                    "  border: 0;\n"
+                    "  border-radius: 10px;\n"
+                    "  color: #ecf3ff;\n"
+                    "  background: rgba(255, 255, 255, 0.14);\n"
+                    "  font-size: 1rem;\n"
+                    "  cursor: pointer;\n"
+                    "}\n"
+                    ".keypad button:hover { background: rgba(255, 255, 255, 0.2); }\n"
+                    ".keypad .eq { background: #27a884; }\n"
+                    ".keypad .eq:hover { background: #2fbd96; }\n"
+                    ".keypad .zero { grid-column: span 2; }\n"
+                    ".history {\n"
+                    "  margin-top: 0.9rem;\n"
+                    "  border-top: 1px solid rgba(255, 255, 255, 0.1);\n"
+                    "  padding-top: 0.7rem;\n"
+                    "}\n"
+                    ".history h2 { margin: 0 0 0.5rem; font-size: 0.9rem; color: rgba(231, 237, 247, 0.75); }\n"
+                    ".history ul { margin: 0; padding-left: 1rem; color: rgba(231, 237, 247, 0.78); }\n"
+                ),
+                "README.md": (
+                    f"# {title}\n\n"
+                    "A deterministic calculator scaffold generated by HAM chat.\n\n"
+                    "- Functional four-operation calculator\n"
+                    "- Deterministic local state logic for `+ - * /`\n"
+                    "- Optional history panel when requested by prompt\n"
+                ),
+            },
+            {
+                "template": "calculator",
+                "style_profile_id": "default",
+                "style_requested": polished or large_buttons or include_history,
+                "reference_requested": False,
+                "calculator_history_enabled": include_history,
+                "calculator_large_buttons": large_buttons,
+                "calculator_polished": polished,
             },
         )
     return ({

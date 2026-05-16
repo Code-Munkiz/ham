@@ -193,6 +193,70 @@ def test_chat_scaffold_tetris_prompt_generates_playable_game_sources(tmp_path: P
     _cleanup()
 
 
+def test_chat_scaffold_calculator_prompt_generates_functional_files(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    out = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_a",
+        session_id="sess_calc",
+        last_user_plain="start a new project and build me a clean calculator app",
+        created_by="user_1",
+    )
+    assert out and out.get("scaffolded")
+    snap_id = str(out["source_snapshot_id"])
+    rows = store.list_source_snapshots(workspace_id="ws_a", project_id="pr_a")
+    snap = next(row for row in rows if row.id == snap_id)
+    manifest = snap.manifest or {}
+    inline_files = manifest.get("inline_files")
+    assert isinstance(inline_files, dict)
+    app_tsx = str(inline_files.get("src/App.tsx") or "")
+    styles_css = str(inline_files.get("src/styles.css") or "")
+    assert "function compute(left: number, right: number, op: Op): number" in app_tsx
+    assert "<h1>Calculator</h1>" in app_tsx
+    assert "Scaffold created from your chat request." not in app_tsx
+    assert ".keypad {" in styles_css
+    _cleanup()
+
+
+def test_chat_scaffold_calculator_followup_adds_history_and_larger_buttons(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    first = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_a",
+        session_id="sess_calc_follow",
+        last_user_plain="build me a clean calculator app",
+        created_by="user_1",
+    )
+    assert first and first.get("scaffolded")
+    first_snapshot = str(first["source_snapshot_id"])
+    second = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_a",
+        session_id="sess_calc_follow",
+        last_user_plain="make the buttons larger and add a history panel",
+        created_by="user_1",
+        operation="update_existing_project",
+    )
+    assert second and second.get("scaffolded")
+    second_snapshot = str(second["source_snapshot_id"])
+    assert second_snapshot != first_snapshot
+    rows = store.list_source_snapshots(workspace_id="ws_a", project_id="pr_a")
+    latest = next(row for row in rows if row.id == second_snapshot)
+    inline_files = latest.manifest.get("inline_files")
+    assert isinstance(inline_files, dict)
+    app_tsx = str(inline_files.get("src/App.tsx") or "")
+    styles_css = str(inline_files.get("src/styles.css") or "")
+    assert "<h2>History</h2>" in app_tsx
+    assert "min-height: 3.1rem;" in styles_css
+    sources = store.list_project_sources(workspace_id="ws_a", project_id="pr_a")
+    assert sources and sources[0].active_snapshot_id == second_snapshot
+    _cleanup()
+
+
 def test_chat_scaffold_tetris_reference_prompt_applies_style_profile(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
     store = BuilderSourceStore(store_path=tmp_path / "sources.json")
@@ -413,7 +477,7 @@ def test_chat_scaffold_fingerprint_version_busts_old_dedupe(tmp_path: Path, monk
     )
     assert first and first.get("scaffolded") is True
     first_snapshot = str(first.get("source_snapshot_id") or "")
-    monkeypatch.setattr("src.ham.builder_chat_scaffold._CHAT_SCAFFOLD_FINGERPRINT_VERSION", "v4")
+    monkeypatch.setattr("src.ham.builder_chat_scaffold._CHAT_SCAFFOLD_FINGERPRINT_VERSION", "v5")
     second = maybe_chat_scaffold_for_turn(
         workspace_id="ws_a",
         project_id="pr_a",
