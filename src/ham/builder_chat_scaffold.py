@@ -21,7 +21,7 @@ from src.persistence.builder_source_store import (
 )
 
 _MANIFEST_KIND_INLINE = "inline_text_bundle"
-_CHAT_SCAFFOLD_FINGERPRINT_VERSION = "v4"
+_CHAT_SCAFFOLD_FINGERPRINT_VERSION = "v5"
 _MAX_TOTAL_TEXT = 200_000
 _MAX_FILE_BYTES = 60_000
 _MAX_FILES = 24
@@ -778,8 +778,36 @@ def _build_react_scaffold_files(
         large_buttons = bool(
             re.search(r"\b(larger|bigger|large)\s+buttons?\b", lowered)
             or re.search(r"\bbuttons?\s+(larger|bigger|large)\b", lowered)
+            or re.search(r"\b(make\s+|)(the\s+)?buttons?\s+(larger|bigger)\b", lowered)
+            or re.search(r"\bbigger\s+buttons\b", lowered)
+            or re.search(r"\bmuch\s+larger\b", lowered)
+            or (re.search(r"\bsize\b", lowered) and re.search(r"\b(increase|big|large|bigger)\b", lowered))
         )
         polished = bool(re.search(r"\b(polished|modern|clean|sleek)\b", lowered))
+        digit_area_color = False
+        if re.search(r"\b(light\s+)?(blue|cyan|sky|azure)\b", lowered):
+            digit_area_color = True
+        elif re.search(
+            r"\b(number\s+pad|numpad|digit\s+buttons|number\s+buttons)\b",
+            lowered,
+        ) and re.search(r"\b(color|colour|style|hue|shade)\b", lowered):
+            digit_area_color = True
+        keypad_css_digit_block = ""
+        if digit_area_color:
+            keypad_css_digit_block = (
+                ".calc-digit-light-blue .keypad button.ham-key-digit {\n"
+                "  background: #b8e8ff;\n"
+                "  color: #0b2239;\n"
+                "  border: 1px solid rgba(10, 50, 80, 0.35);\n"
+                "}\n"
+                ".calc-digit-light-blue .keypad button.ham-key-digit:hover {\n"
+                "  background: #d4f3ff;\n"
+                "  filter: none;\n"
+                "}\n"
+            )
+        main_class_attr = (
+            'calc-page calc-digit-light-blue' if digit_area_color else 'calc-page'
+        )
         history_panel_block = (
             "        {history.length > 0 ? (\n"
             "          <aside className=\"history\">\n"
@@ -794,6 +822,14 @@ def _build_react_scaffold_files(
             if include_history
             else ""
         )
+        readme_extras = ""
+        if digit_area_color or large_buttons:
+            lines: list[str] = []
+            if digit_area_color:
+                lines.append("- Light blue styling on digit keys when requested.")
+            if large_buttons:
+                lines.append("- Larger keypad sizing when requested.")
+            readme_extras = "\n".join(lines) + "\n"
         return (
             {
                 "package.json": json.dumps(
@@ -917,29 +953,29 @@ def _build_react_scaffold_files(
                     "  }\n"
                     "\n"
                     "  return (\n"
-                    "    <main className=\"calc-page\">\n"
+                    f"    <main className=\"{main_class_attr}\">\n"
                     "      <section className=\"calc-shell\">\n"
                     "        <h1>Calculator</h1>\n"
                     "        <p className=\"muted\">A clean four-function calculator scaffold.</p>\n"
                     "        <div className=\"display\" aria-live=\"polite\">{display}</div>\n"
                     "        <div className=\"keypad\">\n"
-                    "          <button onClick={clearAll}>AC</button>\n"
-                    "          <button onClick={() => choose(\"/\")}>/</button>\n"
-                    "          <button onClick={() => choose(\"*\")}>*</button>\n"
-                    "          <button onClick={() => choose(\"-\")}>-</button>\n"
-                    "          <button onClick={() => inputDigit(\"7\")}>7</button>\n"
-                    "          <button onClick={() => inputDigit(\"8\")}>8</button>\n"
-                    "          <button onClick={() => inputDigit(\"9\")}>9</button>\n"
-                    "          <button onClick={() => choose(\"+\")}>+</button>\n"
-                    "          <button onClick={() => inputDigit(\"4\")}>4</button>\n"
-                    "          <button onClick={() => inputDigit(\"5\")}>5</button>\n"
-                    "          <button onClick={() => inputDigit(\"6\")}>6</button>\n"
-                    "          <button onClick={evaluate} className=\"eq\">=</button>\n"
-                    "          <button onClick={() => inputDigit(\"1\")}>1</button>\n"
-                    "          <button onClick={() => inputDigit(\"2\")}>2</button>\n"
-                    "          <button onClick={() => inputDigit(\"3\")}>3</button>\n"
-                    "          <button onClick={() => inputDigit(\"0\")} className=\"zero\">0</button>\n"
-                    "          <button onClick={inputDot}>.</button>\n"
+                    "          <button type=\"button\" onClick={clearAll} className=\"ham-key-clear\">AC</button>\n"
+                    "          <button type=\"button\" onClick={() => choose(\"/\")} className=\"ham-key-op\">/</button>\n"
+                    "          <button type=\"button\" onClick={() => choose(\"*\")} className=\"ham-key-op\">*</button>\n"
+                    "          <button type=\"button\" onClick={() => choose(\"-\")} className=\"ham-key-op\">-</button>\n"
+                    "          <button type=\"button\" onClick={() => inputDigit(\"7\")} className=\"ham-key-digit\">7</button>\n"
+                    "          <button type=\"button\" onClick={() => inputDigit(\"8\")} className=\"ham-key-digit\">8</button>\n"
+                    "          <button type=\"button\" onClick={() => inputDigit(\"9\")} className=\"ham-key-digit\">9</button>\n"
+                    "          <button type=\"button\" onClick={() => choose(\"+\")} className=\"ham-key-op\">+</button>\n"
+                    "          <button type=\"button\" onClick={() => inputDigit(\"4\")} className=\"ham-key-digit\">4</button>\n"
+                    "          <button type=\"button\" onClick={() => inputDigit(\"5\")} className=\"ham-key-digit\">5</button>\n"
+                    "          <button type=\"button\" onClick={() => inputDigit(\"6\")} className=\"ham-key-digit\">6</button>\n"
+                    "          <button type=\"button\" onClick={evaluate} className=\"ham-key-eq\">=</button>\n"
+                    "          <button type=\"button\" onClick={() => inputDigit(\"1\")} className=\"ham-key-digit\">1</button>\n"
+                    "          <button type=\"button\" onClick={() => inputDigit(\"2\")} className=\"ham-key-digit\">2</button>\n"
+                    "          <button type=\"button\" onClick={() => inputDigit(\"3\")} className=\"ham-key-digit\">3</button>\n"
+                    "          <button type=\"button\" onClick={() => inputDigit(\"0\")} className=\"ham-key-digit ham-key-zero\">0</button>\n"
+                    "          <button type=\"button\" onClick={inputDot} className=\"ham-key-digit\">.</button>\n"
                     "        </div>\n"
                     f"{history_panel_block}"
                     "      </section>\n"
@@ -985,21 +1021,27 @@ def _build_react_scaffold_files(
                     ".keypad {\n"
                     "  display: grid;\n"
                     "  grid-template-columns: repeat(4, minmax(0, 1fr));\n"
-                    "  gap: 0.55rem;\n"
+                    f"  gap: {'0.7rem' if large_buttons else '0.55rem'};\n"
                     "}\n"
                     ".keypad button {\n"
-                    f"  min-height: {'3.1rem' if large_buttons else '2.55rem'};\n"
+                    f"  min-height: {'3.55rem' if large_buttons else '2.55rem'};\n"
                     "  border: 0;\n"
                     "  border-radius: 10px;\n"
                     "  color: #ecf3ff;\n"
                     "  background: rgba(255, 255, 255, 0.14);\n"
-                    "  font-size: 1rem;\n"
+                    f"  font-size: {'1.12rem' if large_buttons else '1rem'};\n"
                     "  cursor: pointer;\n"
                     "}\n"
-                    ".keypad button:hover { background: rgba(255, 255, 255, 0.2); }\n"
-                    ".keypad .eq { background: #27a884; }\n"
-                    ".keypad .eq:hover { background: #2fbd96; }\n"
-                    ".keypad .zero { grid-column: span 2; }\n"
+                    f"{keypad_css_digit_block}"
+                    ".keypad button:hover {\n"
+                    "  filter: brightness(1.07);\n"
+                    "}\n"
+                    ".calc-digit-light-blue .keypad button.ham-key-digit:hover {\n"
+                    "  filter: none;\n"
+                    "}\n"
+                    ".keypad button.ham-key-eq { background: #27a884; }\n"
+                    ".keypad button.ham-key-eq:hover { background: #2fbd96; }\n"
+                    ".keypad .ham-key-zero { grid-column: span 2; }\n"
                     ".history {\n"
                     "  margin-top: 0.9rem;\n"
                     "  border-top: 1px solid rgba(255, 255, 255, 0.1);\n"
@@ -1014,15 +1056,17 @@ def _build_react_scaffold_files(
                     "- Functional four-operation calculator\n"
                     "- Deterministic local state logic for `+ - * /`\n"
                     "- Optional history panel when requested by prompt\n"
+                    f"{readme_extras}"
                 ),
             },
             {
                 "template": "calculator",
                 "style_profile_id": "default",
-                "style_requested": polished or large_buttons or include_history,
+                "style_requested": polished or large_buttons or include_history or digit_area_color,
                 "reference_requested": False,
                 "calculator_history_enabled": include_history,
                 "calculator_large_buttons": large_buttons,
+                "calculator_light_blue_digits": digit_area_color,
                 "calculator_polished": polished,
             },
         )

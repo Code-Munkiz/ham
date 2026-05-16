@@ -251,9 +251,69 @@ def test_chat_scaffold_calculator_followup_adds_history_and_larger_buttons(tmp_p
     app_tsx = str(inline_files.get("src/App.tsx") or "")
     styles_css = str(inline_files.get("src/styles.css") or "")
     assert "<h2>History</h2>" in app_tsx
-    assert "min-height: 3.1rem;" in styles_css
+    assert "min-height: 3.55rem;" in styles_css
     sources = store.list_project_sources(workspace_id="ws_a", project_id="pr_a")
     assert sources and sources[0].active_snapshot_id == second_snapshot
+    _cleanup()
+
+
+def test_chat_scaffold_calculator_followup_light_blue_and_larger_snapshots(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    first = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_theme",
+        session_id="sess_calc_theme",
+        last_user_plain="build me a clean calculator app",
+        created_by="user_1",
+    )
+    assert first and first.get("scaffolded")
+    first_id = str(first["source_snapshot_id"])
+    snap1 = next(
+        row
+        for row in store.list_source_snapshots(workspace_id="ws_a", project_id="pr_calc_theme")
+        if row.id == first_id
+    )
+    assert str((snap1.metadata or {}).get("template")) == "calculator"
+    css1 = (snap1.manifest or {}).get("inline_files") or {}
+    assert isinstance(css1, dict)
+    assert "#b8e8ff" not in str(css1.get("src/styles.css") or "").lower()
+
+    follow = (
+        "change the colors of the number pad to light blue and make the buttons larger"
+    )
+    second = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_theme",
+        session_id="sess_calc_theme",
+        last_user_plain=follow,
+        created_by="user_1",
+        operation="update_existing_project",
+    )
+    assert second and second.get("scaffolded")
+    second_id = str(second["source_snapshot_id"])
+    assert second_id != first_id
+
+    snap2 = next(
+        row
+        for row in store.list_source_snapshots(workspace_id="ws_a", project_id="pr_calc_theme")
+        if row.id == second_id
+    )
+    md2 = snap2.metadata or {}
+    assert md2.get("calculator_large_buttons") is True
+    assert md2.get("calculator_light_blue_digits") is True
+
+    files2 = snap2.manifest.get("inline_files") if isinstance(snap2.manifest, dict) else {}
+    assert isinstance(files2, dict)
+    styles2 = str(files2.get("src/styles.css") or "").lower()
+    assert "#b8e8ff" in styles2
+    assert "min-height: 3.55rem;" in styles2
+    assert "calc-digit-light-blue" in str(files2.get("src/App.tsx") or "")
+    sources = store.list_project_sources(workspace_id="ws_a", project_id="pr_calc_theme")
+    assert sources and sources[0].active_snapshot_id == second_id
     _cleanup()
 
 
@@ -477,7 +537,7 @@ def test_chat_scaffold_fingerprint_version_busts_old_dedupe(tmp_path: Path, monk
     )
     assert first and first.get("scaffolded") is True
     first_snapshot = str(first.get("source_snapshot_id") or "")
-    monkeypatch.setattr("src.ham.builder_chat_scaffold._CHAT_SCAFFOLD_FINGERPRINT_VERSION", "v5")
+    monkeypatch.setattr("src.ham.builder_chat_scaffold._CHAT_SCAFFOLD_FINGERPRINT_VERSION", "v6")
     second = maybe_chat_scaffold_for_turn(
         workspace_id="ws_a",
         project_id="pr_a",
