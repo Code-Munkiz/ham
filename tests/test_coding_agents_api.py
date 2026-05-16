@@ -97,13 +97,19 @@ def test_planned_candidates_are_not_implemented_and_not_launchable(client: TestC
     assert rows["claude_code"]["launchable"] is False
     assert rows["claude_code"]["audit_sink"] is None
     assert rows["claude_code"]["harness_family"] == "local_cli_planned"
-    # opencode_cli is scaffolded (Mission 1): wired into shared registries
-    # but not yet launchable; live execution lands in Mission 2.
-    assert rows["opencode_cli"]["implemented"] is False
-    assert rows["opencode_cli"]["registry_status"] == "scaffolded"
-    assert rows["opencode_cli"]["launchable"] is False
+
+
+def test_opencode_cli_is_implemented_and_launchable(client: TestClient) -> None:
+    """opencode_cli is implemented: live launch route exists, harness_capabilities reflects it."""
+    res = client.get("/api/coding-agents/providers")
+    rows = {p["provider"]: p for p in res.json()["providers"]}
+    assert rows["opencode_cli"]["implemented"] is True
+    assert rows["opencode_cli"]["registry_status"] == "implemented"
+    assert rows["opencode_cli"]["launchable"] is True
+    assert rows["opencode_cli"]["supports_operator_launch"] is True
+    assert rows["opencode_cli"]["harness_family"] == "local_subprocess"
+    # No JSONL audit sink yet (ControlPlaneRun store is the record).
     assert rows["opencode_cli"]["audit_sink"] is None
-    assert rows["opencode_cli"]["harness_family"] == "local_cli_planned"
 
 
 def test_launchable_set_matches_implemented_and_supports_launch(client: TestClient) -> None:

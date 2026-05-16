@@ -264,11 +264,12 @@ def test_readiness_api_includes_opencode_provider_entry_when_available(
     normie_actor: HamActor,
     cleanup_overrides: None,
 ) -> None:
-    """Env gates on + CLI present + auth set → opencode_cli entry is available."""
+    """Env gates on + CLI present + auth + exec token → opencode_cli entry is available."""
     from src.ham.worker_adapters import opencode_adapter as _opencode_adapter
 
     monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
     monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXEC_TOKEN", "test-readiness-api-exec-token")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-opencode-canary")
     monkeypatch.setattr(
         _opencode_adapter.shutil,
@@ -282,8 +283,9 @@ def test_readiness_api_includes_opencode_provider_entry_when_available(
     oc = next(p for p in body["providers"] if p["provider"] == "opencode_cli")
     assert oc["available"] is True
     assert oc["blockers"] == []
-    # Secret value canary never leaks into the response body.
+    # Secret value canaries must never leak into the response body.
     assert "test-opencode-canary" not in res.text
+    assert "test-readiness-api-exec-token" not in res.text
 
 
 def test_readiness_api_opencode_blockers_normie_safe(

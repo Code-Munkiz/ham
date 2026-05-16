@@ -108,6 +108,7 @@ def test_readiness_configured_when_enabled_sdk_and_auth(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
+    monkeypatch.setenv("HAM_CLAUDE_AGENT_EXEC_TOKEN", "test-ca-exec-token")
     with (
         patch(
             _FAKE_READINESS_PATH,
@@ -180,6 +181,7 @@ def test_claude_agent_recommended_for_single_file_edit_when_launchable(
     SDK or environment.
     """
     monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
+    monkeypatch.setenv("HAM_CLAUDE_AGENT_EXEC_TOKEN", "test-ca-exec-token")
     with (
         patch(
             _FAKE_READINESS_PATH,

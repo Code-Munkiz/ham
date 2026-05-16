@@ -916,6 +916,7 @@ def _make_opencode_ready(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
     monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXEC_TOKEN", "test-opencode-exec-token")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-opencode-canary")
     monkeypatch.setattr(
         _opencode_adapter.shutil,
@@ -1038,6 +1039,54 @@ def test_preview_opencode_blocked_when_env_disabled(
     assert oc is not None, "opencode_cli must appear as a blocked candidate, not be absent"
     assert oc["available"] is False
     assert oc["blockers"], "opencode_cli must carry a blocker when env gates are off"
+    # Never chosen when blocked.
+    assert body["chosen"] is None or body["chosen"]["provider"] != "opencode_cli"
+    _assert_no_secret_leakage(res.text)
+
+
+def test_preview_opencode_blocked_when_exec_token_absent(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    normie_actor: HamActor,
+    tmp_path: Path,
+    cleanup_overrides: None,
+) -> None:
+    """All env gates on + CLI present + auth set, but no exec token → opencode_cli blocked."""
+    from src.ham.worker_adapters import opencode_adapter as _opencode_adapter
+
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    # Deliberately omit HAM_OPENCODE_EXEC_TOKEN.
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-opencode-canary")
+    monkeypatch.setattr(
+        _opencode_adapter.shutil,
+        "which",
+        lambda name: "/usr/local/bin/opencode" if name == "opencode" else None,
+    )
+    _opencode_adapter.reset_opencode_readiness_cache()
+    rec = _register_project(
+        isolated_store,
+        name="p_opencode_notoken",
+        root=tmp_path,
+        build_lane_enabled=True,
+        output_target="managed_workspace",
+        workspace_id="ws_opencode_notoken",
+    )
+    res = _post(
+        _client(normie_actor),
+        user_prompt="Build a new feature for the chat panel.",
+        project_id=rec.id,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    oc = next((c for c in body["candidates"] if c["provider"] == "opencode_cli"), None)
+    assert oc is not None, "opencode_cli must appear as a blocked candidate, not be absent"
+    assert oc["available"] is False
+    assert oc["blockers"], "opencode_cli must carry a blocker when exec token is absent"
+    # The blocker copy must never reveal the env var name or token value.
+    for blocker in oc["blockers"]:
+        assert "HAM_OPENCODE_EXEC_TOKEN" not in blocker
+        assert "HAM_OPENCODE" not in blocker
     # Never chosen when blocked.
     assert body["chosen"] is None or body["chosen"]["provider"] != "opencode_cli"
     _assert_no_secret_leakage(res.text)

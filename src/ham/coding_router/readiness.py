@@ -53,6 +53,8 @@ _BLOCKER_BUILD_LANE_HOST = (
 _BLOCKER_CURSOR_KEY = "Cursor team key is not configured for this workspace."
 _BLOCKER_CLAUDE_SDK = "Claude Code is not available on this host."
 _BLOCKER_CLAUDE_AUTH = "Claude Code is installed, but no authentication channel is configured."
+# Permanent blocker: claude_code has no launch route in HAM; always shown as blocked.
+_BLOCKER_CLAUDE_NOT_LAUNCHED = "Local single-file editor is coming in a future release."
 
 
 # ---------------------------------------------------------------------------
@@ -219,21 +221,19 @@ def _build_cursor_readiness(*, include_operator_details: bool) -> ProviderReadin
 def _build_claude_readiness(
     actor: HamActor | None, *, include_operator_details: bool
 ) -> ProviderReadiness:
+    # claude_code has no active launch route in HAM (planned_candidate status in
+    # harness_capabilities); it is always blocked regardless of SDK/auth state.
+    # operator_signals still surface SDK presence so operators can see readiness
+    # for when the launch route is eventually added.
     sdk_ok = _claude_sdk_available()
     auth_kind = _claude_auth_kind(actor) if sdk_ok else "none"
-    available = sdk_ok and auth_kind != "none"
-    blockers: list[str] = []
-    if not sdk_ok:
-        blockers.append(_BLOCKER_CLAUDE_SDK)
-    elif auth_kind == "none":
-        blockers.append(_BLOCKER_CLAUDE_AUTH)
     op_signals: tuple[str, ...] = ()
     if include_operator_details:
         op_signals = (f"sdk_available={sdk_ok}", f"auth_kind={auth_kind}")
     return ProviderReadiness(
         provider="claude_code",
-        available=available,
-        blockers=tuple(blockers),
+        available=False,
+        blockers=(_BLOCKER_CLAUDE_NOT_LAUNCHED,),
         operator_signals=op_signals,
     )
 

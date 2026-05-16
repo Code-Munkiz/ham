@@ -38,12 +38,17 @@ from src.ham.worker_adapters.claude_agent_adapter import (
 _LOG = logging.getLogger(__name__)
 
 CLAUDE_AGENT_ENABLED_ENV_NAME = "CLAUDE_AGENT_ENABLED"
+# Presence of this env var is required for the launch route to accept build requests.
+CLAUDE_AGENT_EXEC_TOKEN_ENV = "HAM_CLAUDE_AGENT_EXEC_TOKEN"  # noqa: S105
 CLAUDE_AGENT_REGISTRY_REVISION = "claude-agent-v1"
 
 _BLOCKER_DISABLED = "Claude Agent provider is disabled on this host."
 _BLOCKER_SDK_MISSING = "Claude Agent SDK is not installed on this host."
 _BLOCKER_NOT_CONFIGURED = "Claude Agent has no Anthropic credentials configured."
 _BLOCKER_RUNNER_UNAVAILABLE = "Claude Agent runner is not available yet."
+_BLOCKER_EXEC_TOKEN_MISSING = (
+    "Claude Agent build lane is not configured on this host. Contact your workspace operator."  # noqa: S105
+)
 
 
 def _truthy_env(name: str) -> bool:
@@ -415,6 +420,11 @@ def launch_claude_agent_coding(  # noqa: C901
         )
 
 
+def _claude_agent_exec_token_configured() -> bool:
+    """Boolean presence check for the launch exec token. Never returns the value."""
+    return bool((os.environ.get(CLAUDE_AGENT_EXEC_TOKEN_ENV) or "").strip())
+
+
 def build_claude_agent_readiness(
     actor: object | None = None,
     *,
@@ -425,7 +435,8 @@ def build_claude_agent_readiness(
     Disabled-by-default: if CLAUDE_AGENT_ENABLED is not truthy, returns
     available=False with a normie-safe blocker. Otherwise delegates SDK +
     auth presence detection to claude_agent_adapter (presence-only — no
-    secret values returned).
+    secret values returned). Also requires HAM_CLAUDE_AGENT_EXEC_TOKEN to
+    be present; absence means the launch route would reject with 403.
     """
     if not _truthy_env(CLAUDE_AGENT_ENABLED_ENV_NAME):
         return ProviderReadiness(
@@ -435,6 +446,7 @@ def build_claude_agent_readiness(
             operator_signals=(("enabled=false",) if include_operator_details else ()),
         )
     worker = check_claude_agent_readiness(actor)
+    exec_token_ok = _claude_agent_exec_token_configured()
     blockers: list[str] = []
     if not worker.sdk_available:
         blockers.append(_BLOCKER_SDK_MISSING)
@@ -442,12 +454,15 @@ def build_claude_agent_readiness(
         blockers.append(_BLOCKER_NOT_CONFIGURED)
     elif not claude_agent_mission_auth_configured(actor):
         blockers.append(_BLOCKER_NOT_CONFIGURED)
+    if not exec_token_ok and not blockers:
+        blockers.append(_BLOCKER_EXEC_TOKEN_MISSING)
     operator_signals: tuple[str, ...] = ()
     if include_operator_details:
         operator_signals = (
             "enabled=true",
             f"sdk_available={'true' if worker.sdk_available else 'false'}",
             f"auth_kind={claude_agent_coarse_provider()}",
+            f"exec_token_configured={'true' if exec_token_ok else 'false'}",
         )
     return ProviderReadiness(
         provider="claude_agent",
@@ -459,6 +474,7 @@ def build_claude_agent_readiness(
 
 __all__ = [
     "CLAUDE_AGENT_ENABLED_ENV_NAME",
+    "CLAUDE_AGENT_EXEC_TOKEN_ENV",
     "CLAUDE_AGENT_REGISTRY_REVISION",
     "ClaudeAgentLaunchResult",
     "build_claude_agent_readiness",

@@ -40,6 +40,8 @@ _LOG = logging.getLogger(__name__)
 
 OPENCODE_EXECUTION_ENABLED_ENV_NAME = "HAM_OPENCODE_EXECUTION_ENABLED"
 OPENCODE_ALLOW_DELETIONS_ENV_NAME = "HAM_OPENCODE_ALLOW_DELETIONS"
+# Presence of this env var is required for the launch proxy to accept build requests.
+OPENCODE_EXEC_TOKEN_ENV = "HAM_OPENCODE_EXEC_TOKEN"  # noqa: S105
 OPENCODE_REGISTRY_REVISION = "opencode-v1"
 
 _BLOCKER_DISABLED = "OpenCode provider is disabled on this host."
@@ -47,6 +49,9 @@ _BLOCKER_CLI_MISSING = "OpenCode CLI is not installed on this host."
 _BLOCKER_AUTH_MISSING = "OpenCode has no model-provider credentials configured."
 _BLOCKER_NOT_IMPLEMENTED = "OpenCode live execution is not yet enabled on this host."
 _BLOCKER_EXECUTION_DISABLED = "OpenCode execution is paused for this host. An admin must enable it."
+_BLOCKER_EXEC_TOKEN_MISSING = (
+    "OpenCode build lane is not configured on this host. Contact your workspace operator."  # noqa: S105
+)
 
 
 def _truthy_env(name: str) -> bool:
@@ -519,6 +524,11 @@ def _persist_output_requires_review_opencode(
     )
 
 
+def _opencode_exec_token_configured() -> bool:
+    """Boolean presence check for the launch-proxy exec token. Never returns the value."""
+    return bool((os.environ.get(OPENCODE_EXEC_TOKEN_ENV) or "").strip())
+
+
 def build_opencode_readiness(
     actor: object | None = None,
     *,
@@ -530,6 +540,8 @@ def build_opencode_readiness(
     - ``HAM_OPENCODE_ENABLED`` is truthy
     - ``HAM_OPENCODE_EXECUTION_ENABLED`` is truthy
     - :func:`check_opencode_readiness` returns ``OpenCodeStatus.CONFIGURED``
+    - ``HAM_OPENCODE_EXEC_TOKEN`` is present in the process environment
+      (required by the launch proxy; absence means launch would fail with 503)
     """
     enabled = _truthy_env(OPENCODE_ENABLED_ENV_NAME)
     execution_enabled = _truthy_env(OPENCODE_EXECUTION_ENABLED_ENV_NAME)
@@ -545,6 +557,7 @@ def build_opencode_readiness(
             ),
         )
     readiness = check_opencode_readiness(actor)
+    exec_token_ok = _opencode_exec_token_configured()
     blockers: list[str] = []
     if readiness.status == OpenCodeStatus.CLI_MISSING:
         blockers.append(_BLOCKER_CLI_MISSING)
@@ -554,8 +567,15 @@ def build_opencode_readiness(
         blockers.append(_BLOCKER_NOT_IMPLEMENTED)
     if not execution_enabled and not blockers:
         blockers.append(_BLOCKER_EXECUTION_DISABLED)
+    if not exec_token_ok and not blockers:
+        blockers.append(_BLOCKER_EXEC_TOKEN_MISSING)
 
-    available = enabled and execution_enabled and readiness.status == OpenCodeStatus.CONFIGURED
+    available = (
+        enabled
+        and execution_enabled
+        and exec_token_ok
+        and readiness.status == OpenCodeStatus.CONFIGURED
+    )
 
     operator_signals: tuple[str, ...] = ()
     if include_operator_details:
@@ -564,6 +584,7 @@ def build_opencode_readiness(
             f"execution_enabled={'true' if execution_enabled else 'false'}",
             f"cli_present={'true' if readiness.cli_present else 'false'}",
             f"status={readiness.status.value}",
+            f"exec_token_configured={'true' if exec_token_ok else 'false'}",
         )
     return ProviderReadiness(
         provider="opencode_cli",
@@ -577,6 +598,7 @@ __all__ = [
     "OPENCODE_ALLOW_DELETIONS_ENV_NAME",
     "OPENCODE_ENABLED_ENV_NAME",
     "OPENCODE_EXECUTION_ENABLED_ENV_NAME",
+    "OPENCODE_EXEC_TOKEN_ENV",
     "OPENCODE_REGISTRY_REVISION",
     "OpenCodeLaunchResult",
     "build_opencode_readiness",

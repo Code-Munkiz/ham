@@ -425,6 +425,7 @@ def test_build_opencode_readiness_reports_available_when_fully_configured(
 ) -> None:
     monkeypatch.setenv(OPENCODE_ENABLED_ENV_NAME, "1")
     monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXEC_TOKEN", "test-readiness-exec-token")
     monkeypatch.setenv("OPENROUTER_API_KEY", _AUTH_CANARY)
     _patch_which_present(monkeypatch)
     pr = build_opencode_readiness(actor=None, include_operator_details=False)
@@ -462,11 +463,12 @@ def test_build_opencode_readiness_reports_execution_disabled_blocker(
 def test_recommender_promotes_opencode_when_all_gates_pass_and_managed_workspace(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Both env gates + CONFIGURED readiness + managed_workspace project → opencode in candidates."""
+    """Both env gates + exec token + CONFIGURED readiness + managed_workspace → opencode available."""
     from src.ham.coding_router.types import ProjectFlags, WorkspaceReadiness
 
     monkeypatch.setenv(OPENCODE_ENABLED_ENV_NAME, "1")
     monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXEC_TOKEN", "test-readiness-exec-token")
     monkeypatch.setenv("OPENROUTER_API_KEY", _AUTH_CANARY)
     _patch_which_present(monkeypatch)
     base = collate_readiness(actor=None, project_id=None, include_operator_details=False)
@@ -499,11 +501,12 @@ def test_recommender_promotes_opencode_when_all_gates_pass_and_managed_workspace
 def test_recommender_blocks_opencode_when_output_target_is_github_pr(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Full env gates + CONFIGURED readiness + project output_target=github_pr → opencode blocked."""
+    """Full env gates + exec token + CONFIGURED readiness + github_pr → opencode blocked."""
     from src.ham.coding_router.types import ProjectFlags, WorkspaceReadiness
 
     monkeypatch.setenv(OPENCODE_ENABLED_ENV_NAME, "1")
     monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXEC_TOKEN", "test-readiness-exec-token")
     monkeypatch.setenv("OPENROUTER_API_KEY", _AUTH_CANARY)
     _patch_which_present(monkeypatch)
     base = collate_readiness(actor=None, project_id=None, include_operator_details=False)

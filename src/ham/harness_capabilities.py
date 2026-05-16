@@ -4,11 +4,11 @@ Read-only harness capability registry (vocabulary only).
 This module mirrors ``docs/HARNESS_PROVIDER_CONTRACT.md`` — no dispatch, no provider
 runtime imports, and no Claude Code / OpenCode (or other) launch implementation.
 
-The ``claude_code`` row stays ``planned_candidate`` until a provider adapter PR
-lands. ``opencode_cli`` is ``scaffolded``: the readiness adapter, disabled launch
-shim, and conductor wiring exist, but live execution does not. See
-``docs/OPENCODE_PROVIDER.md`` for the Mission 1/2/3 plan and
-``docs/OPENCODE_VERIFICATION.md`` if/when it is added.
+The ``claude_code`` row stays ``planned_candidate`` until a provider adapter PR lands;
+it has no launch route in HAM and ``is_provider_launchable`` always returns ``False``
+for it. ``opencode_cli`` is ``implemented``: a live launch route exists at
+``/api/opencode/build/launch`` and ``/api/opencode/build/launch_proxy``, backed by
+:func:`src.ham.coding_router.opencode_provider.launch_opencode_coding`.
 
 Planned / candidate rows use ``registry_status=planned_candidate`` and ``implemented=False``;
 ``ControlPlaneRun`` / ``ControlPlaneProvider`` may not include such providers until wired.
@@ -159,44 +159,43 @@ def _rows() -> dict[str, HarnessCapabilityRow]:
         ),
         "opencode_cli": HarnessCapabilityRow(
             provider="opencode_cli",
-            display_name="OpenCode CLI (scaffolded)",
-            harness_family="local_cli_planned",
-            # Mission 1: readiness adapter + disabled launch shim + conductor wiring
-            # exist, but no live execution path is wired. Promote to ``implemented``
-            # only after Mission 2 (serve adapter, per-run XDG isolation, SSE
-            # permission interception, HAM-enforced deletion guard) lands.
-            registry_status="scaffolded",
-            implemented=False,
+            display_name="OpenCode CLI",
+            harness_family="local_subprocess",
+            registry_status="implemented",
+            implemented=True,
             requires_local_root=True,
             requires_remote_repo=False,
-            supports_operator_preview=False,
-            supports_operator_launch=False,
+            supports_operator_preview=True,
+            supports_operator_launch=True,
+            # Status is polled via HAM's ControlPlaneRun store, not via opencode serve SSE.
             supports_status_poll=False,
             supports_follow_up=False,
-            returns_stable_external_id=False,
+            # ham_run_id is assigned at launch and persisted in ControlPlaneRun.
+            returns_stable_external_id=True,
             requires_provider_side_auth=True,
+            # No per-run JSONL audit sink yet; ControlPlaneRun persistence is the record.
             audit_sink=None,
-            digest_family="TBD (Mission 2)",
-            base_revision_source="TBD (Mission 2)",
-            status_mapping="TBD event-based via opencode serve SSE; not map_cursor_raw_status",
+            digest_family="opencode_v1 (HAM-local; no provider-side digest)",
+            base_revision_source="opencode_provider.OPENCODE_REGISTRY_REVISION",
+            status_mapping="opencode_provider._status_reason_from_run (event-based via serve)",
             topology_note=(
-                "Scaffolded: Mission 2 targets ``opencode serve`` (HTTP/OpenAPI) with per-run "
-                "XDG_DATA_HOME isolation, SSE permission interception, and HAM-enforced "
-                "deletion guard at the snapshot-promotion boundary. ACP NDJSON adapter is "
-                "fast-follow; plain CLI/TUI is diagnostic only."
+                "Implemented: ``opencode serve`` (HTTP/OpenAPI) with per-run XDG_DATA_HOME "
+                "isolation, HAM-enforced deletion guard at the snapshot-promotion boundary, "
+                "and managed_workspace snapshot emission. Gated by HAM_OPENCODE_ENABLED, "
+                "HAM_OPENCODE_EXECUTION_ENABLED, and HAM_OPENCODE_EXEC_TOKEN."
             ),
             capabilities=MappingProxyType(
                 {
-                    "managed_workspace": "planned",
+                    "managed_workspace": "implemented",
                     "github_pr": "later",
                     "custom_builder_profiles": "planned",
-                    "local_or_byom_models": "planned",
-                    "live_execution": False,
+                    "local_or_byom_models": "implemented",
+                    "live_execution": True,
                 }
             ),
             integration_modes=MappingProxyType(
                 {
-                    "serve": "planned_primary",
+                    "serve": "implemented_primary",
                     "acp": "planned_fast_follow",
                     "cli": "diagnostic_only",
                 }

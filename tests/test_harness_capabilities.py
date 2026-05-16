@@ -27,18 +27,21 @@ def test_registry_keys_and_implemented() -> None:
         "cursor_cloud_agent",
         "factory_droid",
         "claude_agent",
+        "opencode_cli",
     }
     assert PLANNED_CANDIDATE_PROVIDERS == {"claude_code"}
     oc = get_harness_capability("opencode_cli")
     assert oc is not None
-    assert oc.implemented is False
-    assert oc.registry_status == "scaffolded"
+    assert oc.implemented is True
+    assert oc.registry_status == "implemented"
+    assert oc.supports_operator_launch is True
+    assert oc.harness_family == "local_subprocess"
     assert oc.integration_modes == {
-        "serve": "planned_primary",
+        "serve": "implemented_primary",
         "acp": "planned_fast_follow",
         "cli": "diagnostic_only",
     }
-    assert oc.capabilities.get("live_execution") is False
+    assert oc.capabilities.get("live_execution") is True
     cc = get_harness_capability("claude_code")
     assert cc is not None
     assert cc.implemented is False
@@ -51,11 +54,12 @@ def test_registry_keys_and_implemented() -> None:
     for p in ControlPlaneProvider:
         row = get_harness_capability(p.value)
         assert row is not None
-        if row.registry_status == "scaffolded":
-            assert row.implemented is False
-            continue
         assert row.implemented is True
-        assert row.audit_sink is not None
+        # opencode_cli does not yet have a JSONL audit sink (uses ControlPlaneRun store).
+        if row.audit_sink is None:
+            assert p.value == "opencode_cli", f"unexpected None audit_sink for {p.value!r}"
+        else:
+            assert isinstance(row.audit_sink, str)
 
 
 def test_planned_candidates_have_no_audit_sink_or_runtime_seam() -> None:
@@ -83,17 +87,12 @@ def test_planned_candidates_are_not_launchable() -> None:
     assert is_provider_launchable("") is False
 
 
-def test_scaffolded_providers_are_not_launchable() -> None:
-    """Scaffolded providers (e.g. opencode_cli) are wired into shared tables but
-    not yet executable, so is_provider_launchable() must still return False."""
-    assert is_provider_launchable("opencode_cli") is False
-
-
 def test_implemented_providers_are_launchable() -> None:
     """All implemented providers must remain launchable."""
     assert is_provider_launchable("cursor_cloud_agent") is True
     assert is_provider_launchable("factory_droid") is True
     assert is_provider_launchable("claude_agent") is True
+    assert is_provider_launchable("opencode_cli") is True
 
 
 def test_claude_agent_in_control_plane_enum() -> None:

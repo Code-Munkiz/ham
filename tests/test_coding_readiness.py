@@ -48,6 +48,12 @@ def _isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "ANTHROPIC_VERTEX_PROJECT_ID",
         "GCLOUD_PROJECT",
         "GOOGLE_CLOUD_PROJECT",
+        "HAM_OPENCODE_ENABLED",
+        "HAM_OPENCODE_EXECUTION_ENABLED",
+        "HAM_OPENCODE_EXEC_TOKEN",
+        "OPENROUTER_API_KEY",
+        "CLAUDE_AGENT_ENABLED",
+        "HAM_CLAUDE_AGENT_EXEC_TOKEN",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -305,11 +311,12 @@ def test_public_dict_never_leaks_secrets(
 def test_opencode_readiness_reports_available_when_fully_configured(
     monkeypatch: pytest.MonkeyPatch, isolated_store: ProjectStore
 ) -> None:
-    """Env gates on + CLI present + auth set → snapshot's opencode_cli row available."""
+    """Env gates on + CLI present + auth + exec token → opencode_cli available."""
     from src.ham.worker_adapters import opencode_adapter as _opencode_adapter
 
     monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
     monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXEC_TOKEN", "test-readiness-exec-token")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-opencode-canary")
     monkeypatch.setattr(
         _opencode_adapter.shutil,
@@ -323,18 +330,43 @@ def test_opencode_readiness_reports_available_when_fully_configured(
     assert oc.blockers == ()
 
 
+def test_opencode_readiness_blocked_when_exec_token_absent(
+    monkeypatch: pytest.MonkeyPatch, isolated_store: ProjectStore
+) -> None:
+    """All gates satisfied except HAM_OPENCODE_EXEC_TOKEN → opencode_cli blocked."""
+    from src.ham.worker_adapters import opencode_adapter as _opencode_adapter
+
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    # Deliberately omit HAM_OPENCODE_EXEC_TOKEN.
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-opencode-canary")
+    monkeypatch.setattr(
+        _opencode_adapter.shutil,
+        "which",
+        lambda name: "/usr/local/bin/opencode" if name == "opencode" else None,
+    )
+    _opencode_adapter.reset_opencode_readiness_cache()
+    snap = collate_readiness()
+    oc = _provider(snap, "opencode_cli")
+    assert oc.available is False
+    assert oc.blockers
+    # Blocker copy must be normie-safe — no env var name or token value.
+    for blocker in oc.blockers:
+        assert "HAM_OPENCODE_EXEC_TOKEN" not in blocker
+        assert "HAM_OPENCODE" not in blocker
+
+
 def test_opencode_readiness_blockers_normie_safe(
     monkeypatch: pytest.MonkeyPatch, isolated_store: ProjectStore
 ) -> None:
     """Mirror the per-builder lock at the collator level for defence-in-depth."""
-    monkeypatch.delenv("HAM_OPENCODE_ENABLED", raising=False)
-    monkeypatch.delenv("HAM_OPENCODE_EXECUTION_ENABLED", raising=False)
     snap = collate_readiness()
     oc = _provider(snap, "opencode_cli")
     for blocker in oc.blockers:
         for forbidden in (
             "HAM_OPENCODE_ENABLED",
             "HAM_OPENCODE_EXECUTION_ENABLED",
+            "HAM_OPENCODE_EXEC_TOKEN",
             "OPENROUTER_API_KEY",
             "ANTHROPIC_API_KEY",
             "/usr/",
@@ -343,3 +375,45 @@ def test_opencode_readiness_blockers_normie_safe(
             "subprocess",
         ):
             assert forbidden not in blocker, (forbidden, blocker)
+
+
+def test_claude_code_always_blocked_no_launch_route(
+    monkeypatch: pytest.MonkeyPatch, isolated_store: ProjectStore
+) -> None:
+    """claude_code has no active launch route; it must always be blocked regardless of SDK/auth."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-readiness-only")
+    snap = collate_readiness()
+    cc = _provider(snap, "claude_code")
+    assert cc.available is False
+    assert cc.blockers
+    # The blocker copy must be normie-safe.
+    for blocker in cc.blockers:
+        assert "ANTHROPIC_API_KEY" not in blocker
+        assert "launch_route" not in blocker.lower()
+
+
+def test_claude_agent_readiness_blocked_when_exec_token_absent(
+    monkeypatch: pytest.MonkeyPatch, isolated_store: ProjectStore
+) -> None:
+    """CLAUDE_AGENT_ENABLED + SDK + auth but no exec token → claude_agent blocked."""
+    from unittest.mock import patch
+
+    monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
+    # Deliberately omit HAM_CLAUDE_AGENT_EXEC_TOKEN.
+    with (
+        patch(
+            "src.ham.coding_router.claude_agent_provider.check_claude_agent_readiness",
+            return_value=type("W", (), {"sdk_available": True, "authenticated": True})(),
+        ),
+        patch(
+            "src.ham.coding_router.claude_agent_provider.claude_agent_mission_auth_configured",
+            return_value=True,
+        ),
+    ):
+        from src.ham.coding_router.claude_agent_provider import build_claude_agent_readiness
+
+        pr = build_claude_agent_readiness()
+    assert pr.available is False
+    assert pr.blockers
+    for blocker in pr.blockers:
+        assert "HAM_CLAUDE_AGENT_EXEC_TOKEN" not in blocker

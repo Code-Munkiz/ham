@@ -766,6 +766,7 @@ def test_conductor_allow_opencode_true_unblocks_opencode_when_platform_ready(
     monkeypatch.setenv("HAM_CODING_AGENT_SETTINGS_LOCAL_PATH", str(tmp_path / "agent_settings"))
     monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
     monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXEC_TOKEN", "test-oc-exec-token")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-only-not-deployed-key")
 
     store = isolated_store
@@ -816,6 +817,7 @@ def test_conductor_prefer_open_custom_boosts_opencode_when_eligible(
     monkeypatch.setenv("HAM_CODING_AGENT_SETTINGS_LOCAL_PATH", str(tmp_path / "agent_settings"))
     monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
     monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXEC_TOKEN", "test-oc-exec-token")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-only-not-deployed-key")
 
     store = isolated_store
