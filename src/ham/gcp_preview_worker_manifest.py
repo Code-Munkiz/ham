@@ -99,6 +99,7 @@ def build_gke_preview_pod_manifest(
     ephemeral_storage_request: str = "2Gi",
     pod_name_prefix: str = "ham-preview",
     service_account_name: str = "ham-preview-runner",
+    preview_deploy_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Build a Pod manifest suitable for GKE Sandbox / gVisor (runtimeClassName ``gvisor``).
@@ -124,7 +125,12 @@ def build_gke_preview_pod_manifest(
         .replace("+00:00", "Z")
     )
 
-    name_seed = sanitize_dns_label(runtime_session_id, max_len=48)
+    deploy_tag = ""
+    raw_seed = runtime_session_id
+    if preview_deploy_id and str(preview_deploy_id).strip():
+        deploy_tag = sanitize_dns_label(str(preview_deploy_id).strip(), max_len=28)
+        raw_seed = f"{runtime_session_id}-{deploy_tag}"
+    name_seed = sanitize_dns_label(raw_seed, max_len=48)
     pod_name = sanitize_dns_label(f"{pod_name_prefix}-{name_seed}", max_len=63)
 
     labels = {
@@ -136,6 +142,8 @@ def build_gke_preview_pod_manifest(
         "ham.expires_at": sanitize_dns_label(expires_iso.replace(":", "-"), max_len=63),
         "ham.preview_ttl_seconds": str(ttl_seconds),
     }
+    if deploy_tag:
+        labels["ham.preview_deploy_id"] = deploy_tag[:63]
 
     annotations = {
         "ham.dev/source-bundle-uri": bundle_gs_uri[:2048],

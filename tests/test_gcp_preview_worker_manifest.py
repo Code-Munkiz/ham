@@ -75,6 +75,36 @@ def test_manifest_rejects_traversal_workspace_id() -> None:
         )
 
 
+def test_manifest_pod_name_changes_when_preview_deploy_id_set() -> None:
+    baseline = build_gke_preview_pod_manifest(
+        workspace_id="ws_demo_alpha",
+        project_id="proj_demo_alpha",
+        runtime_session_id="rs_demo_alpha",
+        namespace="ham-builder-preview-spike",
+        bundle_gs_uri="gs://bucket/prefix/preview-source.zip",
+        runner_image="us-central1-docker.pkg.dev/proj/ham/ham-preview-runner:spike",
+    )
+    with_deploy = build_gke_preview_pod_manifest(
+        workspace_id="ws_demo_alpha",
+        project_id="proj_demo_alpha",
+        runtime_session_id="rs_demo_alpha",
+        namespace="ham-builder-preview-spike",
+        bundle_gs_uri="gs://bucket/prefix/preview-source-new.zip",
+        runner_image="us-central1-docker.pkg.dev/proj/ham/ham-preview-runner:spike",
+        preview_deploy_id="crjb_followup_deploy_1",
+    )
+    meta_b = baseline["metadata"]
+    meta_d = with_deploy["metadata"]
+    assert meta_b["name"] != meta_d["name"]
+    assert meta_d["labels"]["ham.preview_deploy_id"]
+    ann_b = baseline["spec"]["containers"][0].get("env") or []
+    ann_d = with_deploy["spec"]["containers"][0].get("env") or []
+    uri_b = next((e for e in ann_b if e.get("name") == "PREVIEW_SOURCE_URI"), None)
+    uri_d = next((e for e in ann_d if e.get("name") == "PREVIEW_SOURCE_URI"), None)
+    assert uri_b and uri_d
+    assert uri_b["value"] != uri_d["value"]
+
+
 def test_manifest_yaml_roundtrip_has_no_bearer_tokens() -> None:
     doc = build_gke_preview_pod_manifest(
         workspace_id="ws_demo_alpha",

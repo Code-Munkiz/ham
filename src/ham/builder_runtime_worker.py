@@ -838,6 +838,7 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
                 runner_image=str(os.environ.get("HAM_BUILDER_PREVIEW_RUNNER_IMAGE") or ""),
                 preview_port=cfg.default_port,
                 ttl_seconds=cfg.ttl_seconds,
+                preview_deploy_id=str(job.id or "").strip() or None,
             )
             lifecycle_stage = "create_preview_pod"
             gke_resource = gke_client.create_preview_pod(manifest=manifest)

@@ -458,25 +458,37 @@ class LiveGkePreviewRuntimeClient:
         _ = manifest
         labels = dict(pod_ref.labels or {})
         runtime_label = str(labels.get("ham.runtime_session_id") or "").strip()
+        deploy_label = str(labels.get("ham.preview_deploy_id") or "").strip()
         if not runtime_label:
             return None
+        selector: dict[str, str]
+        if deploy_label:
+            selector = {
+                "ham.runtime_session_id": runtime_label,
+                "ham.preview_deploy_id": deploy_label,
+            }
+        else:
+            selector = {"ham.runtime_session_id": runtime_label}
         service_name = f"{pod_ref.pod_name[:52]}-svc"
+        svc_labels: dict[str, str] = {
+            "app.kubernetes.io/name": "ham-builder-preview",
+            "ham.runtime_session_id": runtime_label,
+            "ham.workspace_id": str(labels.get("ham.workspace_id") or ""),
+            "ham.project_id": str(labels.get("ham.project_id") or ""),
+        }
+        if deploy_label:
+            svc_labels["ham.preview_deploy_id"] = deploy_label
         svc_manifest: dict[str, Any] = {
             "apiVersion": "v1",
             "kind": "Service",
             "metadata": {
                 "name": service_name,
                 "namespace": pod_ref.namespace,
-                "labels": {
-                    "app.kubernetes.io/name": "ham-builder-preview",
-                    "ham.runtime_session_id": runtime_label,
-                    "ham.workspace_id": str(labels.get("ham.workspace_id") or ""),
-                    "ham.project_id": str(labels.get("ham.project_id") or ""),
-                },
+                "labels": svc_labels,
             },
             "spec": {
                 "type": "ClusterIP",
-                "selector": {"ham.runtime_session_id": runtime_label},
+                "selector": selector,
                 "ports": [{"name": "http", "port": 80, "targetPort": 3000, "protocol": "TCP"}],
             },
         }
