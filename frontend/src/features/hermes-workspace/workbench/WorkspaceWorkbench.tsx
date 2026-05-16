@@ -121,7 +121,7 @@ export function WorkspaceWorkbench({
       )}
       aria-label="Workspace workbench"
     >
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] px-2.5 py-2">
+      <div className="relative z-[250] flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] px-2.5 py-2">
         <div
           ref={tabStripRef}
           data-hww-workbench-tab-strip
