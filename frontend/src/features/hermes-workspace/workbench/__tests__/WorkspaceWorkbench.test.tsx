@@ -20,6 +20,9 @@ const {
   getBuilderLocalRunProfileMock,
   listBuilderVisualEditRequestsMock,
   createBuilderVisualEditRequestMock,
+  listBuilderSnapshotFilesMock,
+  getBuilderSnapshotFileContentMock,
+  postBuilderSnapshotFileChatMock,
   saveBuilderLocalRunProfileMock,
   deleteBuilderLocalRunProfileMock,
   postBuilderLocalPreviewMock,
@@ -42,6 +45,9 @@ const {
   getBuilderLocalRunProfileMock: vi.fn(),
   listBuilderVisualEditRequestsMock: vi.fn(),
   createBuilderVisualEditRequestMock: vi.fn(),
+  listBuilderSnapshotFilesMock: vi.fn(),
+  getBuilderSnapshotFileContentMock: vi.fn(),
+  postBuilderSnapshotFileChatMock: vi.fn(),
   saveBuilderLocalRunProfileMock: vi.fn(),
   deleteBuilderLocalRunProfileMock: vi.fn(),
   postBuilderLocalPreviewMock: vi.fn(),
@@ -73,6 +79,10 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
       listBuilderVisualEditRequestsMock(...args),
     createBuilderVisualEditRequest: (...args: unknown[]) =>
       createBuilderVisualEditRequestMock(...args),
+    listBuilderSnapshotFiles: (...args: unknown[]) => listBuilderSnapshotFilesMock(...args),
+    getBuilderSnapshotFileContent: (...args: unknown[]) =>
+      getBuilderSnapshotFileContentMock(...args),
+    postBuilderSnapshotFileChat: (...args: unknown[]) => postBuilderSnapshotFileChatMock(...args),
     saveBuilderLocalRunProfile: (...args: unknown[]) => saveBuilderLocalRunProfileMock(...args),
     deleteBuilderLocalRunProfile: (...args: unknown[]) => deleteBuilderLocalRunProfileMock(...args),
     postBuilderLocalPreview: (...args: unknown[]) => postBuilderLocalPreviewMock(...args),
@@ -309,6 +319,30 @@ describe("WorkspaceWorkbench", () => {
         metadata: {},
       },
     });
+    listBuilderSnapshotFilesMock.mockResolvedValue({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      source_snapshot_id: "ssnp_1",
+      files: [{ path: "client/src/App.tsx", size_bytes: 1200, type: "file", language: "tsx" }],
+    });
+    getBuilderSnapshotFileContentMock.mockResolvedValue({
+      project_id: "proj_abc",
+      source_snapshot_id: "ssnp_1",
+      path: "client/src/App.tsx",
+      content: "export default function App() { return <div>Hi</div>; }",
+      size_bytes: 56,
+      encoding: "utf-8",
+      language: "tsx",
+      readonly: false,
+    });
+    postBuilderSnapshotFileChatMock.mockResolvedValue({
+      project_id: "proj_abc",
+      previous_snapshot_id: "ssnp_1",
+      new_snapshot_id: "ssnp_2",
+      changed_files: ["client/src/App.tsx"],
+      preview_refresh_requested: true,
+      assistant_message: "Applied file-scoped edit request for `client/src/App.tsx`.",
+    });
     saveBuilderLocalRunProfileMock.mockResolvedValue({
       workspace_id: "ws_abc",
       project_id: "proj_abc",
@@ -397,6 +431,131 @@ describe("WorkspaceWorkbench", () => {
     fireEvent.click(screen.getByTestId("hww-workbench-tab-code"));
     expect(screen.getByTestId("hww-workbench-panel-code")).toBeInTheDocument();
     expect(screen.getByTestId("hww-workbench-tab-code").getAttribute("data-active")).toBe("true");
+  });
+
+  it("Code tab renders files and scoped file context", async () => {
+    listBuilderProjectSourcesMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      sources: [
+        {
+          id: "psrc_1",
+          project_id: "proj_abc",
+          workspace_id: "ws_abc",
+          kind: "chat_scaffold",
+          status: "ready",
+          display_name: "Chat scaffold",
+          origin_ref: "ham_chat",
+          active_snapshot_id: "ssnp_1",
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+          created_by: "user_a",
+          metadata: {},
+        },
+      ],
+    });
+    listBuilderSourceSnapshotsMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      source_snapshots: [
+        {
+          id: "ssnp_1",
+          project_id: "proj_abc",
+          workspace_id: "ws_abc",
+          project_source_id: "psrc_1",
+          status: "materialized",
+          digest_sha256: "abc",
+          size_bytes: 123,
+          artifact_uri: "builder-artifact://bzip_1",
+          manifest: {},
+          created_at: "2026-01-01T00:00:00Z",
+          created_by: "user_a",
+          metadata: {},
+        },
+      ],
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByTestId("hww-workbench-tab-code"));
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-code-file-row")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId("hww-code-file-row"));
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-code-file-content")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("hww-code-active-snapshot")).toHaveTextContent("ssnp_1");
+  });
+
+  it("Code tab file chat edit submits and shows changed files", async () => {
+    listBuilderProjectSourcesMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      sources: [
+        {
+          id: "psrc_1",
+          project_id: "proj_abc",
+          workspace_id: "ws_abc",
+          kind: "chat_scaffold",
+          status: "ready",
+          display_name: "Chat scaffold",
+          origin_ref: "ham_chat",
+          active_snapshot_id: "ssnp_1",
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+          created_by: "user_a",
+          metadata: {},
+        },
+      ],
+    });
+    listBuilderSourceSnapshotsMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      source_snapshots: [
+        {
+          id: "ssnp_1",
+          project_id: "proj_abc",
+          workspace_id: "ws_abc",
+          project_source_id: "psrc_1",
+          status: "materialized",
+          digest_sha256: "abc",
+          size_bytes: 123,
+          artifact_uri: "builder-artifact://bzip_1",
+          manifest: {},
+          created_at: "2026-01-01T00:00:00Z",
+          created_by: "user_a",
+          metadata: {},
+        },
+      ],
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByTestId("hww-workbench-tab-code"));
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-code-file-row")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId("hww-code-file-row"));
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-code-file-chat-input")).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByTestId("hww-code-file-chat-input"), {
+      target: { value: "Make the buttons larger." },
+    });
+    fireEvent.click(screen.getByTestId("hww-code-file-chat-submit"));
+    await waitFor(() => {
+      expect(postBuilderSnapshotFileChatMock).toHaveBeenCalledWith("ws_abc", "proj_abc", "ssnp_1", {
+        path: "client/src/App.tsx",
+        user_message: "Make the buttons larger.",
+        mode: "edit",
+      });
+    });
+    expect(screen.getByTestId("hww-code-file-chat-changed")).toHaveTextContent("client/src/App.tsx");
   });
 
   it("Preview shows not-connected state and no iframe", async () => {

@@ -10,6 +10,7 @@ import { ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   appendChatSessionTurns,
+  createBuilderWorkspaceProject,
   createChatSession,
   downloadChatSessionPdf,
   ensureBuilderDefaultProject,
@@ -401,6 +402,18 @@ function isFollowUpBrowserInstruction(text: string): boolean {
   return /\b(click|scroll|type|select|open that|what do you see|what does this page|read the page)\b/.test(
     t,
   );
+}
+
+function isExplicitNewBuilderProjectPrompt(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (!t) return false;
+  return [
+    /\bstart a new project\b/,
+    /\bcreate a new project\b/,
+    /\bbuild me a new\b/,
+    /\bcreate a new app\b/,
+    /\bnew app\b/,
+  ].some((pattern) => pattern.test(t));
 }
 
 function buildSafeSearchUrl(text: string): string {
@@ -2441,6 +2454,22 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
 
       const streamAuth: HamChatStreamAuth | undefined = await workspaceChatAdapter.getStreamAuth();
       try {
+        let effectiveProjectId = projectId;
+        if (
+          requestWorkspaceId?.trim() &&
+          plainOutbound &&
+          isExplicitNewBuilderProjectPrompt(plainOutbound)
+        ) {
+          try {
+            const created = await createBuilderWorkspaceProject(requestWorkspaceId.trim());
+            effectiveProjectId = created.project_id;
+            setProjectId(created.project_id);
+            setHamProjectId(created.project_id);
+            setWorkbenchBounce((x) => x + 1);
+          } catch {
+            // Fall back to active project if project isolation provisioning fails.
+          }
+        }
         let execPrefEffective: "auto" | "browser" | "machine" | "chat" = executionModePreference;
         if (
           desktopShell &&
@@ -2466,7 +2495,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
               },
             ],
             ...(chatModelIdForApi ? { model_id: chatModelIdForApi } : {}),
-            ...(projectId ? { project_id: projectId } : {}),
+            ...(effectiveProjectId ? { project_id: effectiveProjectId } : {}),
             workbench_mode: "agent",
             worker: "builder",
             max_mode: false,

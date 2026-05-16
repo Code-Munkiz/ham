@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import io
 import zipfile
 from datetime import UTC, datetime
@@ -720,13 +721,141 @@ def test_builder_inline_snapshot_files_list_and_content(tmp_path: Path) -> None:
     assert r_list.status_code == 200, r_list.text
     body = r_list.json()
     assert body["source_snapshot_id"] == snap_id
-    assert len(body["files"]) == 1
-    assert body["files"][0]["path"] == "src/App.tsx"
+    assert len(body["files"]) == 2
+    leaf = [row for row in body["files"] if row.get("type") == "file"]
+    assert len(leaf) == 1
+    assert leaf[0]["path"] == "src/App.tsx"
     r_content = client.get(
         f"/api/workspaces/{ws_id}/projects/{project.id}/builder/source-snapshots/{snap_id}/files/content",
         params={"path": "src/App.tsx"},
     )
     assert r_content.status_code == 200, r_content.text
     assert r_content.json()["content"] == "abc"
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+
+
+def test_builder_create_workspace_project_route_creates_isolated_project(tmp_path: Path) -> None:
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    set_project_store_for_tests(project_store)
+    set_builder_source_store_for_tests(BuilderSourceStore(store_path=tmp_path / "builder_sources.json"))
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+
+    res = client.post(f"/api/workspaces/{ws_id}/builder/projects")
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["workspace_id"] == ws_id
+    assert body["project_id"]
+    assert body["project"]["metadata"]["workspace_id"] == ws_id
+    assert body["project"]["metadata"]["ham_builder_kind"] == "chat_builder_project"
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+
+
+def test_builder_snapshot_file_chat_explain_mode_returns_message_without_snapshot(tmp_path: Path) -> None:
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    project = project_store.make_record(name="alpha-project", root=str(tmp_path), metadata={"workspace_id": ws_id})
+    project_store.register(project)
+    set_project_store_for_tests(project_store)
+    builder_store = BuilderSourceStore(store_path=tmp_path / "builder_sources.json")
+    source = builder_store.upsert_project_source(ProjectSource(workspace_id=ws_id, project_id=project.id))
+    snap = builder_store.upsert_source_snapshot(
+        SourceSnapshot(
+            workspace_id=ws_id,
+            project_id=project.id,
+            project_source_id=source.id,
+            manifest={
+                "kind": "inline_text_bundle",
+                "entries": [{"path": "client/src/App.tsx", "size_bytes": 12}],
+                "inline_files": {"client/src/App.tsx": "export {};\n"},
+            },
+        )
+    )
+    set_builder_source_store_for_tests(builder_store)
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+
+    text = "export {};\n"
+    content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project.id}/builder/source-snapshots/{snap.id}/files/chat",
+        json={
+            "path": "client/src/App.tsx",
+            "user_message": "Explain this file.",
+            "current_content": content_hash,
+            "mode": "explain",
+        },
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["project_id"] == project.id
+    assert body["previous_snapshot_id"] == snap.id
+    assert body["new_snapshot_id"] is None
+    assert body["changed_files"] == []
+    assert "Scoped to `client/src/App.tsx`" in body["assistant_message"]
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+
+
+def test_builder_snapshot_file_chat_edit_mode_creates_new_snapshot(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    project = project_store.make_record(name="alpha-project", root=str(tmp_path), metadata={"workspace_id": ws_id})
+    project_store.register(project)
+    set_project_store_for_tests(project_store)
+    builder_store = BuilderSourceStore(store_path=tmp_path / "builder_sources.json")
+    source = builder_store.upsert_project_source(
+        ProjectSource(
+            workspace_id=ws_id,
+            project_id=project.id,
+            kind="chat_scaffold",
+            metadata={"chat_scaffold": "1"},
+        )
+    )
+    snap = builder_store.upsert_source_snapshot(
+        SourceSnapshot(
+            workspace_id=ws_id,
+            project_id=project.id,
+            project_source_id=source.id,
+            manifest={
+                "kind": "inline_text_bundle",
+                "entries": [{"path": "src/App.tsx", "size_bytes": 20}],
+                "inline_files": {"src/App.tsx": "export default function App() { return null; }\n"},
+            },
+        )
+    )
+    source.active_snapshot_id = snap.id
+    builder_store.upsert_project_source(source)
+    set_builder_source_store_for_tests(builder_store)
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project.id}/builder/source-snapshots/{snap.id}/files/chat",
+        json={
+            "path": "src/App.tsx",
+            "user_message": "make the buttons larger and add a history panel",
+            "mode": "edit",
+        },
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["project_id"] == project.id
+    assert body["previous_snapshot_id"] == snap.id
+    assert body["new_snapshot_id"]
+    assert body["new_snapshot_id"] != snap.id
+    assert isinstance(body["changed_files"], list)
+    snapshots = builder_store.list_source_snapshots(workspace_id=ws_id, project_id=project.id)
+    assert any(row.id == body["new_snapshot_id"] for row in snapshots)
+
     set_project_store_for_tests(None)
     set_builder_source_store_for_tests(None)

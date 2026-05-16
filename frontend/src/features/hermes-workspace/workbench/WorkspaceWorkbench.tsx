@@ -49,6 +49,7 @@ import {
   listBuilderProjectSources,
   listBuilderSnapshotFiles,
   listBuilderSourceSnapshots,
+  postBuilderSnapshotFileChat,
   postBuilderLocalPreview,
   requestBuilderCloudRuntime,
   saveBuilderLocalRunProfile,
@@ -255,6 +256,7 @@ export function WorkspaceWorkbench({
             projectId={projectId}
             sourceRefreshKey={sourceRefreshKey}
             onAddProjectSource={() => setProjectSourceOpen(true)}
+            onSnapshotUpdated={() => setSourceRefreshKey((prev) => prev + 1)}
           />
         ) : null}
         {activeTab === "database" ? <WorkbenchDatabasePanel /> : null}
@@ -1960,6 +1962,7 @@ type WorkbenchCodePanelProps = {
   projectId?: string | null;
   sourceRefreshKey: number;
   onAddProjectSource: () => void;
+  onSnapshotUpdated: () => void;
 };
 
 function WorkbenchCodePanel({
@@ -1967,14 +1970,48 @@ function WorkbenchCodePanel({
   projectId = null,
   sourceRefreshKey,
   onAddProjectSource,
+  onSnapshotUpdated,
 }: WorkbenchCodePanelProps) {
   const [snapshots, setSnapshots] = React.useState<BuilderSourceSnapshotRecord[]>([]);
   const [sources, setSources] = React.useState<BuilderProjectSourceRecord[]>([]);
-  const [files, setFiles] = React.useState<Array<{ path: string; size_bytes: number }>>([]);
+  const [files, setFiles] = React.useState<
+    Array<{ path: string; size_bytes: number; type?: "file" | "directory"; language?: string | null }>
+  >([]);
+  const [activeSnapshotId, setActiveSnapshotId] = React.useState<string | null>(null);
   const [selectedPath, setSelectedPath] = React.useState<string | null>(null);
   const [content, setContent] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
+  const [fileChatMessage, setFileChatMessage] = React.useState("");
+  const [fileChatMode, setFileChatMode] = React.useState<"edit" | "explain">("edit");
+  const [fileChatBusy, setFileChatBusy] = React.useState(false);
+  const [fileChatResult, setFileChatResult] = React.useState<string | null>(null);
+  const [changedFiles, setChangedFiles] = React.useState<string[]>([]);
+
+  const loadSnapshotFiles = React.useCallback(
+    async (ws: string, pid: string, snapId: string) => {
+      const manifest = await listBuilderSnapshotFiles(ws, pid, snapId);
+      const rows = (manifest.files || []).map((f) => ({
+        path: f.path,
+        size_bytes: f.size_bytes,
+        type: f.type ?? (f.is_dir ? "directory" : "file"),
+        language: f.language ?? null,
+      }));
+      const fileRows = rows.filter((f) => f.type !== "directory");
+      setFiles(rows);
+      const nextPath =
+        selectedPath && fileRows.some((f) => f.path === selectedPath) ? selectedPath : (fileRows[0]?.path ?? null);
+      setSelectedPath(nextPath);
+      setActiveSnapshotId(snapId);
+      if (!nextPath) {
+        setContent(null);
+        return;
+      }
+      const body = await getBuilderSnapshotFileContent(ws, pid, snapId, nextPath);
+      setContent(body.content);
+    },
+    [selectedPath],
+  );
 
   React.useEffect(() => {
     const ws = workspaceId?.trim() || "";
@@ -1983,9 +2020,12 @@ function WorkbenchCodePanel({
       setSnapshots([]);
       setSources([]);
       setFiles([]);
+      setActiveSnapshotId(null);
       setSelectedPath(null);
       setContent(null);
       setErr(null);
+      setFileChatResult(null);
+      setChangedFiles([]);
       return;
     }
     let cancelled = false;
@@ -2005,26 +2045,17 @@ function WorkbenchCodePanel({
         const snapId = active || (snaps[0]?.id ?? null);
         if (!snapId) {
           setFiles([]);
+          setActiveSnapshotId(null);
           setSelectedPath(null);
           setContent(null);
           return;
         }
-        const manifest = await listBuilderSnapshotFiles(ws, pid, snapId);
-        if (cancelled) return;
-        const rows = (manifest.files || []).filter((f) => !f.is_dir);
-        setFiles(rows);
-        const first = rows[0]?.path ?? null;
-        setSelectedPath(first);
-        if (first) {
-          const body = await getBuilderSnapshotFileContent(ws, pid, snapId, first);
-          if (!cancelled) setContent(body.content);
-        } else {
-          setContent(null);
-        }
+        await loadSnapshotFiles(ws, pid, snapId);
       } catch (e) {
         if (!cancelled) {
           setErr(e instanceof Error ? e.message : String(e));
           setFiles([]);
+          setActiveSnapshotId(null);
           setContent(null);
         }
       } finally {
@@ -2034,12 +2065,12 @@ function WorkbenchCodePanel({
     return () => {
       cancelled = true;
     };
-  }, [workspaceId, projectId, sourceRefreshKey]);
+  }, [workspaceId, projectId, sourceRefreshKey, loadSnapshotFiles]);
 
   const ws = workspaceId?.trim() || "";
   const pid = projectId?.trim() || "";
   const activeSnapId =
-    sources.find((s) => s.active_snapshot_id)?.active_snapshot_id || snapshots[0]?.id || null;
+    activeSnapshotId || sources.find((s) => s.active_snapshot_id)?.active_snapshot_id || snapshots[0]?.id || null;
 
   React.useEffect(() => {
     if (!ws || !pid || !activeSnapId || !selectedPath) {
@@ -2047,15 +2078,53 @@ function WorkbenchCodePanel({
       return;
     }
     let cancelled = false;
-    void getBuilderSnapshotFileContent(ws, pid, activeSnapId, selectedPath).then((b) => {
-      if (!cancelled) setContent(b.content);
-    });
+    void getBuilderSnapshotFileContent(ws, pid, activeSnapId, selectedPath)
+      .then((b) => {
+        if (!cancelled) setContent(b.content);
+      })
+      .catch(() => {
+        if (!cancelled) setContent(null);
+      });
     return () => {
       cancelled = true;
     };
   }, [ws, pid, activeSnapId, selectedPath]);
 
   const hasSnapshot = Boolean(activeSnapId);
+  const handleFileChat = React.useCallback(async () => {
+    if (!ws || !pid || !activeSnapId || !selectedPath) return;
+    const prompt = fileChatMessage.trim();
+    if (!prompt) return;
+    setFileChatBusy(true);
+    setFileChatResult(null);
+    setChangedFiles([]);
+    try {
+      const out = await postBuilderSnapshotFileChat(ws, pid, activeSnapId, {
+        path: selectedPath,
+        user_message: prompt,
+        mode: fileChatMode,
+      });
+      setFileChatResult(out.assistant_message);
+      setChangedFiles(out.changed_files || []);
+      if (out.new_snapshot_id) {
+        await loadSnapshotFiles(ws, pid, out.new_snapshot_id);
+        onSnapshotUpdated();
+      }
+    } catch (e) {
+      setFileChatResult(e instanceof Error ? e.message : String(e));
+    } finally {
+      setFileChatBusy(false);
+    }
+  }, [
+    ws,
+    pid,
+    activeSnapId,
+    selectedPath,
+    fileChatMessage,
+    fileChatMode,
+    loadSnapshotFiles,
+    onSnapshotUpdated,
+  ]);
 
   return (
     <MutedPanel>
@@ -2077,23 +2146,27 @@ function WorkbenchCodePanel({
         </p>
       ) : null}
       {hasSnapshot ? (
-        <div className="grid min-h-[220px] gap-2 rounded-lg border border-white/[0.08] bg-black/25 md:grid-cols-2">
+        <div className="grid min-h-[260px] gap-2 rounded-lg border border-white/[0.08] bg-black/25 md:grid-cols-[minmax(180px,1fr)_minmax(0,2fr)]">
           <div className="border-b border-white/[0.06] p-2 md:border-b-0 md:border-r md:border-white/[0.06]">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Files</p>
             <ul className="mt-2 max-h-[320px] space-y-1 overflow-y-auto text-[11px]">
               {files.map((f) => (
                 <li key={f.path}>
-                  <button
-                    type="button"
-                    data-testid="hww-code-file-row"
-                    className={cn(
-                      "w-full truncate rounded px-1 py-0.5 text-left",
-                      selectedPath === f.path ? "bg-emerald-500/15 text-white" : "text-white/70",
-                    )}
-                    onClick={() => setSelectedPath(f.path)}
-                  >
-                    {f.path}
-                  </button>
+                  {f.type === "directory" ? (
+                    <p className="truncate rounded px-1 py-0.5 text-white/40">{f.path}</p>
+                  ) : (
+                    <button
+                      type="button"
+                      data-testid="hww-code-file-row"
+                      className={cn(
+                        "w-full truncate rounded px-1 py-0.5 text-left",
+                        selectedPath === f.path ? "bg-emerald-500/15 text-white" : "text-white/70",
+                      )}
+                      onClick={() => setSelectedPath(f.path)}
+                    >
+                      {f.path}
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -2103,17 +2176,92 @@ function WorkbenchCodePanel({
               Viewer
             </p>
             {selectedPath ? (
-              <pre
-                className="mt-2 max-h-[360px] overflow-auto whitespace-pre-wrap rounded border border-white/[0.08] bg-black/40 p-2 text-[11px] text-white/85"
-                data-testid="hww-code-file-content"
-              >
-                {content ?? "…"}
-              </pre>
+              <>
+                <p className="mt-1 text-[10px] text-white/50" data-testid="hww-code-active-file-path">
+                  {selectedPath}
+                </p>
+                <pre
+                  className="mt-2 max-h-[250px] overflow-auto whitespace-pre-wrap rounded border border-white/[0.08] bg-black/40 p-2 text-[11px] text-white/85"
+                  data-testid="hww-code-file-content"
+                >
+                  {content ?? "…"}
+                </pre>
+                <div className="mt-3 space-y-2 rounded border border-white/[0.08] bg-black/35 p-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">
+                    Chat with file
+                  </p>
+                  <p className="text-[11px] text-white/55">
+                    Scoped to <span className="text-white/75">{selectedPath}</span>
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={fileChatMode === "edit" ? "default" : "secondary"}
+                      className="h-7 text-[10px]"
+                      onClick={() => setFileChatMode("edit")}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={fileChatMode === "explain" ? "default" : "secondary"}
+                      className="h-7 text-[10px]"
+                      onClick={() => setFileChatMode("explain")}
+                    >
+                      Explain
+                    </Button>
+                  </div>
+                  <textarea
+                    value={fileChatMessage}
+                    onChange={(event) => setFileChatMessage(event.target.value)}
+                    placeholder={
+                      fileChatMode === "edit"
+                        ? "Describe the file edit for this file..."
+                        : "Ask what this file does..."
+                    }
+                    className="min-h-[76px] w-full rounded border border-white/[0.1] bg-black/40 px-2 py-1.5 text-[11px] text-white/90 outline-none focus:border-emerald-400/40"
+                    data-testid="hww-code-file-chat-input"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-7 text-[10px]"
+                    data-testid="hww-code-file-chat-submit"
+                    disabled={fileChatBusy || !fileChatMessage.trim()}
+                    onClick={() => void handleFileChat()}
+                  >
+                    {fileChatBusy ? "Working..." : "Chat with file"}
+                  </Button>
+                  {fileChatResult ? (
+                    <p
+                      className="rounded border border-white/[0.08] bg-black/40 px-2 py-1.5 text-[11px] text-white/75"
+                      data-testid="hww-code-file-chat-result"
+                    >
+                      {fileChatResult}
+                    </p>
+                  ) : null}
+                  {changedFiles.length > 0 ? (
+                    <p
+                      className="text-[10px] text-emerald-200/85"
+                      data-testid="hww-code-file-chat-changed"
+                    >
+                      Changed: {changedFiles.join(", ")}
+                    </p>
+                  ) : null}
+                </div>
+              </>
             ) : (
               <p className="mt-2 text-white/45">Select a file.</p>
             )}
           </div>
         </div>
+      ) : null}
+      {activeSnapId ? (
+        <p className="text-[10px] text-white/40" data-testid="hww-code-active-snapshot">
+          Project `{pid}` · Snapshot `{activeSnapId}`
+        </p>
       ) : null}
       <p className="text-white/55">
         Use <span className="font-medium text-white/65">Add project source</span> for a full ZIP

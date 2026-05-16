@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import io
 import hashlib
 import hmac
 import inspect
@@ -12,6 +13,7 @@ import re
 import shlex
 import time
 import uuid
+import zipfile
 from ipaddress import ip_address
 from datetime import UTC, datetime
 from pathlib import Path
@@ -180,6 +182,10 @@ def _source_snapshot_for_project_or_404(
 
 _SNAPSHOT_LISTING_CAP = 512
 _SNAPSHOT_CONTENT_MAX_BYTES = 262_144
+_FILE_CHAT_MESSAGE_MAX_CHARS = 4_000
+_FILE_CHAT_SELECTED_TEXT_MAX_CHARS = 16_000
+_FILE_CHAT_CONTENT_HASH_MAX_CHARS = 128
+_FILE_CHAT_SNAPSHOT_DIFF_CAP = 2_048
 
 
 def _artifact_stem_from_uri(artifact_uri: str) -> str | None:
@@ -1538,6 +1544,15 @@ class CloudRuntimeJobPayload(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class BuilderFileChatPayload(BaseModel):
+    path: str = Field(min_length=1, max_length=2048)
+    selected_text: str | None = Field(default=None, max_length=_FILE_CHAT_SELECTED_TEXT_MAX_CHARS)
+    user_message: str = Field(min_length=1, max_length=_FILE_CHAT_MESSAGE_MAX_CHARS)
+    current_content: str | None = Field(default=None, max_length=_FILE_CHAT_CONTENT_HASH_MAX_CHARS)
+    mode: Literal["explain", "edit"] = "edit"
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class BuilderActivityItem(BaseModel):
     id: str
     kind: str
@@ -2387,6 +2402,272 @@ def _build_activity_items(*, workspace_id: str, project_id: str) -> list[Builder
     return items
 
 
+def _safe_workspace_segment(raw: str) -> str:
+    base = re.sub(r"[^A-Za-z0-9._-]", "-", str(raw or "").strip()).strip("-._")
+    return base or "workspace"
+
+
+def _normalize_snapshot_rel_path(raw: str) -> str:
+    norm = str(raw or "").replace("\\", "/").strip().lstrip("/")
+    if not norm or ".." in norm.split("/"):
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "FILE_PATH_INVALID", "message": "path must stay within the project source tree."}},
+        )
+    return norm
+
+
+def _language_hint_for_path(path: str) -> str | None:
+    ext = Path(path).suffix.strip().lower()
+    if not ext:
+        return None
+    return ext[1:] if ext.startswith(".") else ext
+
+
+def _inline_snapshot_files_map(snapshot: SourceSnapshot) -> dict[str, str]:
+    manifest = snapshot.manifest or {}
+    if str(manifest.get("kind") or "") != "inline_text_bundle":
+        return {}
+    raw_files = manifest.get("inline_files")
+    if not isinstance(raw_files, dict):
+        return {}
+    out: dict[str, str] = {}
+    for key, value in raw_files.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            continue
+        norm = key.replace("\\", "/").lstrip("/")
+        if not norm or ".." in norm.split("/"):
+            continue
+        out[norm] = value
+    return out
+
+
+def _manifest_entries_with_dirs(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[tuple[str, str]] = set()
+    out: list[dict[str, Any]] = []
+    for row in entries[:_SNAPSHOT_LISTING_CAP]:
+        path = str(row.get("path") or "").replace("\\", "/").lstrip("/")
+        if not path:
+            continue
+        is_dir = bool(row.get("is_dir"))
+        size = int(row.get("size_bytes") or 0)
+        parts = path.split("/")
+        if len(parts) > 1:
+            prefix = ""
+            for part in parts[:-1]:
+                prefix = f"{prefix}/{part}" if prefix else part
+                key = ("directory", prefix)
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append({"path": prefix, "type": "directory", "size_bytes": 0, "language": None})
+        item_type = "directory" if is_dir else "file"
+        key = (item_type, path)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(
+            {
+                "path": path,
+                "type": item_type,
+                "size_bytes": size,
+                "language": None if is_dir else _language_hint_for_path(path),
+            }
+        )
+    out.sort(key=lambda row: (row["path"].count("/"), row["path"]))
+    return out[:_SNAPSHOT_LISTING_CAP]
+
+
+def _snapshot_tree_entries(snapshot: SourceSnapshot) -> list[dict[str, Any]]:
+    manifest = snapshot.manifest or {}
+    kind = str(manifest.get("kind") or "")
+    entries = manifest.get("entries")
+    if not isinstance(entries, list):
+        entries = []
+    if kind == "inline_text_bundle":
+        inline_files = _inline_snapshot_files_map(snapshot)
+        from_entries: list[dict[str, Any]] = []
+        if entries:
+            from_entries = [e for e in entries if isinstance(e, dict)]
+        else:
+            for rel_path, text in inline_files.items():
+                from_entries.append({"path": rel_path, "size_bytes": len(text.encode("utf-8")), "is_dir": False})
+        return _manifest_entries_with_dirs(from_entries)
+    rows: list[dict[str, Any]] = []
+    for item in entries:
+        if isinstance(item, dict) and isinstance(item.get("path"), str):
+            rows.append(
+                {
+                    "path": item["path"],
+                    "size_bytes": int(item.get("size_bytes") or 0),
+                    "is_dir": bool(item.get("is_dir")),
+                }
+            )
+    return _manifest_entries_with_dirs(rows)
+
+
+def _sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _snapshot_file_text_or_404(*, workspace_id: str, project_id: str, snapshot: SourceSnapshot, path: str) -> str:
+    from src.ham.builder_chat_scaffold import (
+        load_zip_bytes_for_snapshot,
+        read_inline_snapshot_file,
+        read_zip_snapshot_file_bytes,
+    )
+
+    kind = str((snapshot.manifest or {}).get("kind") or "")
+    if kind == "inline_text_bundle":
+        hit = read_inline_snapshot_file(snapshot=snapshot, rel_path=path)
+        if hit is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": {"code": "FILE_NOT_FOUND", "message": "File not found in snapshot."}},
+            )
+        return hit[0]
+    stem = _artifact_stem_from_uri(snapshot.artifact_uri) or str((snapshot.metadata or {}).get("artifact_id") or "").strip()
+    if not stem:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "ARTIFACT_NOT_FOUND", "message": "Snapshot has no artifact."}},
+        )
+    zbytes = load_zip_bytes_for_snapshot(workspace_id=workspace_id, project_id=project_id, artifact_id=stem)
+    if zbytes is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "ARTIFACT_NOT_FOUND", "message": "ZIP artifact missing."}},
+        )
+    raw = read_zip_snapshot_file_bytes(zip_bytes=zbytes, rel_path=path, max_out=_SNAPSHOT_CONTENT_MAX_BYTES)
+    if raw is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "FILE_NOT_FOUND", "message": "File not found in archive."}},
+        )
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(
+            status_code=415,
+            detail={"error": {"code": "BINARY_FILE", "message": "Binary files are not shown."}},
+        ) from exc
+
+
+def _files_manifest_entries_from_inline(inline_files: dict[str, str]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for rel_path, text in sorted(inline_files.items()):
+        rows.append({"path": rel_path, "size_bytes": len(text.encode("utf-8"))})
+    return rows
+
+
+def _rewrite_zip_file_content(*, payload: bytes, rel_path: str, replacement_text: str) -> tuple[bytes, list[dict[str, Any]], bool]:
+    src = io.BytesIO(payload)
+    out = io.BytesIO()
+    replaced = False
+    entries: list[dict[str, Any]] = []
+    with zipfile.ZipFile(src, mode="r") as reader:
+        with zipfile.ZipFile(out, mode="w", compression=zipfile.ZIP_DEFLATED) as writer:
+            for info in reader.infolist():
+                name = str(info.filename or "").replace("\\", "/").lstrip("/")
+                if not name:
+                    continue
+                if info.is_dir():
+                    entries.append({"path": name.rstrip("/") + "/", "size_bytes": 0, "is_dir": True})
+                    writer.writestr(f"{name.rstrip('/')}/", b"")
+                    continue
+                blob = reader.read(info)
+                if name == rel_path:
+                    blob = replacement_text.encode("utf-8")
+                    replaced = True
+                writer.writestr(name, blob)
+                entries.append({"path": name, "size_bytes": len(blob), "is_dir": False})
+            if not replaced:
+                raise HTTPException(
+                    status_code=404,
+                    detail={"error": {"code": "FILE_NOT_FOUND", "message": "File not found in archive."}},
+                )
+    return out.getvalue(), entries, replaced
+
+
+def _snapshot_text_map_for_diff(*, workspace_id: str, project_id: str, snapshot: SourceSnapshot) -> dict[str, str]:
+    from src.ham.builder_chat_scaffold import load_zip_bytes_for_snapshot
+
+    kind = str((snapshot.manifest or {}).get("kind") or "")
+    if kind == "inline_text_bundle":
+        return _inline_snapshot_files_map(snapshot)
+    stem = _artifact_stem_from_uri(snapshot.artifact_uri) or str((snapshot.metadata or {}).get("artifact_id") or "").strip()
+    if not stem:
+        return {}
+    zbytes = load_zip_bytes_for_snapshot(workspace_id=workspace_id, project_id=project_id, artifact_id=stem)
+    if zbytes is None:
+        return {}
+    out: dict[str, str] = {}
+    try:
+        with zipfile.ZipFile(io.BytesIO(zbytes), mode="r") as zf:
+            for info in zf.infolist():
+                if info.is_dir():
+                    continue
+                norm = str(info.filename or "").replace("\\", "/").lstrip("/")
+                if not norm or ".." in norm.split("/"):
+                    continue
+                if info.file_size > _SNAPSHOT_CONTENT_MAX_BYTES:
+                    continue
+                raw = zf.read(info)
+                if len(raw) > _SNAPSHOT_CONTENT_MAX_BYTES:
+                    continue
+                try:
+                    out[norm] = raw.decode("utf-8")
+                except UnicodeDecodeError:
+                    continue
+                if len(out) >= _FILE_CHAT_SNAPSHOT_DIFF_CAP:
+                    break
+    except (OSError, zipfile.BadZipFile, RuntimeError):
+        return {}
+    return out
+
+
+def _changed_paths(prev: dict[str, str], nxt: dict[str, str]) -> list[str]:
+    changed: list[str] = []
+    keys = sorted(set(prev.keys()) | set(nxt.keys()))
+    for key in keys:
+        if prev.get(key) != nxt.get(key):
+            changed.append(key)
+        if len(changed) >= _FILE_CHAT_SNAPSHOT_DIFF_CAP:
+            break
+    return changed
+
+
+def _file_explain_message(*, path: str, content: str, selected_text: str | None, user_message: str) -> str:
+    lines = content.splitlines()
+    line_count = len(lines)
+    char_count = len(content)
+    selected_note = ""
+    if selected_text:
+        selected_chars = len(selected_text)
+        selected_note = f" Selected snippet length: {selected_chars} chars."
+    request = _safe_text(user_message, fallback="Explain this file.")
+    return (
+        f"Scoped to `{path}`. {request}\n\n"
+        f"- Approx size: {char_count} chars across {line_count} lines.\n"
+        f"- Language hint: `{_language_hint_for_path(path) or 'plain-text'}`."
+        f"{selected_note}"
+    )
+
+
+def _looks_like_new_project_prompt(text: str) -> bool:
+    low = str(text or "").strip().lower()
+    if not low:
+        return False
+    patterns = (
+        r"\bstart a new project\b",
+        r"\bcreate a new project\b",
+        r"\bbuild me a new\b",
+        r"\bcreate a new app\b",
+        r"\bnew app\b",
+    )
+    return any(re.search(p, low) for p in patterns)
+
+
 @router.get("/api/workspaces/{workspace_id}/projects/{project_id}/builder/sources")
 async def list_project_sources(
     project_id: str,
@@ -2435,8 +2716,37 @@ async def ensure_default_builder_project_route(
     }
 
 
+@router.post("/api/workspaces/{workspace_id}/builder/projects")
+async def create_builder_workspace_project(
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_WRITE))],
+) -> dict[str, Any]:
+    store = get_project_store()
+    segment = _safe_workspace_segment(ctx.workspace_id)
+    suffix = uuid.uuid4().hex[:10]
+    root = (Path.home() / ".ham" / "builder-virtual" / segment / f"project-{suffix}").resolve()
+    project = store.make_record(
+        name=f"builder-{suffix}",
+        root=str(root),
+        description="HAM isolated builder workspace project.",
+        metadata={
+            "workspace_id": ctx.workspace_id,
+            "ham_builder_kind": "chat_builder_project",
+            "created_via": "workspace_builder_new_project",
+        },
+    )
+    store.register(project)
+    return {
+        "workspace_id": ctx.workspace_id,
+        "project_id": project.id,
+        "project": project.model_dump(mode="json"),
+    }
+
+
 @router.get(
     "/api/workspaces/{workspace_id}/projects/{project_id}/builder/source-snapshots/{snapshot_id}/files",
+)
+@router.get(
+    "/api/workspaces/{workspace_id}/projects/{project_id}/source-snapshots/{snapshot_id}/files",
 )
 async def list_builder_snapshot_files(
     project_id: str,
@@ -2448,29 +2758,7 @@ async def list_builder_snapshot_files(
         project_id=project_id,
         snapshot_id=snapshot_id,
     )
-    manifest = snap.manifest or {}
-    files_out: list[dict[str, Any]] = []
-    kind = str(manifest.get("kind") or "")
-    if kind == "inline_text_bundle":
-        entries = manifest.get("entries")
-        if isinstance(entries, list):
-            for e in entries[:_SNAPSHOT_LISTING_CAP]:
-                if isinstance(e, dict) and isinstance(e.get("path"), str):
-                    files_out.append(
-                        {"path": e["path"], "size_bytes": int(e.get("size_bytes") or 0)},
-                    )
-    else:
-        entries = manifest.get("entries")
-        if isinstance(entries, list):
-            for e in entries[:_SNAPSHOT_LISTING_CAP]:
-                if isinstance(e, dict) and isinstance(e.get("path"), str):
-                    files_out.append(
-                        {
-                            "path": e["path"],
-                            "size_bytes": int(e.get("size_bytes") or 0),
-                            "is_dir": bool(e.get("is_dir")),
-                        },
-                    )
+    files_out = _snapshot_tree_entries(snap)
     return {
         "workspace_id": ctx.workspace_id,
         "project_id": project_id,
@@ -2482,87 +2770,140 @@ async def list_builder_snapshot_files(
 @router.get(
     "/api/workspaces/{workspace_id}/projects/{project_id}/builder/source-snapshots/{snapshot_id}/files/content",
 )
+@router.get(
+    "/api/workspaces/{workspace_id}/projects/{project_id}/source-snapshots/{snapshot_id}/files/content",
+)
 async def read_builder_snapshot_file_content(
     ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
     project_id: str,
     snapshot_id: str,
     path: str = Query(..., min_length=1, max_length=2048),
 ) -> dict[str, Any]:
-    from src.ham.builder_chat_scaffold import (
-        load_zip_bytes_for_snapshot,
-        read_inline_snapshot_file,
-        read_zip_snapshot_file_bytes,
-    )
-
     snap = _source_snapshot_for_project_or_404(
         workspace_id=ctx.workspace_id,
         project_id=project_id,
         snapshot_id=snapshot_id,
     )
-    manifest = snap.manifest or {}
-    kind = str(manifest.get("kind") or "")
-
-
-    if kind == "inline_text_bundle":
-        hit = read_inline_snapshot_file(snapshot=snap, rel_path=path)
-        if hit is None:
-            raise HTTPException(
-                status_code=404,
-                detail={
-                    "error": {
-                        "code": "FILE_NOT_FOUND",
-                        "message": "File not found in snapshot.",
-                    },
-                },
-            )
-        text, nbytes = hit
-        return {
-            "path": path.replace("\\", "/").lstrip("/"),
-            "encoding": "utf-8",
-            "content": text,
-            "size_bytes": nbytes,
-        }
-    stem = _artifact_stem_from_uri(snap.artifact_uri) or str(
-        (snap.metadata or {}).get("artifact_id") or "",
-    ).strip()
-    if not stem:
-        raise HTTPException(
-            status_code=404,
-            detail={"error": {"code": "ARTIFACT_NOT_FOUND", "message": "Snapshot has no artifact."}},
-        )
-    zbytes = load_zip_bytes_for_snapshot(
+    safe_path = _normalize_snapshot_rel_path(path)
+    text = _snapshot_file_text_or_404(
         workspace_id=ctx.workspace_id,
         project_id=project_id,
-        artifact_id=stem,
+        snapshot=snap,
+        path=safe_path,
     )
-    if zbytes is None:
-        raise HTTPException(
-            status_code=404,
-            detail={"error": {"code": "ARTIFACT_NOT_FOUND", "message": "ZIP artifact missing."}},
-        )
-    raw = read_zip_snapshot_file_bytes(
-        zip_bytes=zbytes,
-        rel_path=path,
-        max_out=_SNAPSHOT_CONTENT_MAX_BYTES,
-    )
-    if raw is None:
-        raise HTTPException(
-            status_code=404,
-            detail={"error": {"code": "FILE_NOT_FOUND", "message": "File not found in archive."}},
-        )
-    try:
-        text = raw.decode("utf-8")
-    except UnicodeDecodeError:
-        raise HTTPException(
-            status_code=415,
-            detail={"error": {"code": "BINARY_FILE", "message": "Binary files are not shown."}},
-        ) from None
     return {
-        "path": path.replace("\\", "/").lstrip("/"),
+        "project_id": project_id,
+        "source_snapshot_id": snap.id,
+        "path": safe_path,
         "encoding": "utf-8",
         "content": text,
-        "size_bytes": len(raw),
+        "size_bytes": len(text.encode("utf-8")),
+        "language": _language_hint_for_path(safe_path),
+        "readonly": False,
     }
+
+
+@router.post(
+    "/api/workspaces/{workspace_id}/projects/{project_id}/builder/source-snapshots/{snapshot_id}/files/chat",
+)
+@router.post(
+    "/api/workspaces/{workspace_id}/projects/{project_id}/source-snapshots/{snapshot_id}/files/chat",
+)
+async def chat_builder_snapshot_file(
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_WRITE))],
+    project_id: str,
+    snapshot_id: str,
+    body: BuilderFileChatPayload,
+    actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+) -> dict[str, Any]:
+    snap = _source_snapshot_for_project_or_404(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        snapshot_id=snapshot_id,
+    )
+    rel_path = _normalize_snapshot_rel_path(body.path)
+    current_text = _snapshot_file_text_or_404(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        snapshot=snap,
+        path=rel_path,
+    )
+    provided_hash = str(body.current_content or "").strip().lower()
+    if provided_hash and provided_hash != _sha256_text(current_text):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": {
+                    "code": "FILE_CONTENT_MISMATCH",
+                    "message": "current_content hash does not match the latest snapshot file content.",
+                }
+            },
+        )
+    user_message = _safe_text(body.user_message, fallback="Update this file.")
+    selected_text = (body.selected_text or "").strip() or None
+    if body.mode == "explain":
+        return {
+            "project_id": project_id,
+            "previous_snapshot_id": snap.id,
+            "new_snapshot_id": None,
+            "changed_files": [],
+            "preview_refresh_requested": False,
+            "assistant_message": _file_explain_message(
+                path=rel_path,
+                content=current_text,
+                selected_text=selected_text,
+                user_message=user_message,
+            ),
+        }
+
+    from src.ham.builder_chat_cloud_runtime import maybe_enqueue_chat_scaffold_cloud_runtime_job
+    from src.ham.builder_chat_scaffold import maybe_chat_scaffold_for_turn
+
+    original_map = _snapshot_text_map_for_diff(workspace_id=ctx.workspace_id, project_id=project_id, snapshot=snap)
+    scaffold_result = maybe_chat_scaffold_for_turn(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        session_id=f"filechat-{uuid.uuid4().hex[:12]}",
+        last_user_plain=f"Update {rel_path}: {user_message}",
+        created_by=actor.user_id if actor is not None else "",
+        operation="update_existing_project",
+    )
+    if scaffold_result and scaffold_result.get("scaffolded") and scaffold_result.get("source_snapshot_id"):
+        new_snapshot_id = str(scaffold_result.get("source_snapshot_id"))
+        new_snap = _source_snapshot_for_project_or_404(
+            workspace_id=ctx.workspace_id,
+            project_id=project_id,
+            snapshot_id=new_snapshot_id,
+        )
+        new_map = _snapshot_text_map_for_diff(workspace_id=ctx.workspace_id, project_id=project_id, snapshot=new_snap)
+        changed_files = _changed_paths(original_map, new_map)
+        enqueue_meta = maybe_enqueue_chat_scaffold_cloud_runtime_job(
+            workspace_id=ctx.workspace_id,
+            project_id=project_id,
+            source_snapshot_id=new_snapshot_id,
+            session_id=f"filechat-refresh-{new_snapshot_id}",
+            requested_by=actor.user_id if actor is not None else "",
+        )
+        return {
+            "project_id": project_id,
+            "previous_snapshot_id": snap.id,
+            "new_snapshot_id": new_snapshot_id,
+            "changed_files": changed_files,
+            "preview_refresh_requested": bool(
+                enqueue_meta.get("cloud_runtime_job_id") or enqueue_meta.get("cloud_runtime_queued")
+            ),
+            "assistant_message": f"Applied file-scoped edit request for `{rel_path}` and created a new snapshot.",
+        }
+
+    raise HTTPException(
+        status_code=503,
+        detail={
+            "error": {
+                "code": "FILE_CHAT_EDIT_UNAVAILABLE",
+                "message": "File edit mode is unavailable for this snapshot at the moment.",
+            }
+        },
+    )
 
 
 @router.get("/api/workspaces/{workspace_id}/projects/{project_id}/builder/import-jobs")

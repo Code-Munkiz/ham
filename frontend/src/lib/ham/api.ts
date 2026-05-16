@@ -673,6 +673,25 @@ export async function ensureBuilderDefaultProject(workspaceId: string): Promise<
   }>;
 }
 
+export async function createBuilderWorkspaceProject(workspaceId: string): Promise<{
+  workspace_id: string;
+  project_id: string;
+  project: ProjectRecord;
+}> {
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/builder/projects`,
+    { method: "POST" },
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{
+    workspace_id: string;
+    project_id: string;
+    project: ProjectRecord;
+  }>;
+}
+
 export async function listBuilderSnapshotFiles(
   workspaceId: string,
   projectId: string,
@@ -681,7 +700,13 @@ export async function listBuilderSnapshotFiles(
   workspace_id: string;
   project_id: string;
   source_snapshot_id: string;
-  files: Array<{ path: string; size_bytes: number; is_dir?: boolean }>;
+  files: Array<{
+    path: string;
+    size_bytes: number;
+    is_dir?: boolean;
+    type?: "file" | "directory";
+    language?: string | null;
+  }>;
 }> {
   const res = await hamApiFetch(
     `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/source-snapshots/${encodeURIComponent(snapshotId)}/files`,
@@ -693,7 +718,13 @@ export async function listBuilderSnapshotFiles(
     workspace_id: string;
     project_id: string;
     source_snapshot_id: string;
-    files: Array<{ path: string; size_bytes: number; is_dir?: boolean }>;
+    files: Array<{
+      path: string;
+      size_bytes: number;
+      is_dir?: boolean;
+      type?: "file" | "directory";
+      language?: string | null;
+    }>;
   }>;
 }
 
@@ -702,7 +733,16 @@ export async function getBuilderSnapshotFileContent(
   projectId: string,
   snapshotId: string,
   path: string,
-): Promise<{ path: string; content: string; size_bytes: number; encoding: string }> {
+): Promise<{
+  project_id: string;
+  source_snapshot_id: string;
+  path: string;
+  content: string;
+  size_bytes: number;
+  encoding: string;
+  language?: string | null;
+  readonly?: boolean;
+}> {
   const q = new URLSearchParams({ path });
   const res = await hamApiFetch(
     `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/source-snapshots/${encodeURIComponent(snapshotId)}/files/content?${q}`,
@@ -711,10 +751,64 @@ export async function getBuilderSnapshotFileContent(
     throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
   }
   return res.json() as Promise<{
+    project_id: string;
+    source_snapshot_id: string;
     path: string;
     content: string;
     size_bytes: number;
     encoding: string;
+    language?: string | null;
+    readonly?: boolean;
+  }>;
+}
+
+export type BuilderSnapshotFileChatMode = "explain" | "edit";
+
+export async function postBuilderSnapshotFileChat(
+  workspaceId: string,
+  projectId: string,
+  snapshotId: string,
+  body: {
+    path: string;
+    selected_text?: string | null;
+    user_message: string;
+    current_content?: string | null;
+    mode: BuilderSnapshotFileChatMode;
+    metadata?: Record<string, unknown>;
+  },
+): Promise<{
+  project_id: string;
+  previous_snapshot_id: string;
+  new_snapshot_id: string | null;
+  changed_files: string[];
+  preview_refresh_requested: boolean;
+  assistant_message: string;
+}> {
+  const res = await hamApiFetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/source-snapshots/${encodeURIComponent(snapshotId)}/files/chat`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        path: body.path,
+        selected_text: body.selected_text ?? null,
+        user_message: body.user_message,
+        current_content: body.current_content ?? null,
+        mode: body.mode,
+        metadata: body.metadata ?? {},
+      }),
+    },
+  );
+  if (!res.ok) {
+    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{
+    project_id: string;
+    previous_snapshot_id: string;
+    new_snapshot_id: string | null;
+    changed_files: string[];
+    preview_refresh_requested: boolean;
+    assistant_message: string;
   }>;
 }
 
