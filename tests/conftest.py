@@ -10,6 +10,21 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def _reset_opencode_readiness_cache() -> None:
+    """Reset the opencode readiness cache before each test.
+
+    ``check_opencode_readiness`` caches its result at module level. Tests that
+    monkeypatch ``HAM_OPENCODE_ENABLED``, ``ANTHROPIC_API_KEY``, etc. require a
+    fresh probe so the monkeypatched env is actually read.
+    """
+    from src.ham.worker_adapters.opencode_adapter import reset_opencode_readiness_cache
+
+    reset_opencode_readiness_cache()
+    yield
+    reset_opencode_readiness_cache()
+
+
+@pytest.fixture(autouse=True)
 def _reset_cp_run_store_singleton() -> None:
     """Reset the ControlPlaneRunStore singleton before and after each test.
 

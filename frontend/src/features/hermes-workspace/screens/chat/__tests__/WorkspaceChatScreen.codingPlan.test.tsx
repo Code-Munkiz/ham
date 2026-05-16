@@ -253,6 +253,7 @@ describe("WorkspaceChatScreen composer-driven coding plan", () => {
       expect(previewCodingConductorMock).toHaveBeenCalledWith({
         user_prompt: "Audit the persistence layer.",
         project_id: CHAT_W1_PROJECT_ID,
+        workspace_id: "w1",
       });
     });
 
@@ -474,6 +475,7 @@ describe("WorkspaceChatScreen OpenCode preferred-provider affordance", () => {
     expect(previewCodingConductorMock).toHaveBeenNthCalledWith(1, {
       user_prompt: "Refactor the auth module.",
       project_id: CHAT_W1_PROJECT_ID,
+      workspace_id: "w1",
     });
 
     const cta = container.querySelector(
@@ -486,6 +488,7 @@ describe("WorkspaceChatScreen OpenCode preferred-provider affordance", () => {
       user_prompt: "Refactor the auth module.",
       project_id: CHAT_W1_PROJECT_ID,
       preferred_provider: "opencode_cli",
+      workspace_id: "w1",
     });
 
     await waitFor(() =>

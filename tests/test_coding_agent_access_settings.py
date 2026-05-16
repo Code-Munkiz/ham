@@ -697,3 +697,210 @@ def test_conductor_cursor_blocked_without_github_repo(
     cursor = next(c for c in body["candidates"] if c["provider"] == "cursor_cloud")
     assert cursor["available"] is False
     assert any("GitHub" in b for b in cursor["blockers"])
+
+
+# ---------------------------------------------------------------------------
+# Conductor integration — allow_opencode flag via workspace settings
+# ---------------------------------------------------------------------------
+
+
+def test_conductor_allow_opencode_false_blocks_opencode_candidate(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    ws_store: tuple[InMemoryWorkspaceStore, str],
+    tmp_path: Path,
+) -> None:
+    """allow_opencode=false makes opencode_cli appear blocked (not absent) in candidates."""
+    monkeypatch.setenv("HAM_WORKSPACE_STORE_BACKEND", "local")
+    monkeypatch.setenv("HAM_CODING_AGENT_SETTINGS_LOCAL_PATH", str(tmp_path / "agent_settings"))
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+
+    store = isolated_store
+    rec = store.make_record(name="p_oc_off", root=str(tmp_path))
+    rec = rec.model_copy(
+        update={
+            "build_lane_enabled": True,
+            "output_target": "managed_workspace",
+            "workspace_id": "ws_managed",
+        }
+    )
+    rec = store.register(rec)
+    _, wid = ws_store
+
+    client = _client()
+    patch_res = client.patch(
+        f"/api/workspaces/{wid}/coding-agent-access-settings",
+        json={"allow_opencode": False},
+    )
+    assert patch_res.status_code == 200
+
+    import src.ham.coding_router.readiness as readiness_mod
+
+    monkeypatch.setattr(readiness_mod.shutil, "which", lambda _: "/usr/local/bin/ham")
+    res = _post_preview(
+        client,
+        user_prompt="Build a new feature for the chat panel.",
+        workspace_id=wid,
+        project_id=rec.id,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    candidates_by_provider = {c["provider"]: c for c in body["candidates"]}
+    oc = candidates_by_provider.get("opencode_cli")
+    assert oc is not None, "opencode_cli must be in candidates (blocked, not absent)"
+    assert oc["available"] is False, "opencode_cli must be blocked when allow_opencode=False"
+    assert oc["blockers"], "opencode_cli must have a blocker when allow_opencode=False"
+    blocker_text = " ".join(oc["blockers"]).lower()
+    assert "opencode_cli" not in blocker_text, f"blocker leaks provider id: {oc['blockers']}"
+
+
+def test_conductor_allow_opencode_true_unblocks_opencode_when_platform_ready(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    ws_store: tuple[InMemoryWorkspaceStore, str],
+    tmp_path: Path,
+) -> None:
+    """allow_opencode=true + platform gates + model creds + managed_workspace → opencode_cli available."""
+    monkeypatch.setenv("HAM_WORKSPACE_STORE_BACKEND", "local")
+    monkeypatch.setenv("HAM_CODING_AGENT_SETTINGS_LOCAL_PATH", str(tmp_path / "agent_settings"))
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-only-not-deployed-key")
+
+    store = isolated_store
+    rec = store.make_record(name="p_oc_on", root=str(tmp_path))
+    rec = rec.model_copy(
+        update={
+            "build_lane_enabled": True,
+            "output_target": "managed_workspace",
+            "workspace_id": "ws_managed",
+        }
+    )
+    rec = store.register(rec)
+    _, wid = ws_store
+
+    client = _client()
+    patch_res = client.patch(
+        f"/api/workspaces/{wid}/coding-agent-access-settings",
+        json={"allow_opencode": True},
+    )
+    assert patch_res.status_code == 200
+
+    import src.ham.coding_router.readiness as readiness_mod
+
+    monkeypatch.setattr(readiness_mod.shutil, "which", lambda _: "/usr/local/bin/ham")
+    res = _post_preview(
+        client,
+        user_prompt="Build a new feature for the chat panel.",
+        workspace_id=wid,
+        project_id=rec.id,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    candidates_by_provider = {c["provider"]: c for c in body["candidates"]}
+    oc = candidates_by_provider.get("opencode_cli")
+    assert oc is not None, "opencode_cli must be in candidates"
+    assert oc["available"] is True, f"opencode_cli must be unblocked; blockers={oc['blockers']}"
+    assert oc["blockers"] == [], f"opencode_cli must have no blockers; got {oc['blockers']}"
+
+
+def test_conductor_prefer_open_custom_boosts_opencode_when_eligible(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    ws_store: tuple[InMemoryWorkspaceStore, str],
+    tmp_path: Path,
+) -> None:
+    """preference_mode=prefer_open_custom boosts opencode_cli confidence only when unblocked."""
+    monkeypatch.setenv("HAM_WORKSPACE_STORE_BACKEND", "local")
+    monkeypatch.setenv("HAM_CODING_AGENT_SETTINGS_LOCAL_PATH", str(tmp_path / "agent_settings"))
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-only-not-deployed-key")
+
+    store = isolated_store
+    rec = store.make_record(name="p_prefer_oc", root=str(tmp_path))
+    rec = rec.model_copy(
+        update={
+            "build_lane_enabled": True,
+            "output_target": "managed_workspace",
+            "workspace_id": "ws_managed",
+        }
+    )
+    rec = store.register(rec)
+    _, wid = ws_store
+
+    client = _client()
+    client.patch(
+        f"/api/workspaces/{wid}/coding-agent-access-settings",
+        json={"allow_opencode": True, "preference_mode": "prefer_open_custom"},
+    )
+
+    import src.ham.coding_router.readiness as readiness_mod
+
+    monkeypatch.setattr(readiness_mod.shutil, "which", lambda _: "/usr/local/bin/ham")
+    res = _post_preview(
+        client,
+        user_prompt="Build a new feature for the chat panel.",
+        workspace_id=wid,
+        project_id=rec.id,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    candidates_by_provider = {c["provider"]: c for c in body["candidates"]}
+    oc = candidates_by_provider.get("opencode_cli")
+    assert oc is not None, "opencode_cli must be in candidates"
+    assert oc["available"] is True, f"opencode_cli must be unblocked; blockers={oc['blockers']}"
+    # Boosted confidence must be higher than base (0.55 + 0.15 = 0.70 for feature tasks).
+    assert oc["confidence"] > 0.55, f"expected boosted confidence, got {oc['confidence']}"
+    # Boost must not exceed 1.0.
+    assert oc["confidence"] <= 1.0
+
+
+def test_conductor_preference_cannot_bypass_readiness_blocker(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    ws_store: tuple[InMemoryWorkspaceStore, str],
+    tmp_path: Path,
+) -> None:
+    """prefer_open_custom boost must not remove a readiness blocker from opencode_cli."""
+    monkeypatch.setenv("HAM_WORKSPACE_STORE_BACKEND", "local")
+    monkeypatch.setenv("HAM_CODING_AGENT_SETTINGS_LOCAL_PATH", str(tmp_path / "agent_settings"))
+    # Gates off → opencode_cli is readiness-blocked regardless of preference.
+    monkeypatch.delenv("HAM_OPENCODE_ENABLED", raising=False)
+    monkeypatch.delenv("HAM_OPENCODE_EXECUTION_ENABLED", raising=False)
+
+    store = isolated_store
+    rec = store.make_record(name="p_prefer_blocked", root=str(tmp_path))
+    rec = rec.model_copy(
+        update={
+            "build_lane_enabled": True,
+            "output_target": "managed_workspace",
+            "workspace_id": "ws_managed",
+        }
+    )
+    rec = store.register(rec)
+    _, wid = ws_store
+
+    client = _client()
+    client.patch(
+        f"/api/workspaces/{wid}/coding-agent-access-settings",
+        json={"allow_opencode": True, "preference_mode": "prefer_open_custom"},
+    )
+
+    import src.ham.coding_router.readiness as readiness_mod
+
+    monkeypatch.setattr(readiness_mod.shutil, "which", lambda _: "/usr/local/bin/ham")
+    res = _post_preview(
+        client,
+        user_prompt="Build a new feature for the chat panel.",
+        workspace_id=wid,
+        project_id=rec.id,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    candidates_by_provider = {c["provider"]: c for c in body["candidates"]}
+    oc = candidates_by_provider.get("opencode_cli")
+    assert oc is not None, "opencode_cli must still appear (blocked, not absent)"
+    assert oc["available"] is False, "preference must not bypass readiness blocker"
+    assert oc["blockers"], "opencode_cli must retain its readiness blockers"

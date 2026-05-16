@@ -2162,6 +2162,7 @@ export interface CodingConductorPreviewRequest {
   user_prompt: string;
   project_id?: string | null;
   preferred_provider?: CodingConductorProviderKind | null;
+  workspace_id?: string | null;
 }
 
 /**
@@ -2175,9 +2176,11 @@ export async function previewCodingConductor(
   const trimmed = body.user_prompt.trim();
   const projectId = body.project_id?.trim() || undefined;
   const preferred = body.preferred_provider ?? undefined;
+  const workspaceId = body.workspace_id?.trim() || undefined;
   const payload: Record<string, unknown> = { user_prompt: trimmed };
   if (projectId) payload.project_id = projectId;
   if (preferred) payload.preferred_provider = preferred;
+  if (workspaceId) payload.workspace_id = workspaceId;
   const res = await hamApiFetch("/api/coding/conductor/preview", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

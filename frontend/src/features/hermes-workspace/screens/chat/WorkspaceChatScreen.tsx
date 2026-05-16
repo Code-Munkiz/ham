@@ -2818,6 +2818,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       const payload = await previewCodingConductor({
         user_prompt: draft,
         project_id: projectId ?? undefined,
+        workspace_id: activeWorkspaceId ?? undefined,
       });
       setCodingPlanPreview(payload);
       setCodingPlanPrompt(draft);
@@ -2827,7 +2828,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     } finally {
       setCodingPlanLoading(false);
     }
-  }, [input, projectId]);
+  }, [input, projectId, activeWorkspaceId]);
 
   const handlePreferProvider = React.useCallback(
     async (provider: "opencode_cli") => {
@@ -2843,6 +2844,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           user_prompt: draft,
           project_id: projectId,
           preferred_provider: provider,
+          workspace_id: activeWorkspaceId ?? undefined,
         });
         setCodingPlanPreview(payload);
         setCodingPlanPrompt(draft);
@@ -2854,7 +2856,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         setCodingPlanPreferring(null);
       }
     },
-    [codingPlanPreview, codingPlanPrompt, input, projectId],
+    [codingPlanPreview, codingPlanPrompt, input, projectId, activeWorkspaceId],
   );
 
   // Conversational conductor: fired automatically from send() when the user's
@@ -2890,6 +2892,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         const payload = await previewCodingConductor({
           user_prompt: draft,
           project_id: projectId ?? undefined,
+          workspace_id: activeWorkspaceId ?? undefined,
         });
         setCodingPlanPreview(payload);
         setCodingPlanPrompt(draft);
@@ -2901,7 +2904,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         autoCodingPlanInFlightRef.current = false;
       }
     },
-    [projectId],
+    [projectId, activeWorkspaceId],
   );
 
   React.useEffect(() => {

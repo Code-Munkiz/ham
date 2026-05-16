@@ -46,6 +46,7 @@ describe("previewCodingConductor", () => {
       user_prompt: "  Audit the API.  ",
       project_id: "  proj.alpha  ",
       preferred_provider: "factory_droid_audit",
+      workspace_id: "  ws_beta  ",
     });
 
     expect(out.kind).toBe("coding_conductor_preview");
@@ -61,6 +62,7 @@ describe("previewCodingConductor", () => {
       user_prompt: "Audit the API.",
       project_id: "proj.alpha",
       preferred_provider: "factory_droid_audit",
+      workspace_id: "ws_beta",
     });
   });
 
@@ -98,6 +100,54 @@ describe("previewCodingConductor", () => {
     expect(body).toEqual({ user_prompt: "Explain things." });
     expect(body).not.toHaveProperty("project_id");
     expect(body).not.toHaveProperty("preferred_provider");
+    expect(body).not.toHaveProperty("workspace_id");
+  });
+
+  it("includes workspace_id when provided and omits it when null/empty", async () => {
+    const mockResponse = {
+      kind: "coding_conductor_preview",
+      preview_id: "p-3",
+      task_kind: "explain",
+      task_confidence: 0.9,
+      chosen: null,
+      candidates: [],
+      blockers: [],
+      recommendation_reason: "x",
+      requires_approval: false,
+      approval_kind: "none",
+      project: {
+        found: false,
+        project_id: null,
+        build_lane_enabled: false,
+        has_github_repo: false,
+      },
+      is_operator: false,
+    };
+    global.fetch = vi.fn(async () => {
+      return new Response(JSON.stringify(mockResponse), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    await previewCodingConductor({ user_prompt: "Explain things.", workspace_id: "ws_gamma" });
+    const body1 = JSON.parse(
+      String(
+        ((global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as RequestInit)
+          .body,
+      ),
+    );
+    expect(body1.workspace_id).toBe("ws_gamma");
+
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockClear();
+    await previewCodingConductor({ user_prompt: "Explain things.", workspace_id: null });
+    const body2 = JSON.parse(
+      String(
+        ((global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as RequestInit)
+          .body,
+      ),
+    );
+    expect(body2).not.toHaveProperty("workspace_id");
   });
 
   it("rethrows server detail messages on non-200", async () => {

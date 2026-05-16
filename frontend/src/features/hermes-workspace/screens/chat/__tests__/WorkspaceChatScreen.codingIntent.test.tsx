@@ -308,6 +308,7 @@ describe("WorkspaceChatScreen conversational coding conductor", () => {
       expect(previewCodingConductorMock).toHaveBeenCalledWith({
         user_prompt: "Refactor the persistence layer in the HAM repo",
         project_id: CHAT_W1_PROJECT_ID,
+        workspace_id: "w1",
       });
     });
     // CodingPlanCard appears below the thread.
@@ -453,6 +454,7 @@ describe("WorkspaceChatScreen conversational coding conductor", () => {
       expect(previewCodingConductorMock).toHaveBeenCalledWith({
         user_prompt: "Inspect the runner",
         project_id: CHAT_W1_PROJECT_ID,
+        workspace_id: "w1",
       });
     });
   });
