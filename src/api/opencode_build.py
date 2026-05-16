@@ -293,6 +293,63 @@ def _created_by(actor: HamActor | None) -> dict[str, Any] | None:
     return d
 
 
+def _persist_opencode_initial_running_run(
+    *,
+    rec: Any,
+    ham_actor: HamActor | None,
+    project_root: Path | None,
+    proposal_digest: str,
+    ham_run_id: str,
+    change_id: str,
+) -> None:
+    """Persist a ``status="running"`` placeholder before an async launch job begins.
+
+    The terminal row (persisted by :func:`_run_opencode_launch_core`) overwrites
+    this placeholder once the OpenCode run finishes. Callers can poll
+    ``GET /api/control-plane-runs/{ham_run_id}`` immediately after the proxy
+    returns without waiting for the run to complete.
+    """
+    now = utc_now_iso()
+    project_root_str = str(project_root.resolve()) if project_root is not None else None
+    cp_run = ControlPlaneRun(
+        ham_run_id=ham_run_id,
+        provider="opencode_cli",
+        action_kind="launch",
+        project_id=rec.id,
+        created_by=_created_by(ham_actor),
+        created_at=now,
+        updated_at=now,
+        committed_at=now,
+        started_at=now,
+        finished_at=None,
+        last_observed_at=now,
+        status="running",
+        status_reason="opencode:running",
+        proposal_digest=proposal_digest,
+        base_revision=OPENCODE_REGISTRY_REVISION,
+        external_id=change_id,
+        workflow_id=None,
+        summary=None,
+        error_summary=None,
+        last_provider_status=None,
+        audit_ref=None,
+        project_root=project_root_str,
+        pr_url=None,
+        pr_branch=None,
+        pr_commit_sha=None,
+        build_outcome=None,
+        output_target="managed_workspace",
+        output_ref=None,
+    )
+    try:
+        get_control_plane_run_store().save(cp_run, project_root_for_mirror=project_root_str)
+    except Exception as exc:  # noqa: BLE001
+        _LOG.warning(
+            "opencode_build initial running-row save failed (%s)",
+            type(exc).__name__,
+        )
+
+
 def _persist_opencode_terminal_run(
     *,
     rec: Any,
@@ -672,6 +729,8 @@ def _run_opencode_launch_core(
     user_prompt: str,
     model: str | None,
     proposal_digest: str,
+    ham_run_id: str | None = None,
+    change_id: str | None = None,
 ) -> dict[str, Any]:
     """Shared OpenCode launch core for both the operator route and the
     chat-side launch proxy.
@@ -686,9 +745,14 @@ def _run_opencode_launch_core(
     response payload. It never logs the exec token (only its env name
     appears in :func:`_require_opencode_exec_token`) and the response
     payload is token-free by construction.
+
+    ``ham_run_id`` and ``change_id`` may be pre-allocated by the caller
+    (e.g. the async proxy route) so that the identifiers are returned in the
+    HTTP response before this function completes.  When omitted, fresh values
+    are generated here (backward-compatible with the operator route).
     """
-    ham_run_id = new_ham_run_id()
-    change_id = uuid.uuid4().hex
+    ham_run_id = ham_run_id or new_ham_run_id()
+    change_id = change_id or uuid.uuid4().hex
     project_root = _project_managed_root(rec)
 
     workspace_id = (getattr(rec, "workspace_id", None) or "").strip() or None
@@ -847,5 +911,7 @@ __all__ = [
     "effective_opencode_launch_deadline_s",
     "router",
     "verify_opencode_launch_against_preview",
+    "_persist_opencode_initial_running_run",
+    "_project_managed_root",
     "_run_opencode_launch_core",
 ]
