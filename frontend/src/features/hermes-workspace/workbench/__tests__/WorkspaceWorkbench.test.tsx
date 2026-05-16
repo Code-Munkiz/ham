@@ -687,7 +687,7 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.queryByText(/running build/i)).toBeNull();
   });
 
-  it("Preview renders honest cloud runtime placeholder copy", async () => {
+  it("Preview renders cloud runtime setup copy when experiments are not enabled", async () => {
     render(
       <MemoryRouter>
         <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
@@ -704,9 +704,128 @@ describe("WorkspaceWorkbench", () => {
       "not enabled in this environment",
     );
     expect(screen.getByTestId("hww-cloud-runtime-section")).toHaveTextContent(
-      "control-plane path only",
+      "Cloud preview runtime status is shown below.",
     );
     expect(screen.queryByText(/deployed successfully/i)).toBeNull();
+  });
+
+  it("Provider-ready cloud runtime renders positive ready copy", async () => {
+    getBuilderCloudRuntimeMock.mockResolvedValueOnce({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      mode: "cloud",
+      status: "provider_ready",
+      message: "Cloud runtime provider is configured for experimentation.",
+      updated_at: "2026-01-01T00:00:00Z",
+      runtime_session_id: "rtms_1",
+      source_snapshot_id: "ssnp_1",
+      metadata: {},
+    });
+    getBuilderWorkerCapabilitiesMock.mockResolvedValueOnce({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      workers: [
+        {
+          worker_kind: "cloud_runtime_worker",
+          provider: "builder_cloud_runtime",
+          display_name: "Cloud Runtime Worker",
+          status: "available",
+          capabilities: ["request_runtime_job", "read_job_status"],
+          environment_fit: "Cloud runtime worker for live preview provisioning and health checks.",
+          required_setup: "No additional setup required for this workspace.",
+          settings_href: null,
+          last_checked_at: "2026-01-01T00:00:00Z",
+          metadata: { provider_mode: "gcp_gke_sandbox", provider_status: "available" },
+        },
+      ],
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    openPreviewDiagnostics();
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-cloud-runtime-provider-copy")).toHaveTextContent(
+        "Cloud runtime experiment provider is ready.",
+      );
+    });
+    expect(screen.getByTestId("hww-cloud-runtime-refresh-copy")).toHaveTextContent(
+      "Generated apps can run in the hosted preview sandbox.",
+    );
+    expect(screen.queryByTestId("hww-cloud-runtime-disabled-copy")).toBeNull();
+    expect(screen.queryByText("Cloud preview is not configured in this environment.")).toBeNull();
+  });
+
+  it("Optional worker disabled states are visually distinct from cloud runtime readiness", async () => {
+    getBuilderCloudRuntimeMock.mockResolvedValueOnce({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      mode: "cloud",
+      status: "provider_ready",
+      message: "Cloud runtime provider is configured for experimentation.",
+      updated_at: "2026-01-01T00:00:00Z",
+      runtime_session_id: "rtms_1",
+      source_snapshot_id: "ssnp_1",
+      metadata: {},
+    });
+    getBuilderWorkerCapabilitiesMock.mockResolvedValueOnce({
+      workspace_id: "ws_abc",
+      project_id: "proj_abc",
+      workers: [
+        {
+          worker_kind: "cloud_runtime_worker",
+          provider: "builder_cloud_runtime",
+          display_name: "Cloud Runtime Worker",
+          status: "available",
+          capabilities: ["request_runtime_job", "read_job_status"],
+          environment_fit: "Cloud runtime worker for live preview provisioning and health checks.",
+          required_setup: "No additional setup required for this workspace.",
+          settings_href: null,
+          last_checked_at: "2026-01-01T00:00:00Z",
+          metadata: { provider_mode: "gcp_gke_sandbox", provider_status: "available" },
+        },
+        {
+          worker_kind: "cursor_local_sdk",
+          provider: "cursor_sdk_bridge",
+          display_name: "Cursor Local SDK Bridge",
+          status: "disabled",
+          capabilities: ["status_stream", "event_projection"],
+          environment_fit: "Optional local/bridge telemetry path for Cursor-native status streams.",
+          required_setup: "Enable HAM_CURSOR_SDK_BRIDGE_ENABLED and configure provider credentials.",
+          settings_href: null,
+          last_checked_at: "2026-01-01T00:00:00Z",
+          metadata: { bridge_enabled: false },
+        },
+        {
+          worker_kind: "claude_agent",
+          provider: "claude_agent_sdk",
+          display_name: "Claude Agent",
+          status: "needs_connection",
+          capabilities: ["plan", "edit_code", "run_tests"],
+          environment_fit: "Server-side Claude Agent SDK with BYOK auth channels.",
+          required_setup: "Install claude-agent-sdk on host and connect auth.",
+          settings_href: null,
+          last_checked_at: "2026-01-01T00:00:00Z",
+          metadata: { readiness_status: "needs_sign_in" },
+        },
+      ],
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    openPreviewDiagnostics();
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-cloud-runtime-status")).toHaveTextContent("provider_ready");
+    });
+    expect(screen.getByText("Optional coding workers")).toBeInTheDocument();
+    expect(screen.getByText(/do not block cloud preview runtime/i)).toBeInTheDocument();
+    expect(screen.getByText("Off — only needed for local Cursor execution.")).toBeInTheDocument();
+    expect(screen.getByText("Not connected — optional external worker.")).toBeInTheDocument();
+    expect(screen.queryByTestId("hww-cloud-runtime-disabled-copy")).toBeNull();
+    expect(screen.queryByText("Cloud preview is not configured in this environment.")).toBeNull();
   });
 
   it("Cloud runtime retry button is disabled when provider is disabled", async () => {

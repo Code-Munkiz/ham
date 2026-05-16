@@ -850,6 +850,15 @@ function WorkbenchPreviewPanel({
           : cloudRuntimeState === "provider_ready" || cloudRuntimeState === "provider_accepted"
             ? "Cloud runtime experiment provider is ready."
             : "Cloud runtime experiments are disabled by default.";
+  const cloudRuntimeReady = cloudRuntimeState === "provider_ready" || cloudRuntimeState === "provider_accepted";
+  const cloudRuntimePrimaryCopy = cloudRuntimeReady
+    ? "Cloud preview runtime is ready."
+    : "Cloud preview runtime status is shown below.";
+  const cloudRuntimeSecondaryCopy = cloudRuntimeReady
+    ? "Generated apps can run in the hosted preview sandbox."
+    : "Check status and setup hints below for this project.";
+  const optionalWorkerIntroCopy =
+    "Optional coding workers can be connected for extra workflows. They do not block cloud preview runtime.";
   const cloudPreviewDisconnected = [
     "disabled",
     "experiment_not_enabled",
@@ -1460,14 +1469,13 @@ function WorkbenchPreviewPanel({
             data-testid="hww-cloud-runtime-section"
           >
             <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
-              Cloud runtime
+              Cloud preview runtime
             </p>
             <p className="text-[11px] text-white/60">
-              Cloud runtime execution is not production-ready. This POC validates the control-plane
-              path only.
+              {cloudRuntimePrimaryCopy}
             </p>
             <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-refresh-copy">
-              Status is refreshed on demand. Live streaming is not connected yet.
+              {cloudRuntimeSecondaryCopy}
             </p>
             <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-status">
               Status: {cloudRuntimeState}
@@ -1639,10 +1647,10 @@ function WorkbenchPreviewPanel({
             data-testid="hww-worker-capability-section"
           >
             <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
-              Builder workers
+              Optional coding workers
             </p>
             <p className="text-[11px] text-white/60">
-              Read-only worker readiness. This view does not launch workers.
+              {optionalWorkerIntroCopy}
             </p>
             {workersError ? (
               <p className="text-amber-200/90" data-testid="hww-worker-capability-error">
@@ -1667,6 +1675,13 @@ function WorkbenchPreviewPanel({
                           : worker.status === "disabled"
                             ? "text-white/60 border-white/[0.16] bg-white/[0.06]"
                             : "text-rose-200 border-rose-400/30 bg-rose-500/10";
+                  const workerDetailCopy =
+                    worker.worker_kind === "cursor_local_sdk" && worker.status === "disabled"
+                      ? "Off — only needed for local Cursor execution."
+                      : worker.worker_kind === "claude_agent" &&
+                          worker.status === "needs_connection"
+                        ? "Not connected — optional external worker."
+                        : worker.environment_fit;
                   return (
                     <li
                       key={worker.worker_kind}
@@ -1684,7 +1699,7 @@ function WorkbenchPreviewPanel({
                           {worker.status.replace("_", " ")}
                         </span>
                       </div>
-                      <p className="mt-1 text-[11px] text-white/50">{worker.environment_fit}</p>
+                      <p className="mt-1 text-[11px] text-white/50">{workerDetailCopy}</p>
                     </li>
                   );
                 })}
