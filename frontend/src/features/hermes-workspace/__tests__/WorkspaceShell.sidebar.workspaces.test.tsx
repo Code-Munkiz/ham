@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockUseHamWorkspace } = vi.hoisted(() => ({
   mockUseHamWorkspace: vi.fn(),
@@ -13,6 +13,44 @@ vi.mock("@/lib/ham/HamWorkspaceContext", () => ({
 vi.mock("../screens/terminal/WorkspaceTerminalView", () => ({
   WorkspaceTerminalView: () => null,
 }));
+
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
+vi.mock("@radix-ui/react-dropdown-menu", async () => {
+  const React = await import("react");
+  return {
+    Root: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement("div", { "data-testid": "radix-dropdown-menu-root" }, children),
+    Trigger: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(React.Fragment, null, children),
+    Portal: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement(React.Fragment, null, children),
+    Content: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement("div", { role: "menu" }, children),
+    Item: ({
+      children,
+      onSelect,
+      onClick,
+      ...rest
+    }: React.ComponentProps<"button"> & {
+      onSelect?: (ev: { preventDefault: () => void }) => void;
+    }) =>
+      React.createElement(
+        "button",
+        {
+          ...rest,
+          type: "button",
+          onClick: (ev: React.MouseEvent<HTMLButtonElement>) => {
+            onClick?.(ev);
+            onSelect?.({ preventDefault() {} });
+          },
+        },
+        children,
+      ),
+  };
+});
 
 vi.mock("@/components/workspace/WorkspaceCreateWorkspaceDialog", () => ({
   WorkspaceCreateWorkspaceDialog: ({
@@ -44,11 +82,15 @@ vi.mock("@/components/workspace/WorkspaceCreateWorkspaceDialog", () => ({
 }));
 
 import type { HamWorkspaceContextValue } from "@/lib/ham/HamWorkspaceContext";
-import type { HamWorkspaceSummary } from "@/lib/ham/workspaceApi";
+import type {
+  HamArchiveWorkspaceResponse,
+  HamWorkspacePurgeSummary,
+  HamWorkspaceSummary,
+} from "@/lib/ham/workspaceApi";
 
 import { WorkspaceShell } from "../WorkspaceShell";
 
-function ws(id: string, name: string): HamWorkspaceSummary {
+function ws(id: string, name: string, perms?: string[]): HamWorkspaceSummary {
   return {
     workspace_id: id,
     org_id: null,
@@ -57,10 +99,32 @@ function ws(id: string, name: string): HamWorkspaceSummary {
     description: "",
     status: "active",
     role: "owner",
-    perms: [],
+    perms: perms ?? [],
     is_default: true,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
+  };
+}
+
+function purgeZero(): HamWorkspacePurgeSummary {
+  return {
+    chats_deleted: 0,
+    projects_deleted: 0,
+    project_sources_deleted: 0,
+    snapshots_deleted: 0,
+    import_jobs_deleted: 0,
+    runtime_sessions_removed: 0,
+    preview_endpoints_removed: 0,
+    cloud_runtime_jobs_removed: 0,
+    runtime_cleanup_requested: false,
+  };
+}
+
+function archiveResponse(w: HamWorkspaceSummary): HamArchiveWorkspaceResponse {
+  return {
+    workspace: { ...w, status: "archived" },
+    context: { role: w.role, perms: [...w.perms], org_role: null },
+    purge_summary: purgeZero(),
   };
 }
 
@@ -75,6 +139,7 @@ function baseCtx(overrides: Partial<HamWorkspaceContextValue> = {}): HamWorkspac
     selectWorkspace: vi.fn(),
     createWorkspace: vi.fn(),
     patchActiveWorkspace: vi.fn(),
+    archiveWorkspaceById: vi.fn(),
     hasPerm: vi.fn(() => false),
     ...overrides,
   };
@@ -259,5 +324,90 @@ describe("WorkspaceShell workspace sidebar", () => {
     renderShell("/workspace/chat");
 
     await waitFor(() => expect(screen.getByText("workspace child")).toBeInTheDocument());
+  });
+
+  it("row actions trigger does not select the workspace row", async () => {
+    const selectWorkspace = vi.fn();
+    const beta = ws("ws_b", "Beta", ["workspace:admin"]);
+    mockUseHamWorkspace.mockReturnValue({
+      ...readyCtx("ws_a", [ws("ws_a", "Alpha", ["workspace:admin"]), beta]),
+      selectWorkspace,
+    });
+    renderShell();
+
+    await waitFor(() => expect(screen.getByText("workspace child")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId("hww-workspace-row-menu-ws_b"));
+    expect(selectWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("workspace delete confirms with phrase and invokes archiveWorkspaceById", async () => {
+    const archiveWorkspaceById = vi.fn(async (): Promise<HamArchiveWorkspaceResponse> =>
+      archiveResponse(ws("ws_b", "Beta", ["workspace:admin"])),
+    );
+    const alpha = ws("ws_a", "Alpha", ["workspace:admin"]);
+    const beta = ws("ws_b", "Beta", ["workspace:admin"]);
+    mockUseHamWorkspace.mockReturnValue({
+      ...readyCtx("ws_a", [alpha, beta]),
+      archiveWorkspaceById,
+    });
+    render(
+      <MemoryRouter initialEntries={["/workspace/settings"]}>
+        <>
+          <RouteProbe />
+          <WorkspaceShell>
+            <div>workspace child</div>
+          </WorkspaceShell>
+        </>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(screen.getByText("workspace child")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId("hww-workspace-row-menu-ws_b"));
+    fireEvent.click(screen.getByTestId("hww-workspace-delete-trigger-ws_b"));
+
+    expect(screen.getByTestId("hww-workspace-archive-dialog")).toBeInTheDocument();
+
+    const confirmBtn = screen.getByTestId("hww-workspace-archive-confirm");
+    expect(confirmBtn).toBeDisabled();
+
+    fireEvent.change(screen.getByTestId("hww-workspace-archive-phrase"), {
+      target: { value: "ARCHIVE WORKSPACE beta" },
+    });
+    expect(confirmBtn).not.toBeDisabled();
+
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() =>
+      expect(archiveWorkspaceById).toHaveBeenCalledWith("ws_b", {
+        confirmation_phrase: "ARCHIVE WORKSPACE beta",
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("shell-route-path")).toHaveTextContent("/workspace/chat"),
+    );
+  });
+
+  it("workspace delete cancel closes dialog without archiving", async () => {
+    const archiveWorkspaceById = vi.fn();
+    const alpha = ws("ws_a", "Alpha", ["workspace:admin"]);
+    const beta = ws("ws_b", "Beta", ["workspace:admin"]);
+    mockUseHamWorkspace.mockReturnValue({
+      ...readyCtx("ws_a", [alpha, beta]),
+      archiveWorkspaceById,
+    });
+    renderShell();
+
+    await waitFor(() => expect(screen.getByText("workspace child")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId("hww-workspace-row-menu-ws_b"));
+    fireEvent.click(screen.getByTestId("hww-workspace-delete-trigger-ws_b"));
+    fireEvent.click(screen.getByTestId("hww-workspace-archive-cancel"));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("hww-workspace-archive-dialog")).not.toBeInTheDocument(),
+    );
+    expect(archiveWorkspaceById).not.toHaveBeenCalled();
   });
 });

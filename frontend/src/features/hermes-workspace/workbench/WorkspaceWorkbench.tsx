@@ -97,6 +97,13 @@ export function WorkspaceWorkbench({
     }
   }, [workbenchRefreshSignal]);
 
+  /** When chat/zips bump sources while Preview is visible, mimic clicking the Preview tab (refetch preview-status). Code→Preview hid this gap by remounting the preview panel + bumping previewTabRefreshKey. */
+  React.useEffect(() => {
+    if (sourceRefreshKey <= 0) return;
+    if (activeTab !== "preview") return;
+    setPreviewTabRefreshKey((k) => k + 1);
+  }, [sourceRefreshKey, activeTab]);
+
   React.useLayoutEffect(() => {
     const el = tabStripRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
@@ -798,6 +805,53 @@ function WorkbenchPreviewPanel({
     if (!previewTabRefreshKey) return;
     void refreshPreviewRuntimeStatus({ includeLifecycle: false });
   }, [previewTabRefreshKey, refreshPreviewRuntimeStatus]);
+
+  /** Same preview URL often serves the newer bundle after a snapshot refresh — force iframe reload when preview metadata catches up. */
+  const previousPreviewSnapshotIdRef = React.useRef<string | null | undefined>(undefined);
+  React.useEffect(() => {
+    const cur = preview?.source_snapshot_id ?? null;
+    if (preview?.status !== "ready" || !previewUrl) {
+      previousPreviewSnapshotIdRef.current = cur;
+      return;
+    }
+    const prev = previousPreviewSnapshotIdRef.current;
+    previousPreviewSnapshotIdRef.current = cur;
+    if (
+      prev !== undefined &&
+      prev !== null &&
+      cur !== null &&
+      cur !== prev
+    ) {
+      setIframeReloadNonce((n) => n + 1);
+      setIframeProxyError(null);
+    }
+  }, [preview?.source_snapshot_id, preview?.status, previewUrl]);
+
+  const wasListedBehindRef = React.useRef(false);
+  React.useEffect(() => {
+    if (previewBehindLatestListedSnapshot) {
+      wasListedBehindRef.current = true;
+      return;
+    }
+    if (
+      wasListedBehindRef.current &&
+      preview?.status === "ready" &&
+      previewUrl &&
+      preview?.source_snapshot_id &&
+      newestListedSnapshotId &&
+      preview.source_snapshot_id === newestListedSnapshotId
+    ) {
+      setIframeReloadNonce((n) => n + 1);
+      setIframeProxyError(null);
+      wasListedBehindRef.current = false;
+    }
+  }, [
+    previewBehindLatestListedSnapshot,
+    newestListedSnapshotId,
+    preview?.source_snapshot_id,
+    preview?.status,
+    previewUrl,
+  ]);
 
   React.useEffect(() => {
     setIframeProxyError(null);

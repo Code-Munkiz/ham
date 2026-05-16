@@ -100,6 +100,7 @@ function readyCtx(workspaceId: string | null): HamWorkspaceContextValue {
     selectWorkspace: vi.fn(),
     createWorkspace: vi.fn(),
     patchActiveWorkspace: vi.fn(),
+    archiveWorkspaceById: vi.fn(),
     hasPerm: vi.fn(() => true),
   };
 }

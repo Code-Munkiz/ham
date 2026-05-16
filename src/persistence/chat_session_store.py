@@ -90,6 +90,8 @@ class ChatSessionStore(Protocol):
 
     def delete_session(self, session_id: str) -> bool: ...
 
+    def delete_sessions_for_workspace(self, workspace_id: str) -> int: ...
+
 
 def build_chat_session_store() -> ChatSessionStore:
     """
@@ -238,3 +240,14 @@ class InMemoryChatSessionStore:
                 return False
             del self._sessions[session_id]
             return True
+
+    def delete_sessions_for_workspace(self, workspace_id: str) -> int:
+        with self._lock:
+            to_drop = [
+                sid
+                for sid, rec in self._sessions.items()
+                if rec.workspace_id == workspace_id
+            ]
+            for sid in to_drop:
+                del self._sessions[sid]
+            return len(to_drop)

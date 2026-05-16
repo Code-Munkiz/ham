@@ -1,6 +1,8 @@
 import * as React from "react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Menu, PanelLeft, PanelLeftClose, Search, X } from "lucide-react";
+import { Menu, MoreVertical, PanelLeft, PanelLeftClose, Search, X } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
 import { Button } from "@/components/ui/button";
@@ -23,9 +25,148 @@ import { WorkspaceChatPanel } from "./components/WorkspaceChatPanel";
 import { WorkspaceSidebarUserTrigger } from "./components/WorkspaceSidebarUserTrigger";
 import { HamWorkspaceTopbarPill } from "@/components/layout/HamWorkspaceTopbarPill";
 import { useHamWorkspace } from "@/lib/ham/HamWorkspaceContext";
-import type { HamWorkspaceSummary } from "@/lib/ham/workspaceApi";
+import { HamWorkspaceApiError, type HamWorkspaceSummary } from "@/lib/ham/workspaceApi";
 
 const HWW_SIDEBAR_COLLAPSE_KEY = "hww.sidebar.collapsed";
+
+function workspaceArchiveConfirmationPhrase(ws: Pick<HamWorkspaceSummary, "slug">): string {
+  return `ARCHIVE WORKSPACE ${(ws.slug || "").trim()}`.trim();
+}
+
+function WorkspaceArchiveDialog({
+  open,
+  workspace,
+  archiveWorkspaceById,
+  onSuccess,
+  onClose,
+}: {
+  open: boolean;
+  workspace: HamWorkspaceSummary;
+  archiveWorkspaceById: (
+    workspaceId: string,
+    body: { confirmation_phrase: string },
+  ) => Promise<unknown>;
+  onSuccess: () => void;
+  onClose: () => void;
+}) {
+  const phraseRequired = workspaceArchiveConfirmationPhrase(workspace);
+  const [phrase, setPhrase] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!open) {
+      setPhrase("");
+      setBusy(false);
+    }
+  }, [open]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    function onKey(ev: KeyboardEvent) {
+      if (ev.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  const canConfirm = phrase.trim() === phraseRequired.trim() && !busy;
+
+  return (
+    <>
+      <button
+        type="button"
+        className="fixed inset-0 z-[460] bg-black/60 backdrop-blur-sm"
+        aria-label="Close delete workspace dialog"
+        data-testid="hww-workspace-archive-backdrop"
+        onClick={() => {
+          if (!busy) onClose();
+        }}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="hww-workspace-archive-title"
+        data-testid="hww-workspace-archive-dialog"
+        className={cn(
+          "fixed left-1/2 top-1/2 z-[465] max-h-[min(90vh,720px)] w-[min(calc(100vw-2rem),26rem)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-white/[0.12] bg-[#050e14]/98 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.55)]",
+        )}
+      >
+        <p
+          id="hww-workspace-archive-title"
+          className="text-[13px] font-semibold text-white/[0.92]"
+        >
+          Delete this workspace and its built apps?
+        </p>
+        <p className="mt-2 text-[12px] leading-relaxed text-white/55">
+          This removes chats, generated builder projects shown in Ham, previews, snapshots, and
+          runtime bookkeeping for this workspace. Type the phrase below exactly to confirm.
+        </p>
+        <p className="mt-2 rounded-md border border-white/[0.08] bg-black/30 px-2 py-1.5 font-mono text-[11px] leading-snug text-amber-100/95">
+          {phraseRequired}
+        </p>
+        <label className="mt-3 block">
+          <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-white/40">
+            Confirmation phrase
+          </span>
+          <textarea
+            data-testid="hww-workspace-archive-phrase"
+            rows={2}
+            value={phrase}
+            onChange={(e) => setPhrase(e.target.value)}
+            className="hww-input w-full resize-none rounded-lg text-[12px]"
+            disabled={busy}
+            autoComplete="off"
+          />
+        </label>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-9 text-[11px] text-white/70"
+            data-testid="hww-workspace-archive-cancel"
+            disabled={busy}
+            onClick={onClose}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            className="h-9 bg-red-600 text-[11px] text-white hover:bg-red-500"
+            data-testid="hww-workspace-archive-confirm"
+            disabled={!canConfirm}
+            onClick={() => {
+              void (async () => {
+                try {
+                  setBusy(true);
+                  await archiveWorkspaceById(workspace.workspace_id, {
+                    confirmation_phrase: phrase.trim(),
+                  });
+                  toast.success("Workspace archived and associated data cleared.");
+                  onSuccess();
+                  onClose();
+                } catch (e) {
+                  const msg =
+                    e instanceof HamWorkspaceApiError
+                      ? e.message
+                      : e instanceof Error
+                        ? e.message
+                        : "Could not delete workspace.";
+                  toast.error(msg);
+                } finally {
+                  setBusy(false);
+                }
+              })();
+            }}
+          >
+            {busy ? "Deleting…" : "Delete workspace"}
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+}
 
 /** SPA home / marketing landing. Default `/` uses the current deployment origin. Set `VITE_HAM_LANDING_URL` for a fixed URL (e.g. future marketing site). */
 function hamLandingHref(): string {
@@ -54,6 +195,7 @@ type SideNavOptions = {
   workspaceFilter: string;
   onWorkspaceFilterChange: (q: string) => void;
   onSelectWorkspace: (workspaceId: string) => void;
+  onWorkspaceDeleteRequest?: (w: HamWorkspaceSummary) => void;
   isChatRoute: boolean;
 };
 
@@ -82,6 +224,7 @@ function WorkspaceSideNav({
   onWorkspaceFilterChange,
   onSelectWorkspace,
   isChatRoute,
+  onWorkspaceDeleteRequest,
 }: SideNavOptions) {
   const brandLogoSrc = hamWorkspaceLogoUrl();
   const landingHref = hamLandingHref();
@@ -177,8 +320,12 @@ function WorkspaceSideNav({
       <ul className={ulClass} aria-label="Workspaces">
         {filteredWorkspaces.map((w) => {
           const active = activeWorkspaceId === w.workspace_id;
+          const showDelete =
+            typeof onWorkspaceDeleteRequest === "function" &&
+            (w.perms || []).includes("workspace:admin") &&
+            w.status === "active";
           return (
-            <li key={w.workspace_id}>
+            <li key={w.workspace_id} className="flex min-w-0 items-stretch gap-0.5">
               <button
                 type="button"
                 data-testid={`hww-workspace-row-${w.workspace_id}`}
@@ -187,19 +334,56 @@ function WorkspaceSideNav({
                   onNavigate?.();
                 }}
                 className={cn(
-                  "w-full rounded-lg border px-2 py-1.5 text-left transition",
+                  "min-w-0 flex-1 rounded-lg border px-2 py-1.5 text-left transition",
                   active
                     ? "border-white/20 bg-white/[0.1] text-white/92"
                     : "border-white/[0.04] bg-black/20 text-white/70 hover:border-white/10 hover:bg-white/[0.04]",
                 )}
               >
-                <p className="truncate text-[11px] font-medium leading-snug text-white/85">
-                  {w.name}
-                </p>
+                <p className="truncate text-[11px] font-medium leading-snug text-white/85">{w.name}</p>
                 {w.slug ? (
                   <p className="mt-0.5 truncate text-[10px] text-white/45">{w.slug}</p>
                 ) : null}
               </button>
+              {showDelete ? (
+                <DropdownMenu.Root>
+                  <DropdownMenu.Trigger asChild>
+                    <button
+                      type="button"
+                      data-testid={`hww-workspace-row-menu-${w.workspace_id}`}
+                      className={cn(
+                        "inline-flex shrink-0 items-center justify-center rounded-lg border px-1.5 py-1 text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white/90",
+                        active ? "border-white/15 bg-white/[0.06]" : "border-white/[0.06] bg-black/20",
+                      )}
+                      aria-label={`Actions for workspace ${w.name}`}
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                      }}
+                      onPointerDown={(ev) => ev.stopPropagation()}
+                    >
+                      <MoreVertical className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden />
+                    </button>
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.Content
+                      className="z-[420] min-w-[10rem] rounded-lg border border-white/[0.1] bg-[#07141c] p-1 text-[11px] text-white/88 shadow-xl"
+                      sideOffset={6}
+                      align="end"
+                    >
+                      <DropdownMenu.Item
+                        className="cursor-pointer rounded px-2 py-1.5 text-red-300/95 outline-none hover:bg-white/[0.06]"
+                        onSelect={(ev) => {
+                          ev.preventDefault();
+                          onWorkspaceDeleteRequest(w);
+                        }}
+                        data-testid={`hww-workspace-delete-trigger-${w.workspace_id}`}
+                      >
+                        Delete workspace…
+                      </DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Portal>
+                </DropdownMenu.Root>
+              ) : null}
             </li>
           );
         })}
@@ -491,6 +675,9 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [workspaceChatPanelOpen, setWorkspaceChatPanelOpen] = React.useState(false);
   const [workspaceFilter, setWorkspaceFilter] = React.useState("");
+  const [workspaceToArchive, setWorkspaceToArchive] = React.useState<HamWorkspaceSummary | null>(
+    null,
+  );
 
   const canUseWorkspaceSidebar =
     hamWorkspace.state.status === "ready" || hamWorkspace.state.status === "onboarding";
@@ -532,6 +719,11 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
       navigate("/workspace/chat");
     },
     isChatRoute: isWorkspaceChat,
+    ...(hamWorkspace.state.status === "ready"
+      ? {
+          onWorkspaceDeleteRequest: (w: HamWorkspaceSummary) => setWorkspaceToArchive(w),
+        }
+      : {}),
   };
 
   const setSidebarPersist = React.useCallback((next: boolean) => {
@@ -640,6 +832,15 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
             sidebarCollapsed={sidebarCollapsed}
             onItemNavigate={() => setDrawerOpen(false)}
           />
+          {workspaceToArchive && hamWorkspace.state.status === "ready" ? (
+            <WorkspaceArchiveDialog
+              open
+              workspace={workspaceToArchive}
+              archiveWorkspaceById={hamWorkspace.archiveWorkspaceById}
+              onClose={() => setWorkspaceToArchive(null)}
+              onSuccess={() => navigate("/workspace/chat")}
+            />
+          ) : null}
         </div>
       </div>
     </WorkspaceLibraryFlyoutContext.Provider>

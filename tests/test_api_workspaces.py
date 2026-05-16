@@ -344,6 +344,25 @@ def test_archive_succeeds_with_phrase() -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert body["workspace"]["status"] == "archived"
+    purge = body.get("purge_summary") or {}
+    expected_keys = {
+        "chats_deleted",
+        "projects_deleted",
+        "project_sources_deleted",
+        "snapshots_deleted",
+        "import_jobs_deleted",
+        "runtime_sessions_removed",
+        "preview_endpoints_removed",
+        "cloud_runtime_jobs_removed",
+        "runtime_cleanup_requested",
+    }
+    assert set(purge.keys()) == expected_keys
+    assert isinstance(purge["runtime_cleanup_requested"], bool)
+    for k in expected_keys:
+        if k == "runtime_cleanup_requested":
+            continue
+        assert isinstance(purge[k], int)
+    assert_no_secret_keys(body)
     # Subsequent get → 404 (resolver rejects archived)
     g = client_for(store, actor=actor).get(f"/api/workspaces/{ids['ws_a']}")
     assert g.status_code == 404

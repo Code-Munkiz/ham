@@ -29,6 +29,7 @@ function baseCtx(overrides: Partial<HamWorkspaceContextValue> = {}): HamWorkspac
     selectWorkspace: vi.fn(),
     createWorkspace: vi.fn(),
     patchActiveWorkspace: vi.fn(),
+    archiveWorkspaceById: vi.fn(),
     hasPerm: vi.fn(() => false),
     ...overrides,
   };

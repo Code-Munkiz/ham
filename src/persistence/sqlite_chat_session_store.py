@@ -315,3 +315,17 @@ class SqliteChatSessionStore:
             self._conn.execute("DELETE FROM turns WHERE session_id = ?", (session_id,))
             self._conn.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
             return True
+
+    def delete_sessions_for_workspace(self, workspace_id: str) -> int:
+        with self._lock, self._conn:
+            rows = self._conn.execute(
+                "SELECT session_id FROM sessions WHERE workspace_id IS NOT NULL AND workspace_id = ?",
+                (workspace_id,),
+            ).fetchall()
+            ids = [str(r["session_id"]) for r in rows]
+            if not ids:
+                return 0
+            placeholders = ",".join("?" for _ in ids)
+            self._conn.execute(f"DELETE FROM turns WHERE session_id IN ({placeholders})", ids)
+            self._conn.execute(f"DELETE FROM sessions WHERE session_id IN ({placeholders})", ids)
+            return len(ids)

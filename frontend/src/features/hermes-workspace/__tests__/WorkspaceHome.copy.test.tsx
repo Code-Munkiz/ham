@@ -68,6 +68,7 @@ function readyWs(): HamWorkspaceContextValue {
     selectWorkspace: vi.fn(),
     createWorkspace: vi.fn(),
     patchActiveWorkspace: vi.fn(),
+    archiveWorkspaceById: vi.fn(),
     hasPerm: vi.fn(() => true),
   };
 }
@@ -117,6 +118,7 @@ describe("WorkspaceHome", () => {
       selectWorkspace: vi.fn(),
       createWorkspace: vi.fn(),
       patchActiveWorkspace: vi.fn(),
+      archiveWorkspaceById: vi.fn(),
       hasPerm: vi.fn(() => false),
     });
     render(

@@ -51,3 +51,16 @@ def test_memory_unscoped_actor_sees_legacy_and_own_sessions_only() -> None:
     assert {s.session_id for s in visible} == {legacy, mine}
     assert other not in {s.session_id for s in visible}
 
+
+def test_memory_delete_sessions_for_workspace() -> None:
+    store = InMemoryChatSessionStore()
+    s_same = _create_with_turn(store, "keep-same-ws", user_id="user-a", workspace_id="ws-1")
+    s_drop = _create_with_turn(store, "drop-me", user_id="user-a", workspace_id="ws-2")
+
+    removed = store.delete_sessions_for_workspace("ws-2")
+    assert removed == 1
+
+    scoped_after = store.list_sessions(user_id="user-a", workspace_id="ws-1")
+    assert [s.session_id for s in scoped_after] == [s_same]
+    assert store.get_session(s_drop) is None
+

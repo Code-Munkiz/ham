@@ -240,3 +240,24 @@ class FirestoreChatSessionStore:
                 return False
             doc_ref.delete()
             return True
+
+    def delete_sessions_for_workspace(self, workspace_id: str) -> int:
+        """Delete docs whose ``workspace_id`` matches (batched deletes)."""
+        doc_refs: list[Any] = []
+        with self._lock:
+            for doc in (
+                self._coll()
+                .where("workspace_id", "==", workspace_id)
+                .stream()
+            ):
+                doc_refs.append(doc.reference)
+        deleted = 0
+        chunk = 400
+        for i in range(0, len(doc_refs), chunk):
+            with self._lock:
+                batch = self._db.batch()
+                for ref in doc_refs[i : i + chunk]:
+                    batch.delete(ref)
+                batch.commit()
+            deleted += len(doc_refs[i : i + chunk])
+        return deleted

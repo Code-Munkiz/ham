@@ -50,6 +50,18 @@ def test_sqlite_delete_session(tmp_path: Path) -> None:
     assert store.delete_session(sid) is False
 
 
+def test_sqlite_delete_sessions_for_workspace(tmp_path: Path) -> None:
+    store = SqliteChatSessionStore(tmp_path / "bulk_del.db")
+    keep = _create_with_turn(store, "keep-same-ws", user_id="user-a", workspace_id="ws-1")
+    dropped = _create_with_turn(store, "drop-me", user_id="user-a", workspace_id="ws-2")
+
+    assert store.delete_sessions_for_workspace("ws-2") == 1
+
+    scoped_after = store.list_sessions(user_id="user-a", workspace_id="ws-1")
+    assert [s.session_id for s in scoped_after] == [keep]
+    assert store.get_session(dropped) is None
+
+
 def _create_with_turn(
     store: SqliteChatSessionStore,
     text: str,

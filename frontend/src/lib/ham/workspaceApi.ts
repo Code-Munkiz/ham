@@ -82,6 +82,26 @@ export interface HamPatchWorkspaceBody {
   description?: string;
 }
 
+export interface HamWorkspacePurgeSummary {
+  chats_deleted: number;
+  projects_deleted: number;
+  project_sources_deleted: number;
+  snapshots_deleted: number;
+  import_jobs_deleted: number;
+  runtime_sessions_removed: number;
+  preview_endpoints_removed: number;
+  cloud_runtime_jobs_removed: number;
+  runtime_cleanup_requested: boolean;
+}
+
+export interface HamArchiveWorkspaceBody {
+  confirmation_phrase: string;
+}
+
+export interface HamArchiveWorkspaceResponse extends HamWorkspaceResponse {
+  purge_summary: HamWorkspacePurgeSummary;
+}
+
 // ---------------------------------------------------------------------------
 // Error shape
 // ---------------------------------------------------------------------------
@@ -191,6 +211,22 @@ export async function patchWorkspace(
     throw await readError(res, `PATCH workspace failed (${res.status})`);
   }
   return (await res.json()) as HamWorkspaceResponse;
+}
+
+/** Soft-delete (archive) a workspace and purge associated chats/builder/runtime metadata server-side. */
+export async function archiveWorkspace(
+  workspaceId: string,
+  body: HamArchiveWorkspaceBody,
+): Promise<HamArchiveWorkspaceResponse> {
+  const res = await hamApiFetch(`/api/workspaces/${encodeURIComponent(workspaceId)}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw await readError(res, `DELETE workspace failed (${res.status})`);
+  }
+  return (await res.json()) as HamArchiveWorkspaceResponse;
 }
 
 // Re-export the API origin helper so callers (tests, debug pages) don't need

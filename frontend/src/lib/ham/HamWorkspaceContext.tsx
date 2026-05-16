@@ -13,10 +13,13 @@
 import * as React from "react";
 
 import {
+  archiveWorkspace as apiArchiveWorkspace,
   createWorkspace as apiCreateWorkspace,
   getMe as apiGetMe,
   patchWorkspace as apiPatchWorkspace,
   HamWorkspaceApiError,
+  type HamArchiveWorkspaceBody,
+  type HamArchiveWorkspaceResponse,
   type HamAuthMode,
   type HamCreateWorkspaceBody,
   type HamMeResponse,
@@ -82,6 +85,10 @@ export interface HamWorkspaceContextValue {
   selectWorkspace: (workspaceId: string) => void;
   createWorkspace: (body: HamCreateWorkspaceBody) => Promise<HamWorkspaceSummary>;
   patchActiveWorkspace: (patch: HamPatchWorkspaceBody) => Promise<HamWorkspaceSummary>;
+  archiveWorkspaceById: (
+    workspaceId: string,
+    body: HamArchiveWorkspaceBody,
+  ) => Promise<HamArchiveWorkspaceResponse>;
   hasPerm: (perm: string) => boolean;
 }
 
@@ -348,6 +355,24 @@ export function HamWorkspaceProvider({
     [],
   );
 
+  const archiveWorkspaceById = React.useCallback(
+    async (
+      workspaceId: string,
+      body: HamArchiveWorkspaceBody,
+    ): Promise<HamArchiveWorkspaceResponse> => {
+      const resp = await apiArchiveWorkspace(workspaceId, body);
+      const me = await apiGetMe();
+      const stored = readActiveWorkspaceId(me.user.user_id);
+      const next = deriveStateFromMe(me, stored);
+      if (next.status === "ready" && next.activeWorkspaceId) {
+        persistSelection(me.user.user_id, next.activeWorkspaceId);
+      }
+      setState(next);
+      return resp;
+    },
+    [persistSelection],
+  );
+
   const value = React.useMemo<HamWorkspaceContextValue>(() => {
     const workspaces =
       state.status === "ready" || state.status === "onboarding" ? state.me.workspaces : [];
@@ -366,6 +391,7 @@ export function HamWorkspaceProvider({
       selectWorkspace,
       createWorkspace,
       patchActiveWorkspace,
+      archiveWorkspaceById,
       hasPerm,
     };
   }, [
@@ -376,6 +402,7 @@ export function HamWorkspaceProvider({
     selectWorkspace,
     createWorkspace,
     patchActiveWorkspace,
+    archiveWorkspaceById,
   ]);
 
   return <HamWorkspaceContext.Provider value={value}>{children}</HamWorkspaceContext.Provider>;

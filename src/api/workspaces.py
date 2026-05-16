@@ -389,6 +389,9 @@ async def archive_workspace(
             f"confirmation_phrase must equal {expected_phrase!r}.",
             expected_phrase_template=ARCHIVE_PHRASE_TEMPLATE,
         )
+    from src.ham.workspace_purge import purge_workspace_associated_records
+
+    purge_summary = purge_workspace_associated_records(workspace_id=ctx.workspace_id)
     archived = store.update_workspace(
         ctx.workspace_id,
         status="archived",
@@ -399,9 +402,11 @@ async def archive_workspace(
         ctx,
         workspace_id=ctx.workspace_id,
         slug=rec.slug,
+        purge=purge_summary.as_public_dict(),
     )
     payload = workspace_response(archived, ctx)
     payload["audit_id"] = audit_id
+    payload["purge_summary"] = purge_summary.as_public_dict()
     return payload
 
 
