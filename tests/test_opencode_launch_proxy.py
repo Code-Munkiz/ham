@@ -84,6 +84,7 @@ def isolated_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         "HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS",
     ):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv("HAM_OPENCODE_LAUNCH_DEADLINE_S", raising=False)
     monkeypatch.setenv("HAM_MANAGED_WORKSPACE_ROOT", str(tmp_path / "ham-workspaces"))
 
 
@@ -619,6 +620,172 @@ def test_proxy_deletion_guard_blocks_when_allow_deletions_false(
     cp = saved[0]
     assert cp.status_reason == "opencode:output_requires_review"
     assert cp.output_ref is None
+
+
+async def _immediate_to_thread(fn, /, *args, **kwargs):
+    """Runs sync launch core immediately (test double for asyncio.to_thread)."""
+
+    return fn(*args, **kwargs)
+
+
+def test_launch_proxy_wraps_core_in_asyncio_to_thread(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+    actor: HamActor,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXEC_TOKEN", _new_token())
+    monkeypatch.setenv("OPENROUTER_API_KEY", _AUTH_CANARY)
+    rec = _project_rec()
+    patches = _patch_proxy_gates(rec=rec)
+
+    fake_snap = SimpleNamespace(
+        build_outcome="succeeded",
+        target_ref={"snapshot_id": "snap_thread"},
+        error_summary=None,
+    )
+
+    def fake_runner(**kwargs: Any) -> OpenCodeRunResult:
+        return OpenCodeRunResult(status="success", assistant_summary="ok.")
+
+    captured: list[Any] = []
+
+    async def spy_to_thread(fn, /, *args, **kwargs):
+        captured.append(fn)
+        return fn(*args, **kwargs)
+
+    fake_store = SimpleNamespace(save=lambda *a, **k: None)
+
+    try:
+        with (
+            patch("src.api.opencode_launch_proxy.asyncio.to_thread", spy_to_thread),
+            patch.object(build_api, "run_opencode_mission", fake_runner),
+            patch.object(build_api, "compute_deleted_paths_against_parent", lambda _c: ()),
+            patch.object(build_api, "emit_managed_workspace_snapshot", lambda _c: fake_snap),
+            patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
+        ):
+            res = _client(actor).post(
+                "/api/opencode/build/launch_proxy",
+                json=_good_body(rec),
+            )
+    finally:
+        _stop(patches)
+
+    assert res.status_code == 200
+    assert len(captured) == 1
+    assert captured[0] is build_api._run_opencode_launch_core
+
+
+def test_proxy_timeout_persists_failed_run_no_snapshot_no_head(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+    actor: HamActor,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXEC_TOKEN", _new_token())
+    monkeypatch.setenv("OPENROUTER_API_KEY", _AUTH_CANARY)
+    rec = _project_rec()
+    patches = _patch_proxy_gates(rec=rec)
+
+    def timeout_runner(**kwargs: Any) -> OpenCodeRunResult:
+        assert kwargs.get("deadline_s") == pytest.approx(270.0)
+        return OpenCodeRunResult(
+            status="timeout",
+            error_kind="timeout",
+            error_summary="OpenCode mission exceeded HAM-side deadline.",
+            duration_seconds=270.0,
+        )
+
+    snapshot_mock = MagicMock()
+    deleted_paths_mock = MagicMock(return_value=())
+    saved: list[Any] = []
+    fake_store = SimpleNamespace(save=lambda r, **k: saved.append(r))
+
+    try:
+        with (
+            patch(
+                "src.api.opencode_launch_proxy.asyncio.to_thread",
+                _immediate_to_thread,
+            ),
+            patch.object(build_api, "run_opencode_mission", timeout_runner),
+            patch.object(build_api, "compute_deleted_paths_against_parent", deleted_paths_mock),
+            patch.object(build_api, "emit_managed_workspace_snapshot", snapshot_mock),
+            patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
+        ):
+            res = _client(actor).post(
+                "/api/opencode/build/launch_proxy",
+                json=_good_body(rec),
+            )
+    finally:
+        _stop(patches)
+
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["ok"] is False
+    assert body["control_plane_status"] == "failed"
+    assert body["output_ref"] is None
+
+    assert len(saved) == 1
+    cp = saved[0]
+    assert cp.provider == "opencode_cli"
+    assert cp.action_kind == "launch"
+    assert cp.status == "failed"
+    assert cp.status_reason == "opencode:timeout"
+    assert cp.output_target == "managed_workspace"
+
+    snapshot_mock.assert_not_called()
+    deleted_paths_mock.assert_not_called()
+
+
+def test_proxy_deadline_passed_from_env_to_runner(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+    actor: HamActor,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("HAM_OPENCODE_LAUNCH_DEADLINE_S", "42")
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXEC_TOKEN", _new_token())
+    monkeypatch.setenv("OPENROUTER_API_KEY", _AUTH_CANARY)
+    rec = _project_rec()
+    patches = _patch_proxy_gates(rec=rec)
+
+    fake_snap = SimpleNamespace(
+        build_outcome="succeeded",
+        target_ref={"snapshot_id": "snap_deadline_env"},
+        error_summary=None,
+    )
+
+    def fake_runner(**kwargs: Any) -> OpenCodeRunResult:
+        assert kwargs.get("deadline_s") == pytest.approx(42.0)
+        return OpenCodeRunResult(status="success", assistant_summary="ok.")
+
+    fake_store = SimpleNamespace(save=lambda *a, **k: None)
+
+    try:
+        with (
+            patch(
+                "src.api.opencode_launch_proxy.asyncio.to_thread",
+                _immediate_to_thread,
+            ),
+            patch.object(build_api, "run_opencode_mission", fake_runner),
+            patch.object(build_api, "compute_deleted_paths_against_parent", lambda _c: ()),
+            patch.object(build_api, "emit_managed_workspace_snapshot", lambda _c: fake_snap),
+            patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
+        ):
+            res = _client(actor).post(
+                "/api/opencode/build/launch_proxy",
+                json=_good_body(rec),
+            )
+    finally:
+        _stop(patches)
+
+    assert res.status_code == 200
 
 
 # ---------------------------------------------------------------------------

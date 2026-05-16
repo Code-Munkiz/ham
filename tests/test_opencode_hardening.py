@@ -407,6 +407,26 @@ def test_status_from_run_maps_provider_not_configured_to_status_reason() -> None
     assert reason == "opencode:provider_not_configured"
 
 
+def test_status_from_run_maps_timeout_to_opencode_timeout() -> None:
+    status, reason = build_api._status_from_run("timeout", None)
+    assert status == "failed"
+    assert reason == "opencode:timeout"
+
+
+def test_effective_opencode_launch_deadline_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("HAM_OPENCODE_LAUNCH_DEADLINE_S", raising=False)
+    assert build_api.effective_opencode_launch_deadline_s() == pytest.approx(270.0)
+
+
+def test_effective_opencode_launch_deadline_env_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HAM_OPENCODE_LAUNCH_DEADLINE_S", "180")
+    assert build_api.effective_opencode_launch_deadline_s() == pytest.approx(180.0)
+
+
 # ---------------------------------------------------------------------------
 # 4. End-to-end launch — no-completion persists a failed ControlPlaneRun and
 #    does NOT emit a snapshot, NOT advance head, NOT create a successful row.

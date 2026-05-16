@@ -284,7 +284,6 @@ def _consume_run(  # noqa: C901
     log_context: Mapping[str, Any] | None = None,
 ) -> OpenCodeRunResult:
     started = time.monotonic()
-    deadline = started + deadline_s
 
     assistant_text: list[str] = []
     changed: list[str] = []
@@ -295,12 +294,14 @@ def _consume_run(  # noqa: C901
     saw_complete = False
     event_count = 0
     last_event_type: str | None = None
+    deadline_exceeded = False
 
     _LOG.info(
         "opencode_runner.sse_stream_started %s",
         _safe_log_fields(log_context, {"session_id": session_id}),
     )
 
+    deadline_wall = started + deadline_s
     for parsed in consume_events(event_stream):
         event_count += 1
         last_event_type = type(parsed).__name__
@@ -353,8 +354,8 @@ def _consume_run(  # noqa: C901
             break
         if isinstance(parsed, UnknownEvent):
             continue
-        if time.monotonic() >= deadline:
-            last_error = "OpenCode mission exceeded HAM-side deadline."
+        if time.monotonic() >= deadline_wall:
+            deadline_exceeded = True
             break
 
     duration = max(time.monotonic() - started, 0.0)
@@ -372,6 +373,12 @@ def _consume_run(  # noqa: C901
             "changed_count": len(set(changed)),
             "deleted_count": len(set(deleted)),
         },
+    )
+
+    timed_out = deadline_exceeded or (
+        not saw_complete
+        and last_error is None
+        and duration + 1e-9 >= deadline_s
     )
 
     if last_error is not None:
@@ -425,6 +432,26 @@ def _consume_run(  # noqa: C901
             denied_tool_calls_count=denied,
             error_kind="permission_denied",
             error_summary="All OpenCode tool calls were denied by HAM policy.",
+            duration_seconds=duration,
+        )
+
+    if timed_out:
+        _LOG.info(
+            "opencode_runner.sse_stream_ended status=timeout %s",
+            base_log_fields,
+        )
+        return OpenCodeRunResult(
+            status="timeout",
+            changed_paths=tuple(sorted(set(changed))),
+            deleted_paths=tuple(sorted(set(deleted))),
+            assistant_summary=assistant_summary,
+            tool_calls_count=tool_calls,
+            denied_tool_calls_count=denied,
+            error_kind="timeout",
+            error_summary=_cap(
+                _redact("OpenCode mission exceeded HAM-side deadline."),
+                ERROR_SUMMARY_CAP,
+            ),
             duration_seconds=duration,
         )
 
@@ -735,7 +762,15 @@ def run_opencode_mission(  # noqa: C901
             except Exception as exc:  # noqa: BLE001
                 _LOG.debug("opencode_runner.close_raised %s", type(exc).__name__)
         if process is not None:
+            _LOG.info(
+                "opencode_runner.subprocess_cleanup_started %s",
+                _safe_log_fields(log_context, None),
+            )
             shutdown_serve(process)
+            _LOG.info(
+                "opencode_runner.subprocess_cleanup_completed %s",
+                _safe_log_fields(log_context, None),
+            )
         _cleanup_xdg(isolated.xdg_data_home, isolated.xdg_config_home)
 
 

@@ -36,6 +36,7 @@ UI/test helpers can consume both surfaces uniformly.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from typing import Annotated, Any
@@ -47,9 +48,11 @@ from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.dependencies.workspace import get_workspace_store
 from src.api.droid_build import _require_build_approver
 from src.api.opencode_build import (
+    HOSTED_CLOUD_RUN_DEFAULT_HTTP_DEADLINE_S,
     OPENCODE_REGISTRY_REVISION,
     _run_opencode_launch_core,
     _truthy_env,
+    effective_opencode_launch_deadline_s,
     verify_opencode_launch_against_preview,
 )
 from src.ham.clerk_auth import HamActor
@@ -240,13 +243,20 @@ async def launch_opencode_build_proxy(
 
     _require_proxy_env_token()
 
+    deadline_s = effective_opencode_launch_deadline_s()
     _LOG.info(
-        "opencode_launch_proxy invoked project_id=%s actor_user_id=%s",
+        "opencode_launch_proxy.launch_proxy_started project_id=%s launch_deadline_seconds=%s launch_timeout_before_cloud_run_deadline=%s",
         rec.id,
-        getattr(ham_actor, "user_id", None) or "anonymous",
+        deadline_s,
+        deadline_s < HOSTED_CLOUD_RUN_DEFAULT_HTTP_DEADLINE_S,
+    )
+    _LOG.info(
+        "opencode_launch_proxy.launch_thread_started project_id=%s",
+        rec.id,
     )
 
-    return _run_opencode_launch_core(
+    return await asyncio.to_thread(
+        _run_opencode_launch_core,
         rec=rec,
         ham_actor=ham_actor,
         user_prompt=body.user_prompt,

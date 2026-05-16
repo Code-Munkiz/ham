@@ -28,6 +28,7 @@ from the request. All credential / config bring-up is handled inside
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import os
@@ -79,6 +80,26 @@ OPENCODE_REGISTRY_REVISION = "opencode-v1"
 _OPENCODE_EXEC_TOKEN_ENV = "HAM_OPENCODE_EXEC_TOKEN"  # noqa: S105
 _OPENCODE_ALLOW_DELETIONS_ENV = "HAM_OPENCODE_ALLOW_DELETIONS"
 _SUMMARY_FALLBACK = "OpenCode mission finished."
+
+# Default managed-workspace launch budget must finish below hosted Cloud Run's
+# HTTP deadline (300s by default) so HAM can persist ControlPlaneRun + JSON.
+_OPENCODE_LAUNCH_DEADLINE_ENV = "HAM_OPENCODE_LAUNCH_DEADLINE_S"
+_DEFAULT_MANAGED_WORKSPACE_LAUNCH_DEADLINE_S = 270.0
+HOSTED_CLOUD_RUN_DEFAULT_HTTP_DEADLINE_S = 300.0
+
+
+def effective_opencode_launch_deadline_s() -> float:
+    """Bounded OpenCode runner deadline for managed-workspace HTTP launches."""
+
+    raw = (os.environ.get(_OPENCODE_LAUNCH_DEADLINE_ENV) or "").strip()
+    if raw:
+        try:
+            parsed = float(raw)
+            if parsed > 0:
+                return parsed
+        except ValueError:
+            pass
+    return _DEFAULT_MANAGED_WORKSPACE_LAUNCH_DEADLINE_S
 
 
 router = APIRouter(
@@ -433,7 +454,7 @@ def _status_from_run(run_status: str, snapshot_outcome: str | None) -> tuple[str
     if run_status == "session_no_completion":
         return "failed", "opencode:session_no_completion"
     if run_status == "timeout":
-        return "failed", "opencode:runner_error"
+        return "failed", "opencode:timeout"
     return "failed", "opencode:runner_error"
 
 
@@ -634,7 +655,8 @@ async def launch_opencode_build(  # noqa: C901
         )
     _require_opencode_exec_token(authorization)
 
-    return _run_opencode_launch_core(
+    return await asyncio.to_thread(
+        _run_opencode_launch_core,
         rec=rec,
         ham_actor=ham_actor,
         user_prompt=body.user_prompt,
@@ -686,6 +708,14 @@ def _run_opencode_launch_core(
         rec.id,
     )
 
+    deadline_s = effective_opencode_launch_deadline_s()
+    _LOG.info(
+        "opencode_build.launch_deadline_seconds ham_run_id=%s deadline_s=%s launch_timeout_before_cloud_run_deadline=%s",
+        ham_run_id,
+        deadline_s,
+        deadline_s < HOSTED_CLOUD_RUN_DEFAULT_HTTP_DEADLINE_S,
+    )
+
     try:
         ensure_managed_working_tree(
             workspace_id=getattr(rec, "workspace_id", None),
@@ -714,6 +744,7 @@ def _run_opencode_launch_core(
         model=model,
         actor=ham_actor,
         log_context=log_context,
+        deadline_s=deadline_s,
     )
 
     snapshot_outcome: str | None = None
@@ -813,6 +844,7 @@ def _run_opencode_launch_core(
 __all__ = [
     "OPENCODE_REGISTRY_REVISION",
     "compute_opencode_proposal_digest",
+    "effective_opencode_launch_deadline_s",
     "router",
     "verify_opencode_launch_against_preview",
     "_run_opencode_launch_core",
