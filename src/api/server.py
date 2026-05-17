@@ -21,6 +21,7 @@ from src.api.coding_agents import router as coding_agents_router
 from src.api.coding_conductor import router as coding_conductor_router
 from src.api.coding_readiness import router as coding_readiness_router
 from src.api.control_plane_runs import router as control_plane_runs_router
+from src.api.custom_builders import router as custom_builders_router
 from src.api.cursor_managed_deploy import router as cursor_managed_deploy_router
 from src.api.cursor_managed_deploy_approval import router as cursor_managed_deploy_approval_router
 from src.api.cursor_managed_missions import router as cursor_managed_missions_router
@@ -149,6 +150,7 @@ app.include_router(opencode_build_router)
 app.include_router(opencode_launch_proxy_router)
 app.include_router(coding_readiness_router)
 app.include_router(coding_conductor_router)
+app.include_router(custom_builders_router)
 app.include_router(models_catalog_router)
 app.include_router(workspace_health_router)
 app.include_router(workspace_files_router)
