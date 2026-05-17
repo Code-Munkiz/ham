@@ -21,6 +21,7 @@ Properties locked by tests:
 from __future__ import annotations
 
 import os
+from typing import TYPE_CHECKING
 
 from src.ham.coding_router.types import (
     Candidate,
@@ -32,6 +33,9 @@ from src.ham.coding_router.types import (
     WorkspaceAgentPolicy,
     WorkspaceReadiness,
 )
+
+if TYPE_CHECKING:
+    from src.ham.custom_builder.profile import CustomBuilderProfile
 
 
 def _truthy_env(name: str) -> bool:
@@ -133,11 +137,11 @@ _BASE_CONFIDENCE: dict[str, dict[ProviderKind, float]] = {
     "feature": {
         "cursor_cloud": 0.8,
         "opencode_cli": 0.65,  # default open managed-workspace builder
-        "claude_agent": 0.6,   # meaningful for prefer_premium_reasoning
+        "claude_agent": 0.6,  # meaningful for prefer_premium_reasoning
     },
     "fix": {
         "cursor_cloud": 0.7,
-        "opencode_cli": 0.6,   # default open managed-workspace fixer
+        "opencode_cli": 0.6,  # default open managed-workspace fixer
         "claude_agent": 0.55,  # meaningful for prefer_premium_reasoning
         "claude_code": 0.5,
     },
@@ -149,13 +153,13 @@ _BASE_CONFIDENCE: dict[str, dict[ProviderKind, float]] = {
     "multi_file_edit": {
         "cursor_cloud": 0.85,
         "opencode_cli": 0.65,  # default open managed-workspace multi-file editor
-        "claude_agent": 0.5,   # meaningful for prefer_premium_reasoning
+        "claude_agent": 0.5,  # meaningful for prefer_premium_reasoning
     },
     "single_file_edit": {
         "claude_code": 0.7,
         "claude_agent": 0.6,
         "cursor_cloud": 0.5,
-        "opencode_cli": 0.5,   # slightly raised; competitive for managed-workspace
+        "opencode_cli": 0.5,  # slightly raised; competitive for managed-workspace
     },
     "unknown": {
         "no_agent": 0.4,
@@ -283,6 +287,11 @@ def _apply_preference_boosts(
     ``recommended`` mode (and absent policy) applies no boost — let platform
     readiness and task-fit confidence decide. Other modes add a small boost to
     the nominated provider kind so it surfaces first among approve-able options.
+
+    For ``prefer_open_custom``: in addition to boosting the bare ``opencode_cli``
+    candidate, the single best-matching unblocked custom-builder candidate
+    (highest current confidence) receives an extra ``+0.05`` so a strong tag
+    match can promote a builder above its bare lane.
     """
     if workspace_policy is None or workspace_policy.preference_mode == "recommended":
         return candidates
@@ -294,21 +303,48 @@ def _apply_preference_boosts(
     target_provider, boost = boost_spec
     result: list[Candidate] = []
     for c in candidates:
-        if c.provider == target_provider and not c.blockers:
-            result.append(
-                Candidate(
-                    provider=c.provider,
-                    confidence=min(1.0, c.confidence + boost),
-                    reason=c.reason,
-                    blockers=c.blockers,
-                    requires_operator=c.requires_operator,
-                    requires_confirmation=c.requires_confirmation,
-                    will_open_pull_request=c.will_open_pull_request,
-                )
-            )
+        if c.provider == target_provider and not c.blockers and c.builder_id is None:
+            result.append(_with_confidence(c, min(1.0, c.confidence + boost)))
         else:
             result.append(c)
+
+    if workspace_policy.preference_mode == "prefer_open_custom":
+        result = _apply_prefer_open_custom_builder_boost(result)
     return result
+
+
+def _apply_prefer_open_custom_builder_boost(
+    candidates: list[Candidate],
+) -> list[Candidate]:
+    """Give the single best unblocked builder candidate an extra +0.05."""
+    best_index = -1
+    best_confidence = -1.0
+    for i, c in enumerate(candidates):
+        if c.builder_id is None or c.blockers:
+            continue
+        if c.confidence > best_confidence:
+            best_confidence = c.confidence
+            best_index = i
+    if best_index < 0:
+        return candidates
+    boosted = list(candidates)
+    target = boosted[best_index]
+    boosted[best_index] = _with_confidence(target, min(1.0, target.confidence + 0.05))
+    return boosted
+
+
+def _with_confidence(c: Candidate, new_confidence: float) -> Candidate:
+    return Candidate(
+        provider=c.provider,
+        confidence=new_confidence,
+        reason=c.reason,
+        blockers=c.blockers,
+        requires_operator=c.requires_operator,
+        requires_confirmation=c.requires_confirmation,
+        will_open_pull_request=c.will_open_pull_request,
+        builder_id=c.builder_id,
+        builder_name=c.builder_name,
+    )
 
 
 def recommend(
@@ -316,6 +352,8 @@ def recommend(
     readiness: WorkspaceReadiness,
     project: ProjectFlags | None = None,
     workspace_policy: WorkspaceAgentPolicy | None = None,
+    *,
+    custom_builders: list[CustomBuilderProfile] | None = None,
 ) -> list[Candidate]:
     """Return a ranked list of :class:`Candidate` rows for ``task``.
 
@@ -327,6 +365,12 @@ def recommend(
     ``workspace_policy`` carries the workspace's allow/deny flags and
     preference mode. When ``None``, no policy boosts are applied and all
     platform-ready providers are considered (pre-settings behavior).
+
+    ``custom_builders`` are enabled workspace custom-builder profiles (PR 4).
+    When ``None`` or empty, behaviour is unchanged. Otherwise each matching
+    enabled profile may emit an additional ``opencode_cli``-backed candidate
+    that inherits the bare lane's blockers, with a tag-driven confidence boost
+    capped at ``+0.15``.
     """
     proj = project if project is not None else readiness.project
     table = _BASE_CONFIDENCE.get(task.kind, {})
@@ -360,9 +404,102 @@ def recommend(
         )
 
     out = _demote_opencode_when_ineligible(out, readiness, proj)
+    out = _emit_custom_builder_candidates(out, task, workspace_policy, custom_builders)
     out = _apply_preference_boosts(out, workspace_policy)
     out.sort(key=_approveable_first)
     return out
+
+
+_MAX_BUILDER_CANDIDATES = 3
+_BUILDER_TAG_BOOST_STEP = 0.05
+_BUILDER_TAG_BOOST_CAP = 0.15
+_BUILDER_POLICY_DISABLED_BLOCKER = "OpenCode is disabled by workspace policy."
+
+
+def _match_intent_tags(profile: CustomBuilderProfile, prompt: str) -> list[str]:
+    """Return profile intent_tags that appear (case-insensitive substring) in ``prompt``."""
+    lowered = prompt.lower()
+    matches: list[str] = []
+    for tag in profile.intent_tags:
+        if not tag:
+            continue
+        if tag.lower() in lowered:
+            matches.append(tag)
+    return matches
+
+
+def _builder_qualifies(
+    profile: CustomBuilderProfile, task: CodingTask, tag_matches: list[str]
+) -> bool:
+    if not profile.enabled:
+        return False
+    if profile.preferred_harness != "opencode_cli":
+        return False
+    if "opencode_cli" not in profile.allowed_harnesses:
+        return False
+    if profile.task_kinds:
+        return task.kind in profile.task_kinds
+    return len(tag_matches) > 0
+
+
+def _emit_custom_builder_candidates(
+    out: list[Candidate],
+    task: CodingTask,
+    workspace_policy: WorkspaceAgentPolicy | None,
+    custom_builders: list[CustomBuilderProfile] | None,
+) -> list[Candidate]:
+    """Append at most three custom-builder candidates that piggy-back on opencode_cli."""
+    if not custom_builders:
+        return out
+    base = _BASE_CONFIDENCE.get(task.kind, {}).get("opencode_cli")
+    if base is None:
+        return out
+
+    bare = next((c for c in out if c.provider == "opencode_cli" and c.builder_id is None), None)
+    if bare is None:
+        return out
+
+    safety = _SAFETY["opencode_cli"]
+    bare_blockers = list(bare.blockers)
+    policy_blocker_needed = (
+        workspace_policy is not None and workspace_policy.allow_opencode is False
+    )
+
+    scored: list[tuple[float, str, Candidate]] = []
+    for profile in custom_builders:
+        tag_matches = _match_intent_tags(profile, task.user_prompt)
+        if not _builder_qualifies(profile, task, tag_matches):
+            continue
+
+        blockers: list[str] = list(bare_blockers)
+        if policy_blocker_needed and _BUILDER_POLICY_DISABLED_BLOCKER not in blockers:
+            blockers.append(_BUILDER_POLICY_DISABLED_BLOCKER)
+
+        if blockers:
+            confidence = base
+        else:
+            boost = min(_BUILDER_TAG_BOOST_CAP, len(tag_matches) * _BUILDER_TAG_BOOST_STEP)
+            confidence = min(1.0, base + boost)
+
+        reason = f"{profile.name} — custom builder running on managed OpenCode."
+        candidate = Candidate(
+            provider="opencode_cli",
+            confidence=confidence,
+            reason=reason,
+            blockers=tuple(blockers),
+            requires_operator=safety["requires_operator"],
+            requires_confirmation=safety["requires_confirmation"],
+            will_open_pull_request=safety["will_open_pull_request"],
+            builder_id=profile.builder_id,
+            builder_name=profile.name,
+        )
+        scored.append((confidence, profile.builder_id, candidate))
+
+    if not scored:
+        return out
+
+    scored.sort(key=lambda row: (-row[0], row[1]))
+    return out + [row[2] for row in scored[:_MAX_BUILDER_CANDIDATES]]
 
 
 def _demote_opencode_when_ineligible(

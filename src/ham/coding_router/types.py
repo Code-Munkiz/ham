@@ -171,6 +171,10 @@ class Candidate:
     extended with task-specific blockers (e.g. project missing GitHub repo).
     A candidate with non-empty ``blockers`` is **not approve-able**; the
     future chat card renders it as "Recommended, but blocked because…".
+
+    ``builder_id`` and ``builder_name`` are populated only for custom
+    builder candidates (PR 4); for plain provider candidates they remain
+    ``None`` so the public response shape stays unchanged.
     """
 
     provider: ProviderKind
@@ -180,6 +184,8 @@ class Candidate:
     requires_operator: bool = False
     requires_confirmation: bool = False
     will_open_pull_request: bool = False
+    builder_id: str | None = field(default=None, kw_only=True)
+    builder_name: str | None = field(default=None, kw_only=True)
 
 
 __all__ = [

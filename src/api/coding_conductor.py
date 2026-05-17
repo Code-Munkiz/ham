@@ -43,7 +43,17 @@ from src.ham.coding_router import (
     collate_readiness,
     recommend,
 )
-from src.ham.coding_router.types import ProjectFlags, ProviderKind, WorkspaceAgentPolicy, WorkspaceReadiness
+from src.ham.coding_router.types import (
+    ProjectFlags,
+    ProviderKind,
+    WorkspaceAgentPolicy,
+    WorkspaceReadiness,
+)
+from src.ham.custom_builder.profile import CustomBuilderProfile  # noqa: E402
+from src.persistence.custom_builder_store import (  # noqa: E402
+    build_custom_builder_store,
+    list_profiles_for_workspace,
+)
 
 router = APIRouter(
     prefix="/api/coding/conductor",
@@ -213,6 +223,25 @@ def _truthy_env_conductor(name: str) -> bool:
     return (os.environ.get(name) or "").strip().lower() in ("1", "true", "yes", "on")
 
 
+def _load_workspace_custom_builders(
+    workspace_id: str | None,
+) -> list[CustomBuilderProfile]:
+    """Load enabled custom builders for the workspace. Best-effort; never raises."""
+    if not workspace_id:
+        return []
+    try:
+        store = build_custom_builder_store()
+        profiles = list_profiles_for_workspace(store, workspace_id)
+        return [p for p in profiles if p.enabled]
+    except Exception:  # noqa: BLE001 — best-effort, never block recommendation
+        _LOG.warning(
+            "custom builder load failed for workspace=%s",
+            workspace_id,
+            exc_info=False,
+        )
+        return []
+
+
 def _opencode_exclusion_reason(
     gate_enabled: bool,
     execution_enabled: bool,
@@ -330,7 +359,13 @@ async def post_coding_conductor_preview(
         workspace_policy=workspace_policy,
     )
 
-    candidates = recommend(task, snapshot, workspace_policy=workspace_policy)
+    custom_builders = _load_workspace_custom_builders(body.workspace_id)
+    candidates = recommend(
+        task,
+        snapshot,
+        workspace_policy=workspace_policy,
+        custom_builders=custom_builders,
+    )
     candidates = _apply_preferred_override(candidates, body.preferred_provider)
     chosen = _pick_chosen(candidates, task.kind)
 
