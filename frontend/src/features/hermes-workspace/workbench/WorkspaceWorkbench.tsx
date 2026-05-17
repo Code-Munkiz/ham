@@ -723,7 +723,12 @@ function WorkbenchPreviewPanel({
       window.clearTimeout(iframeProxyRetryTimerRef.current);
       iframeProxyRetryTimerRef.current = null;
     }
-  }, [preview?.runtime_session_id, preview?.preview_endpoint_id, preview?.source_snapshot_id, previewUrl]);
+  }, [
+    preview?.runtime_session_id,
+    preview?.preview_endpoint_id,
+    preview?.source_snapshot_id,
+    previewUrl,
+  ]);
 
   const ws = workspaceId?.trim() || "";
   const pid = projectId?.trim() || "";
