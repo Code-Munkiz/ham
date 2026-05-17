@@ -598,6 +598,9 @@ def test_builder_hook_calculator_multi_iteration_preserves_blue_equation_and_yel
     )
     md5 = snap5.metadata or {}
     assert md5.get("calculator_digit_yellow_border") is True
+    assert md5.get("calculator_live_equation_working_line") is True
+    assert md5.get("calculator_light_blue_digits") is True
+    assert md5.get("calculator_large_buttons") is True
     mf5 = snap5.manifest if isinstance(snap5.manifest, dict) else {}
     files5 = mf5.get("inline_files") if isinstance(mf5.get("inline_files"), dict) else {}
     css5_raw = str(files5.get("src/styles.css") or "")
@@ -605,8 +608,35 @@ def test_builder_hook_calculator_multi_iteration_preserves_blue_equation_and_yel
     assert "#b8e8ff" in css5_raw.lower()
     assert "#facc15" in css5_raw.lower()
     assert "equation-working" in app5_raw
+    sixth = maybe_chat_scaffold_for_turn(
+        workspace_id=workspace_id,
+        project_id=project_id,
+        session_id=session_id,
+        last_user_plain="add a subtle soft shadow behind the keypad for depth",
+        created_by="user_1",
+        operation="update_existing_project",
+    )
+    assert sixth and sixth.get("scaffolded") is True
+    sid6 = str(sixth.get("source_snapshot_id") or "")
+    assert sid6 != sid5
+    snap6 = next(
+        row for row in store.list_source_snapshots(workspace_id=workspace_id, project_id=project_id) if row.id == sid6
+    )
+    md6 = snap6.metadata or {}
+    assert md6.get("calculator_digit_yellow_border") is True
+    assert md6.get("calculator_live_equation_working_line") is True
+    assert md6.get("calculator_light_blue_digits") is True
+    assert md6.get("calculator_large_buttons") is True
+    mf6 = snap6.manifest if isinstance(snap6.manifest, dict) else {}
+    files6 = mf6.get("inline_files") if isinstance(mf6.get("inline_files"), dict) else {}
+    css6_raw = str(files6.get("src/styles.css") or "").lower()
+    app6_raw = str(files6.get("src/App.tsx") or "")
+    assert "#b8e8ff" in css6_raw
+    assert "#facc15" in css6_raw
+    assert "equation-working" in app6_raw
+    assert "box-shadow" in css6_raw
     sources = store.list_project_sources(workspace_id=workspace_id, project_id=project_id)
-    assert sources and sources[0].active_snapshot_id == sid5
+    assert sources and sources[0].active_snapshot_id == sid6
     _cleanup()
 
 

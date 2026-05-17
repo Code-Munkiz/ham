@@ -99,6 +99,15 @@ async function structuredErrorCodeFromResponse(res: Response): Promise<string | 
   }
 }
 
+/** True for Clerk JWT verify failures/expiry (narrow — not all HTTP 401s). */
+async function responseLooksLikeStaleClerkUnauthorized(res: Response): Promise<boolean> {
+  if (res.status !== 401) return false;
+  const code = await structuredErrorCodeFromResponse(res);
+  if (code === "CLERK_SESSION_INVALID") return true;
+  const raw = ((await hamApiErrorDetailMessage(res)) || "").toLowerCase();
+  return raw.includes("signature has expired") || raw.includes("signature expired");
+}
+
 /** Builder/workspace-scoped read failed (Workbench preview/status); callers can inspect `.code`. */
 export class HamBuilderScopedReadError extends Error {
   readonly status: number;
@@ -1080,10 +1089,23 @@ export function subscribeBuilderActivityStream(
       ctl.ac = new AbortController();
       const signal = ctl.ac.signal;
       try {
-        const headers = new Headers();
-        headers.set("Accept", "text/event-stream");
-        await mergeClerkAuthBearerIfNeeded(headers);
-        const res = await fetch(apiUrl(path), { credentials: "include", headers, signal });
+        const connect = async (forceRefresh: boolean): Promise<Response> => {
+          const headers = new Headers();
+          headers.set("Accept", "text/event-stream");
+          await mergeClerkAuthBearerIfNeeded(headers, forceRefresh ? { forceRefresh: true } : undefined);
+          return fetch(apiUrl(path), { credentials: "include", headers, signal });
+        };
+        let res = await connect(false);
+        if (
+          (!res.ok || !res.body) &&
+          !ctl.cancelled &&
+          (await responseLooksLikeStaleClerkUnauthorized(res))
+        ) {
+          clearClerkSessionTokenCache();
+          await new Promise<void>((r) => setTimeout(r, 350));
+          if (ctl.cancelled) break;
+          res = await connect(true);
+        }
         if (!res.ok || !res.body) {
           throw new Error(`builder_activity_stream_http_${res.status}`);
         }
@@ -3488,11 +3510,16 @@ export async function postChatStream(
     include_active_agent_guidance: body.include_active_agent_guidance ?? true,
     enable_operator: body.enable_operator ?? true,
   };
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept: "application/x-ndjson, application/json",
+  const clerkPkTrim = ((import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined) || "").trim();
+  const buildStreamHeaders = (auth?: HamChatStreamAuth): Record<string, string> => {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Accept: "application/x-ndjson, application/json",
+    };
+    applyChatStreamAuthHeaders(headers, auth ?? authorization);
+    return headers;
   };
-  applyChatStreamAuthHeaders(headers, authorization);
+  let headers = buildStreamHeaders();
   let res: Response;
   try {
     res = await fetch(url, {
@@ -3506,6 +3533,35 @@ export async function postChatStream(
         ? String((cause as Error).message)
         : "Network error";
     throw new Error(`${hint}. ${streamNetworkHint}`);
+  }
+  const clerkStreamStaleRetryEligible =
+    res.status === 401 &&
+    Boolean(clerkPkTrim) &&
+    (authorization === undefined || typeof authorization === "object");
+  if (clerkStreamStaleRetryEligible && (await responseLooksLikeStaleClerkUnauthorized(res))) {
+    clearClerkSessionTokenCache();
+    await new Promise<void>((resolve) => setTimeout(resolve, 350));
+    const refreshed = await getRegisteredClerkSessionToken({ forceRefresh: true });
+    if (refreshed) {
+      const nextAuth: HamChatStreamAuth =
+        typeof authorization === "object" && authorization
+          ? { ...authorization, sessionToken: refreshed }
+          : { sessionToken: refreshed };
+      headers = buildStreamHeaders(nextAuth);
+      try {
+        res = await fetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payload),
+        });
+      } catch (cause) {
+        const hint =
+          typeof cause === "object" && cause !== null && "message" in cause
+            ? String((cause as Error).message)
+            : "Network error";
+        throw new Error(`${hint}. ${streamNetworkHint}`);
+      }
+    }
   }
   if (!res.ok) {
     let msg = `Chat stream failed (HTTP ${res.status})`;

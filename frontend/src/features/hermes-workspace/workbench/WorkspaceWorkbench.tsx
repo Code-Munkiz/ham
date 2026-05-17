@@ -60,6 +60,23 @@ import { cn } from "@/lib/utils";
 import { ProjectSourceIntakeDialog } from "./ProjectSourceIntakeDialog";
 import { WorkbenchProjectSettingsPanel } from "./WorkbenchProjectSettingsPanel";
 
+/** Treat newest snapshot row by snapshot `created_at` (ordering is not positional). */
+function latestListedSourceSnapshotId(rows: BuilderSourceSnapshotRecord[]): string | null {
+  if (!rows.length) return null;
+  let best: BuilderSourceSnapshotRecord | null = null;
+  let bestMs = Number.NEGATIVE_INFINITY;
+  for (const row of rows) {
+    const t = Date.parse(row.created_at || "");
+    if (!Number.isFinite(t)) continue;
+    if (t >= bestMs) {
+      bestMs = t;
+      best = row;
+    }
+  }
+  const id = (best ?? rows[0])?.id;
+  return id ?? null;
+}
+
 export type WorkspaceWorkbenchProps = {
   /** Binds embedded settings/deep-links to the active Ham project from chat routing. */
   projectId?: string | null;
@@ -335,6 +352,21 @@ function sanitizePreviewFetchError(message: string | null): string | null {
     return "Preview is still warming up. HAM will keep retrying until it is ready.";
   }
   return raw;
+}
+
+function previewIframeUpstreamLooksHardBroken(params: {
+  preview: BuilderPreviewStatus | null;
+  job: CloudRuntimeJob | null;
+}): boolean {
+  const { preview, job } = params;
+  if (preview?.mode !== "cloud" || preview?.status !== "ready") return false;
+  if (!job || job.status !== "succeeded") return false;
+  const pSnap = preview.source_snapshot_id;
+  const jSnap = job.source_snapshot_id;
+  if (pSnap && jSnap && pSnap !== jSnap) return false;
+  const doneAt = Date.parse(job.completed_at || "");
+  if (!Number.isFinite(doneAt)) return false;
+  return Date.now() - doneAt > 45_000;
 }
 
 function normalizePreviewUrl(preview: BuilderPreviewStatus | null): string | null {
@@ -733,6 +765,12 @@ function WorkbenchPreviewPanel({
   const ws = workspaceId?.trim() || "";
   const pid = projectId?.trim() || "";
   const hasBackendSource = snapshots.length > 0 || Boolean(preview?.source_snapshot_id);
+  const newestListedSnapshotId = latestListedSourceSnapshotId(snapshots);
+  const previewBehindLatestListedSnapshot =
+    Boolean(ws && pid && hasBackendSource) &&
+    Boolean(newestListedSnapshotId && preview?.source_snapshot_id) &&
+    newestListedSnapshotId !== preview?.source_snapshot_id &&
+    preview?.status !== "error";
   let previewPhase:
     | "no_project"
     | "no_source"
@@ -743,6 +781,8 @@ function WorkbenchPreviewPanel({
     | "error" = "no_source";
   if (!ws || !pid) {
     previewPhase = "no_project";
+  } else if (iframeProxyError === "PREVIEW_PROXY_FAILED") {
+    previewPhase = "error";
   } else if (iframeProxyError || iframeProxyWarmupPaused) {
     previewPhase = "starting";
   } else if (authSessionRefreshing) {
@@ -751,7 +791,7 @@ function WorkbenchPreviewPanel({
     previewPhase = "error";
   } else if (error) {
     previewPhase = "error";
-  } else if (preview?.status === "ready" && previewUrl) {
+  } else if (preview?.status === "ready" && previewUrl && !previewBehindLatestListedSnapshot) {
     previewPhase = "ready";
   } else if (preview?.mode === "cloud" && preview?.status === "building") {
     previewPhase = "starting";
@@ -777,7 +817,9 @@ function WorkbenchPreviewPanel({
       preview?.status === "waiting" ||
       preview?.status === "error"),
   );
-  const visualEditReady = Boolean(ws && pid && preview?.status === "ready" && previewUrl);
+  const visualEditReady = Boolean(
+    ws && pid && preview?.status === "ready" && previewUrl && !previewBehindLatestListedSnapshot,
+  );
   const previewUrlKind: "local" | "cloud_proxy" | "unknown" =
     preview?.mode === "local" ? "local" : preview?.mode === "cloud" ? "cloud_proxy" : "unknown";
   React.useEffect(() => {
@@ -797,13 +839,6 @@ function WorkbenchPreviewPanel({
   ].includes(cloudRuntimeState);
   const activeSourceSnapshotId =
     preview?.source_snapshot_id || cloudRuntime?.source_snapshot_id || snapshots[0]?.id || null;
-  const newestListedSnapshotId = snapshots[0]?.id ?? null;
-  /** Chat follow-up uploads a newer snapshot before preview-runtime metadata catches up — keep polling. */
-  const previewBehindLatestListedSnapshot =
-    Boolean(ws && pid && hasBackendSource) &&
-    Boolean(newestListedSnapshotId && preview?.source_snapshot_id) &&
-    newestListedSnapshotId !== preview?.source_snapshot_id &&
-    preview?.status !== "error";
   const cloudPreviewHealthy =
     preview?.mode === "cloud" && preview?.status === "ready" && preview?.health === "healthy";
   const cloudRetryEnabled =
@@ -825,6 +860,7 @@ function WorkbenchPreviewPanel({
   const canRenderPreviewIframe =
     preview?.status === "ready" &&
     Boolean(previewUrl) &&
+    !previewBehindLatestListedSnapshot &&
     !iframeProxyError &&
     !iframeProxyWarmupPaused &&
     (!cloudPreviewProxyNeedsSession ||
@@ -1023,11 +1059,17 @@ function WorkbenchPreviewPanel({
                         ? `Latest: ${activity[0].title}`
                         : "Provisioning or waiting for a preview URL.",
               }
-            : previewPhase === "error"
-              ? {
-                  title: "Preview could not start.",
-                  subtitle: "",
-                }
+              : previewPhase === "error"
+                ? {
+                    title:
+                      iframeProxyError === "PREVIEW_PROXY_FAILED"
+                        ? "Preview gateway lost contact with your hosted runtime."
+                        : "Preview could not start.",
+                    subtitle:
+                      iframeProxyError === "PREVIEW_PROXY_FAILED"
+                        ? "The sandbox build finished but the iframe proxy still could not reach the app. Retry Refresh status, or prompt another tiny edit."
+                        : "",
+                  }
               : { title: "", subtitle: "" };
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden text-[12px] leading-relaxed text-white/70">
@@ -1205,6 +1247,27 @@ function WorkbenchPreviewPanel({
                         (frameText.includes("PREVIEW_PROXY_") ||
                           frameText.includes("upstream is unavailable")))
                     ) {
+                      const upstreamUnavailable =
+                        /PREVIEW_PROXY_UPSTREAM_UNAVAILABLE/i.test(frameText) ||
+                        (contentType.includes("application/json") &&
+                          frameText.includes("PREVIEW_PROXY_UPSTREAM_UNAVAILABLE"));
+                      if (
+                        upstreamUnavailable &&
+                        previewIframeUpstreamLooksHardBroken({
+                          preview,
+                          job: cloudRuntimeLatestJob,
+                        })
+                      ) {
+                        if (iframeProxyRetryTimerRef.current != null) {
+                          window.clearTimeout(iframeProxyRetryTimerRef.current);
+                          iframeProxyRetryTimerRef.current = null;
+                        }
+                        iframeProxyStrikeRef.current = 0;
+                        void refreshPreviewRuntimeStatus({ includeLifecycle: true });
+                        setIframeProxyWarmupPaused(true);
+                        setIframeProxyError("PREVIEW_PROXY_FAILED");
+                        return;
+                      }
                       iframeProxyStrikeRef.current += 1;
                       void refreshPreviewRuntimeStatus({ includeLifecycle: false });
                       if (iframeProxyRetryTimerRef.current != null) {

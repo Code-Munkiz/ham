@@ -1009,6 +1009,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     async (sessionOverride?: string | null) => {
       const sid = (sessionOverride ?? sessionId)?.trim();
       if (!sid || chatCapabilitiesLoading) return;
+      if (!projectId?.trim()) {
+        setContextMetersPayload(null);
+        return;
+      }
       if (!chatCapabilities?.context_meters_enabled) {
         setContextMetersPayload(null);
         return;

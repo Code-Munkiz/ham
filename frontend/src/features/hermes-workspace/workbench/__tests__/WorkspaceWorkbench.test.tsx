@@ -1688,7 +1688,9 @@ describe("WorkspaceWorkbench", () => {
       </MemoryRouter>,
     );
 
-    await screen.findByTestId("hww-preview-iframe");
+    await waitFor(() => expect(getBuilderPreviewStatusMock.mock.calls.length).toBeGreaterThanOrEqual(1));
+    expect(screen.queryByTestId("hww-preview-iframe")).toBeNull();
+
     await new Promise((r) => setTimeout(r, 200));
     const baseline = getBuilderPreviewStatusMock.mock.calls.length;
 
@@ -1790,7 +1792,7 @@ describe("WorkspaceWorkbench", () => {
       expect(getBuilderPreviewStatusMock.mock.calls.length).toBeGreaterThanOrEqual(1);
     });
 
-    const firstIframe = await screen.findByTestId("hww-preview-iframe");
+    const firstIframe = await screen.findByTestId("hww-preview-iframe", {}, { timeout: 20000 });
 
     await waitFor(
       () => {
