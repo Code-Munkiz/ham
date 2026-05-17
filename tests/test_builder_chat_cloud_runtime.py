@@ -498,6 +498,118 @@ def test_builder_hook_make_buttons_larger_and_blue_routes_to_update(tmp_path: Pa
     _cleanup()
 
 
+def test_builder_hook_calculator_multi_iteration_preserves_blue_equation_and_yellow_border(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    workspace_id = "ws_a"
+    project_id = "pr_calc_border_carry"
+    session_id = "sess_calc_border_carry"
+
+    first = maybe_chat_scaffold_for_turn(
+        workspace_id=workspace_id,
+        project_id=project_id,
+        session_id=session_id,
+        last_user_plain="ham build me a calculator app",
+        created_by="user_1",
+    )
+    assert first and first.get("scaffolded") is True
+    sid1 = str(first.get("source_snapshot_id") or "")
+
+    p2, m2 = run_builder_happy_path_hook(
+        workspace_id=workspace_id,
+        project_id=project_id,
+        session_id=session_id,
+        last_user_plain="ham make the buttons larger and blue",
+        ham_actor=None,
+    )
+    assert p2 is not None
+    assert m2.get("builder_operation") == "update_existing_project"
+    sid2 = str(m2.get("source_snapshot_id") or "")
+    assert sid2 and sid2 != sid1
+
+    p3, m3 = run_builder_happy_path_hook(
+        workspace_id=workspace_id,
+        project_id=project_id,
+        session_id=session_id,
+        last_user_plain=(
+            "make it show the equation as I type like 8*7=56 and keep digits visible "
+            "while I tap keys"
+        ),
+        ham_actor=None,
+    )
+    assert p3 is not None and m3.get("builder_operation") == "update_existing_project"
+    sid3 = str(m3.get("source_snapshot_id") or "")
+    assert sid3 != sid2
+
+    p4, m4 = run_builder_happy_path_hook(
+        workspace_id=workspace_id,
+        project_id=project_id,
+        session_id=session_id,
+        last_user_plain="make them have a yellow border",
+        ham_actor=None,
+    )
+    assert p4 is not None
+    assert m4.get("builder_operation") == "update_existing_project"
+    sid4 = str(m4.get("source_snapshot_id") or "")
+    assert sid4 != sid3
+
+    snap4 = next(
+        row
+        for row in store.list_source_snapshots(workspace_id=workspace_id, project_id=project_id)
+        if row.id == sid4
+    )
+    md4 = snap4.metadata or {}
+    assert md4.get("calculator_digit_yellow_border") is True
+    assert md4.get("calculator_live_equation_working_line") is True
+    assert md4.get("calculator_light_blue_digits") is True
+    assert md4.get("calculator_large_buttons") is True
+    mf4 = snap4.manifest if isinstance(snap4.manifest, dict) else {}
+    files4 = mf4.get("inline_files") if isinstance(mf4.get("inline_files"), dict) else {}
+    assert isinstance(files4, dict)
+    css4_raw = str(files4.get("src/styles.css") or "")
+    css4 = css4_raw.lower()
+    app4_raw = str(files4.get("src/App.tsx") or "")
+    assert "#b8e8ff" in css4
+    assert "min-height: 3.55rem;" in css4
+    assert ".equation-working" in app4_raw or "equation-working" in app4_raw
+    assert "calc-yellow-digit-border" in app4_raw
+    assert "#facc15" in css4
+
+    fifth = maybe_chat_scaffold_for_turn(
+        workspace_id=workspace_id,
+        project_id=project_id,
+        session_id=session_id,
+        last_user_plain=(
+            "make the calculator easier to read but keep the blue buttons with the yellow border"
+        ),
+        created_by="user_1",
+        operation="update_existing_project",
+    )
+    assert fifth and fifth.get("scaffolded") is True
+    sid5 = str(fifth.get("source_snapshot_id") or "")
+    assert sid5 != sid4
+    snap5 = next(
+        row
+        for row in store.list_source_snapshots(workspace_id=workspace_id, project_id=project_id)
+        if row.id == sid5
+    )
+    md5 = snap5.metadata or {}
+    assert md5.get("calculator_digit_yellow_border") is True
+    mf5 = snap5.manifest if isinstance(snap5.manifest, dict) else {}
+    files5 = mf5.get("inline_files") if isinstance(mf5.get("inline_files"), dict) else {}
+    css5_raw = str(files5.get("src/styles.css") or "")
+    app5_raw = str(files5.get("src/App.tsx") or "")
+    assert "#b8e8ff" in css5_raw.lower()
+    assert "#facc15" in css5_raw.lower()
+    assert "equation-working" in app5_raw
+    sources = store.list_project_sources(workspace_id=workspace_id, project_id=project_id)
+    assert sources and sources[0].active_snapshot_id == sid5
+    _cleanup()
+
+
 def test_chat_scaffold_update_carries_forward_reference_style_profile(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
     store = BuilderSourceStore(store_path=tmp_path / "sources.json")

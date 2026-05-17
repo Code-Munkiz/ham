@@ -56,9 +56,9 @@ const BUILDER_PROMPT =
 
 /** Iterating the hosted Builder app UX (distinct from repo / Hermes codebase edits). */
 const WORKBENCH_HOSTED_APP_SURFACE =
-  /\b(buttons?|digits?|numbers?|keyboard|controls?|calculator|spacing|equation|formula|tape|typing|styled|layouts?|padding|margins|apps?|preview|current\s+app)\b/i;
+  /\b(buttons?|digits?|numbers?|keyboard|controls?|calculator|spacing|equation|formula|tape|typing|styled|layouts?|padding|margins|apps?|preview|current\s+app|them|those|these|outline|border|yellow|readable|readability)\b/i;
 const WORKBENCH_HOSTED_APP_VERB_OR_COLOR =
-  /\b(make|change|update|adjust|improve|tweak|larger|smaller|bigger|better|preserve|yeah|nice job|looks great|keep\s+working|deep|again|blue|green|rounded|tailwind)\b/i;
+  /\b(make|change|update|adjust|improve|tweak|larger|smaller|bigger|better|preserve|yeah|nice job|looks great|keep\s+working|deep|again|give|have|blue|green|rounded|tailwind|yellow|outline|border)\b/i;
 const REPO_CODING_HARD_SIGNAL =
   /\b(pull request|open a pr\b|@\w+\/\w+|jest|vitest|cypress|ruff\b|flake8|migrate the schema|postgresql|sequelize|prisma|opentelemetry|graphql|openapi|kubernetes|dockerfile\b|pnpm-lock|Cargo\.toml)\b/i;
 

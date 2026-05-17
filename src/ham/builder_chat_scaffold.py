@@ -917,6 +917,23 @@ def _build_react_scaffold_files(
     if use_calculator_template:
         pcm = dict(previous_calculator_meta or {})
         lowered = _strip_dashboard_attachment_tail(user_plain).lower()
+        yellow_digit_border_prev = bool(pcm.get("calculator_digit_yellow_border"))
+        yellow_border_requested = bool(
+            re.search(r"\byellow\b.*\bborder\b|\bborder\b.*\byellow\b|\byellow\b.{0,32}\boutline\b", lowered)
+            or re.search(
+                r"\b(gold|amber)\b.{0,40}\bborder\b|\bborder\b.{0,40}\b(gold|amber)\b|\b#\s*facc15\b",
+                lowered,
+            )
+            or (
+                re.search(r"\bborder\b|\boutline\b", lowered)
+                and re.search(r"\byellow\b|\bgold\b|\bamber\b|#\s*facc15\b|\b#\s*[ef][a-f0-9]{5}\b", lowered)
+                and re.search(
+                    r"\b(buttons?|digits?|numbers?|keys?|keypad|numpad|them|those|these|calc|calculator)\b",
+                    lowered,
+                )
+            )
+        )
+        yellow_digit_border = bool(yellow_digit_border_prev or yellow_border_requested)
         include_history = bool(re.search(r"\bhistory\b", lowered)) or bool(
             pcm.get("calculator_history_enabled"),
         )
@@ -930,6 +947,13 @@ def _build_react_scaffold_files(
         ) or bool(pcm.get("calculator_large_buttons"))
         polished = bool(re.search(r"\b(polished|modern|clean|sleek)\b", lowered)) or bool(
             pcm.get("calculator_polished"),
+        )
+        polished = polished or bool(
+            re.search(
+                r"\b(easier\s+to\s+read|readability|readable|legible|more\s+contrast|better\s+contrast|"
+                r"bigger\s+font|larger\s+text|spacing|tracking)\b",
+                lowered,
+            )
         )
         digit_area_color = False
         if re.search(r"\b(light\s+)?(blue|cyan|sky|azure)\b", lowered):
@@ -961,9 +985,20 @@ def _build_react_scaffold_files(
                 "  filter: none;\n"
                 "}\n"
             )
-        main_class_attr = (
-            'calc-page calc-digit-light-blue' if digit_area_color else 'calc-page'
-        )
+        keypad_yellow_border_css = ""
+        if yellow_digit_border:
+            keypad_yellow_border_css = (
+                ".calc-yellow-digit-border .keypad button.ham-key-digit {\n"
+                "  border: 2px solid #facc15 !important;\n"
+                "  box-sizing: border-box;\n"
+                "}\n"
+            )
+        css_classes: list[str] = ["calc-page"]
+        if digit_area_color:
+            css_classes.append("calc-digit-light-blue")
+        if yellow_digit_border:
+            css_classes.append("calc-yellow-digit-border")
+        main_class_attr = " ".join(css_classes)
         history_panel_block = (
             "        {history.length > 0 ? (\n"
             "          <aside className=\"history\">\n"
@@ -981,6 +1016,8 @@ def _build_react_scaffold_files(
         readme_extra_lines: list[str] = []
         if digit_area_color:
             readme_extra_lines.append("- Light blue styling on digit keys when requested.")
+        if yellow_digit_border:
+            readme_extra_lines.append("- Yellow border / outline on digit keys when requested.")
         if large_buttons:
             readme_extra_lines.append("- Larger keypad sizing when requested.")
         if include_history:
@@ -1103,6 +1140,7 @@ def _build_react_scaffold_files(
                     "  cursor: pointer;\n"
                     "}\n"
                     f"{keypad_css_digit_block}"
+                    f"{keypad_yellow_border_css}"
                     ".keypad button:hover {\n"
                     "  filter: brightness(1.07);\n"
                     "}\n"
@@ -1136,13 +1174,15 @@ def _build_react_scaffold_files(
                 or large_buttons
                 or include_history
                 or digit_area_color
-                or show_equation_working_line,
+                or show_equation_working_line
+                or yellow_digit_border,
                 "reference_requested": False,
                 "calculator_history_enabled": include_history,
                 "calculator_large_buttons": large_buttons,
                 "calculator_light_blue_digits": digit_area_color,
                 "calculator_polished": polished,
                 "calculator_live_equation_working_line": show_equation_working_line,
+                "calculator_digit_yellow_border": yellow_digit_border,
             },
         )
     return ({
@@ -1372,6 +1412,7 @@ def maybe_chat_scaffold_for_turn(
                         "calculator_light_blue_digits",
                         "calculator_polished",
                         "calculator_live_equation_working_line",
+                        "calculator_digit_yellow_border",
                     ):
                         if ck in prev_meta:
                             previous_calculator_meta[ck] = prev_meta[ck]

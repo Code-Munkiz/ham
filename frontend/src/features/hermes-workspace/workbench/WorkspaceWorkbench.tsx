@@ -364,6 +364,9 @@ function WorkbenchPreviewPanel({
   onStaleBuilderProject?: () => void;
 }) {
   const PREVIEW_AUTOPOLL_MS = 2500;
+  /** Bound iframe document reloads while preview-proxy serves warmup JSON (avoids hammering nginx with 502s). */
+  const IFRAME_PROXY_WARMUP_MAX_ATTEMPTS = 8;
+  const IFRAME_PROXY_WARMUP_BASE_DELAY_MS = 650;
   const [preview, setPreview] = React.useState<BuilderPreviewStatus | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -426,8 +429,13 @@ function WorkbenchPreviewPanel({
   const [snapshots, setSnapshots] = React.useState<BuilderSourceSnapshotRecord[]>([]);
   const [previewViewport, setPreviewViewport] = React.useState<"desktop" | "mobile">("desktop");
   const [iframeProxyError, setIframeProxyError] = React.useState<string | null>(null);
+  /** True after warmup retries exhausted; cleared on Refresh or preview identity changes. */
+  const [iframeProxyWarmupPaused, setIframeProxyWarmupPaused] = React.useState(false);
   const [iframeReloadNonce, setIframeReloadNonce] = React.useState(0);
   const [authSessionRefreshing, setAuthSessionRefreshing] = React.useState(false);
+  /** Bounded preview-proxy document reloads when proxy returns warmup JSON/errors. */
+  const iframeProxyStrikeRef = React.useRef(0);
+  const iframeProxyRetryTimerRef = React.useRef<number | null>(null);
   const previewAuthBackoffUntilRef = React.useRef(0);
   const activityDrivenPreviewRefreshAtRef = React.useRef(0);
   const staleScopeNotifiedRef = React.useRef(false);
@@ -439,6 +447,13 @@ function WorkbenchPreviewPanel({
 
   React.useEffect(() => {
     staleScopeNotifiedRef.current = false;
+    iframeProxyStrikeRef.current = 0;
+    setIframeProxyWarmupPaused(false);
+    setIframeProxyError(null);
+    if (iframeProxyRetryTimerRef.current != null) {
+      window.clearTimeout(iframeProxyRetryTimerRef.current);
+      iframeProxyRetryTimerRef.current = null;
+    }
   }, [workspaceId, projectId]);
 
   React.useEffect(() => {
@@ -623,6 +638,13 @@ function WorkbenchPreviewPanel({
     }
     setLoading(true);
     setError(null);
+    iframeProxyStrikeRef.current = 0;
+    setIframeProxyWarmupPaused(false);
+    if (iframeProxyRetryTimerRef.current != null) {
+      window.clearTimeout(iframeProxyRetryTimerRef.current);
+      iframeProxyRetryTimerRef.current = null;
+    }
+    setIframeProxyError(null);
     try {
       await refreshPreviewRuntimeStatus({ includeLifecycle: true });
       await refreshActivity();
@@ -693,6 +715,16 @@ function WorkbenchPreviewPanel({
   }, [workspaceId, projectId, refreshActivity, refreshPreviewRuntimeStatus]);
 
   const previewUrl = normalizePreviewUrl(preview);
+  React.useEffect(() => {
+    iframeProxyStrikeRef.current = 0;
+    setIframeProxyWarmupPaused(false);
+    setIframeProxyError(null);
+    if (iframeProxyRetryTimerRef.current != null) {
+      window.clearTimeout(iframeProxyRetryTimerRef.current);
+      iframeProxyRetryTimerRef.current = null;
+    }
+  }, [preview?.runtime_session_id, preview?.preview_endpoint_id, preview?.source_snapshot_id, previewUrl]);
+
   const ws = workspaceId?.trim() || "";
   const pid = projectId?.trim() || "";
   const hasBackendSource = snapshots.length > 0 || Boolean(preview?.source_snapshot_id);
@@ -706,7 +738,7 @@ function WorkbenchPreviewPanel({
     | "error" = "no_source";
   if (!ws || !pid) {
     previewPhase = "no_project";
-  } else if (iframeProxyError) {
+  } else if (iframeProxyError || iframeProxyWarmupPaused) {
     previewPhase = "starting";
   } else if (authSessionRefreshing) {
     previewPhase = "starting";
@@ -789,6 +821,7 @@ function WorkbenchPreviewPanel({
     preview?.status === "ready" &&
     Boolean(previewUrl) &&
     !iframeProxyError &&
+    !iframeProxyWarmupPaused &&
     (!cloudPreviewProxyNeedsSession ||
       (previewProxySessionKey === previewProxySessionCandidateKey && !previewProxySessionError));
   const shouldAutoPollPreview =
@@ -798,6 +831,7 @@ function WorkbenchPreviewPanel({
       (preview?.status === "not_connected" && hasBackendSource) ||
       cloudRuntimeLatestJob?.status === "queued" ||
       Boolean(iframeProxyError) ||
+      iframeProxyWarmupPaused ||
       authSessionRefreshing ||
       cloudRuntimeLatestJob?.status === "running" ||
       previewBehindLatestListedSnapshot);
@@ -843,6 +877,7 @@ function WorkbenchPreviewPanel({
     if (prev !== undefined && prev !== null && cur !== null && cur !== prev) {
       setIframeReloadNonce((n) => n + 1);
       setIframeProxyError(null);
+      setIframeProxyWarmupPaused(false);
     }
   }, [preview?.source_snapshot_id, preview?.status, previewUrl]);
 
@@ -862,6 +897,7 @@ function WorkbenchPreviewPanel({
     ) {
       setIframeReloadNonce((n) => n + 1);
       setIframeProxyError(null);
+      setIframeProxyWarmupPaused(false);
       wasListedBehindRef.current = false;
     }
   }, [
@@ -871,22 +907,6 @@ function WorkbenchPreviewPanel({
     preview?.status,
     previewUrl,
   ]);
-
-  React.useEffect(() => {
-    setIframeProxyError(null);
-  }, [
-    preview?.runtime_session_id,
-    preview?.preview_endpoint_id,
-    preview?.source_snapshot_id,
-    previewUrl,
-  ]);
-
-  React.useEffect(() => {
-    if (!iframeProxyError) return;
-    if (preview?.status !== "ready" || !previewUrl) return;
-    setIframeReloadNonce((n) => n + 1);
-    setIframeProxyError(null);
-  }, [iframeProxyError, preview?.status, previewUrl]);
 
   React.useEffect(() => {
     if (!cloudPreviewProxyNeedsSession || !previewProxySessionCandidateKey || !ws || !pid) {
@@ -986,14 +1006,17 @@ function WorkbenchPreviewPanel({
                   preview?.mode === "cloud" && preview?.message
                     ? preview.message
                     : "Starting preview environment…",
-                subtitle:
-                  preview?.mode === "cloud"
-                    ? authSessionRefreshing
-                      ? "Session refreshing... HAM will retry authenticated preview polling."
-                      : "Source files are visible in the Code tab."
-                    : activity[0]?.title
-                      ? `Latest: ${activity[0].title}`
-                      : "Provisioning or waiting for a preview URL.",
+                subtitle: iframeProxyWarmupPaused
+                  ? "Preview gateway is warming up. Use Refresh status, or wait a few seconds—we will retry without reloading the preview tab repeatedly."
+                  : iframeProxyError === "PREVIEW_PROXY_WARMUP"
+                    ? "Preview gateway is warming up. Retrying on a backoff so the browser does not hammer the preview tab."
+                    : preview?.mode === "cloud"
+                      ? authSessionRefreshing
+                        ? "Session refreshing... HAM will retry authenticated preview polling."
+                        : "Source files are visible in the Code tab."
+                      : activity[0]?.title
+                        ? `Latest: ${activity[0].title}`
+                        : "Provisioning or waiting for a preview URL.",
               }
             : previewPhase === "error"
               ? {
@@ -1177,12 +1200,34 @@ function WorkbenchPreviewPanel({
                         (frameText.includes("PREVIEW_PROXY_") ||
                           frameText.includes("upstream is unavailable")))
                     ) {
-                      setIframeProxyError(
-                        frameText.slice(0, 240) || "PREVIEW_PROXY_UPSTREAM_UNAVAILABLE",
-                      );
+                      iframeProxyStrikeRef.current += 1;
                       void refreshPreviewRuntimeStatus({ includeLifecycle: false });
+                      if (iframeProxyRetryTimerRef.current != null) {
+                        window.clearTimeout(iframeProxyRetryTimerRef.current);
+                        iframeProxyRetryTimerRef.current = null;
+                      }
+                      const strike = iframeProxyStrikeRef.current;
+                      if (strike > IFRAME_PROXY_WARMUP_MAX_ATTEMPTS) {
+                        setIframeProxyWarmupPaused(true);
+                        setIframeProxyError(null);
+                      } else {
+                        setIframeProxyWarmupPaused(false);
+                        const exp = Math.min(5, Math.max(0, strike - 1));
+                        const delayMs = Math.min(
+                          12_000,
+                          IFRAME_PROXY_WARMUP_BASE_DELAY_MS * Math.pow(2, exp),
+                        );
+                        setIframeProxyError("PREVIEW_PROXY_WARMUP");
+                        iframeProxyRetryTimerRef.current = window.setTimeout(() => {
+                          iframeProxyRetryTimerRef.current = null;
+                          setIframeReloadNonce((n) => n + 1);
+                          setIframeProxyError(null);
+                        }, delayMs);
+                      }
                       return;
                     }
+                    iframeProxyStrikeRef.current = 0;
+                    setIframeProxyWarmupPaused(false);
                     setIframeProxyError(null);
                   } catch {
                     // Cross-origin restrictions should not apply for same-origin preview proxy,

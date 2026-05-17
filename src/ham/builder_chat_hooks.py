@@ -21,6 +21,15 @@ def _looks_like_followup_edit(last_user_plain: str) -> bool:
         return True
     if re.search(r"\blarger\b.{0,32}\band\b.{0,32}\bblue\b", text):
         return True
+    if re.search(r"\bborder\b|\boutline\b", text) and (
+        re.search(r"\byellow\b|\bgold\b|\bamber\b|#\s*facc15\b", text)
+        or re.search(r"\b(them|those|these|the\s+buttons?|digits?|keys?)\b", text)
+    ):
+        return True
+    if re.search(
+        r"\b(easier\s+to\s+read|readability|readable|legible|bigger\s+font|more\s+contrast)\b", text,
+    ):
+        return True
     patterns = (
         r"\bmake it\b",
         r"\bi want\b",
@@ -51,7 +60,7 @@ def _looks_like_followup_edit(last_user_plain: str) -> bool:
         return True
     return bool(
         re.search(
-            r"\b(colors?|layout|style|sidebar|sound|leaderboard|particles?|glow|neon|image|reference)\b",
+            r"\b(colors?|layout|style|spacing|sidebar|sound|leaderboard|particles?|glow|neon|image|reference|border|outline)\b",
             text,
         )
     )

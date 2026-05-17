@@ -1903,6 +1903,71 @@ describe("WorkspaceWorkbench", () => {
     expect(await screen.findByTestId("hww-preview-iframe")).toBeInTheDocument();
   });
 
+  it("Cloud preview iframe backs off when preview-proxy serves warmup payloads", async () => {
+    const previewUrlPath = "/api/workspaces/ws_abc/projects/proj_abc/builder/preview-proxy/";
+    getBuilderPreviewStatusMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      mode: "cloud",
+      status: "ready",
+      health: "healthy",
+      preview_url: previewUrlPath,
+      message: "Preview is ready via authenticated cloud proxy.",
+      updated_at: "2026-01-01T00:00:00Z",
+      source_snapshot_id: "ssnp_1",
+      runtime_session_id: "rtms_cloud_1",
+      preview_endpoint_id: "prve_cloud_1",
+      logs_hint: null,
+    });
+
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+
+    const iframe = await screen.findByTestId("hww-preview-iframe");
+
+    await act(async () => {
+      Object.defineProperty(iframe, "contentDocument", {
+        configurable: true,
+        value: {
+          body: { innerText: "PREVIEW_PROXY_UPSTREAM_UNAVAILABLE\n" },
+          contentType: "application/json",
+        },
+      });
+      fireEvent.load(iframe);
+    });
+
+    expect(screen.queryByTestId("hww-preview-iframe")).toBeNull();
+    expect(screen.getByTestId("hww-preview-primary-subtitle")).toHaveTextContent(
+      /Preview gateway is warming up/i,
+    );
+
+    vi.useFakeTimers();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(800);
+    });
+    vi.useRealTimers();
+
+    const retryIframe = await screen.findByTestId("hww-preview-iframe", {}, { timeout: 6000 });
+
+    await act(async () => {
+      Object.defineProperty(retryIframe, "contentDocument", {
+        configurable: true,
+        value: {
+          body: { innerText: "HAM preview rendered" },
+          contentType: "text/html",
+        },
+      });
+      fireEvent.load(retryIframe);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-iframe")).toBeInTheDocument();
+    });
+  });
+
   it("Cloud preview session mint failure shows safe auth error without iframe", async () => {
     getBuilderPreviewStatusMock.mockResolvedValue({
       project_id: "proj_abc",

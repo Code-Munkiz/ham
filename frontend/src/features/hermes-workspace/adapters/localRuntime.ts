@@ -28,6 +28,31 @@ export const DEFAULT_LOCAL_RUNTIME_CANDIDATES = [
 
 export const HAM_WORKSPACE_HEALTH_PATH = "/api/workspace/health" as const;
 
+/** After repeated unreachable local APIs, throttle health probes so the UI does not spam the console/network. */
+let _localWorkspaceHealthBackoffUntilMs = 0;
+let _localWorkspaceHealthFailStreak = 0;
+
+const LOCAL_WORKSPACE_HEALTH_BASE_BACKOFF_MS = 4000;
+const LOCAL_WORKSPACE_HEALTH_MAX_BACKOFF_MS = 96000;
+
+function _scheduleLocalWorkspaceHealthBackoff() {
+  _localWorkspaceHealthFailStreak = Math.min(_localWorkspaceHealthFailStreak + 1, 24);
+  const exp = Math.min(6, Math.max(0, _localWorkspaceHealthFailStreak - 1));
+  const raw = LOCAL_WORKSPACE_HEALTH_BASE_BACKOFF_MS * Math.pow(2, exp);
+  const ms = Math.min(LOCAL_WORKSPACE_HEALTH_MAX_BACKOFF_MS, raw);
+  _localWorkspaceHealthBackoffUntilMs = Date.now() + ms;
+}
+
+function _clearLocalWorkspaceHealthBackoff() {
+  _localWorkspaceHealthFailStreak = 0;
+  _localWorkspaceHealthBackoffUntilMs = 0;
+}
+
+/** Test-only hook to reset backoff state between Vitest cases. */
+export function resetLocalWorkspaceHealthBackoffForTests(): void {
+  _clearLocalWorkspaceHealthBackoff();
+}
+
 function normalizeBase(raw: string): string {
   const t = raw.trim();
   if (!t) return "";
@@ -135,11 +160,21 @@ export type LocalRuntimeTestResult = {
 /** GET `/api/workspace/health` on the saved local runtime (Files/Terminal probe). */
 export async function fetchLocalWorkspaceHealth(): Promise<LocalRuntimeHealthPayload | null> {
   if (!isLocalRuntimeConfigured()) return null;
+  const now = Date.now();
+  if (now < _localWorkspaceHealthBackoffUntilMs) {
+    return null;
+  }
   try {
     const res = await localRuntimeFetch(HAM_WORKSPACE_HEALTH_PATH, { method: "GET" });
-    if (!res.ok) return null;
-    return (await res.json()) as LocalRuntimeHealthPayload;
+    if (!res.ok) {
+      _scheduleLocalWorkspaceHealthBackoff();
+      return null;
+    }
+    const payload = (await res.json()) as LocalRuntimeHealthPayload;
+    _clearLocalWorkspaceHealthBackoff();
+    return payload;
   } catch {
+    _scheduleLocalWorkspaceHealthBackoff();
     return null;
   }
 }
