@@ -11,10 +11,10 @@ import {
   OPENCODE_PREFERRED_HINT,
   OPENCODE_PREFERRED_LOADING,
   approvalCopyForCard,
+  builderLabelForCandidate,
   cardLabelForCandidate,
-  confidenceBadgeForCard,
-  emptyStateHeadlineForCard,
   outputKindCopyForCard,
+  planDescriptionForCard,
   shouldShowOpenCodeAffordance,
   taskKindDisplayForCard,
 } from "./codingPlanCardCopy";
@@ -130,9 +130,12 @@ export function CodingPlanCard({
 }: CodingPlanCardProps) {
   const chosen = payload.chosen;
   const alts = payload.candidates.filter((c) => c !== chosen);
-  const headline = emptyStateHeadlineForCard(payload);
+  const headline = chosen
+    ? builderLabelForCandidate(chosen)
+    : payload.task_kind === "unknown"
+      ? "HAM isn't sure which builder to use"
+      : "No builder is available yet";
   const taskLabel = taskKindDisplayForCard(payload.task_kind);
-  const conf = confidenceBadgeForCard(payload.task_confidence);
   const showManagedApproval = shouldShowManagedBuildApproval(payload);
   const showOpencodeApproval = shouldShowOpencodeBuildApproval(payload);
   const showOpencodeAffordance = Boolean(onPreferProvider) && shouldShowOpenCodeAffordance(payload);
@@ -152,12 +155,9 @@ export function CodingPlanCard({
     >
       <header className="flex flex-wrap items-center gap-2">
         <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-white/55">
-          HAM coding plan
+          HAM's plan
         </span>
         <span className={BADGE_CLASS}>{taskLabel}</span>
-        <span className={BADGE_CLASS} data-hww-coding-plan="task-confidence" data-confidence={conf}>
-          {`Confidence: ${conf}`}
-        </span>
       </header>
 
       <h3
@@ -166,30 +166,30 @@ export function CodingPlanCard({
       >
         {headline}
       </h3>
-      <p
-        className="mt-1 text-[12px] leading-snug text-white/70"
-        data-hww-coding-plan="recommendation-reason"
-      >
-        {payload.recommendation_reason}
-      </p>
 
       {chosen ? (
-        <div className="mt-3 grid gap-1.5 text-[11px] text-white/70">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span
-              className={BADGE_CLASS}
-            >{`Output: ${outputKindCopyForCard(chosen.output_kind)}`}</span>
-            <span className={BADGE_CLASS}>
-              {chosen.will_modify_code ? "Will modify code" : "Won't modify code"}
-            </span>
-            <span className={BADGE_CLASS}>
-              {chosen.will_open_pull_request ? "Opens a pull request" : "No pull request"}
-            </span>
-            {chosen.requires_operator ? <span className={BADGE_CLASS}>Operator-only</span> : null}
-          </div>
-          <p className="leading-snug" data-hww-coding-plan="approval-copy">
-            {approvalCopyForCard(payload.approval_kind)}
+        <div className="mt-2 grid gap-1 text-[11px] text-white/70">
+          <p className="leading-snug" data-hww-coding-plan="plan-description">
+            {planDescriptionForCard(chosen)}
           </p>
+          {chosen.will_modify_code ? (
+            <p
+              className="text-[10px] leading-snug text-white/50"
+              data-hww-coding-plan="plan-impact"
+            >
+              {chosen.will_open_pull_request
+                ? "Opens a pull request."
+                : "No pull request will be opened."}
+            </p>
+          ) : null}
+          {payload.approval_kind !== "none" ? (
+            <p
+              className="text-[10px] leading-snug text-white/50"
+              data-hww-coding-plan="approval-copy"
+            >
+              {approvalCopyForCard(payload.approval_kind)}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -232,28 +232,34 @@ export function CodingPlanCard({
         </div>
       ) : null}
 
-      {alts.length ? (
-        <div className="mt-3">
-          <button
-            type="button"
-            className="text-[11px] font-medium text-cyan-300/85 hover:text-cyan-200"
-            onClick={() => setShowAlternatives((v) => !v)}
-            aria-expanded={showAlternatives}
-            data-hww-coding-plan="alternatives-toggle"
-          >
-            {showAlternatives
-              ? "Hide alternatives"
-              : `Show ${alts.length} alternative${alts.length === 1 ? "" : "s"}`}
-          </button>
-          {showAlternatives ? (
-            <div className="mt-2 grid gap-1.5" role="list" data-hww-coding-plan="alternatives">
-              {alts.map((c) => (
-                <CandidateRow key={c.provider} candidate={c} highlighted={false} />
-              ))}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+      <div className="mt-3">
+        <button
+          type="button"
+          className="text-[11px] font-medium text-white/45 hover:text-white/70"
+          onClick={() => setShowAlternatives((v) => !v)}
+          aria-expanded={showAlternatives}
+          data-hww-coding-plan="alternatives-toggle"
+        >
+          {showAlternatives ? "Hide details" : "Why this plan?"}
+        </button>
+        {showAlternatives ? (
+          <div className="mt-2 grid gap-2" data-hww-coding-plan="alternatives">
+            <p
+              className="text-[11px] leading-snug text-white/65"
+              data-hww-coding-plan="recommendation-reason"
+            >
+              {payload.recommendation_reason}
+            </p>
+            {alts.length > 0 ? (
+              <div className="grid gap-1.5" role="list">
+                {alts.map((c) => (
+                  <CandidateRow key={c.provider} candidate={c} highlighted={false} />
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
 
       {showManagedApproval && payload.project.project_id ? (
         <ManagedBuildApprovalPanel
@@ -282,7 +288,7 @@ export function CodingPlanCard({
             data-hww-coding-plan="launch-cta-disabled"
             data-launch-enabled="0"
           >
-            Approve launch (later step)
+            Approve build
           </button>
         </footer>
       )}

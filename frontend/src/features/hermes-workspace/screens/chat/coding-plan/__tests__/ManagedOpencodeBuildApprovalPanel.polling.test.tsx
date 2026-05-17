@@ -150,7 +150,7 @@ function buildTestConfig(
       checkbox: "I approve HAM to create a managed workspace snapshot with OpenCode.",
       previewCta: "Preview",
       previewBusy: "Previewing…",
-      launchCta: "Approve and build",
+      launchCta: "Approve build",
       launchBusy: "Building…",
       successHeadline: OPENCODE_BUILD_SUCCESS_HEADLINE,
       failureHeadline: OPENCODE_BUILD_FAILURE_HEADLINE,
@@ -189,7 +189,7 @@ async function renderAndApprove(launchFn: () => Promise<OpencodeBuildLaunchPaylo
 
   fireEvent.click(screen.getByRole("button", { name: /preview/i }));
   await waitFor(() =>
-    expect(screen.queryByRole("button", { name: /approve and build/i })).not.toBeNull(),
+    expect(screen.queryByRole("button", { name: /approve build/i })).not.toBeNull(),
   );
 
   const checkbox = document.querySelector(
@@ -197,7 +197,7 @@ async function renderAndApprove(launchFn: () => Promise<OpencodeBuildLaunchPaylo
   ) as HTMLInputElement;
   fireEvent.click(checkbox);
 
-  return screen.getByRole("button", { name: /approve and build/i }) as HTMLButtonElement;
+  return screen.getByRole("button", { name: /approve build/i }) as HTMLButtonElement;
 }
 
 beforeEach(() => {

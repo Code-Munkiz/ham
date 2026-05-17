@@ -210,7 +210,7 @@ describe("ManagedBuildApprovalPanel", () => {
     });
 
     const launchBtn = (await screen.findByRole("button", {
-      name: /approve and build/i,
+      name: /approve build/i,
     })) as HTMLButtonElement;
     expect(launchBtn.disabled).toBe(true);
     expect(launchBtn.getAttribute("data-launch-enabled")).toBe("0");
@@ -242,7 +242,7 @@ describe("ManagedBuildApprovalPanel", () => {
     ) as HTMLInputElement;
     fireEvent.click(checkbox);
 
-    fireEvent.click(screen.getByRole("button", { name: /approve and build/i }));
+    fireEvent.click(screen.getByRole("button", { name: /approve build/i }));
 
     await waitFor(() => {
       expect(launchMock).toHaveBeenCalledTimes(1);

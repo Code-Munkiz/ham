@@ -46,7 +46,7 @@ function payload(over: Partial<CodingConductorPreviewPayload> = {}): CodingCondu
 }
 
 describe("CodingPlanCard — claude_agent provider scaffold", () => {
-  it("renders the claude_agent display name when chosen", () => {
+  it("renders the claude_agent builder label when chosen", () => {
     const chosen = candidate();
     const p = payload({
       chosen,
@@ -55,7 +55,9 @@ describe("CodingPlanCard — claude_agent provider scaffold", () => {
     });
     const { container } = render(<CodingPlanCard payload={p} />);
     const card = container.querySelector('[data-hww-coding-plan="card"]') as HTMLElement;
-    expect(card.textContent).toContain("Claude Agent");
+    // Normie builder label is shown; raw provider id must not appear.
+    expect(card.textContent).toContain("Premium Reasoning Builder");
+    expect(card.textContent?.toLowerCase()).not.toContain("claude_agent");
   });
 
   it("does not render any active approve/launch/preview button for claude_agent", () => {

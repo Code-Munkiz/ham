@@ -32,11 +32,11 @@ export const MANAGED_BUILD_APPROVAL_CHECKBOX =
 
 export const MANAGED_BUILD_PREVIEW_CTA = "Preview this build";
 export const MANAGED_BUILD_PREVIEW_BUSY = "Preparing preview…";
-export const MANAGED_BUILD_LAUNCH_CTA = "Approve and build";
+export const MANAGED_BUILD_LAUNCH_CTA = "Approve build";
 export const MANAGED_BUILD_LAUNCH_BUSY = "Building snapshot…";
 
 export const MANAGED_BUILD_SUCCESS_HEADLINE = "Saved version created";
-export const MANAGED_BUILD_FAILURE_HEADLINE = "HAM could not finish the build";
+export const MANAGED_BUILD_FAILURE_HEADLINE = "Build did not complete. No version was saved.";
 
 /** User-facing line for changed-path counts after a managed snapshot build. */
 export function managedBuildChangedPathsLine(count: number): string {
@@ -64,11 +64,11 @@ export const OPENCODE_BUILD_APPROVAL_CHECKBOX =
 
 export const OPENCODE_BUILD_PREVIEW_CTA = "Preview";
 export const OPENCODE_BUILD_PREVIEW_BUSY = "Previewing…";
-export const OPENCODE_BUILD_LAUNCH_CTA = "Approve and build";
+export const OPENCODE_BUILD_LAUNCH_CTA = "Approve build";
 export const OPENCODE_BUILD_LAUNCH_BUSY = "Building…";
 
 export const OPENCODE_BUILD_SUCCESS_HEADLINE = "Saved version created";
-export const OPENCODE_BUILD_FAILURE_HEADLINE = "Build did not complete";
+export const OPENCODE_BUILD_FAILURE_HEADLINE = "Build did not complete. No version was saved.";
 
 export const OPENCODE_BUILD_NO_PR_NOTE = "Managed workspace builds never open a pull request.";
 export const OPENCODE_BUILD_PREVIEW_LINK = "Preview";
@@ -118,6 +118,20 @@ export function shouldShowOpenCodeAffordance(payload: CodingConductorPreviewPayl
   return true;
 }
 
+/**
+ * Normie-friendly builder labels shown in the main card headline.
+ * Never expose raw provider ids or technical routing vocabulary here.
+ */
+const USER_FACING_BUILDER_LABEL: Record<CodingConductorProviderKind, string> = {
+  no_agent: "Conversational answer",
+  factory_droid_audit: "Code insights",
+  factory_droid_build: "Controlled Builder",
+  cursor_cloud: "Connected Repo Builder",
+  claude_code: "Local editor",
+  claude_agent: "Premium Reasoning Builder",
+  opencode_cli: "Open Builder",
+};
+
 const PROVIDER_LABEL: Record<CodingConductorProviderKind, string> = {
   no_agent: "Conversational answer",
   factory_droid_audit: "Read-only audit",
@@ -161,10 +175,9 @@ const OUTPUT_KIND_COPY: Record<CodingConductorOutputKind, string> = {
 };
 
 const APPROVAL_KIND_COPY: Record<CodingConductorApprovalKind, string> = {
-  none: "No approval needed.",
-  confirm: "You'll confirm before HAM launches anything.",
-  confirm_and_accept_pr:
-    "You'll confirm before HAM opens the pull request, and you can decline it without merging.",
+  none: "No approval required.",
+  confirm: "You'll review before anything is saved.",
+  confirm_and_accept_pr: "You'll review the pull request before it merges.",
 };
 
 const TASK_KIND_DISPLAY: Record<string, string> = {
@@ -205,6 +218,34 @@ export function cardLabelForCandidate(
     return FACTORY_DROID_BUILD_MANAGED_LABEL;
   }
   return PROVIDER_LABEL[c.provider];
+}
+
+/**
+ * User-friendly builder label for the chosen candidate shown in the card headline.
+ * Uses normie names (e.g. "Open Builder") instead of technical provider labels.
+ */
+export function builderLabelForCandidate(c: Pick<CodingConductorCandidate, "provider">): string {
+  return USER_FACING_BUILDER_LABEL[c.provider];
+}
+
+/**
+ * Outcome-based plan description for the card normal view.
+ * Derived from the chosen candidate's output intent; avoids internal vocabulary.
+ */
+export function planDescriptionForCard(
+  chosen: Pick<
+    CodingConductorCandidate,
+    "output_kind" | "will_modify_code" | "will_open_pull_request"
+  >,
+): string {
+  if (chosen.output_kind === "answer") return "HAM will answer without making any code changes.";
+  if (chosen.output_kind === "report")
+    return "HAM will run a read-only analysis and share the findings.";
+  if (chosen.will_open_pull_request)
+    return "HAM will make changes and open a pull request for your review.";
+  if (chosen.will_modify_code)
+    return "HAM will make changes and save a version for you to preview.";
+  return "HAM will handle this request.";
 }
 
 export function outputKindCopyForCard(o: CodingConductorOutputKind): string {
@@ -260,4 +301,8 @@ export const FORBIDDEN_CARD_TOKENS = [
   "droid exec",
   "workflow_id",
   "registry_revision",
+  "opencode_cli",
+  "factory_droid",
+  "cursor_cloud",
+  "claude_agent",
 ] as const;

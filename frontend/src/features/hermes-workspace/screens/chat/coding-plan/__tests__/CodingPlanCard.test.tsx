@@ -81,7 +81,7 @@ describe("CodingPlanCard", () => {
     expect((ul as HTMLElement).textContent ?? "").toMatch(/Choose or create a project/i);
   });
 
-  it("renders chosen provider label and recommendation reason", () => {
+  it("renders normie builder label and plan description for chosen candidate", () => {
     const chosen = candidate({
       provider: "cursor_cloud",
       label: "Cursor pull request",
@@ -100,9 +100,20 @@ describe("CodingPlanCard", () => {
 
     const { card } = renderWithDigest(p);
 
+    // Headline shows normie builder label, not raw provider id.
     expect(card.querySelector('[data-hww-coding-plan="headline"]')!.textContent).toContain(
-      "Cursor pull request",
+      "Connected Repo Builder",
     );
+    // Plan description is shown in the main view.
+    const desc = card.querySelector('[data-hww-coding-plan="plan-description"]')!.textContent ?? "";
+    expect(desc.toLowerCase()).toContain("pull request");
+    // Recommendation reason is NOT in the main view (it's behind the toggle).
+    expect(card.querySelector('[data-hww-coding-plan="recommendation-reason"]')).toBeNull();
+    // Expanding the toggle reveals the recommendation reason.
+    const toggle = card.querySelector(
+      '[data-hww-coding-plan="alternatives-toggle"]',
+    ) as HTMLButtonElement;
+    fireEvent.click(toggle);
     const reason =
       card.querySelector('[data-hww-coding-plan="recommendation-reason"]')!.textContent ?? "";
     expect(reason.toLowerCase()).toContain("pull request");
@@ -141,7 +152,7 @@ describe("CodingPlanCard", () => {
     assertNoForbiddenTokens(card);
   });
 
-  it("toggles alternatives and renders safe alternative labels", () => {
+  it("collapses technical details by default and reveals them on toggle", () => {
     const cursor = candidate({
       provider: "cursor_cloud",
       output_kind: "pull_request",
@@ -166,18 +177,21 @@ describe("CodingPlanCard", () => {
 
     const { card } = renderWithDigest(p);
 
-    // Alternatives drawer is collapsed by default.
+    // Details section is collapsed by default.
     expect(card.querySelector('[data-hww-coding-plan="alternatives"]')).toBeNull();
 
     const toggle = card.querySelector(
       '[data-hww-coding-plan="alternatives-toggle"]',
     ) as HTMLButtonElement;
     expect(toggle).not.toBeNull();
+    expect(toggle.textContent).toContain("Why this plan?");
     fireEvent.click(toggle);
 
     const drawer = card.querySelector('[data-hww-coding-plan="alternatives"]');
     expect(drawer).not.toBeNull();
-    // "Conversational answer" label appears for the no_agent fallback.
+    // Recommendation reason appears in the details section.
+    expect(drawer!.textContent).toContain("Repo-wide context");
+    // Alternative provider label appears (no_agent → "Conversational answer").
     expect(drawer!.textContent).toContain("Conversational answer");
     assertNoForbiddenTokens(card);
   });

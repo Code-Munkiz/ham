@@ -8,12 +8,14 @@ import {
   OPENCODE_PREFERRED_HINT,
   OPENCODE_PREFERRED_LOADING,
   approvalCopyForCard,
+  builderLabelForCandidate,
   cardLabelForCandidate,
   claudeAgentStatusCopy,
   confidenceBadgeForCard,
   emptyStateHeadlineForCard,
   isLaunchableInThisPhase,
   outputKindCopyForCard,
+  planDescriptionForCard,
   providerLabelForCard,
   shouldShowOpenCodeAffordance,
   taskKindDisplayForCard,
@@ -260,6 +262,70 @@ describe("shouldShowOpenCodeAffordance", () => {
   it("false when no opencode candidate is present", () => {
     const chosen = makeCandidate({ provider: "factory_droid_build" });
     expect(shouldShowOpenCodeAffordance(makePayload({ chosen, candidates: [chosen] }))).toBe(false);
+  });
+});
+
+describe("builderLabelForCandidate", () => {
+  it("returns a non-empty normie label for every provider", () => {
+    for (const p of PROVIDERS) {
+      const label = builderLabelForCandidate({ provider: p });
+      expect(label.length).toBeGreaterThan(0);
+      const lower = label.toLowerCase();
+      for (const token of FORBIDDEN_CARD_TOKENS) {
+        expect(lower).not.toContain(token);
+      }
+    }
+  });
+
+  it("maps known providers to expected labels", () => {
+    expect(builderLabelForCandidate({ provider: "opencode_cli" })).toBe("Open Builder");
+    expect(builderLabelForCandidate({ provider: "claude_agent" })).toBe(
+      "Premium Reasoning Builder",
+    );
+    expect(builderLabelForCandidate({ provider: "factory_droid_build" })).toBe(
+      "Controlled Builder",
+    );
+    expect(builderLabelForCandidate({ provider: "cursor_cloud" })).toBe("Connected Repo Builder");
+  });
+});
+
+describe("planDescriptionForCard", () => {
+  it("returns answer copy for output_kind=answer", () => {
+    const desc = planDescriptionForCard({
+      output_kind: "answer",
+      will_modify_code: false,
+      will_open_pull_request: false,
+    });
+    expect(desc.toLowerCase()).toContain("without");
+    expect(desc.toLowerCase()).not.toContain("pull request");
+  });
+
+  it("returns report copy for output_kind=report", () => {
+    const desc = planDescriptionForCard({
+      output_kind: "report",
+      will_modify_code: false,
+      will_open_pull_request: false,
+    });
+    expect(desc.toLowerCase()).toContain("read-only");
+  });
+
+  it("returns PR copy when will_open_pull_request is true", () => {
+    const desc = planDescriptionForCard({
+      output_kind: "pull_request",
+      will_modify_code: true,
+      will_open_pull_request: true,
+    });
+    expect(desc.toLowerCase()).toContain("pull request");
+  });
+
+  it("returns snapshot copy when will_modify_code but no PR", () => {
+    const desc = planDescriptionForCard({
+      output_kind: "mission",
+      will_modify_code: true,
+      will_open_pull_request: false,
+    });
+    expect(desc.toLowerCase()).toContain("version");
+    expect(desc.toLowerCase()).not.toContain("pull request");
   });
 });
 

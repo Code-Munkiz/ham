@@ -153,7 +153,7 @@ describe("ManagedOpencodeBuildApprovalPanel", () => {
     await waitFor(() => expect(previewMock).toHaveBeenCalledTimes(1));
 
     const launchBtn = (await screen.findByRole("button", {
-      name: /approve and build/i,
+      name: /approve build/i,
     })) as HTMLButtonElement;
     expect(launchBtn.disabled).toBe(true);
     expect(launchBtn.getAttribute("data-launch-enabled")).toBe("0");
@@ -183,7 +183,7 @@ describe("ManagedOpencodeBuildApprovalPanel", () => {
     ) as HTMLInputElement;
     fireEvent.click(checkbox);
 
-    fireEvent.click(screen.getByRole("button", { name: /approve and build/i }));
+    fireEvent.click(screen.getByRole("button", { name: /approve build/i }));
     await waitFor(() => expect(launchMock).toHaveBeenCalledTimes(1));
 
     expect(screen.getByText("Saved version created")).toBeTruthy();
@@ -252,7 +252,7 @@ describe("ManagedOpencodeBuildApprovalPanel", () => {
     ) as HTMLInputElement;
     fireEvent.click(checkbox);
 
-    fireEvent.click(screen.getByRole("button", { name: /approve and build/i }));
+    fireEvent.click(screen.getByRole("button", { name: /approve build/i }));
     await waitFor(() => expect(launchMock).toHaveBeenCalledTimes(1));
 
     expect(screen.getByText(/Build did not complete/i)).toBeTruthy();
@@ -289,7 +289,7 @@ describe("ManagedOpencodeBuildApprovalPanel", () => {
     ) as HTMLInputElement;
     fireEvent.click(checkbox);
 
-    fireEvent.click(screen.getByRole("button", { name: /approve and build/i }));
+    fireEvent.click(screen.getByRole("button", { name: /approve build/i }));
     await waitFor(() => expect(launchMock).toHaveBeenCalledTimes(1));
 
     fireEvent.click(screen.getByRole("button", { name: /keep building/i }));
