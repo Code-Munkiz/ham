@@ -148,13 +148,13 @@ function buildTestConfig(
       body: "HAM will run OpenCode in a managed workspace.",
       noPrNote: "Managed workspace builds never open a pull request.",
       checkbox: "I approve HAM to create a managed workspace snapshot with OpenCode.",
-      previewCta: "Preview",
-      previewBusy: "Previewing…",
+      previewCta: "Prepare build",
+      previewBusy: "Preparing build…",
       launchCta: "Approve build",
       launchBusy: "Building…",
       successHeadline: OPENCODE_BUILD_SUCCESS_HEADLINE,
       failureHeadline: OPENCODE_BUILD_FAILURE_HEADLINE,
-      previewLink: "Preview",
+      previewLink: "Open app preview",
       viewChangesLink: "View changes",
       technicalDetailsSummary: "Details",
       keepBuildingCta: "Keep building",
@@ -187,7 +187,7 @@ async function renderAndApprove(launchFn: () => Promise<OpencodeBuildLaunchPaylo
     />,
   );
 
-  fireEvent.click(screen.getByRole("button", { name: /preview/i }));
+  fireEvent.click(screen.getByRole("button", { name: /prepare build/i }));
   await waitFor(() =>
     expect(screen.queryByRole("button", { name: /approve build/i })).not.toBeNull(),
   );
@@ -240,7 +240,7 @@ describe("OpenCode async launch → running → polling", () => {
     await waitFor(() => expect(screen.queryByText(OPENCODE_BUILD_SUCCESS_HEADLINE)).not.toBeNull());
 
     expect(pollMock).toHaveBeenCalledWith(RUN_ID);
-    expect(screen.getByRole("link", { name: /preview/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /open app preview/i })).toHaveAttribute(
       "href",
       "https://snapshots.example.test/p/xyz",
     );

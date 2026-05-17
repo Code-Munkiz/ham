@@ -116,6 +116,12 @@ import {
   getHamDesktopWebBridgeApi,
 } from "@/lib/ham/desktopBundleBridge";
 import {
+  clearCodingPlanDraft,
+  clearCodingPlanDraftsForWorkspace,
+  persistCodingPlanDraft,
+  readCodingPlanDraft,
+} from "./codingPlanDraftSessionStorage";
+import {
   readWorkspaceLastChatSessionId,
   writeWorkspaceLastChatSessionId,
 } from "./workspaceChatSessionStorage";
@@ -634,6 +640,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [codingPlanPreferring, setCodingPlanPreferring] = React.useState<"opencode_cli" | null>(
     null,
   );
+  const [codingPlanRestoredBanner, setCodingPlanRestoredBanner] = React.useState(false);
+  const codingPlanDraftRestoreKeyRef = React.useRef<string | null>(null);
   const composerTextareaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const [attachments, setAttachments] = React.useState<WorkspaceComposerAttachment[]>([]);
   const attachmentsRef = React.useRef(attachments);
@@ -1612,6 +1620,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       return;
     }
     if (prev === activeWorkspaceId) return;
+    clearCodingPlanDraftsForWorkspace(prev);
     previousActiveWorkspaceIdRef.current = activeWorkspaceId;
     suppressSessionQueryUntilNavigationRef.current = true;
     cancelComposerPrefSaveTimer();
@@ -1633,6 +1642,13 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     });
     setInspectorEvents([]);
     setArtifactRows([]);
+    setCodingPlanPreview(null);
+    setCodingPlanPrompt("");
+    setCodingPlanInlineError(null);
+    setCodingPlanLoading(false);
+    setCodingPlanPreferring(null);
+    setCodingPlanRestoredBanner(false);
+    codingPlanDraftRestoreKeyRef.current = null;
     if (!embedMode && !missionIdFromQuery) {
       navigate({ pathname: "/workspace/chat", search: "" }, { replace: true });
     }
@@ -1697,6 +1713,13 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     const s = searchParams.get("session");
     if (!s) {
       streamTurnSessionRef.current = null;
+      const workspaceScopedSaved = readWorkspaceLastChatSessionId(activeWorkspaceId)?.trim();
+      if (workspaceScopedSaved) {
+        // `/workspace/chat` without `?session=` is immediately replaced via the hydrate effect
+        // below when localStorage remembers a workspace session — avoid wiping the transcript in
+        // the brief window before that replace runs (e.g. “Full chat” from /workspace/coding-agents).
+        return;
+      }
       if (sessionId) {
         previousLoadedWorkspaceSessionRef.current = null;
         revokeAllChatAttachmentLocalBlobs();
@@ -1715,9 +1738,21 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       return;
     }
     void loadFromApi(s);
-  }, [embedMode, searchParams, sessionId, sending, loadFromApi, revokeAllChatAttachmentLocalBlobs]);
+  }, [
+    activeWorkspaceId,
+    embedMode,
+    searchParams,
+    sessionId,
+    sending,
+    loadFromApi,
+    revokeAllChatAttachmentLocalBlobs,
+  ]);
 
   const startNew = React.useCallback(() => {
+    const sidOpening = sessionId?.trim();
+    if (sidOpening && activeWorkspaceId?.trim()) {
+      clearCodingPlanDraft(activeWorkspaceId, sidOpening);
+    }
     previousLoadedWorkspaceSessionRef.current = null;
     revokeAllChatAttachmentLocalBlobs();
     setSessionId(null);
@@ -1729,6 +1764,13 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     setInspectorEvents([]);
     setArtifactRows([]);
     setInput("");
+    setCodingPlanPreview(null);
+    setCodingPlanPrompt("");
+    setCodingPlanInlineError(null);
+    setCodingPlanLoading(false);
+    setCodingPlanPreferring(null);
+    setCodingPlanRestoredBanner(false);
+    codingPlanDraftRestoreKeyRef.current = null;
     setAttachments((prev) => {
       revokeWorkspaceComposerAttachmentPreviews(prev);
       return [];
@@ -1740,7 +1782,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     queueMicrotask(() => {
       document.getElementById("hww-chat-composer")?.focus();
     });
-  }, [activeWorkspaceId, embedMode, navigate, revokeAllChatAttachmentLocalBlobs]);
+  }, [activeWorkspaceId, embedMode, navigate, revokeAllChatAttachmentLocalBlobs, sessionId]);
 
   const retryLoadSession = React.useCallback(() => {
     if (embedMode) return;
@@ -2809,6 +2851,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   }, [attachments, input, runWorkspaceVideoGeneration]);
 
   const handlePlanWithCodingAgents = React.useCallback(async () => {
+    setCodingPlanRestoredBanner(false);
     setCodingPlanInlineError(null);
     const draft = input.trim();
     if (!draft) {
@@ -2842,6 +2885,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
 
   const handlePreferProvider = React.useCallback(
     async (provider: "opencode_cli") => {
+      setCodingPlanRestoredBanner(false);
       const draft = (codingPlanPrompt || input).trim();
       if (!draft) return;
       if (!projectId?.trim()) return;
@@ -2883,6 +2927,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
 
   const triggerAutoCodingPlanPreview = React.useCallback(
     async (prompt: string) => {
+      setCodingPlanRestoredBanner(false);
       const draft = prompt.trim();
       if (!draft) return;
       if (!projectId?.trim()) {
@@ -2916,6 +2961,50 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     },
     [projectId, activeWorkspaceId],
   );
+
+  React.useEffect(() => {
+    codingPlanDraftRestoreKeyRef.current = null;
+  }, [activeWorkspaceId, sessionId]);
+
+  React.useEffect(() => {
+    if (embedMode) return;
+    const ws = activeWorkspaceId?.trim();
+    const sid = sessionId?.trim();
+    if (!ws || !sid) return;
+    const rk = `${ws}|${sid}`;
+    if (codingPlanDraftRestoreKeyRef.current === rk) return;
+    if (codingPlanPreview) {
+      codingPlanDraftRestoreKeyRef.current = rk;
+      return;
+    }
+    const draft = readCodingPlanDraft(ws, sid);
+    codingPlanDraftRestoreKeyRef.current = rk;
+    if (!draft) return;
+    setCodingPlanPreview(draft.preview);
+    setCodingPlanPrompt(draft.prompt);
+    setCodingPlanInlineError(null);
+    setCodingPlanRestoredBanner(true);
+  }, [embedMode, sessionId, activeWorkspaceId, codingPlanPreview]);
+
+  React.useEffect(() => {
+    if (embedMode) return;
+    const ws = activeWorkspaceId?.trim();
+    const sid = sessionId?.trim();
+    if (!ws || !sid) return;
+    if (!codingPlanPreview) {
+      if (codingPlanLoading) return;
+      clearCodingPlanDraft(ws, sid);
+      return;
+    }
+    persistCodingPlanDraft(ws, sid, codingPlanPrompt, codingPlanPreview);
+  }, [
+    embedMode,
+    activeWorkspaceId,
+    sessionId,
+    codingPlanPreview,
+    codingPlanPrompt,
+    codingPlanLoading,
+  ]);
 
   React.useEffect(() => {
     if (!input.trim()) return;
@@ -3434,8 +3523,9 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     >
       <div
         data-testid="hww-command-panel"
+        data-hww-chat-stack-anchor="command"
         className={cn(
-          "flex min-h-0 max-w-full min-w-0 flex-1 flex-col overflow-x-hidden md:flex-none",
+          "relative z-[20] isolate flex min-h-0 max-w-full min-w-0 flex-1 flex-col overflow-x-hidden md:flex-none",
           "w-full border-b border-white/[0.06] md:border-b-0 md:border-r md:border-white/[0.08] md:shrink-0 md:overflow-x-hidden",
         )}
         style={
@@ -3551,6 +3641,18 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                 className="w-full max-w-full shrink-0 border-t border-white/[0.06] bg-[#050b10]/95 px-3 py-2 md:px-6"
                 data-hww-coding-plan-strip
               >
+                {codingPlanRestoredBanner && codingPlanPreview && !codingPlanLoading ? (
+                  <p
+                    className="mb-2 text-[10px] leading-snug text-cyan-100/85"
+                    data-hww-coding-plan-restored-hint
+                    role="status"
+                  >
+                    Restored your coding-plan approval card from this browser tab. If it looks
+                    stale, run{" "}
+                    <span className="font-medium text-white/85">Plan with coding agents</span>{" "}
+                    again.
+                  </p>
+                ) : null}
                 {codingPlanLoading ? (
                   <div
                     className="flex items-center gap-2 text-[11px] text-white/60"
@@ -3790,7 +3892,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       <div
         data-testid="hww-workbench-panel-slot"
         className={cn(
-          "relative z-0 flex min-h-0 w-full min-w-0 shrink-0 flex-col overflow-x-hidden",
+          "relative z-0 flex min-h-0 w-full min-w-0 shrink-0 flex-col overflow-x-hidden md:isolate",
           "min-h-[min(260px,48vh)] max-h-[48vh] md:max-h-none md:h-full md:min-h-0 md:min-w-[420px] md:flex-1 md:shrink",
         )}
       >

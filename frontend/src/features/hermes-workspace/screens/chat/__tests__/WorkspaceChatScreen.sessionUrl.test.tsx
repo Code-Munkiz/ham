@@ -57,6 +57,7 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
 
 import { WorkspaceChatScreen } from "../WorkspaceChatScreen";
 import { WorkspaceHamProjectProvider } from "../../../WorkspaceHamProjectContext";
+import { workspaceLastSessionStorageKey } from "../workspaceChatSessionStorage";
 import type { HamWorkspaceContextValue } from "@/lib/ham/HamWorkspaceContext";
 import type { HamWorkspaceSummary } from "@/lib/ham/workspaceApi";
 
@@ -150,6 +151,7 @@ describe("WorkspaceChatScreen session URL + workspace switch", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
   });
 
   it("does not fetch a prior workspace session id immediately after switching workspace (stale ?session=)", async () => {
@@ -185,5 +187,21 @@ describe("WorkspaceChatScreen session URL + workspace switch", () => {
     await waitFor(() => {
       expect(screen.getByText("Session unavailable")).toBeInTheDocument();
     });
+  });
+
+  it("bare /workspace/chat hydrates saved workspace session (no premature transcript wipe)", async () => {
+    window.localStorage.setItem(workspaceLastSessionStorageKey("ws_a"), "sid_saved");
+    mockUseHamWorkspace.mockReturnValue(readyCtx("ws_a"));
+    render(
+      <WorkspaceHamProjectProvider>
+        <MemoryRouter initialEntries={["/workspace/chat"]}>
+          <Routes>
+            <Route path="/workspace/chat" element={<WorkspaceChatScreen />} />
+          </Routes>
+        </MemoryRouter>
+      </WorkspaceHamProjectProvider>,
+    );
+
+    await waitFor(() => expect(fetchChatSessionMock).toHaveBeenCalledWith("sid_saved", "ws_a"));
   });
 });

@@ -255,7 +255,7 @@ export function ManagedProviderBuildApprovalPanel<
   return (
     <section
       className={cn(
-        "mt-3 rounded-md border border-emerald-300/20 bg-emerald-300/[0.04] p-3",
+        "relative z-[1] mt-3 rounded-md border border-emerald-300/20 bg-emerald-300/[0.04] p-3",
         className,
       )}
       data-hww-coding-plan={`${prefix}-approval`}

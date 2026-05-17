@@ -175,6 +175,12 @@ describe("WorkspaceChatScreen split containment", () => {
     expect(wbSlot?.contains(workbenchAside!)).toBe(true);
     expect(commandPanel?.contains(workbenchAside!)).toBe(false);
 
+    expect(commandPanel?.getAttribute("data-hww-chat-stack-anchor")).toBe("command");
+    expect(commandPanel?.className ?? "").toMatch(/z-\[20\]/);
+    expect(commandPanel?.className ?? "").toMatch(/\bisolate\b/);
+
+    expect(wbSlot?.className ?? "").toMatch(/\bmd:isolate\b/);
+
     expect(commandPanel?.querySelector(".hww-chat-composer-outer")).toBeTruthy();
     expect(commandPanel?.querySelector("[data-hww-command-deck]")).toBeTruthy();
     expect(commandPanel?.querySelector("[data-hww-composer-quick-tips]")).toBeTruthy();

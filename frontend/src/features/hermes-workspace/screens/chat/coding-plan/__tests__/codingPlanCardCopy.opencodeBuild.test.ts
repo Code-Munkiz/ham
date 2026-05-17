@@ -58,8 +58,8 @@ describe("OpenCode managed build copy", () => {
   it("locks user-facing strings", () => {
     expect(OPENCODE_BUILD_APPROVAL_HEADLINE).toBe("Review OpenCode build");
     expect(OPENCODE_BUILD_APPROVAL_CHECKBOX).toContain("OpenCode");
-    expect(OPENCODE_BUILD_PREVIEW_CTA).toBe("Preview");
-    expect(OPENCODE_BUILD_PREVIEW_BUSY).toBe("Previewing…");
+    expect(OPENCODE_BUILD_PREVIEW_CTA).toBe("Prepare build");
+    expect(OPENCODE_BUILD_PREVIEW_BUSY).toBe("Preparing build…");
     expect(OPENCODE_BUILD_LAUNCH_CTA).toBe("Approve build");
     expect(OPENCODE_BUILD_LAUNCH_BUSY).toBe("Building…");
     expect(OPENCODE_BUILD_SUCCESS_HEADLINE).toBe("Saved version created");

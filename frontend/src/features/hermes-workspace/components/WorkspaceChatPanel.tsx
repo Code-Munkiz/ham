@@ -6,7 +6,9 @@ import { useNavigate } from "react-router-dom";
 import { ExternalLink, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { hamWorkspaceLogoUrl } from "@/lib/ham/publicAssets";
+import { useHamWorkspace } from "@/lib/ham/HamWorkspaceContext";
 import { WorkspaceChatScreen } from "../screens/chat/WorkspaceChatScreen";
+import { readWorkspaceLastChatSessionId } from "../screens/chat/workspaceChatSessionStorage";
 
 export type WorkspaceChatPanelProps = {
   open: boolean;
@@ -15,6 +17,9 @@ export type WorkspaceChatPanelProps = {
 
 export function WorkspaceChatPanel({ open, onClose }: WorkspaceChatPanelProps) {
   const navigate = useNavigate();
+  const hamWorkspace = useHamWorkspace();
+  const activeWorkspaceId =
+    hamWorkspace.state.status === "ready" ? hamWorkspace.state.activeWorkspaceId : null;
 
   React.useEffect(() => {
     if (!open) return;
@@ -60,7 +65,12 @@ export function WorkspaceChatPanel({ open, onClose }: WorkspaceChatPanelProps) {
               className="h-8 gap-1 px-2 text-[11px] text-[#7dd3fc]"
               onClick={() => {
                 onClose();
-                navigate("/workspace/chat");
+                const saved = readWorkspaceLastChatSessionId(activeWorkspaceId);
+                navigate(
+                  saved
+                    ? `/workspace/chat?session=${encodeURIComponent(saved)}`
+                    : "/workspace/chat",
+                );
               }}
             >
               <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.5} />

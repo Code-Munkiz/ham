@@ -119,7 +119,7 @@ describe("ManagedOpencodeBuildApprovalPanel", () => {
 
   it("preview button is disabled when prompt is empty", () => {
     render(<ManagedOpencodeBuildApprovalPanel projectId="p1" userPrompt="" />);
-    const btn = screen.getByRole("button", { name: /^preview$/i });
+    const btn = screen.getByRole("button", { name: /prepare build/i });
     expect((btn as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -133,7 +133,7 @@ describe("ManagedOpencodeBuildApprovalPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /^preview$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /prepare build/i }));
 
     await waitFor(() => expect(previewMock).toHaveBeenCalledTimes(1));
     expect(previewMock.mock.calls[0]?.[0]).toMatchObject({
@@ -149,7 +149,7 @@ describe("ManagedOpencodeBuildApprovalPanel", () => {
       <ManagedOpencodeBuildApprovalPanel projectId="p1" userPrompt="Tidy README." />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /^preview$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /prepare build/i }));
     await waitFor(() => expect(previewMock).toHaveBeenCalledTimes(1));
 
     const launchBtn = (await screen.findByRole("button", {
@@ -175,7 +175,7 @@ describe("ManagedOpencodeBuildApprovalPanel", () => {
       <ManagedOpencodeBuildApprovalPanel projectId="p1" userPrompt="Tidy README." />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /^preview$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /prepare build/i }));
     await waitFor(() => expect(previewMock).toHaveBeenCalledTimes(1));
 
     const checkbox = container.querySelector(
@@ -187,7 +187,7 @@ describe("ManagedOpencodeBuildApprovalPanel", () => {
     await waitFor(() => expect(launchMock).toHaveBeenCalledTimes(1));
 
     expect(screen.getByText("Saved version created")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Preview" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Open app preview" })).toHaveAttribute(
       "href",
       "https://snapshots.example.test/p/oc",
     );
@@ -244,7 +244,7 @@ describe("ManagedOpencodeBuildApprovalPanel", () => {
       <ManagedOpencodeBuildApprovalPanel projectId="p1" userPrompt="Trim docs." />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /^preview$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /prepare build/i }));
     await waitFor(() => expect(previewMock).toHaveBeenCalledTimes(1));
 
     const checkbox = container.querySelector(
@@ -267,7 +267,7 @@ describe("ManagedOpencodeBuildApprovalPanel", () => {
 
     render(<ManagedOpencodeBuildApprovalPanel projectId="p1" userPrompt="Tidy README." />);
 
-    fireEvent.click(screen.getByRole("button", { name: /^preview$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /prepare build/i }));
 
     await waitFor(() => expect(screen.getByText(/HAM_PERMISSION_DENIED/)).toBeTruthy());
     expect(screen.getByRole("button", { name: /start over/i })).toBeTruthy();
@@ -281,7 +281,7 @@ describe("ManagedOpencodeBuildApprovalPanel", () => {
       <ManagedOpencodeBuildApprovalPanel projectId="p1" userPrompt="Tidy README." />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /^preview$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /prepare build/i }));
     await waitFor(() => expect(previewMock).toHaveBeenCalledTimes(1));
 
     const checkbox = container.querySelector(
@@ -307,7 +307,7 @@ describe("ManagedOpencodeBuildApprovalPanel", () => {
       <ManagedOpencodeBuildApprovalPanel projectId="p1" userPrompt="Hi." />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /^preview$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /prepare build/i }));
     await waitFor(() =>
       expect(
         container.querySelector('[data-hww-coding-plan="opencode-build-approve-checkbox"]'),

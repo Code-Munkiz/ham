@@ -30,8 +30,8 @@ export const MANAGED_BUILD_APPROVAL_BODY =
 export const MANAGED_BUILD_APPROVAL_CHECKBOX =
   "I approve HAM to create a managed workspace snapshot.";
 
-export const MANAGED_BUILD_PREVIEW_CTA = "Preview this build";
-export const MANAGED_BUILD_PREVIEW_BUSY = "Preparing preview…";
+export const MANAGED_BUILD_PREVIEW_CTA = "Prepare build";
+export const MANAGED_BUILD_PREVIEW_BUSY = "Preparing build…";
 export const MANAGED_BUILD_LAUNCH_CTA = "Approve build";
 export const MANAGED_BUILD_LAUNCH_BUSY = "Building snapshot…";
 
@@ -46,7 +46,7 @@ export function managedBuildChangedPathsLine(count: number): string {
   return `${count} files changed`;
 }
 
-export const MANAGED_BUILD_PREVIEW_LINK = "Preview";
+export const MANAGED_BUILD_PREVIEW_LINK = "Open app preview";
 export const MANAGED_BUILD_VIEW_CHANGES_LINK = "View changes";
 export const MANAGED_BUILD_TECHNICAL_DETAILS_SUMMARY = "Technical details";
 export const MANAGED_BUILD_KEEP_BUILDING_CTA = "Keep building";
@@ -62,8 +62,8 @@ export const OPENCODE_BUILD_APPROVAL_BODY =
 export const OPENCODE_BUILD_APPROVAL_CHECKBOX =
   "I approve HAM to create a managed workspace snapshot with OpenCode.";
 
-export const OPENCODE_BUILD_PREVIEW_CTA = "Preview";
-export const OPENCODE_BUILD_PREVIEW_BUSY = "Previewing…";
+export const OPENCODE_BUILD_PREVIEW_CTA = "Prepare build";
+export const OPENCODE_BUILD_PREVIEW_BUSY = "Preparing build…";
 export const OPENCODE_BUILD_LAUNCH_CTA = "Approve build";
 export const OPENCODE_BUILD_LAUNCH_BUSY = "Building…";
 
@@ -71,7 +71,7 @@ export const OPENCODE_BUILD_SUCCESS_HEADLINE = "Saved version created";
 export const OPENCODE_BUILD_FAILURE_HEADLINE = "Build did not complete. No version was saved.";
 
 export const OPENCODE_BUILD_NO_PR_NOTE = "Managed workspace builds never open a pull request.";
-export const OPENCODE_BUILD_PREVIEW_LINK = "Preview";
+export const OPENCODE_BUILD_PREVIEW_LINK = "Open app preview";
 export const OPENCODE_BUILD_VIEW_CHANGES_LINK = "View changes";
 export const OPENCODE_BUILD_TECHNICAL_DETAILS_SUMMARY = "Details";
 export const OPENCODE_BUILD_KEEP_BUILDING_CTA = "Keep building";

@@ -176,7 +176,7 @@ describe("CodingPlanCard managed workspace branch", () => {
 describe("ManagedBuildApprovalPanel", () => {
   it("preview button is disabled when prompt is empty", () => {
     render(<ManagedBuildApprovalPanel projectId="p1" userPrompt="" />);
-    const btn = screen.getByRole("button", { name: /preview this build/i });
+    const btn = screen.getByRole("button", { name: /prepare build/i });
     expect((btn as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -187,7 +187,7 @@ describe("ManagedBuildApprovalPanel", () => {
       <ManagedBuildApprovalPanel projectId="project.scoped-chat" userPrompt=" Wire tests. " />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /preview this build/i }));
+    fireEvent.click(screen.getByRole("button", { name: /prepare build/i }));
 
     await waitFor(() => expect(previewMock).toHaveBeenCalledTimes(1));
     expect(previewMock.mock.calls[0]?.[0]).toMatchObject({
@@ -203,7 +203,7 @@ describe("ManagedBuildApprovalPanel", () => {
       <ManagedBuildApprovalPanel projectId="p1" userPrompt="Tidy README." />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /preview this build/i }));
+    fireEvent.click(screen.getByRole("button", { name: /prepare build/i }));
 
     await waitFor(() => {
       expect(previewMock).toHaveBeenCalledTimes(1);
@@ -233,7 +233,7 @@ describe("ManagedBuildApprovalPanel", () => {
       <ManagedBuildApprovalPanel projectId="p1" userPrompt="Tidy README." />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /preview this build/i }));
+    fireEvent.click(screen.getByRole("button", { name: /prepare build/i }));
     await waitFor(() => {
       expect(previewMock).toHaveBeenCalledTimes(1);
     });
@@ -249,7 +249,7 @@ describe("ManagedBuildApprovalPanel", () => {
     });
 
     expect(screen.getByText("Saved version created")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Preview" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Open app preview" })).toHaveAttribute(
       "href",
       "https://snapshots.example.test/p/abc",
     );
@@ -297,7 +297,7 @@ describe("ManagedBuildApprovalPanel", () => {
 
     render(<ManagedBuildApprovalPanel projectId="p1" userPrompt="Tidy README." />);
 
-    fireEvent.click(screen.getByRole("button", { name: /preview this build/i }));
+    fireEvent.click(screen.getByRole("button", { name: /prepare build/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/HAM_PERMISSION_DENIED/)).toBeTruthy();
