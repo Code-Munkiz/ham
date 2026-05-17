@@ -127,3 +127,21 @@ HAM_CORS_ORIGIN_REGEX: "https://.*\\.vercel\\.app"
 # HAM_OPENCODE_ENABLED: "1"
 # HAM_OPENCODE_EXECUTION_ENABLED: "1"
 # HAM_OPENCODE_DEFAULT_MODEL: "anthropic/claude-sonnet-4-6"
+
+# --- Claude Agent managed-workspace lane (optional) ---
+# CLAUDE_AGENT_ENABLED=1 enables the readiness probe and the launch route.
+# HAM_CLAUDE_AGENT_EXEC_TOKEN is required for the launch route (503 CLAUDE_AGENT_LANE_UNCONFIGURED
+# without it). The deploy script default --set-secrets now includes
+# HAM_CLAUDE_AGENT_EXEC_TOKEN=ham-claude-agent-exec-token:latest.
+# Create the secret before deploying:
+#   printf '%s' '<token>' | gcloud secrets create ham-claude-agent-exec-token \
+#     --data-file=- --project=clarity-staging-488201 --replication-policy=automatic
+# Then grant the Cloud Run runtime SA secretAccessor:
+#   gcloud secrets add-iam-policy-binding ham-claude-agent-exec-token \
+#     --member="serviceAccount:<project-number>-compute@developer.gserviceaccount.com" \
+#     --role="roles/secretmanager.secretAccessor" --project=clarity-staging-488201
+# ANTHROPIC_API_KEY (already in --set-secrets as anthropic-api-key:latest) satisfies the
+# SDK auth gate when CLAUDE_CODE_USE_BEDROCK and CLAUDE_CODE_USE_VERTEX are unset.
+# CLAUDE_AGENT_ENABLED: "1"
+# CLAUDE_AGENT_RUN_TIMEOUT_SEC: "600"
+# CLAUDE_AGENT_MAX_TURNS: "25"

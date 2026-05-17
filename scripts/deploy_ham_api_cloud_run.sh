@@ -37,14 +37,18 @@ CPU="${CPU:-2}"
 # ham-cursor-agent-launch-token → HAM_CURSOR_AGENT_LAUNCH_TOKEN (see docs/DEPLOY_CLOUD_RUN.md).
 # ham-droid-runner-token → HAM_DROID_RUNNER_TOKEN (Cloud Run bearer to ham-droid-runner-1 RFC1918 host).
 # ham-opencode-exec-token → HAM_OPENCODE_EXEC_TOKEN (OpenCode build/launch Bearer gate).
+# ham-claude-agent-exec-token → HAM_CLAUDE_AGENT_EXEC_TOKEN (Claude Agent build/launch Bearer gate).
 # anthropic-api-key → ANTHROPIC_API_KEY (Claude-family paths + OpenCode readiness `check_opencode_readiness`).
-SECRETS="${SET_SECRETS:-CURSOR_API_KEY=ham-cursor-api-key:latest,HERMES_GATEWAY_API_KEY=ham-hermes-gateway-api-key:latest,ANTHROPIC_API_KEY=anthropic-api-key:latest,HAM_CURSOR_AGENT_LAUNCH_TOKEN=ham-cursor-agent-launch-token:latest,HAM_TRANSCRIPTION_API_KEY=ham-transcription-api-key:latest,HAM_DROID_RUNNER_TOKEN=ham-droid-runner-token:latest,HAM_CONNECTED_TOOLS_CREDENTIAL_ENCRYPTION_KEY=ham-connected-tools-credential-encryption-key:latest,HAM_OPENCODE_EXEC_TOKEN=ham-opencode-exec-token:latest}"
+SECRETS="${SET_SECRETS:-CURSOR_API_KEY=ham-cursor-api-key:latest,HERMES_GATEWAY_API_KEY=ham-hermes-gateway-api-key:latest,ANTHROPIC_API_KEY=anthropic-api-key:latest,HAM_CURSOR_AGENT_LAUNCH_TOKEN=ham-cursor-agent-launch-token:latest,HAM_TRANSCRIPTION_API_KEY=ham-transcription-api-key:latest,HAM_DROID_RUNNER_TOKEN=ham-droid-runner-token:latest,HAM_CONNECTED_TOOLS_CREDENTIAL_ENCRYPTION_KEY=ham-connected-tools-credential-encryption-key:latest,HAM_OPENCODE_EXEC_TOKEN=ham-opencode-exec-token:latest,HAM_CLAUDE_AGENT_EXEC_TOKEN=ham-claude-agent-exec-token:latest}"
 
 # Guardrail: required secret env bindings that MUST appear in the resolved SECRETS string.
 # Adding a new required name here will block future deploys until the operator wires the secret.
 # HAM_CONNECTED_TOOLS_CREDENTIAL_ENCRYPTION_KEY -> ham-connected-tools-credential-encryption-key:
 # Fernet key for BYOK Connected Tools persistence; dropping it silently breaks workspace tool
 # credential storage on the new revision.
+# HAM_CLAUDE_AGENT_EXEC_TOKEN -> ham-claude-agent-exec-token:
+# Bearer gate for Claude Agent build/launch; dropping it makes claude_agent readiness-blocked
+# on all revisions (launch route returns 503 CLAUDE_AGENT_LANE_UNCONFIGURED without it).
 REQUIRED_SECRET_ENVS=(
   CURSOR_API_KEY
   HERMES_GATEWAY_API_KEY
@@ -54,6 +58,7 @@ REQUIRED_SECRET_ENVS=(
   HAM_DROID_RUNNER_TOKEN
   HAM_CONNECTED_TOOLS_CREDENTIAL_ENCRYPTION_KEY
   HAM_OPENCODE_EXEC_TOKEN
+  HAM_CLAUDE_AGENT_EXEC_TOKEN
 )
 
 if [[ "${ALLOW_SECRET_DROP:-0}" != "1" ]]; then
@@ -80,7 +85,8 @@ if [[ "${ALLOW_SECRET_DROP:-0}" != "1" ]]; then
     echo "                 HAM_TRANSCRIPTION_API_KEY=ham-transcription-api-key:latest,\\" >&2
     echo "                 HAM_DROID_RUNNER_TOKEN=ham-droid-runner-token:latest,\\" >&2
     echo "                 HAM_CONNECTED_TOOLS_CREDENTIAL_ENCRYPTION_KEY=ham-connected-tools-credential-encryption-key:latest,\\" >&2
-    echo "                 HAM_OPENCODE_EXEC_TOKEN=ham-opencode-exec-token:latest'" >&2
+    echo "                 HAM_OPENCODE_EXEC_TOKEN=ham-opencode-exec-token:latest,\\" >&2
+    echo "                 HAM_CLAUDE_AGENT_EXEC_TOKEN=ham-claude-agent-exec-token:latest'" >&2
     echo "" >&2
     echo "  Or rely on the script default by leaving SET_SECRETS unset." >&2
     echo "" >&2
