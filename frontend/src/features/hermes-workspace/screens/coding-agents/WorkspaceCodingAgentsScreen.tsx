@@ -232,6 +232,8 @@ export function WorkspaceCodingAgentsScreen({ workspaceId }: { workspaceId?: str
         }
       />
 
+      <MyBuildersRow />
+
       <ProviderRow
         readiness={readiness}
         readinessError={readinessError}
@@ -392,6 +394,22 @@ export function WorkspaceCodingAgentsScreen({ workspaceId }: { workspaceId?: str
 // ---------------------------------------------------------------------------
 // Subcomponents
 // ---------------------------------------------------------------------------
+
+function MyBuildersRow() {
+  return (
+    <section className="flex flex-wrap items-center gap-3 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-4 py-3 shadow-[0_12px_40px_var(--theme-shadow)]">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-[var(--theme-text)]">My builders</p>
+        <p className="mt-0.5 text-[11px] text-[var(--theme-muted)]">
+          Create reusable builder profiles tailored to what you&apos;re building.
+        </p>
+      </div>
+      <Button type="button" size="sm" variant="secondary" asChild className="h-8">
+        <Link to="/workspace/builder-studio">Open Builder Studio →</Link>
+      </Button>
+    </section>
+  );
+}
 
 function ProviderRow({
   readiness,

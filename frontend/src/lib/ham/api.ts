@@ -2218,6 +2218,8 @@ export interface CodingConductorCandidate {
   requires_confirmation: boolean;
   will_modify_code: boolean;
   will_open_pull_request: boolean;
+  builder_id?: string | null;
+  builder_name?: string | null;
 }
 
 export interface CodingConductorProjectFlags {

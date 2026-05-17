@@ -9,6 +9,7 @@ import {
   Share2,
   FolderOpen,
   Settings,
+  Sparkles,
   Waypoints,
   Terminal,
   UserCircle,
@@ -44,6 +45,7 @@ export const libraryNavItems: MainNavItem[] = [
   { to: "/workspace/tasks", label: "Tasks", icon: CheckSquare },
   { to: "/workspace/conductor", label: "Conductor", icon: Waypoints },
   { to: "/workspace/operations", label: "Operations", icon: Network },
+  { to: "/workspace/builder-studio", label: "Builder Studio", icon: Sparkles },
 ];
 
 /** Linked from Settings side nav; not in the primary rail. */
@@ -94,6 +96,10 @@ const MOBILE_TITLE_RULES: { test: (p: string) => boolean; title: string }[] = [
   {
     test: (p) => p === "/workspace/coding-agents" || p.startsWith("/workspace/coding-agents/"),
     title: "Coding agents",
+  },
+  {
+    test: (p) => p === "/workspace/builder-studio" || p.startsWith("/workspace/builder-studio/"),
+    title: "Builder Studio",
   },
   { test: (p) => p === "/workspace/social" || p.startsWith("/workspace/social/"), title: "Social" },
   { test: (p) => p === "/workspace/memory" || p.startsWith("/workspace/memory/"), title: "Memory" },

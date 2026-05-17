@@ -27,6 +27,7 @@ export type CodingPlanCardProps = {
   className?: string;
   onPreferProvider?: (provider: "opencode_cli") => void;
   preferringProvider?: "opencode_cli" | null;
+  builderName?: string;
 };
 
 function shouldShowManagedBuildApproval(payload: CodingConductorPreviewPayload): boolean {
@@ -127,8 +128,15 @@ export function CodingPlanCard({
   className,
   onPreferProvider,
   preferringProvider = null,
+  builderName,
 }: CodingPlanCardProps) {
   const chosen = payload.chosen;
+  const resolvedBuilderName = (() => {
+    const fromProp = builderName?.trim();
+    if (fromProp) return fromProp;
+    const fromCandidate = chosen?.builder_name?.trim();
+    return fromCandidate || null;
+  })();
   const alts = payload.candidates.filter((c) => c !== chosen);
   const headline = chosen
     ? builderLabelForCandidate(chosen)
@@ -159,6 +167,15 @@ export function CodingPlanCard({
         </span>
         <span className={BADGE_CLASS}>{taskLabel}</span>
       </header>
+
+      {resolvedBuilderName ? (
+        <p
+          className={cn(BADGE_CLASS, "mt-2 inline-flex w-fit")}
+          data-hww-coding-plan="builder-badge"
+        >
+          {resolvedBuilderName}
+        </p>
+      ) : null}
 
       <h3
         className="mt-2 text-[13px] font-semibold tracking-tight text-white"
