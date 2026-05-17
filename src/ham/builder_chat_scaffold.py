@@ -63,6 +63,95 @@ def _is_calculator_prompt(user_plain: str) -> bool:
     )
 
 
+def _prior_calculator_digit_area_palette(pcm: dict[str, Any]) -> str:
+    raw = str(pcm.get("calculator_digit_area_palette") or "").strip().lower()
+    if raw in {"light_blue", "purple", "none"}:
+        return raw
+    if pcm.get("calculator_purple_digit_keys") is True:
+        return "purple"
+    if pcm.get("calculator_light_blue_digits") is True:
+        return "light_blue"
+    return "none"
+
+
+def _derive_calculator_digit_area_palette(lowered: str, pcm: dict[str, Any]) -> str:
+    prior = _prior_calculator_digit_area_palette(pcm)
+    purple_kw = bool(re.search(r"\b(purple|violet|lavender)\b", lowered))
+
+    keypad_context = bool(
+        re.search(
+            r"\b(calculator|keypad|numpad|digit\s+buttons|number\s+buttons|digits|keys|buttons)\b",
+            lowered,
+        )
+    )
+
+    wants_blue_kw = bool(re.search(r"\b(light\s+)?(blue|cyan|sky|azure)\b", lowered))
+
+    blue_instead_of_purple = bool(
+        wants_blue_kw
+        and prior == "purple"
+        and (
+            re.search(r"\binstead\s+of\s+.{0,40}(purple|violet|lavender)\b", lowered)
+            or re.search(r"\b(rather\s+than|not)\s+.{0,24}(purple|violet)\b", lowered)
+        )
+    )
+    if blue_instead_of_purple:
+        return "light_blue"
+
+    purple_explicit_replace = bool(
+        purple_kw
+        and (
+            re.search(
+                r"\binstead\s+of\s+(\w+\s+){0,4}(light\s+|)?(blue|cyan|sky)\b",
+                lowered,
+            )
+            or re.search(
+                r"\b(blue|cyan|sky)\b.{0,80}\binstead\b.{0,30}\b(purple|violet|lavender)\b",
+                lowered,
+            )
+            or re.search(
+                r"\b(change|make|paint|switch|swap|replace|turn)\b.{1,132}\b(buttons|keys|digits|digit|keypad)"
+                r"\b.{0,132}\b(purple|violet|lavender)\b",
+                lowered,
+            )
+            or re.search(
+                r"\b(purple|violet|lavender)\b.{1,132}\b(buttons|keys|digits|digit|keypad)\b.{0,60}\binstead\b",
+                lowered,
+            )
+        )
+    )
+
+    purple_implicit_carry = bool(
+        purple_kw
+        and prior == "light_blue"
+        and (keypad_context or re.search(r"\binstead\b", lowered))
+    )
+
+    purple_first_paint = bool(
+        purple_kw
+        and prior == "none"
+        and wants_blue_kw is False
+        and (keypad_context or re.search(r"\b(calculator)\b", lowered))
+    )
+
+    new_blue_paint = bool(
+        wants_blue_kw
+        or (
+            re.search(
+                r"\b(number\s+pad|numpad|digit\s+buttons|number\s+buttons)\b",
+                lowered,
+            )
+            and re.search(r"\b(color|colour|style|hue|shade)\b", lowered)
+        )
+    )
+
+    if purple_explicit_replace or purple_implicit_carry or purple_first_paint:
+        return "purple"
+    if new_blue_paint:
+        return "light_blue"
+    return prior
+
+
 def _looks_like_reference_style_request(user_plain: str) -> bool:
     low = str(user_plain or "").strip().lower()
     if ("image(s)" in low or "image" in low) and re.search(
@@ -955,15 +1044,7 @@ def _build_react_scaffold_files(
                 lowered,
             )
         )
-        digit_area_color = False
-        if re.search(r"\b(light\s+)?(blue|cyan|sky|azure)\b", lowered):
-            digit_area_color = True
-        elif re.search(
-            r"\b(number\s+pad|numpad|digit\s+buttons|number\s+buttons)\b",
-            lowered,
-        ) and re.search(r"\b(color|colour|style|hue|shade)\b", lowered):
-            digit_area_color = True
-        digit_area_color = bool(digit_area_color or pcm.get("calculator_light_blue_digits"))
+        digit_palette = _derive_calculator_digit_area_palette(lowered, pcm)
         prev_live_working = bool(pcm.get("calculator_live_equation_working_line"))
         live_working_requested = bool(
             re.search(
@@ -973,16 +1054,20 @@ def _build_react_scaffold_files(
         )
         show_equation_working_line = prev_live_working or live_working_requested
         keypad_css_digit_block = ""
-        if digit_area_color:
+        if digit_palette == "light_blue":
             keypad_css_digit_block = (
                 ".calc-digit-light-blue .keypad button.ham-key-digit {\n"
                 "  background: #b8e8ff;\n"
                 "  color: #0b2239;\n"
                 "  border: 1px solid rgba(10, 50, 80, 0.35);\n"
                 "}\n"
-                ".calc-digit-light-blue .keypad button.ham-key-digit:hover {\n"
-                "  background: #d4f3ff;\n"
-                "  filter: none;\n"
+            )
+        elif digit_palette == "purple":
+            keypad_css_digit_block = (
+                ".calc-digit-purple-keys .keypad button.ham-key-digit {\n"
+                "  background: #d9c4ff;\n"
+                "  color: #1a082f;\n"
+                "  border: 1px solid rgba(74, 32, 120, 0.35);\n"
                 "}\n"
             )
         keypad_yellow_border_css = ""
@@ -994,8 +1079,10 @@ def _build_react_scaffold_files(
                 "}\n"
             )
         css_classes: list[str] = ["calc-page"]
-        if digit_area_color:
+        if digit_palette == "light_blue":
             css_classes.append("calc-digit-light-blue")
+        elif digit_palette == "purple":
+            css_classes.append("calc-digit-purple-keys")
         if yellow_digit_border:
             css_classes.append("calc-yellow-digit-border")
         main_class_attr = " ".join(css_classes)
@@ -1014,8 +1101,10 @@ def _build_react_scaffold_files(
             else ""
         )
         readme_extra_lines: list[str] = []
-        if digit_area_color:
+        if digit_palette == "light_blue":
             readme_extra_lines.append("- Light blue styling on digit keys when requested.")
+        if digit_palette == "purple":
+            readme_extra_lines.append("- Purple styling on digit keys when requested.")
         if yellow_digit_border:
             readme_extra_lines.append("- Yellow border / outline on digit keys when requested.")
         if large_buttons:
@@ -1144,10 +1233,22 @@ def _build_react_scaffold_files(
                     ".keypad button:hover {\n"
                     "  filter: brightness(1.07);\n"
                     "}\n"
-                    ".calc-digit-light-blue .keypad button.ham-key-digit:hover {\n"
-                    "  filter: none;\n"
-                    "}\n"
-                    ".keypad button.ham-key-eq { background: #27a884; }\n"
+                    + (
+                        ".calc-digit-light-blue .keypad button.ham-key-digit:hover {\n"
+                        "  background: #d4f3ff;\n"
+                        "  filter: none;\n"
+                        "}\n"
+                        if digit_palette == "light_blue"
+                        else (
+                            ".calc-digit-purple-keys .keypad button.ham-key-digit:hover {\n"
+                            "  background: #eae0ff;\n"
+                            "  filter: none;\n"
+                            "}\n"
+                            if digit_palette == "purple"
+                            else ""
+                        )
+                    )
+                    + ".keypad button.ham-key-eq { background: #27a884; }\n"
                     ".keypad button.ham-key-eq:hover { background: #2fbd96; }\n"
                     ".keypad .ham-key-zero { grid-column: span 2; }\n"
                     ".history {\n"
@@ -1173,13 +1274,15 @@ def _build_react_scaffold_files(
                 "style_requested": polished
                 or large_buttons
                 or include_history
-                or digit_area_color
+                or digit_palette != "none"
                 or show_equation_working_line
                 or yellow_digit_border,
                 "reference_requested": False,
                 "calculator_history_enabled": include_history,
                 "calculator_large_buttons": large_buttons,
-                "calculator_light_blue_digits": digit_area_color,
+                "calculator_digit_area_palette": digit_palette,
+                "calculator_light_blue_digits": digit_palette == "light_blue",
+                "calculator_purple_digit_keys": digit_palette == "purple",
                 "calculator_polished": polished,
                 "calculator_live_equation_working_line": show_equation_working_line,
                 "calculator_digit_yellow_border": yellow_digit_border,
@@ -1410,6 +1513,8 @@ def maybe_chat_scaffold_for_turn(
                         "calculator_history_enabled",
                         "calculator_large_buttons",
                         "calculator_light_blue_digits",
+                        "calculator_digit_area_palette",
+                        "calculator_purple_digit_keys",
                         "calculator_polished",
                         "calculator_live_equation_working_line",
                         "calculator_digit_yellow_border",

@@ -640,6 +640,85 @@ def test_builder_hook_calculator_multi_iteration_preserves_blue_equation_and_yel
     _cleanup()
 
 
+def test_chat_scaffold_calculator_digit_purple_replaces_light_blue_carrying_features(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    workspace_id = "ws_a"
+    project_id = "pr_calc_purple_carry"
+    session_id = "sess_calc_purple_carry"
+
+    first = maybe_chat_scaffold_for_turn(
+        workspace_id=workspace_id,
+        project_id=project_id,
+        session_id=session_id,
+        last_user_plain="build me a clean calculator app",
+        created_by="user_1",
+    )
+    assert first and first.get("scaffolded") is True
+    sid1 = str(first.get("source_snapshot_id") or "")
+
+    _p2, m2 = run_builder_happy_path_hook(
+        workspace_id=workspace_id,
+        project_id=project_id,
+        session_id=session_id,
+        last_user_plain="make the calculator buttons bigger and light blue",
+        ham_actor=None,
+    )
+    assert m2.get("builder_operation") == "update_existing_project"
+    sid2 = str(m2.get("source_snapshot_id") or "")
+    assert sid2 != sid1
+
+    _p3, m3 = run_builder_happy_path_hook(
+        workspace_id=workspace_id,
+        project_id=project_id,
+        session_id=session_id,
+        last_user_plain=(
+            "I want the calculator to show the equation as I type like 12+3 before I press equals"
+        ),
+        ham_actor=None,
+    )
+    sid3 = str(m3.get("source_snapshot_id") or "")
+    assert sid3 != sid2
+
+    _p4, m4 = run_builder_happy_path_hook(
+        workspace_id=workspace_id,
+        project_id=project_id,
+        session_id=session_id,
+        last_user_plain="make the keypad buttons purple instead of blue — keep everything else",
+        ham_actor=None,
+    )
+    assert m4.get("builder_operation") == "update_existing_project"
+    sid4 = str(m4.get("source_snapshot_id") or "")
+    assert sid4 != sid3
+
+    snap = next(row for row in store.list_source_snapshots(workspace_id=workspace_id, project_id=project_id) if row.id == sid4)
+    md = snap.metadata or {}
+    assert md.get("calculator_digit_area_palette") == "purple"
+    assert md.get("calculator_purple_digit_keys") is True
+    assert md.get("calculator_light_blue_digits") is not True
+    assert md.get("calculator_live_equation_working_line") is True
+    assert md.get("calculator_large_buttons") is True
+
+    mf = snap.manifest if isinstance(snap.manifest, dict) else {}
+    files = mf.get("inline_files") if isinstance(mf.get("inline_files"), dict) else {}
+    css_raw = str(files.get("src/styles.css") or "")
+    css = css_raw.lower()
+    assert "calc-digit-purple-keys" in css
+    assert "#d9c4ff" in css
+    assert "calc-digit-light-blue" not in css
+    assert "#b8e8ff" not in css
+
+    app_raw = str(files.get("src/App.tsx") or "")
+    assert "calc-digit-purple-keys" in app_raw
+    assert "calc-digit-light-blue" not in app_raw
+    assert "equation-working" in app_raw
+    assert "min-height: 3.55rem" in css
+    _cleanup()
+
+
 def test_chat_scaffold_update_carries_forward_reference_style_profile(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
     store = BuilderSourceStore(store_path=tmp_path / "sources.json")

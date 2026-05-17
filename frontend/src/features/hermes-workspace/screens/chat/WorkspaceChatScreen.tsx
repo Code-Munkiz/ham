@@ -69,6 +69,7 @@ import { PROJECT_WORKSPACE_GATE_MESSAGE } from "@/lib/ham/projectWorkspaceGateCo
 import {
   pickWorkspaceScopedProjectId,
   projectRecordsHaveWorkspaceBinding,
+  workspaceProjectScope,
 } from "@/lib/ham/workspaceProjectScope";
 import { useVoiceWorkspaceSettingsOptional } from "../../voice/VoiceWorkspaceSettingsContext";
 import { WorkspaceChatEmptyState, WORKSPACE_CHAT_SUGGESTIONS } from "./WorkspaceChatEmptyState";
@@ -1017,6 +1018,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         setContextMetersPayload(null);
         return;
       }
+      const meterScopeStarted = workspaceProjectScope(activeWorkspaceId, projectId);
       try {
         const mid = chatModelIdForApi ?? modelId;
         const p = await fetchChatContextMeters({
@@ -1025,6 +1027,9 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           projectId,
           workspaceId: activeWorkspaceId,
         });
+        if (workspaceProjectScope(activeWorkspaceId, projectId) !== meterScopeStarted) {
+          return;
+        }
         setContextMetersPayload(p);
       } catch {
         setContextMetersPayload(null);

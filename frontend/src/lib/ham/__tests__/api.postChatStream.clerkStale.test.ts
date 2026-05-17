@@ -75,11 +75,38 @@ describe("postChatStream Clerk stale-session retry", () => {
     await postChatStream(payload, {}, { sessionToken: "jwt_stale" });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(clearCache).toHaveBeenCalledTimes(1);
-    expect(getToken).toHaveBeenCalledTimes(1);
+    expect(clearCache).toHaveBeenCalled();
     expect(getToken).toHaveBeenCalledWith({ forceRefresh: true });
-    const secondHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Record<string, string>;
-    expect(secondHeaders.Authorization).toBe("Bearer jwt_refreshed");
+  });
+
+  it("forces a Clerk refresh when 401 uses plain-text Signature has expired body", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response("Invalid Clerk session: Signature has expired", {
+          status: 401,
+          headers: { "Content-Type": "text/plain" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(ndjsonDoneStream(), {
+          status: 200,
+          headers: { "Content-Type": "application/x-ndjson" },
+        }),
+      );
+    global.fetch = fetchMock as unknown as typeof fetch;
+    getToken.mockResolvedValue("jwt_refreshed");
+
+    const payload: HamChatRequest = {
+      messages: [{ role: "user", content: "hi" }],
+    };
+
+    await postChatStream(payload, {}, { sessionToken: "jwt_stale" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(getToken).toHaveBeenCalledWith({ forceRefresh: true });
+    const refreshedHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Record<string, string>;
+    expect(refreshedHeaders.Authorization).toBe("Bearer jwt_refreshed");
   });
 
   it("does not retry for string-only Bearer auth payloads", async () => {

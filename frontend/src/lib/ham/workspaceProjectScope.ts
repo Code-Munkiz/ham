@@ -41,3 +41,24 @@ export function pickWorkspaceScopedProjectId(
   const sorted = [...scoped].sort((a, b) => a.id.localeCompare(b.id));
   return sorted[0]!.id;
 }
+
+/** Stable `{ workspace_id, project_id }` pairing for cancelling stale polling. */
+export function workspaceProjectScope(workspaceId?: string | null, projectId?: string | null): string {
+  return `${(workspaceId ?? "").trim()}|${(projectId ?? "").trim()}`;
+}
+
+export function workspaceProjectScopesMatch(a: string, b: string): boolean {
+  return a === b;
+}
+
+/**
+ * Abort applying async results when hooks still point at a **different**
+ * `{ workspaceId, projectId }` than when the operation started.
+ */
+export function ignoreStaleWorkbenchScope(params: {
+  started: string;
+  currentWorkspaceId?: string | null;
+  currentProjectId?: string | null;
+}): boolean {
+  return workspaceProjectScope(params.currentWorkspaceId, params.currentProjectId) !== params.started;
+}

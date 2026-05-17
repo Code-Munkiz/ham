@@ -56,6 +56,8 @@ import {
   shouldResetHamWorkbenchProjectSelection,
 } from "@/lib/ham/api";
 import { sanitizeWorkbenchProjectAccessMessage } from "@/lib/ham/workbenchProjectMessages";
+import { workspaceProjectScope } from "@/lib/ham/workspaceProjectScope";
+import { detectPreviewIframeProxySignals } from "@/features/hermes-workspace/workbench/previewProxyIframeSignals";
 import { cn } from "@/lib/utils";
 import { ProjectSourceIntakeDialog } from "./ProjectSourceIntakeDialog";
 import { WorkbenchProjectSettingsPanel } from "./WorkbenchProjectSettingsPanel";
@@ -477,6 +479,14 @@ function WorkbenchPreviewPanel({
     staleBuilderCbRef.current = onStaleBuilderProject;
   }, [onStaleBuilderProject]);
 
+  const projectionScopeRef = React.useRef(workspaceProjectScope(workspaceId, projectId));
+  React.useLayoutEffect(() => {
+    projectionScopeRef.current = workspaceProjectScope(workspaceId, projectId);
+  }, [workspaceId, projectId]);
+  const isStaleWorkbenchPoll = React.useCallback((startedScope: string) => {
+    return projectionScopeRef.current !== startedScope;
+  }, []);
+
   React.useEffect(() => {
     staleScopeNotifiedRef.current = false;
     iframeProxyStrikeRef.current = 0;
@@ -491,6 +501,7 @@ function WorkbenchPreviewPanel({
   React.useEffect(() => {
     const ws = workspaceId?.trim() || "";
     const pid = projectId?.trim() || "";
+    const startedScope = workspaceProjectScope(ws, pid);
     if (!ws || !pid) {
       setSnapshots([]);
       return;
@@ -498,19 +509,26 @@ function WorkbenchPreviewPanel({
     let cancelled = false;
     void listBuilderSourceSnapshots(ws, pid)
       .then((r) => {
-        if (!cancelled) setSnapshots(r.source_snapshots || []);
+        if (cancelled || isStaleWorkbenchPoll(startedScope)) return;
+        setSnapshots(r.source_snapshots || []);
       })
-      .catch(() => {
-        if (!cancelled) setSnapshots([]);
+      .catch((e: unknown) => {
+        if (cancelled || isStaleWorkbenchPoll(startedScope)) return;
+        if (shouldResetHamWorkbenchProjectSelection(e) && !staleScopeNotifiedRef.current) {
+          staleScopeNotifiedRef.current = true;
+          staleBuilderCbRef.current?.();
+        }
+        setSnapshots([]);
       });
     return () => {
       cancelled = true;
     };
-  }, [workspaceId, projectId, sourceRefreshKey]);
+  }, [workspaceId, projectId, sourceRefreshKey, isStaleWorkbenchPoll]);
 
   const refreshActivity = React.useCallback(async () => {
     const ws = workspaceId?.trim() || "";
     const pid = projectId?.trim() || "";
+    const startedScope = workspaceProjectScope(ws, pid);
     if (!ws || !pid) {
       setActivity([]);
       setActivityError(null);
@@ -518,17 +536,20 @@ function WorkbenchPreviewPanel({
     }
     try {
       const activityPayload = await getBuilderActivity(ws, pid);
+      if (isStaleWorkbenchPoll(startedScope)) return;
       setActivity(activityPayload.items || []);
       setActivityError(null);
     } catch (e) {
+      if (isStaleWorkbenchPoll(startedScope)) return;
       setActivity([]);
       setActivityError(e instanceof Error ? e.message : String(e));
     }
-  }, [workspaceId, projectId]);
+  }, [workspaceId, projectId, isStaleWorkbenchPoll]);
 
   const refreshRunProfile = React.useCallback(async () => {
     const ws = workspaceId?.trim() || "";
     const pid = projectId?.trim() || "";
+    const startedScope = workspaceProjectScope(ws, pid);
     if (!ws || !pid) {
       setRunProfile(null);
       setRunProfileError(null);
@@ -536,6 +557,7 @@ function WorkbenchPreviewPanel({
     }
     try {
       const payload = await getBuilderLocalRunProfile(ws, pid);
+      if (isStaleWorkbenchPoll(startedScope)) return;
       setRunProfile(payload);
       setRunProfileError(null);
       if (payload.profile) {
@@ -554,14 +576,16 @@ function WorkbenchPreviewPanel({
         });
       }
     } catch (e) {
+      if (isStaleWorkbenchPoll(startedScope)) return;
       setRunProfile(null);
       setRunProfileError(e instanceof Error ? e.message : String(e));
     }
-  }, [workspaceId, projectId]);
+  }, [workspaceId, projectId, isStaleWorkbenchPoll]);
 
   const refreshVisualEditRequests = React.useCallback(async () => {
     const ws = workspaceId?.trim() || "";
     const pid = projectId?.trim() || "";
+    const startedScope = workspaceProjectScope(ws, pid);
     if (!ws || !pid) {
       setVisualEditRequests([]);
       setVisualEditError(null);
@@ -569,17 +593,20 @@ function WorkbenchPreviewPanel({
     }
     try {
       const payload = await listBuilderVisualEditRequests(ws, pid);
+      if (isStaleWorkbenchPoll(startedScope)) return;
       setVisualEditRequests(payload.visual_edit_requests || []);
       setVisualEditError(null);
     } catch (e) {
+      if (isStaleWorkbenchPoll(startedScope)) return;
       setVisualEditRequests([]);
       setVisualEditError(e instanceof Error ? e.message : String(e));
     }
-  }, [workspaceId, projectId]);
+  }, [workspaceId, projectId, isStaleWorkbenchPoll]);
 
   const refreshWorkers = React.useCallback(async () => {
     const ws = workspaceId?.trim() || "";
     const pid = projectId?.trim() || "";
+    const startedScope = workspaceProjectScope(ws, pid);
     if (!ws || !pid) {
       setWorkers([]);
       setWorkersError(null);
@@ -587,18 +614,21 @@ function WorkbenchPreviewPanel({
     }
     try {
       const payload = await getBuilderWorkerCapabilities(ws, pid);
+      if (isStaleWorkbenchPoll(startedScope)) return;
       setWorkers(payload.workers || []);
       setWorkersError(null);
     } catch (e) {
+      if (isStaleWorkbenchPoll(startedScope)) return;
       setWorkers([]);
       setWorkersError(e instanceof Error ? e.message : String(e));
     }
-  }, [workspaceId, projectId]);
+  }, [workspaceId, projectId, isStaleWorkbenchPoll]);
 
   const refreshPreviewRuntimeStatus = React.useCallback(
     async (opts?: { includeLifecycle?: boolean; forceRefresh?: boolean }) => {
       const ws = workspaceId?.trim() || "";
       const pid = projectId?.trim() || "";
+      const scopeStarted = workspaceProjectScope(ws, pid);
       if (!ws || !pid) {
         setPreview(null);
         setCloudRuntime(null);
@@ -615,14 +645,18 @@ function WorkbenchPreviewPanel({
       const includeLifecycle = opts?.includeLifecycle !== false;
       try {
         const previewPayload = await getBuilderPreviewStatus(ws, pid);
+        if (isStaleWorkbenchPoll(scopeStarted)) return;
         const cloudPayload = await getBuilderCloudRuntime(ws, pid);
+        if (isStaleWorkbenchPoll(scopeStarted)) return;
         const cloudJobsPayload = await listBuilderCloudRuntimeJobs(ws, pid);
+        if (isStaleWorkbenchPoll(scopeStarted)) return;
         setPreview(previewPayload);
         setCloudRuntime(cloudPayload);
         const latestJob = cloudJobsPayload.jobs?.[0] || null;
         setCloudRuntimeLatestJob(latestJob);
         if (includeLifecycle && latestJob?.id) {
           const jobStatus = await getBuilderCloudRuntimeJobStatus(ws, pid, latestJob.id);
+          if (isStaleWorkbenchPoll(scopeStarted)) return;
           setCloudRuntimeLifecycle(jobStatus.lifecycle);
         } else if (!latestJob) {
           setCloudRuntimeLifecycle(null);
@@ -632,6 +666,7 @@ function WorkbenchPreviewPanel({
         previewAuthBackoffUntilRef.current = 0;
         setCloudRuntimeError(null);
       } catch (e) {
+        if (isStaleWorkbenchPoll(scopeStarted)) return;
         const msg = e instanceof Error ? e.message : String(e);
         if (isSessionAuthInterruption(msg)) {
           setAuthSessionRefreshing(true);
@@ -652,12 +687,13 @@ function WorkbenchPreviewPanel({
         setCloudRuntimeError(msg);
       }
     },
-    [workspaceId, projectId],
+    [workspaceId, projectId, isStaleWorkbenchPoll],
   );
 
   const refresh = React.useCallback(async () => {
     const ws = workspaceId?.trim() || "";
     const pid = projectId?.trim() || "";
+    const scopeStarted = workspaceProjectScope(ws, pid);
     if (!ws || !pid) {
       setPreview(null);
       setActivity([]);
@@ -679,20 +715,28 @@ function WorkbenchPreviewPanel({
     setIframeProxyError(null);
     try {
       await refreshPreviewRuntimeStatus({ includeLifecycle: true });
+      if (isStaleWorkbenchPoll(scopeStarted)) return;
       await refreshActivity();
+      if (isStaleWorkbenchPoll(scopeStarted)) return;
       await refreshRunProfile();
+      if (isStaleWorkbenchPoll(scopeStarted)) return;
       await refreshVisualEditRequests();
+      if (isStaleWorkbenchPoll(scopeStarted)) return;
       await refreshWorkers();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
-      setPreview(null);
-      setCloudRuntime(null);
-      setCloudRuntimeLatestJob(null);
-      setCloudRuntimeLifecycle(null);
-      setCloudRuntimeError(msg);
+      if (!isStaleWorkbenchPoll(scopeStarted)) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setError(msg);
+        setPreview(null);
+        setCloudRuntime(null);
+        setCloudRuntimeLatestJob(null);
+        setCloudRuntimeLifecycle(null);
+        setCloudRuntimeError(msg);
+      }
     } finally {
-      setLoading(false);
+      if (!isStaleWorkbenchPoll(scopeStarted)) {
+        setLoading(false);
+      }
     }
   }, [
     workspaceId,
@@ -702,6 +746,7 @@ function WorkbenchPreviewPanel({
     refreshVisualEditRequests,
     refreshWorkers,
     refreshPreviewRuntimeStatus,
+    isStaleWorkbenchPoll,
   ]);
 
   React.useEffect(() => {
@@ -716,9 +761,11 @@ function WorkbenchPreviewPanel({
       return;
     }
     setActivityStreamState("reconnecting");
+    const streamScopeAnchor = workspaceProjectScope(wsId, project);
     const sub = subscribeBuilderActivityStream(wsId, project, {
       onOpen: () => setActivityStreamState("live"),
       onActivity: (payload) => {
+        if (isStaleWorkbenchPoll(streamScopeAnchor)) return;
         setActivity(payload.items || []);
         setActivityError(null);
         setActivityStreamState("live");
@@ -744,7 +791,13 @@ function WorkbenchPreviewPanel({
       },
     });
     return () => sub.close();
-  }, [workspaceId, projectId, refreshActivity, refreshPreviewRuntimeStatus]);
+  }, [
+    workspaceId,
+    projectId,
+    refreshActivity,
+    refreshPreviewRuntimeStatus,
+    isStaleWorkbenchPoll,
+  ]);
 
   const previewUrl = normalizePreviewUrl(preview);
   React.useEffect(() => {
@@ -1241,16 +1294,9 @@ function WorkbenchPreviewPanel({
                     const doc = frame.contentDocument;
                     const frameText = String(doc?.body?.innerText || "").trim();
                     const contentType = String(doc?.contentType || "").toLowerCase();
-                    if (
-                      /PREVIEW_PROXY_[A-Z_]+/.test(frameText) ||
-                      (contentType.includes("application/json") &&
-                        (frameText.includes("PREVIEW_PROXY_") ||
-                          frameText.includes("upstream is unavailable")))
-                    ) {
-                      const upstreamUnavailable =
-                        /PREVIEW_PROXY_UPSTREAM_UNAVAILABLE/i.test(frameText) ||
-                        (contentType.includes("application/json") &&
-                          frameText.includes("PREVIEW_PROXY_UPSTREAM_UNAVAILABLE"));
+                    const iframeSignals = detectPreviewIframeProxySignals(frameText, contentType);
+                    if (iframeSignals.previewProxyWarmupLike) {
+                      const upstreamUnavailable = iframeSignals.upstreamUnavailableMarked;
                       if (
                         upstreamUnavailable &&
                         previewIframeUpstreamLooksHardBroken({
@@ -1276,8 +1322,12 @@ function WorkbenchPreviewPanel({
                       }
                       const strike = iframeProxyStrikeRef.current;
                       if (strike > IFRAME_PROXY_WARMUP_MAX_ATTEMPTS) {
+                        if (iframeProxyRetryTimerRef.current != null) {
+                          window.clearTimeout(iframeProxyRetryTimerRef.current);
+                          iframeProxyRetryTimerRef.current = null;
+                        }
                         setIframeProxyWarmupPaused(true);
-                        setIframeProxyError(null);
+                        setIframeProxyError("PREVIEW_PROXY_FAILED");
                       } else {
                         setIframeProxyWarmupPaused(false);
                         const exp = Math.min(5, Math.max(0, strike - 1));

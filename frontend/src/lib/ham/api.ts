@@ -105,7 +105,17 @@ async function responseLooksLikeStaleClerkUnauthorized(res: Response): Promise<b
   const code = await structuredErrorCodeFromResponse(res);
   if (code === "CLERK_SESSION_INVALID") return true;
   const raw = ((await hamApiErrorDetailMessage(res)) || "").toLowerCase();
-  return raw.includes("signature has expired") || raw.includes("signature expired");
+  if (raw.includes("signature has expired") || raw.includes("signature expired")) return true;
+  try {
+    const txt = ((await res.clone().text()) || "").toLowerCase();
+    return (
+      txt.includes("clerk_session_invalid") ||
+      txt.includes("signature has expired") ||
+      txt.includes("signature expired")
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** Builder/workspace-scoped read failed (Workbench preview/status); callers can inspect `.code`. */
@@ -234,10 +244,11 @@ export async function hamApiFetch(path: string, init: RequestInit = {}): Promise
     });
   };
   const first = await runOnce({ forceRefresh: false });
+  const staleClerk401 = await responseLooksLikeStaleClerkUnauthorized(first);
   const shouldAuthRetry =
     !hasExplicitAuthHeader &&
-    (first.status === 401 ||
-      first.status === 429 ||
+    (first.status === 429 ||
+      staleClerk401 ||
       (isSafeMethod && isBuilderPath && first.status === 502));
   if (!shouldAuthRetry) return first;
   clearClerkSessionTokenCache();
@@ -698,7 +709,7 @@ export async function listBuilderSourceSnapshots(
     `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/source-snapshots`,
   );
   if (!res.ok) {
-    throw new Error((await hamApiErrorDetailMessage(res)) || `HTTP ${res.status}`);
+    await throwBuilderScopedReadFailure(res, "source snapshots");
   }
   return res.json() as Promise<{
     project_id: string;
