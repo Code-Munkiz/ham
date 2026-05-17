@@ -94,7 +94,7 @@ def list_cursor_skills(*, repo_root: Path | None = None) -> list[dict[str, Any]]
 def render_skills_for_system_prompt(
     skills: list[dict[str, Any]],
     *,
-    max_chars: int = 4_000,
+    max_chars: int = 2_400,
 ) -> str:
     """Compact block for LLM system context (operator intents, not full SKILL bodies)."""
     if not skills:
