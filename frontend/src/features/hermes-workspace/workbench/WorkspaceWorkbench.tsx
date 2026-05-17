@@ -1059,17 +1059,17 @@ function WorkbenchPreviewPanel({
                         ? `Latest: ${activity[0].title}`
                         : "Provisioning or waiting for a preview URL.",
               }
-              : previewPhase === "error"
-                ? {
-                    title:
-                      iframeProxyError === "PREVIEW_PROXY_FAILED"
-                        ? "Preview gateway lost contact with your hosted runtime."
-                        : "Preview could not start.",
-                    subtitle:
-                      iframeProxyError === "PREVIEW_PROXY_FAILED"
-                        ? "The sandbox build finished but the iframe proxy still could not reach the app. Retry Refresh status, or prompt another tiny edit."
-                        : "",
-                  }
+            : previewPhase === "error"
+              ? {
+                  title:
+                    iframeProxyError === "PREVIEW_PROXY_FAILED"
+                      ? "Preview gateway lost contact with your hosted runtime."
+                      : "Preview could not start.",
+                  subtitle:
+                    iframeProxyError === "PREVIEW_PROXY_FAILED"
+                      ? "The sandbox build finished but the iframe proxy still could not reach the app. Retry Refresh status, or prompt another tiny edit."
+                      : "",
+                }
               : { title: "", subtitle: "" };
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden text-[12px] leading-relaxed text-white/70">

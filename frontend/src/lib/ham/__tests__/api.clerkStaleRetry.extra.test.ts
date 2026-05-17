@@ -79,6 +79,8 @@ describe("subscribeBuilderActivityStream Clerk stale-session retry", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(clearClerkCache).toHaveBeenCalledTimes(1);
     expect(getRegisteredClerkSessionTokenMock.mock.calls.length).toBeGreaterThanOrEqual(2);
-    expect(getRegisteredClerkSessionTokenMock.mock.calls.at(-1)?.[0]).toEqual({ forceRefresh: true });
+    expect(getRegisteredClerkSessionTokenMock.mock.calls.at(-1)?.[0]).toEqual({
+      forceRefresh: true,
+    });
   });
 });

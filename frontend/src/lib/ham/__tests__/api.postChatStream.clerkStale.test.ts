@@ -103,7 +103,9 @@ describe("postChatStream Clerk stale-session retry", () => {
       messages: [{ role: "user", content: "hi" }],
     };
 
-    await expect(postChatStream(payload, {}, "Bearer legacy")).rejects.toThrow(/Signature has expired/);
+    await expect(postChatStream(payload, {}, "Bearer legacy")).rejects.toThrow(
+      /Signature has expired/,
+    );
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(getToken).not.toHaveBeenCalled();
   });

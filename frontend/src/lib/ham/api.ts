@@ -1092,7 +1092,10 @@ export function subscribeBuilderActivityStream(
         const connect = async (forceRefresh: boolean): Promise<Response> => {
           const headers = new Headers();
           headers.set("Accept", "text/event-stream");
-          await mergeClerkAuthBearerIfNeeded(headers, forceRefresh ? { forceRefresh: true } : undefined);
+          await mergeClerkAuthBearerIfNeeded(
+            headers,
+            forceRefresh ? { forceRefresh: true } : undefined,
+          );
           return fetch(apiUrl(path), { credentials: "include", headers, signal });
         };
         let res = await connect(false);
@@ -3510,7 +3513,9 @@ export async function postChatStream(
     include_active_agent_guidance: body.include_active_agent_guidance ?? true,
     enable_operator: body.enable_operator ?? true,
   };
-  const clerkPkTrim = ((import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined) || "").trim();
+  const clerkPkTrim = (
+    (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined) || ""
+  ).trim();
   const buildStreamHeaders = (auth?: HamChatStreamAuth): Record<string, string> => {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",

@@ -1688,7 +1688,9 @@ describe("WorkspaceWorkbench", () => {
       </MemoryRouter>,
     );
 
-    await waitFor(() => expect(getBuilderPreviewStatusMock.mock.calls.length).toBeGreaterThanOrEqual(1));
+    await waitFor(() =>
+      expect(getBuilderPreviewStatusMock.mock.calls.length).toBeGreaterThanOrEqual(1),
+    );
     expect(screen.queryByTestId("hww-preview-iframe")).toBeNull();
 
     await new Promise((r) => setTimeout(r, 200));
