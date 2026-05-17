@@ -1,5 +1,9 @@
-"""HAM Custom Builder Studio — profile model + validators (PR 1 scope)."""
+"""HAM Custom Builder Studio — profile model + OpenCode compiler."""
 
+from src.ham.custom_builder.opencode_compile import (
+    OpenCodeRunConfig,
+    compile_opencode_config,
+)
 from src.ham.custom_builder.profile import (
     SECRET_PROHIBITED_FIELDS,
     CustomBuilderProfile,
@@ -16,8 +20,10 @@ __all__ = [
     "CustomBuilderProfile",
     "DeletionPolicy",
     "ExternalNetworkPolicy",
+    "OpenCodeRunConfig",
     "PermissionPreset",
     "ReviewMode",
+    "compile_opencode_config",
     "public_dict",
     "validate_profile",
 ]
