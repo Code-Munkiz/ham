@@ -21,8 +21,7 @@ export function detectPreviewIframeProxySignals(
   const proxyJsonOrMarker =
     /PREVIEW_PROXY_[A-Z_]+/.test(text) ||
     (ct.includes("application/json") &&
-      (upper.includes("PREVIEW_PROXY_") ||
-        /\bupstream is unavailable\b/i.test(text)));
+      (upper.includes("PREVIEW_PROXY_") || /\bupstream is unavailable\b/i.test(text)));
 
   const nginxStyle502 =
     /\b502\b/.test(text) ||

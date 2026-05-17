@@ -791,13 +791,7 @@ function WorkbenchPreviewPanel({
       },
     });
     return () => sub.close();
-  }, [
-    workspaceId,
-    projectId,
-    refreshActivity,
-    refreshPreviewRuntimeStatus,
-    isStaleWorkbenchPoll,
-  ]);
+  }, [workspaceId, projectId, refreshActivity, refreshPreviewRuntimeStatus, isStaleWorkbenchPoll]);
 
   const previewUrl = normalizePreviewUrl(preview);
   React.useEffect(() => {

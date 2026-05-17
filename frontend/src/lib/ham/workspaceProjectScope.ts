@@ -43,7 +43,10 @@ export function pickWorkspaceScopedProjectId(
 }
 
 /** Stable `{ workspace_id, project_id }` pairing for cancelling stale polling. */
-export function workspaceProjectScope(workspaceId?: string | null, projectId?: string | null): string {
+export function workspaceProjectScope(
+  workspaceId?: string | null,
+  projectId?: string | null,
+): string {
   return `${(workspaceId ?? "").trim()}|${(projectId ?? "").trim()}`;
 }
 
@@ -60,5 +63,7 @@ export function ignoreStaleWorkbenchScope(params: {
   currentWorkspaceId?: string | null;
   currentProjectId?: string | null;
 }): boolean {
-  return workspaceProjectScope(params.currentWorkspaceId, params.currentProjectId) !== params.started;
+  return (
+    workspaceProjectScope(params.currentWorkspaceId, params.currentProjectId) !== params.started
+  );
 }

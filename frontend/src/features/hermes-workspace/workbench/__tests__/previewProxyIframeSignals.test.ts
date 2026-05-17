@@ -3,7 +3,10 @@ import { detectPreviewIframeProxySignals } from "../previewProxyIframeSignals";
 
 describe("detectPreviewIframeProxySignals", () => {
   it("treats PREVIEW_PROXY JSON markers as warmup-like proxy issues", () => {
-    const r = detectPreviewIframeProxySignals("PREVIEW_PROXY_WARMUP", "application/json; charset=utf-8");
+    const r = detectPreviewIframeProxySignals(
+      "PREVIEW_PROXY_WARMUP",
+      "application/json; charset=utf-8",
+    );
     expect(r.previewProxyWarmupLike).toBe(true);
     expect(r.upstreamUnavailableMarked).toBe(false);
   });
