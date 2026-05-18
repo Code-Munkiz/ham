@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_serializer
 
 from src.ham.builder_plan import CloudRuntimeJobStatus, ErrorEnvelope
 
@@ -48,6 +48,13 @@ class CloudRuntimeJob(BaseModel):
     logs_summary: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+    @field_serializer("status")
+    def _serialize_status_for_wire(self, value: CloudRuntimeJobStatus) -> str:
+        # v1.x workers/API use "succeeded"; Phase 0 Literal uses "completed".
+        if value == "completed":
+            return "succeeded"
+        return value
+
 
 @runtime_checkable
 class BuilderRuntimeJobStoreProtocol(Protocol):
@@ -63,6 +70,7 @@ class BuilderRuntimeJobStore:
         self._path = Path(store_path) if store_path is not None else _DEFAULT_STORE_PATH
 
     _VALID_STATUSES = {"queued", "running", "cancelling", "cancelled", "completed", "failed"}
+    _LEGACY_STATUS_ALIASES = {"succeeded": "completed", "success": "completed"}
 
     def list_cloud_runtime_jobs(self, *, workspace_id: str, project_id: str) -> list[CloudRuntimeJob]:
         out: list[CloudRuntimeJob] = []
@@ -87,10 +95,26 @@ class BuilderRuntimeJobStore:
         if not isinstance(item, dict):
             return item
         status = item.get("status")
-        if isinstance(status, str) and status not in cls._VALID_STATUSES:
+        if not isinstance(status, str):
+            return item
+        alias = cls._LEGACY_STATUS_ALIASES.get(status)
+        if alias is not None:
+            item = dict(item)
+            item["status"] = alias
+        elif status not in cls._VALID_STATUSES:
             item = dict(item)
             item["status"] = "failed"
         return item
+
+    @classmethod
+    def _coerce_incoming_status(cls, status: Any) -> CloudRuntimeJobStatus:
+        if isinstance(status, str):
+            alias = cls._LEGACY_STATUS_ALIASES.get(status)
+            if alias is not None:
+                return alias  # type: ignore[return-value]
+            if status in cls._VALID_STATUSES:
+                return status  # type: ignore[return-value]
+        return "failed"
 
     def get_cloud_runtime_job(self, *, workspace_id: str, project_id: str, job_id: str) -> CloudRuntimeJob | None:
         for row in self.list_cloud_runtime_jobs(workspace_id=workspace_id, project_id=project_id):
@@ -99,6 +123,10 @@ class BuilderRuntimeJobStore:
         return None
 
     def upsert_cloud_runtime_job(self, record: CloudRuntimeJob) -> CloudRuntimeJob:
+        # Workers may still assign v1.x "succeeded" before Phase 0 Literal lands everywhere.
+        coerced_status = self._coerce_incoming_status(record.status)
+        if coerced_status != record.status:
+            record = record.model_copy(update={"status": coerced_status})
         # Backward-compat: populate deprecated string fields from last_error
         if record.last_error is not None:
             record = record.model_copy(

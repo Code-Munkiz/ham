@@ -77,6 +77,31 @@ class TestOldRecordMigration:
         assert len(jobs) == 1
         assert jobs[0].status == "failed"
 
+    def test_v1_succeeded_status_loads_as_completed_and_serializes_as_succeeded(
+        self, store: BuilderRuntimeJobStore
+    ):
+        """v1.x jobs use succeeded; Phase 0 Literal uses completed internally."""
+        old_record = {
+            "id": "crjb_ok",
+            "version": "1.0.0",
+            "workspace_id": "ws_1",
+            "project_id": "proj_1",
+            "status": "succeeded",
+            "phase": "completed",
+            "provider": "gcp_gke_sandbox",
+            "created_at": _TS,
+            "updated_at": _TS,
+            "metadata": {},
+        }
+        raw = {"cloud_runtime_jobs": [old_record]}
+        store._path.parent.mkdir(parents=True, exist_ok=True)
+        store._path.write_text(json.dumps(raw), encoding="utf-8")
+
+        jobs = store.list_cloud_runtime_jobs(workspace_id="ws_1", project_id="proj_1")
+        assert len(jobs) == 1
+        assert jobs[0].status == "completed"
+        assert jobs[0].model_dump(mode="json")["status"] == "succeeded"
+
 
 # ── New → old backward-compat ─────────────────────────────────────
 
