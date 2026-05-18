@@ -122,10 +122,7 @@ import {
   persistCodingPlanDraft,
   readCodingPlanDraft,
 } from "./codingPlanDraftSessionStorage";
-import {
-  buildWorkspaceChatPostureFields,
-  type WorkbenchModePosture,
-} from "./workspaceChatPosture";
+import { buildWorkspaceChatPostureFields, type WorkbenchModePosture } from "./workspaceChatPosture";
 import {
   readWorkspaceLastChatSessionId,
   writeWorkspaceLastChatSessionId,
