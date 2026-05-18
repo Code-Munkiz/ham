@@ -16,14 +16,18 @@ export function PermissionPresetSelector({
   value,
   onChange,
   showAdvanced,
+  allowCustom = false,
 }: {
   value: PermissionPreset;
   onChange: (next: PermissionPreset) => void;
   showAdvanced: boolean;
+  /** Custom preset requires path/operation rules; keep false in Create Wizard until those fields exist. */
+  allowCustom?: boolean;
 }) {
-  const presets: PermissionPreset[] = showAdvanced
-    ? [...ORDERED_PRESETS, "custom"]
-    : ORDERED_PRESETS;
+  const presets: PermissionPreset[] = [
+    ...ORDERED_PRESETS,
+    ...(showAdvanced && allowCustom ? (["custom"] as const) : []),
+  ];
 
   return (
     <fieldset className="space-y-2">

@@ -107,6 +107,17 @@ describe("builderStudioAdapter.create", () => {
     }
   });
 
+  it("POST create body omits workspace_id", async () => {
+    const fetchSpy = vi
+      .spyOn(api, "hamApiFetch")
+      .mockResolvedValue(jsonResponse({ builder: fakeBuilder() }));
+    await builderStudioAdapter.create("ws_abc", draft());
+    const init = fetchSpy.mock.calls[0][1] as RequestInit;
+    const posted = JSON.parse(String(init.body));
+    expect(posted).not.toHaveProperty("workspace_id");
+    expect(posted.name).toBe("Game Builder");
+  });
+
   it("returns duplicate error on 409", async () => {
     vi.spyOn(api, "hamApiFetch").mockResolvedValue(emptyResponse(409, { detail: "exists" }));
     const { error } = await builderStudioAdapter.create("ws_abc", draft());
@@ -131,13 +142,71 @@ describe("builderStudioAdapter.get", () => {
 });
 
 describe("builderStudioAdapter.preview", () => {
-  it("returns the compiled summary on a happy path", async () => {
+  it("returns a formatted summary when the API reports valid with an object summary", async () => {
+    vi.spyOn(api, "hamApiFetch").mockResolvedValue(
+      jsonResponse({
+        valid: true,
+        summary: {
+          name: "Game Builder",
+          permission_preset: "game_build",
+          review_mode: "on_mutation",
+          model_source: "ham_default",
+        },
+        errors: [],
+      }),
+    );
+    const { summary, error } = await builderStudioAdapter.preview("ws_abc", draft());
+    expect(error).toBeUndefined();
+    expect(summary).toContain("Game Builder");
+    expect(summary?.toLowerCase()).toContain("safety");
+  });
+
+  it("returns a structured validation error when preview reports valid: false", async () => {
+    vi.spyOn(api, "hamApiFetch").mockResolvedValue(
+      jsonResponse({
+        valid: false,
+        summary: {},
+        errors: [
+          "Value error, custom preset requires at least one allowed_paths, denied_paths, or denied_operations entry",
+        ],
+      }),
+    );
+    const { summary, error } = await builderStudioAdapter.preview("ws_abc", draft());
+    expect(summary).toBeNull();
+    expect(error?.kind).toBe("validation");
+    if (error?.kind === "validation") {
+      expect(error.wizardStep).toBe("safety");
+      expect(error.message.toLowerCase()).toContain("advanced");
+    }
+  });
+
+  it("returns the compiled summary string when the API still returns a string summary (legacy)", async () => {
     vi.spyOn(api, "hamApiFetch").mockResolvedValue(
       jsonResponse({ summary: "edit allowed; delete review; no network" }),
     );
     const { summary, error } = await builderStudioAdapter.preview("ws_abc", draft());
     expect(error).toBeUndefined();
     expect(summary).toBe("edit allowed; delete review; no network");
+  });
+
+  it("POST body omits workspace_id (path-only workspace scope)", async () => {
+    const fetchSpy = vi.spyOn(api, "hamApiFetch").mockResolvedValue(
+      jsonResponse({
+        valid: true,
+        summary: {
+          name: "x",
+          permission_preset: "app_build",
+          review_mode: "always",
+          model_source: "ham_default",
+        },
+        errors: [],
+      }),
+    );
+    await builderStudioAdapter.preview("ws_abc", draft());
+    const init = fetchSpy.mock.calls[0][1] as RequestInit;
+    const posted = JSON.parse(String(init.body));
+    expect(posted).not.toHaveProperty("workspace_id");
+    expect(posted.builder_id).toBe("game-builder");
   });
 
   it("does not leak byok:<record-id> through the URL", async () => {

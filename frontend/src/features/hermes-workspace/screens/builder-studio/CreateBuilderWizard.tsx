@@ -21,6 +21,7 @@ import {
   builderStudioAdapter,
   type BuilderDraft,
   type BuilderPublic,
+  type BuilderWizardValidationStep,
 } from "../../adapters/builderStudioAdapter";
 
 const TASK_KIND_ORDER: TaskKind[] = [
@@ -120,6 +121,9 @@ export function CreateBuilderWizard({
   const [draft, setDraft] = React.useState<DraftState>(EMPTY_DRAFT);
   const [previewSummary, setPreviewSummary] = React.useState<string | null>(null);
   const [previewError, setPreviewError] = React.useState<string | null>(null);
+  const [validationFocus, setValidationFocus] = React.useState<BuilderWizardValidationStep | null>(
+    null,
+  );
   const [submitting, setSubmitting] = React.useState(false);
 
   React.useEffect(() => {
@@ -156,6 +160,7 @@ export function CreateBuilderWizard({
   const handlePreview = async () => {
     setSubmitting(true);
     setPreviewError(null);
+    setValidationFocus(null);
     const result = await builderStudioAdapter.preview(
       workspaceId,
       toDraftPayload(workspaceId, draft),
@@ -163,6 +168,9 @@ export function CreateBuilderWizard({
     setSubmitting(false);
     if (result.error) {
       setPreviewError(adapterErrorMessage(result.error));
+      setValidationFocus(
+        result.error.kind === "validation" ? (result.error.wizardStep ?? null) : null,
+      );
       setPreviewSummary(null);
       return;
     }
@@ -173,6 +181,7 @@ export function CreateBuilderWizard({
   const handleSave = async () => {
     setSubmitting(true);
     setPreviewError(null);
+    setValidationFocus(null);
     const result = await builderStudioAdapter.create(
       workspaceId,
       toDraftPayload(workspaceId, draft),
@@ -181,6 +190,9 @@ export function CreateBuilderWizard({
     if (result.error || !result.builder) {
       const msg = result.error ? adapterErrorMessage(result.error) : "Couldn't save the builder.";
       setPreviewError(msg);
+      setValidationFocus(
+        result.error?.kind === "validation" ? (result.error.wizardStep ?? null) : null,
+      );
       toast.error(msg, { duration: 6000 });
       return;
     }
@@ -310,6 +322,7 @@ export function CreateBuilderWizard({
                 value={draft.permission_preset}
                 onChange={(next) => update({ permission_preset: next })}
                 showAdvanced={draft.show_advanced}
+                allowCustom={false}
               />
               <label className="flex items-center gap-2 text-[11px] text-white/70">
                 <input
@@ -394,9 +407,74 @@ export function CreateBuilderWizard({
           ) : null}
 
           {previewError ? (
-            <p className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100/90">
-              {previewError}
-            </p>
+            <div
+              role="alert"
+              className="mt-3 space-y-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100/90"
+            >
+              <p>{previewError}</p>
+              <div className="flex flex-wrap gap-2">
+                {validationFocus === "safety" ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="h-8"
+                    onClick={() => {
+                      setStep("safety");
+                      setPreviewError(null);
+                      setValidationFocus(null);
+                    }}
+                  >
+                    Back to permissions
+                  </Button>
+                ) : null}
+                {validationFocus === "model" ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="h-8"
+                    onClick={() => {
+                      setStep("model");
+                      setPreviewError(null);
+                      setValidationFocus(null);
+                    }}
+                  >
+                    Back to model
+                  </Button>
+                ) : null}
+                {validationFocus === "identity" ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="h-8"
+                    onClick={() => {
+                      setStep("identity");
+                      setPreviewError(null);
+                      setValidationFocus(null);
+                    }}
+                  >
+                    Back to name &amp; id
+                  </Button>
+                ) : null}
+                {validationFocus === "skill" ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="h-8"
+                    onClick={() => {
+                      setStep("skill");
+                      setPreviewError(null);
+                      setValidationFocus(null);
+                    }}
+                  >
+                    Back to task kinds
+                  </Button>
+                ) : null}
+              </div>
+            </div>
           ) : null}
         </div>
 
