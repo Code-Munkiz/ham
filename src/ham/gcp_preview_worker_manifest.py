@@ -10,6 +10,8 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from src.ham.network_egress_allowlist import EGRESS_POLICY_LABEL_KEY, EGRESS_POLICY_LABEL_VALUE
+
 _SAFE_ID_SEGMENT_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{1,126}[a-zA-Z0-9]$")
 _NS_RE = re.compile(r"^[a-z0-9]([-a-z0-9]{0,251}[a-z0-9])?$")
 
@@ -141,6 +143,7 @@ def build_gke_preview_pod_manifest(
         "ham.runtime_session_id": sanitize_dns_label(runtime_session_id, max_len=63),
         "ham.expires_at": sanitize_dns_label(expires_iso.replace(":", "-"), max_len=63),
         "ham.preview_ttl_seconds": str(ttl_seconds),
+        EGRESS_POLICY_LABEL_KEY: EGRESS_POLICY_LABEL_VALUE,
     }
     if deploy_tag:
         labels["ham.preview_deploy_id"] = deploy_tag[:63]
