@@ -249,3 +249,39 @@ def test_live_client_logs_summary_ignores_non_404_http_errors(monkeypatch) -> No
     monkeypatch.setattr(client, "_refresh_token", lambda: "token")
     ref = PreviewPodRef(namespace="ns", pod_name="pod")
     assert client.get_pod_logs_summary(pod_ref=ref) is None
+
+
+def test_fake_list_preview_pods_filters_namespace_and_builder_label() -> None:
+    client = FakeGkePreviewRuntimeClient(mode="success")
+    client.seed_preview_pod_for_tests(
+        namespace="ns1",
+        name="keep",
+        labels={
+            "app.kubernetes.io/name": "ham-builder-preview",
+            "ham.workspace_id": "ws",
+            "ham.runtime_session_id": "rs",
+            "ham.project_id": "p",
+        },
+    )
+    client.seed_preview_pod_for_tests(
+        namespace="ns2",
+        name="drop-ns",
+        labels={
+            "app.kubernetes.io/name": "ham-builder-preview",
+            "ham.workspace_id": "ws",
+            "ham.runtime_session_id": "rs",
+            "ham.project_id": "p",
+        },
+    )
+    found = client.list_preview_pods(namespace="ns1")
+    assert len(found) == 1
+    assert found[0]["metadata"]["name"] == "keep"
+
+
+def test_fake_normalize_error_preview_concurrency_cap() -> None:
+    from src.ham.gcp_preview_runtime_client import PreviewConcurrencyCapExceeded
+
+    client = FakeGkePreviewRuntimeClient(mode="success")
+    code, msg = client.normalize_error(error=PreviewConcurrencyCapExceeded("blocked-cap"))
+    assert code == "GCP_GKE_PREVIEW_CONCURRENCY_CAP"
+    assert "blocked-cap" in msg

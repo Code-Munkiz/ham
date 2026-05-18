@@ -19,6 +19,7 @@ from src.ham.builder_sandbox_provider import (
 )
 from src.ham.gcp_preview_source_bundle import set_source_bundle_uploader_factory_for_tests
 from src.ham.gcp_preview_runtime_client import (
+    PreviewConcurrencyCapExceeded,
     PreviewPodRef,
     PreviewPodStatus,
     set_gke_runtime_client_factory_for_tests,
@@ -302,10 +303,16 @@ class _RecordingBundleUploader:
 
 class _RecordingRuntimeClient:
     manifests: list[dict] = []
+    pod_items: list[dict] = []
+
+    def list_preview_pods(self, *, namespace: str) -> list[dict]:
+        ns = namespace.strip()
+        return [p for p in self.pod_items if str((p.get("metadata") or {}).get("namespace") or "") == ns]
 
     def create_preview_pod(self, *, manifest: dict):
         self.manifests.append(manifest)
         md = manifest.get("metadata") or {}
+        self.pod_items.append({"metadata": dict(md), "status": {"phase": "Running"}})
         return PreviewPodRef(
             namespace=str(md.get("namespace") or "ham-builder-preview-spike"),
             pod_name=str(md.get("name") or "pod"),
@@ -350,7 +357,8 @@ class _RecordingRuntimeClient:
         return CleanupResult(deleted_pods=0, deleted_services=0, skipped=0, cleanup_status="success")
 
     def normalize_error(self, *, error: Exception) -> tuple[str, str]:
-        _ = error
+        if isinstance(error, PreviewConcurrencyCapExceeded):
+            return ("GCP_GKE_PREVIEW_CONCURRENCY_CAP", str(error))
         return ("GCP_GKE_RUNTIME_CLIENT_ERROR", "runtime client failed")
 
 
@@ -420,6 +428,29 @@ def test_gcp_gke_live_without_fake_reports_config_missing(tmp_path: Path, monkey
         _cleanup()
 
 
+def test_gcp_gke_fake_success_fourth_job_hits_preview_concurrency_cap(tmp_path: Path, monkeypatch) -> None:
+    _apply_gcp_gke_scaffold(monkeypatch, dry_run=False, fake_mode="success")
+    _RecordingRuntimeClient.manifests = []
+    _RecordingRuntimeClient.pod_items = []
+    set_gke_runtime_client_factory_for_tests(lambda: _RecordingRuntimeClient())
+    client, ws_id, project_id, snap_id = _seed_context(tmp_path)
+    try:
+        for _ in range(3):
+            body = client.post(
+                f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+                json={"source_snapshot_id": snap_id},
+            ).json()
+            assert body["job"]["status"] == "succeeded", body
+        body = client.post(
+            f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
+            json={"source_snapshot_id": snap_id},
+        ).json()
+        assert body["job"]["status"] == "failed"
+        assert body["job"]["error_code"] == "GCP_GKE_PREVIEW_CONCURRENCY_CAP"
+    finally:
+        _cleanup()
+
+
 def test_gcp_gke_fake_success_creates_proxy_ready_preview(tmp_path: Path, monkeypatch) -> None:
     _apply_gcp_gke_scaffold(monkeypatch, dry_run=False, fake_mode="success")
     client, ws_id, project_id, snap_id = _seed_context(tmp_path)
@@ -474,6 +505,7 @@ def test_gcp_gke_uses_injected_source_bundle_uploader(tmp_path: Path, monkeypatc
 def test_gcp_gke_passes_source_bundle_uri_into_runtime_client_manifest(tmp_path: Path, monkeypatch) -> None:
     _apply_gcp_gke_scaffold(monkeypatch, dry_run=False, fake_mode="success")
     _RecordingRuntimeClient.manifests = []
+    _RecordingRuntimeClient.pod_items = []
     set_gke_runtime_client_factory_for_tests(lambda: _RecordingRuntimeClient())
     client, ws_id, project_id, snap_id = _seed_context(tmp_path)
     try:
@@ -546,6 +578,7 @@ def test_gcp_gke_live_gate_with_injected_runtime_client_returns_pending_proxy(
     _RecordingBundleUploader.calls = []
     set_source_bundle_uploader_factory_for_tests(lambda: _RecordingBundleUploader())
     _RecordingRuntimeClient.manifests = []
+    _RecordingRuntimeClient.pod_items = []
     set_gke_runtime_client_factory_for_tests(lambda: _RecordingRuntimeClient())
     client, ws_id, project_id, snap_id = _seed_context(tmp_path)
     try:

@@ -13,8 +13,11 @@ from src.ham.preview_janitor import (
     apply_janitor_plan,
     build_age_bucket_counts,
     build_janitor_plan,
+    check_preview_concurrency_violation,
     concurrency_cap_excess_pods,
+    count_active_preview_pods_by_scope,
     derive_companion_service_name,
+    get_preview_concurrency_cap_config,
     janitor_plan_to_report_dict,
     load_kubernetes_list_json,
     parse_endpoints_ready_count,
@@ -294,3 +297,183 @@ def test_load_kubernetes_list_json() -> None:
     items = load_kubernetes_list_json(raw)
     assert len(items) == 1
     assert items[0]["kind"] == "Pod"
+
+
+def _labs(ws_key: str, rs_key: str, proj: str = "p1") -> dict[str, str]:
+    return {
+        "app.kubernetes.io/name": "ham-builder-preview",
+        "ham.workspace_id": ws_key,
+        "ham.runtime_session_id": rs_key,
+        "ham.project_id": proj,
+    }
+
+
+def test_preview_concurrency_counts_pending_and_running_not_terminal() -> None:
+    from src.ham.gcp_preview_worker_manifest import sanitize_dns_label
+
+    ws_raw = "ws_alpha"
+    rs_raw = "rtms_aaa"
+    wk = sanitize_dns_label(ws_raw, max_len=63)
+    rk = sanitize_dns_label(rs_raw, max_len=63)
+    items = [
+        {
+            "metadata": {"name": "a", "labels": _labs(wk, rk)},
+            "status": {"phase": "Pending"},
+        },
+        {
+            "metadata": {"name": "b", "labels": _labs(wk, rk)},
+            "status": {"phase": "Running"},
+        },
+        {
+            "metadata": {"name": "c", "labels": _labs(wk, rk)},
+            "status": {"phase": "Succeeded"},
+        },
+    ]
+    s, w = count_active_preview_pods_by_scope(
+        items, workspace_id_raw=ws_raw, runtime_session_id_raw=rs_raw
+    )
+    assert s == 2
+    assert w == 2
+
+
+def test_preview_concurrency_ignores_foreign_and_incomplete_labels() -> None:
+    from src.ham.gcp_preview_worker_manifest import sanitize_dns_label
+
+    ws_raw = "ws_beta"
+    rs_raw = "rtms_bbb"
+    wk = sanitize_dns_label(ws_raw, max_len=63)
+    rk = sanitize_dns_label(rs_raw, max_len=63)
+    items = [
+        {
+            "metadata": {
+                "name": "x1",
+                "labels": {**_labs(wk, rk), "app.kubernetes.io/name": "something-else"},
+            },
+            "status": {"phase": "Running"},
+        },
+        {
+            "metadata": {
+                "name": "x2",
+                "labels": {
+                    "app.kubernetes.io/name": "ham-builder-preview",
+                    "ham.runtime_session_id": rk,
+                },
+            },
+            "status": {"phase": "Running"},
+        },
+    ]
+    s, w = count_active_preview_pods_by_scope(
+        items, workspace_id_raw=ws_raw, runtime_session_id_raw=rs_raw
+    )
+    assert s == 0
+    assert w == 0
+
+
+def test_preview_concurrency_session_cap_violation() -> None:
+    from src.ham.gcp_preview_worker_manifest import sanitize_dns_label
+
+    ws_raw = "ws_gamma"
+    rs_raw = "rtms_ccc"
+    wk = sanitize_dns_label(ws_raw, max_len=63)
+    rk = sanitize_dns_label(rs_raw, max_len=63)
+    triple = [
+        {"metadata": {"name": f"p{i}", "labels": _labs(wk, rk)}, "status": {"phase": "Running"}}
+        for i in range(3)
+    ]
+    msg = check_preview_concurrency_violation(
+        triple,
+        workspace_id_raw=ws_raw,
+        runtime_session_id_raw=rs_raw,
+        session_cap=3,
+        workspace_cap=5,
+    )
+    assert msg is not None
+    assert "session" in msg.lower()
+
+
+def test_preview_concurrency_workspace_cap_violation() -> None:
+    from src.ham.gcp_preview_worker_manifest import sanitize_dns_label
+
+    ws_raw = "ws_delta"
+    wk = sanitize_dns_label(ws_raw, max_len=63)
+    items = [
+        {
+            "metadata": {
+                "name": f"w{i}",
+                "labels": _labs(wk, sanitize_dns_label(f"rtms_{i}", max_len=63)),
+            },
+            "status": {"phase": "Running"},
+        }
+        for i in range(5)
+    ]
+    msg = check_preview_concurrency_violation(
+        items,
+        workspace_id_raw=ws_raw,
+        runtime_session_id_raw="rtms_new",
+        session_cap=3,
+        workspace_cap=5,
+    )
+    assert msg is not None
+    assert "workspace" in msg.lower()
+
+
+def test_preview_concurrency_under_cap_returns_none() -> None:
+    from src.ham.gcp_preview_worker_manifest import sanitize_dns_label
+
+    ws_raw = "ws_eps"
+    rs_raw = "rtms_ddd"
+    wk = sanitize_dns_label(ws_raw, max_len=63)
+    rk = sanitize_dns_label(rs_raw, max_len=63)
+    items = [
+        {"metadata": {"name": "p0", "labels": _labs(wk, rk)}, "status": {"phase": "Running"}},
+    ]
+    assert (
+        check_preview_concurrency_violation(
+            items,
+            workspace_id_raw=ws_raw,
+            runtime_session_id_raw=rs_raw,
+            session_cap=3,
+            workspace_cap=5,
+        )
+        is None
+    )
+
+
+def test_get_preview_concurrency_cap_config_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("HAM_BUILDER_PREVIEW_SESSION_CAP", raising=False)
+    monkeypatch.delenv("HAM_BUILDER_PREVIEW_WORKSPACE_CAP", raising=False)
+    assert get_preview_concurrency_cap_config() == (3, 5)
+
+
+def test_cap_logic_does_not_invoke_client_delete() -> None:
+    client = FakeGkePreviewRuntimeClient(mode="success")
+    client.delete_preview_pod = MagicMock(return_value=True)  # type: ignore[method-assign]
+    spy = client.delete_preview_pod
+    client.seed_preview_pod_for_tests(
+        namespace="ns",
+        name="p1",
+        labels=_labs("ws", "rs"),
+        phase="Running",
+    )
+    client.seed_preview_pod_for_tests(
+        namespace="ns",
+        name="p2",
+        labels=_labs("ws", "rs"),
+        phase="Running",
+    )
+    client.seed_preview_pod_for_tests(
+        namespace="ns",
+        name="p3",
+        labels=_labs("ws", "rs"),
+        phase="Running",
+    )
+    items = client.list_preview_pods(namespace="ns")
+    msg = check_preview_concurrency_violation(
+        items,
+        workspace_id_raw="ws",
+        runtime_session_id_raw="rs",
+        session_cap=3,
+        workspace_cap=5,
+    )
+    assert msg is not None
+    spy.assert_not_called()

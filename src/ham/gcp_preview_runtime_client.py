@@ -85,6 +85,13 @@ class PreviewPodStatus:
     pod_ip: str | None = None
 
 
+class PreviewConcurrencyCapExceeded(RuntimeError):
+    """Raised before ``create_preview_pod`` when session/workspace caps are already reached."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+
+
 @dataclass(frozen=True)
 class CleanupResult:
     deleted_pods: int
@@ -94,6 +101,8 @@ class CleanupResult:
 
 
 class GkePreviewRuntimeClient(Protocol):
+    def list_preview_pods(self, *, namespace: str) -> list[dict[str, Any]]: ...
+
     def create_preview_pod(self, *, manifest: dict[str, Any]) -> PreviewPodRef: ...
 
     def get_pod_status(self, *, pod_ref: PreviewPodRef) -> PreviewPodStatus: ...
@@ -124,6 +133,43 @@ class FakeGkePreviewRuntimeClient:
     def __init__(self, *, mode: str = "success") -> None:
         self._mode = "failure" if mode == "failure" else "success"
         self._pods: dict[tuple[str, str], dict[str, Any]] = {}
+
+    def seed_preview_pod_for_tests(
+        self,
+        *,
+        namespace: str,
+        name: str,
+        labels: dict[str, str],
+        phase: str = "Running",
+    ) -> None:
+        """Register a pod in the fake cluster (tests / concurrency harness only)."""
+
+        key = (namespace.strip(), name.strip())
+        self._pods[key] = {
+            "phase": phase,
+            "ready": phase == "Running" and self._mode == "success",
+            "logs_summary": "seeded preview pod",
+            "labels": {str(k): str(v) for k, v in labels.items()},
+        }
+
+    def list_preview_pods(self, *, namespace: str) -> list[dict[str, Any]]:
+        ns = namespace.strip()
+        out: list[dict[str, Any]] = []
+        for (p_ns, name), data in self._pods.items():
+            if p_ns != ns:
+                continue
+            labels = dict(data.get("labels") or {})
+            if labels.get("app.kubernetes.io/name") != "ham-builder-preview":
+                continue
+            out.append(
+                {
+                    "apiVersion": "v1",
+                    "kind": "Pod",
+                    "metadata": {"namespace": p_ns, "name": name, "labels": labels},
+                    "status": {"phase": str(data.get("phase") or "Pending")},
+                }
+            )
+        return out
 
     def create_preview_pod(self, *, manifest: dict[str, Any]) -> PreviewPodRef:
         metadata = manifest.get("metadata") or {}
@@ -218,6 +264,8 @@ class FakeGkePreviewRuntimeClient:
         )
 
     def normalize_error(self, *, error: Exception) -> tuple[str, str]:
+        if isinstance(error, PreviewConcurrencyCapExceeded):
+            return ("GCP_GKE_PREVIEW_CONCURRENCY_CAP", str(error) or "Preview concurrency limit reached.")
         _ = error
         return ("GCP_GKE_RUNTIME_CLIENT_ERROR", "GCP GKE runtime client operation failed safely.")
 
@@ -330,6 +378,14 @@ class LiveGkePreviewRuntimeClient:
             raise _KubeRestError(status=exc.code, reason=str(exc.reason), body=err_body) from exc
         except urlerror.URLError as exc:
             raise RuntimeError(f"Kubernetes API unavailable: {exc.reason}") from exc
+
+    def list_preview_pods(self, *, namespace: str) -> list[dict[str, Any]]:
+        selector = "app.kubernetes.io/name=ham-builder-preview"
+        ns = urlparse.quote(namespace.strip(), safe="")
+        sel = urlparse.quote(selector, safe="")
+        path = f"/api/v1/namespaces/{ns}/pods?labelSelector={sel}"
+        payload = self._kube_request(method="GET", path=path)
+        return list(payload.get("items") or [])
 
     def create_preview_pod(self, *, manifest: dict[str, Any]) -> PreviewPodRef:
         metadata = manifest.get("metadata") or {}
@@ -561,6 +617,8 @@ class LiveGkePreviewRuntimeClient:
         )
 
     def normalize_error(self, *, error: Exception) -> tuple[str, str]:
+        if isinstance(error, PreviewConcurrencyCapExceeded):
+            return ("GCP_GKE_PREVIEW_CONCURRENCY_CAP", str(error) or "Preview concurrency limit reached.")
         if isinstance(error, _KubeRestError):
             if error.status in {401, 403}:
                 return (

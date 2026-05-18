@@ -58,6 +58,10 @@ class _RecordingBundleUploader:
 class _RecordingRuntimeClient:
     created_pods = 0
 
+    def list_preview_pods(self, *, namespace: str) -> list[dict]:
+        _ = namespace
+        return []
+
     def create_preview_pod(self, *, manifest: dict):
         _ = manifest
         self.__class__.created_pods += 1

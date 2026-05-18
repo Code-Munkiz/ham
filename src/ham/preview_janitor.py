@@ -16,6 +16,7 @@ from src.ham.gcp_preview_runtime_client import (
     PreviewPodRef,
     _parse_label_expires,
 )
+from src.ham.gcp_preview_worker_manifest import sanitize_dns_label
 
 # Labels set on preview Pods and companion Services by the GKE runtime client + manifest.
 HAM_PREVIEW_APP_LABEL_KEY = "app.kubernetes.io/name"
@@ -114,6 +115,119 @@ def is_eligible_ham_preview_service(labels: dict[str, str]) -> bool:
     if not str(labels.get(HAM_LABEL_RUNTIME_SESSION) or "").strip():
         return False
     return True
+
+
+# Phases that must not count toward preview concurrency (pod is finished / released).
+PREVIEW_POD_TERMINAL_PHASES = frozenset({"Succeeded", "Failed"})
+
+
+def preview_pod_labels_countable_for_concurrency_caps(labels: dict[str, str]) -> bool:
+    """
+    Stricter than janitor pod eligibility: require workspace id so caps align with manifests.
+    """
+
+    if not is_eligible_ham_preview_pod(labels):
+        return False
+    return bool(str(labels.get(HAM_LABEL_WORKSPACE) or "").strip())
+
+
+def preview_pod_item_active_for_concurrency_caps(item: dict[str, Any]) -> bool:
+    """Pending/Running (and non-terminal Unknown) count; Succeeded/Failed do not."""
+
+    status = item.get("status") or {}
+    phase = str(status.get("phase") or "").strip()
+    if phase in PREVIEW_POD_TERMINAL_PHASES:
+        return False
+    return True
+
+
+def count_active_preview_pods_by_scope(
+    items: list[dict[str, Any]],
+    *,
+    workspace_id_raw: str,
+    runtime_session_id_raw: str,
+) -> tuple[int, int]:
+    """
+    Return (session_scoped_count, workspace_scoped_count) for active eligible preview pods.
+
+    Label values are compared using the same DNS sanitization as ``build_gke_preview_pod_manifest``.
+    """
+
+    ws_key = sanitize_dns_label(workspace_id_raw, max_len=63)
+    rs_key = sanitize_dns_label(runtime_session_id_raw, max_len=63)
+    session_n = 0
+    workspace_n = 0
+    for item in items:
+        md = item.get("metadata") or {}
+        if not str(md.get("name") or "").strip():
+            continue
+        if not preview_pod_item_active_for_concurrency_caps(item):
+            continue
+        raw_labels = md.get("labels") or {}
+        labels = {str(k): str(v) for k, v in raw_labels.items()}
+        if not preview_pod_labels_countable_for_concurrency_caps(labels):
+            continue
+        if labels.get(HAM_LABEL_RUNTIME_SESSION) == rs_key:
+            session_n += 1
+        if labels.get(HAM_LABEL_WORKSPACE) == ws_key:
+            workspace_n += 1
+    return session_n, workspace_n
+
+
+def get_preview_concurrency_cap_config() -> tuple[int, int]:
+    """
+    (session_cap, workspace_cap). Defaults match :class:`PreviewJanitorConfig`.
+
+    Optional positive integers: ``HAM_BUILDER_PREVIEW_SESSION_CAP``,
+    ``HAM_BUILDER_PREVIEW_WORKSPACE_CAP`` (no deploy required for defaults).
+    """
+
+    import os
+
+    def _parse(name: str, default: int) -> int:
+        raw = str(os.environ.get(name) or "").strip()
+        if not raw:
+            return default
+        try:
+            parsed = int(raw)
+            return parsed if parsed > 0 else default
+        except ValueError:
+            return default
+
+    return (
+        _parse("HAM_BUILDER_PREVIEW_SESSION_CAP", DEFAULT_SESSION_CAP),
+        _parse("HAM_BUILDER_PREVIEW_WORKSPACE_CAP", DEFAULT_WORKSPACE_CAP),
+    )
+
+
+def check_preview_concurrency_violation(
+    items: list[dict[str, Any]],
+    *,
+    workspace_id_raw: str,
+    runtime_session_id_raw: str,
+    session_cap: int,
+    workspace_cap: int,
+) -> str | None:
+    """If caps are already reached, return a safe operator-facing message; else ``None``."""
+
+    if session_cap < 1 or workspace_cap < 1:
+        return None
+    session_n, workspace_n = count_active_preview_pods_by_scope(
+        items,
+        workspace_id_raw=workspace_id_raw,
+        runtime_session_id_raw=runtime_session_id_raw,
+    )
+    if session_n >= session_cap:
+        return (
+            "Too many active builder preview instances are already running for this session. "
+            "Wait for an existing preview to finish or stop one, then try again."
+        )
+    if workspace_n >= workspace_cap:
+        return (
+            "Too many active builder preview instances are already running for this workspace. "
+            "Wait for an existing preview to finish or stop one, then try again."
+        )
+    return None
 
 
 def pod_expire_reasons(
