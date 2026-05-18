@@ -829,6 +829,9 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
         service_name: str | None = None
         try:
             lifecycle_stage = "render_manifest"
+            # Cost-control (staging): TTL on the Pod manifest is advisory until a janitor
+            # applies label-based expiry + concurrency caps; see ``preview_janitor`` module
+            # and ``scripts/ham_preview_janitor.py`` (dry-run default).
             manifest = build_gke_preview_pod_manifest(
                 workspace_id=job.workspace_id,
                 project_id=job.project_id,
