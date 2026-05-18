@@ -369,7 +369,7 @@ def test_preview_concurrency_ignores_foreign_and_incomplete_labels() -> None:
     assert w == 0
 
 
-def test_preview_concurrency_session_cap_violation() -> None:
+def test_check_preview_concurrency_violation_reports_session_over_cap() -> None:
     from src.ham.gcp_preview_worker_manifest import sanitize_dns_label
 
     ws_raw = "ws_gamma"
@@ -391,7 +391,7 @@ def test_preview_concurrency_session_cap_violation() -> None:
     assert "session" in msg.lower()
 
 
-def test_preview_concurrency_workspace_cap_violation() -> None:
+def test_check_preview_concurrency_violation_reports_workspace_over_cap() -> None:
     from src.ham.gcp_preview_worker_manifest import sanitize_dns_label
 
     ws_raw = "ws_delta"

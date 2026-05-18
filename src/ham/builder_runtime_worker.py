@@ -27,7 +27,6 @@ from src.ham.builder_sandbox_provider import (
     runtime_preview_host,
 )
 from src.ham.gcp_preview_runtime_client import (
-    PreviewConcurrencyCapExceeded,
     PreviewPodRef,
     build_gke_runtime_client,
 )
@@ -36,7 +35,6 @@ from src.ham.gcp_preview_source_bundle import (
     package_source_files_to_zip,
 )
 from src.ham.gcp_preview_worker_manifest import build_gke_preview_pod_manifest
-from src.ham.preview_janitor import check_preview_concurrency_violation, get_preview_concurrency_cap_config
 from src.persistence.builder_runtime_job_store import CloudRuntimeJob
 from src.persistence.builder_source_store import get_builder_source_store
 from src.persistence.builder_runtime_store import PreviewEndpoint, RuntimeSession, get_builder_runtime_store
@@ -831,9 +829,10 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
         service_name: str | None = None
         try:
             lifecycle_stage = "render_manifest"
-            # Cost-control (staging): TTL on the Pod manifest is advisory until a janitor
-            # applies label-based expiry + concurrency caps; see ``preview_janitor`` module
-            # and ``scripts/ham_preview_janitor.py`` (dry-run default).
+            # Cost-control (staging): TTL / expires_at on the Pod manifest + janitor dry-run/apply
+            # (see ``preview_janitor``, ``scripts/ham_preview_janitor.py``). Preview concurrency helpers
+            # in ``preview_janitor`` are for reporting/cost visibility only — they do not block
+            # ``create_preview_pod``; stale runtimes are reclaimed via TTL/janitor, not user-facing caps.
             preview_kube_namespace = (
                 f"{str(os.environ.get('HAM_BUILDER_GKE_NAMESPACE_PREFIX') or 'ham-builder-preview').strip()}-spike"
             )
@@ -849,17 +848,6 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
                 preview_deploy_id=str(job.id or "").strip() or None,
             )
             lifecycle_stage = "create_preview_pod"
-            session_cap, workspace_cap = get_preview_concurrency_cap_config()
-            existing_preview_pods = gke_client.list_preview_pods(namespace=preview_kube_namespace)
-            cap_msg = check_preview_concurrency_violation(
-                existing_preview_pods,
-                workspace_id_raw=job.workspace_id,
-                runtime_session_id_raw=runtime.id,
-                session_cap=session_cap,
-                workspace_cap=workspace_cap,
-            )
-            if cap_msg:
-                raise PreviewConcurrencyCapExceeded(cap_msg)
             gke_resource = gke_client.create_preview_pod(manifest=manifest)
             lifecycle_stage = "wait_for_pod_ready"
             pod_status = gke_client.poll_pod_ready(

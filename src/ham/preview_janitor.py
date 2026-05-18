@@ -208,7 +208,11 @@ def check_preview_concurrency_violation(
     session_cap: int,
     workspace_cap: int,
 ) -> str | None:
-    """If caps are already reached, return a safe operator-facing message; else ``None``."""
+    """If counts would exceed caps, return a safe message; else ``None``.
+
+    **Not used to block** ``create_preview_pod`` in Builder — cost control is TTL/janitor.
+    Kept for dry-run reports, tests, and optional future telemetry.
+    """
 
     if session_cap < 1 or workspace_cap < 1:
         return None

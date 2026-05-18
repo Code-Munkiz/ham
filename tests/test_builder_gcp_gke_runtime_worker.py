@@ -19,7 +19,6 @@ from src.ham.builder_sandbox_provider import (
 )
 from src.ham.gcp_preview_source_bundle import set_source_bundle_uploader_factory_for_tests
 from src.ham.gcp_preview_runtime_client import (
-    PreviewConcurrencyCapExceeded,
     PreviewPodRef,
     PreviewPodStatus,
     set_gke_runtime_client_factory_for_tests,
@@ -357,8 +356,7 @@ class _RecordingRuntimeClient:
         return CleanupResult(deleted_pods=0, deleted_services=0, skipped=0, cleanup_status="success")
 
     def normalize_error(self, *, error: Exception) -> tuple[str, str]:
-        if isinstance(error, PreviewConcurrencyCapExceeded):
-            return ("GCP_GKE_PREVIEW_CONCURRENCY_CAP", str(error))
+        _ = error
         return ("GCP_GKE_RUNTIME_CLIENT_ERROR", "runtime client failed")
 
 
@@ -428,25 +426,26 @@ def test_gcp_gke_live_without_fake_reports_config_missing(tmp_path: Path, monkey
         _cleanup()
 
 
-def test_gcp_gke_fake_success_fourth_job_hits_preview_concurrency_cap(tmp_path: Path, monkeypatch) -> None:
+def test_gcp_gke_fake_success_fourth_same_session_preview_job_still_succeeds(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Repeated Builder preview jobs must not be blocked by reporting-only concurrency helpers."""
+
     _apply_gcp_gke_scaffold(monkeypatch, dry_run=False, fake_mode="success")
     _RecordingRuntimeClient.manifests = []
     _RecordingRuntimeClient.pod_items = []
     set_gke_runtime_client_factory_for_tests(lambda: _RecordingRuntimeClient())
     client, ws_id, project_id, snap_id = _seed_context(tmp_path)
     try:
-        for _ in range(3):
+        for i in range(4):
             body = client.post(
                 f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
                 json={"source_snapshot_id": snap_id},
             ).json()
             assert body["job"]["status"] == "succeeded", body
-        body = client.post(
-            f"/api/workspaces/{ws_id}/projects/{project_id}/builder/cloud-runtime/jobs",
-            json={"source_snapshot_id": snap_id},
-        ).json()
-        assert body["job"]["status"] == "failed"
-        assert body["job"]["error_code"] == "GCP_GKE_PREVIEW_CONCURRENCY_CAP"
+            assert body["job"].get("error_code") in {None, ""}, body
+        assert len(_RecordingRuntimeClient.manifests) == 4
+        assert "GCP_GKE_PREVIEW_CONCURRENCY_CAP" not in str(_RecordingRuntimeClient.manifests)
     finally:
         _cleanup()
 

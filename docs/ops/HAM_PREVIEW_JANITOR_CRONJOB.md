@@ -73,15 +73,15 @@ Previews can be **re-created from Builder** after any cleanup; janitor cannot un
 
 ---
 
-## Next slice — concurrency limits (design only)
+## Preview concurrency helpers (reporting only)
 
 | Item | Plan |
 |------|------|
-| **Insertion point** | **`src/ham/builder_runtime_worker.py`**, immediately **before**
-  **`gke_client.create_preview_pod`**, when live GKE preview is requested. |
-| **Defaults** | **3** previews per **`ham.runtime_session_id`**; **5** per **`ham.workspace_id`**
-  (align with **`PreviewJanitorConfig`**). |
-| **Failure** | Stable error code **`GCP_GKE_PREVIEW_CONCURRENCY_CAP`**; **no** new pod if over cap. |
+| **Purpose** | **`preview_janitor.check_preview_concurrency_violation`** and related helpers
+  support **dry-run cost visibility** and tests. They **do not block**
+  **`create_preview_pod`** — repeated same-session Builder previews are allowed. |
+| **Defaults** | Session **3** / workspace **5** align with **`PreviewJanitorConfig`** for reports only. |
+| **Blocking** | **None** in the Builder path; reclaim stale previews via **TTL / janitor**, not user-facing caps. |
 | **Mechanism** | **List** pods in namespace with HAM preview label; **count** by labels (no IP/URL logging). |
 
 No code for this slice lives in the CronJob manifest.
