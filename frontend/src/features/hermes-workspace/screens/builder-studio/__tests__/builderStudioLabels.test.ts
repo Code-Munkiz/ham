@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  BUILDER_STUDIO_GUIDANCE,
   DELETION_POLICY_LABELS,
   EXTERNAL_NETWORK_POLICY_LABELS,
   MODEL_SOURCE_LABELS,
@@ -29,6 +30,17 @@ const FORBIDDEN_PROVIDER_IDS = [
   "claude_code",
   "cursor_cloud",
 ];
+
+describe("BUILDER_STUDIO_GUIDANCE", () => {
+  it("mentions chat without exposing forbidden provider tokens", () => {
+    expect(BUILDER_STUDIO_GUIDANCE.length).toBeGreaterThan(40);
+    const lower = BUILDER_STUDIO_GUIDANCE.toLowerCase();
+    expect(lower).toContain("chat");
+    for (const forbidden of FORBIDDEN_PROVIDER_IDS) {
+      expect(lower).not.toContain(forbidden);
+    }
+  });
+});
 
 describe("PERMISSION_PRESET_LABELS", () => {
   it("has a non-empty user-friendly label for every preset", () => {

@@ -7,6 +7,10 @@
  * `__tests__/builderStudioLabels.test.ts` enforces that invariant.
  */
 
+/** Shown on the Builder Studio surface — work starts from workspace chat, not here. */
+export const BUILDER_STUDIO_GUIDANCE =
+  "Create and configure builders for HAM to use from workspace chat. When you ask HAM to build, fix, or refactor, HAM selects the best available builder and asks for approval before running.";
+
 export type PermissionPreset =
   | "safe_docs"
   | "app_build"

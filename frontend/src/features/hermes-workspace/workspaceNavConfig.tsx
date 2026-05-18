@@ -1,6 +1,5 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  Bot,
   Briefcase,
   CheckSquare,
   LayoutDashboard,
@@ -20,12 +19,12 @@ import {
 export type MainNavItem = { to: string; label: string; icon: LucideIcon; end?: boolean };
 
 /**
- * Hermes Workspace IA: persistent primary rail (Social, Coding agents) + Library flyout.
+ * Hermes Workspace IA: persistent primary rail (Social, Builder Studio) + Library flyout.
  * `/workspace` index redirects to `/workspace/chat`. `/workspace/projects` lives under Library (first item).
  */
 export const primaryRailItems: MainNavItem[] = [
   { to: "/workspace/social", label: "Social", icon: Share2 },
-  { to: "/workspace/coding-agents", label: "Coding agents", icon: Bot },
+  { to: "/workspace/builder-studio", label: "Builder Studio", icon: Sparkles },
 ];
 
 export const settingsRailItem: MainNavItem = {
@@ -45,7 +44,6 @@ export const libraryNavItems: MainNavItem[] = [
   { to: "/workspace/tasks", label: "Tasks", icon: CheckSquare },
   { to: "/workspace/conductor", label: "Conductor", icon: Waypoints },
   { to: "/workspace/operations", label: "Operations", icon: Network },
-  { to: "/workspace/builder-studio", label: "Builder Studio", icon: Sparkles },
 ];
 
 /** Linked from Settings side nav; not in the primary rail. */
@@ -95,7 +93,7 @@ const MOBILE_TITLE_RULES: { test: (p: string) => boolean; title: string }[] = [
   },
   {
     test: (p) => p === "/workspace/coding-agents" || p.startsWith("/workspace/coding-agents/"),
-    title: "Coding agents",
+    title: "Builder Studio",
   },
   {
     test: (p) => p === "/workspace/builder-studio" || p.startsWith("/workspace/builder-studio/"),

@@ -3,7 +3,7 @@
  *
  * Locks the product contract:
  * - Coding-intent text fired through the main composer triggers
- *   previewCodingConductor automatically (no "Plan with coding agents"
+ *   previewCodingConductor automatically (no “Plan a build in chat”
  *   click required).
  * - Conceptual / conversational text does NOT trigger the preview.
  * - The CodingPlanCard renders inline below the message list.

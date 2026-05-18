@@ -17,6 +17,8 @@ import { BuilderCard } from "./BuilderCard";
 import { CreateBuilderWizard } from "./CreateBuilderWizard";
 import { BuilderDetailDrawer } from "./BuilderDetailDrawer";
 import { BuilderTechnicalDetailsDrawer } from "./BuilderTechnicalDetailsDrawer";
+import { BUILDER_STUDIO_GUIDANCE } from "./builderStudioLabels";
+import { WorkspaceBuilderPreferences } from "./WorkspaceBuilderPreferences";
 
 const FEATURE_DISABLED_COPY = "Builder Studio is being prepared — check back soon.";
 
@@ -78,7 +80,7 @@ export function BuilderStudioScreen() {
       <WorkspaceSurfaceHeader
         eyebrow="Workspace"
         title="Builder Studio"
-        subtitle="Reusable builder profiles HAM can pick when they match what you're working on."
+        subtitle="Custom builders and workspace defaults HAM uses when you work in chat."
         actions={
           <>
             <Button
@@ -105,6 +107,12 @@ export function BuilderStudioScreen() {
           </>
         }
       />
+
+      <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)]/80 px-4 py-3 text-sm leading-relaxed text-[var(--theme-text)] shadow-[0_8px_28px_var(--theme-shadow)]">
+        {BUILDER_STUDIO_GUIDANCE}
+      </div>
+
+      {workspaceId ? <WorkspaceBuilderPreferences workspaceId={workspaceId} /> : null}
 
       {error?.kind === "feature_disabled" ? (
         <WorkspaceSurfaceStateCard

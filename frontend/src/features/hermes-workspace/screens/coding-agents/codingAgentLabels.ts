@@ -1,17 +1,18 @@
 /**
- * Single source of normie-friendly user-facing copy for the Coding Agents
- * screen. The product rule for this MVP: never expose internal vocabulary
- * (provider keys, registry status, audit sinks, ControlPlaneRun, JSONL,
- * mission_handling, planned_candidate, operator phases) in primary UI.
+ * Single source of normie-friendly user-facing copy for coding-agent adapters,
+ * readiness pills, and Builder Studio preference strings. Builder wizards use
+ * `builderStudioLabels.ts`. Never expose internal vocabulary (provider keys,
+ * registry status, audit sinks, ControlPlaneRun, JSONL, mission_handling,
+ * planned_candidate, operator phases) in primary UI.
  *
- * If a label changes, the change is intentional and must be reflected here
- * AND in `__tests__/codingAgentLabels.test.ts`.
+ * If a label changes, reflect it in `__tests__/codingAgentLabels.test.ts`.
+ * Task launch UI was retired from a dedicated route — builds start from chat.
  */
 
 export const CODING_AGENT_LABELS = {
-  surfaceTitle: "Coding agents",
+  surfaceTitle: "Builder Studio",
   surfaceSubtitle:
-    "Hand off a coding task. Preview what will happen, approve the launch, then track progress.",
+    "Configure builders and defaults; start builds and handoffs from workspace chat after HAM proposes a plan.",
   newTaskCta: "New task",
   previewCta: "Preview",
   approveCta: "Approve launch",

@@ -7,9 +7,9 @@ import { CODING_AGENT_LABELS } from "@/features/hermes-workspace/screens/coding-
  * are the canary — if they fail because of a copy change, update the label
  * map and this file together, on purpose.
  */
-describe("CODING_AGENT_LABELS — locked product copy", () => {
+describe("CODING_AGENT_LABELS — locked adapter & readiness copy", () => {
   it("uses the agreed primary action labels", () => {
-    expect(CODING_AGENT_LABELS.surfaceTitle).toBe("Coding agents");
+    expect(CODING_AGENT_LABELS.surfaceTitle).toBe("Builder Studio");
     expect(CODING_AGENT_LABELS.newTaskCta).toBe("New task");
     expect(CODING_AGENT_LABELS.previewCta).toBe("Preview");
     expect(CODING_AGENT_LABELS.approveCta).toBe("Approve launch");

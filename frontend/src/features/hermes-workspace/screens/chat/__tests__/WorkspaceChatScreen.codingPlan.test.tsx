@@ -237,7 +237,7 @@ describe("WorkspaceChatScreen composer-driven coding plan", () => {
     }
   }
 
-  it("submits the trimmed composer draft via Plan with coding agents", async () => {
+  it("submits the trimmed composer draft via Plan a build in chat", async () => {
     previewCodingConductorMock.mockResolvedValue(samplePreviewPayload);
     const { container } = renderChat();
 

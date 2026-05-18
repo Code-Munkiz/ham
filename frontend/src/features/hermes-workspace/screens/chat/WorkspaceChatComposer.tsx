@@ -101,7 +101,7 @@ type WorkspaceChatComposerProps = {
   onQuickSuggestion?: (prompt: string) => void;
   /** When this identity changes (e.g. chat session id), the dismissible starter row is shown again. */
   quickTipsResetSignal?: string | null;
-  /** Main composer textarea — for focus from parent (e.g. empty-state “Plan with coding agents”). */
+  /** Main composer textarea — for focus from parent (e.g. empty-state “Plan a build in chat”). */
   composerTextareaRef?: React.Ref<HTMLTextAreaElement>;
   /** Preview-only: run conductor on the current composer draft (Phase 2C). */
   onPlanWithCodingAgents?: () => void | Promise<void>;
@@ -859,8 +859,8 @@ export function WorkspaceChatComposer({
           type="button"
           variant="ghost"
           size="sm"
-          title="Plan with coding agents (manual) — uses the message above"
-          aria-label="Plan with coding agents (manual)"
+          title="Plan a build in chat (manual) — uses the message above"
+          aria-label="Plan a build in chat (manual)"
           data-hww-coding-plan-action
           data-hww-coding-plan-priority="manual-fallback"
           disabled={
@@ -877,7 +877,7 @@ export function WorkspaceChatComposer({
           ) : (
             <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
           )}
-          <span className="sr-only">Plan with coding agents (manual)</span>
+          <span className="sr-only">Plan a build in chat (manual)</span>
         </Button>
       ) : null}
       <div

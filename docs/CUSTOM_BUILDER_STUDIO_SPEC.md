@@ -192,25 +192,31 @@ runner URLs, or workflow ids.
 
 ```mermaid
 flowchart LR
-  CHAT[Chat]
+  CHAT[Workspace Chat]
   BS[Builder Studio]
-  CA[Coding Agents screen]
   SET[Workspace settings]
-  CHAT -- "uses chosen builder" --> CONDUCTOR
-  BS -- "create/edit" --> API
-  CA -- "My builders row" --> BS
-  SET -- "preference mode" --> CONDUCTOR
-  CONDUCTOR[Conductor]
+  CHAT -- "ask to build, fix, or refactor" --> CONDUCTOR
+  CHAT -- "plan + approval" --> CONDUCTOR
+  BS -- "configure builders + workspace builder prefs" --> API
+  SET -- "other workspace prefs" --> CONDUCTOR
+  CONDUCTOR[Conductor / HAM]
   API[Builder API]
 ```
 
-- **Workspace → Builder Studio** (new): `/workspaces/:wid/builder-studio`.
-- **Workspace → Coding Agents** (existing
-  `WorkspaceCodingAgentsScreen.tsx`): gains a **"My builders"** card row
-  above the existing lane chooser.
-- **Builder detail / settings drawer**: `/workspaces/:wid/builders/:builder_id`.
-- **Chat plan card** ([`HAM_CHAT_CONTROL_PLANE.md`](HAM_CHAT_CONTROL_PLANE.md)):
-  unchanged structure; gains an optional **builder name badge**.
+- **Workspace → Builder Studio** (primary configuration surface): client routes
+  **`/workspace/builder-studio`** (list + create) and
+  **`/workspace/builder-studio/:builderId`** (detail / edit). The active workspace
+  comes from shell context (no `:wid` segment in the path).
+- **Legacy route (redirect only)**: **`/workspace/coding-agents`** →
+  **`/workspace/builder-studio`** (`replace`) so old bookmarks still work. There
+  is no separate “Coding Agents” screen; task launch / handoff UI is not hosted
+  here.
+- **Workspace → Chat**: users ask HAM to build, fix, or refactor; HAM presents
+  the plan and approval affordances in chat ([`HAM_CHAT_CONTROL_PLANE.md`](HAM_CHAT_CONTROL_PLANE.md)),
+  including an optional **builder name badge** on the plan card when applicable.
+- **Backend / REST** paths may still use workspace ids in URLs (see §8); this
+  section describes the **operator-facing workspace shell** routes under
+  `/workspace/*`.
 
 ### 3.2 User-facing labels
 
@@ -706,6 +712,7 @@ New folder:
 ```
 frontend/src/features/hermes-workspace/screens/builder-studio/
   BuilderStudioScreen.tsx
+  WorkspaceBuilderPreferences.tsx
   BuilderCard.tsx
   CreateBuilderWizard.tsx
   BuilderDetailDrawer.tsx
@@ -725,18 +732,21 @@ frontend/src/features/hermes-workspace/adapters/
   __tests__/builderStudioAdapter.test.ts
 ```
 
-Wiring into existing surfaces:
+**Hermes workspace shell wiring** (`frontend/src/features/hermes-workspace/`):
 
-- `WorkspaceCodingAgentsScreen.tsx` — add a **"My builders"** row at the
-  top of the body. Each card links to
-  `/workspaces/:wid/builders/:builder_id`. New empty state copy: "You
-  don't have any custom builders yet. **Create one** → opens
-  `/workspaces/:wid/builder-studio`."
-- `CodingPlanCard.tsx` — add optional `builderName?: string` prop. When
-  present, render a small **badge** above the lane label. Existing
-  approval flow unchanged.
-- New route entry in `frontend/src/features/hermes-workspace/index.tsx`
-  or equivalent router under `App.tsx`.
+- **`WorkspaceApp.tsx`**: registers **`/workspace/builder-studio`** and
+  **`/workspace/builder-studio/:builderId`** → `BuilderStudioScreen`. Registers
+  **`/workspace/coding-agents`** → `Navigate` to **`/workspace/builder-studio`**
+  (legacy compatibility only).
+- **`workspaceNavConfig.tsx`**: **Builder Studio** is a **top-level primary rail**
+  item (alongside Social), not nested under a “Coding Agents” section.
+- **`BuilderStudioScreen.tsx`**: builder library CRUD + normie guidance copy;
+  embeds **`WorkspaceBuilderPreferences`** (provider readiness pills + workspace
+  **Builder settings** toggles / preference mode) — **configuration only**, no
+  “New task” / handoff / launch controls on this page.
+- **Chat** (`/workspace/chat`): **`CodingPlanCard`** and related plan / approval
+  UI remain the place HAM proposes work; optional **`builderName`** badge wiring
+  unchanged ([`HAM_CHAT_CONTROL_PLANE.md`](HAM_CHAT_CONTROL_PLANE.md)).
 
 ### 9.2 Tests (Vitest, pure-function only per C.1 baseline)
 
@@ -758,8 +768,10 @@ C.1 baseline).
 
 - Mission-aware feed
   ([`MISSION_AWARE_FEED_CONTROLS.md`](MISSION_AWARE_FEED_CONTROLS.md)).
-- Workspace settings panel (the existing preference mode chooser still
-  applies; we do not duplicate it inside Builder Studio).
+- **Workspace settings** (`/workspace/settings`) — still hosts general
+  workspace settings; **Builder Studio** additionally surfaces the workspace-scoped
+  **Builder settings** panel (which builders HAM may use + preference mode)
+  alongside custom builder CRUD so operators configure builders in one place.
 - Skills catalog (`/workspace/skills`) — distinct surface; this spec
   does not change it.
 

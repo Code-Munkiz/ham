@@ -12,7 +12,6 @@ import { WorkspaceTasksScreen } from "./screens/tasks/WorkspaceTasksScreen";
 import { WorkspaceConductorScreen } from "./screens/conductor/WorkspaceConductorScreen";
 import { WorkspaceMemoryScreen } from "./screens/memory/WorkspaceMemoryScreen";
 import { WorkspaceOperationsScreen } from "./screens/operations/WorkspaceOperationsScreen";
-import { WorkspaceCodingAgentsScreen } from "./screens/coding-agents/WorkspaceCodingAgentsScreen";
 import { BuilderStudioScreen } from "./screens/builder-studio";
 import { WorkspaceProfilesScreen } from "./screens/profiles/WorkspaceProfilesScreen";
 import { WorkspaceSkillsScreen } from "./screens/skills/WorkspaceSkillsScreen";
@@ -56,7 +55,10 @@ export function WorkspaceApp() {
                 <Route path="tasks" element={<WorkspaceTasksScreen />} />
                 <Route path="conductor" element={<WorkspaceConductorScreen />} />
                 <Route path="operations" element={<WorkspaceOperationsScreen />} />
-                <Route path="coding-agents" element={<WorkspaceCodingAgentsScreen />} />
+                <Route
+                  path="coding-agents"
+                  element={<Navigate to="/workspace/builder-studio" replace />}
+                />
                 <Route path="builder-studio" element={<BuilderStudioScreen />} />
                 <Route path="builder-studio/:builderId" element={<BuilderStudioScreen />} />
                 <Route path="social/policy" element={<WorkspaceSocialPolicyScreen />} />

@@ -84,7 +84,7 @@ export function WorkspaceChatEmptyState({ onPlanWithCodingAgents }: WorkspaceCha
             className="text-[11px] font-medium text-cyan-300/85 hover:text-cyan-200"
             data-hww-coding-plan-open
           >
-            Plan with coding agents
+            Plan a build in chat
           </button>
         </div>
       </div>

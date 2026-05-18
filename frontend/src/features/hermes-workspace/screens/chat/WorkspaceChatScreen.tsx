@@ -1726,7 +1726,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       if (workspaceScopedSaved) {
         // `/workspace/chat` without `?session=` is immediately replaced via the hydrate effect
         // below when localStorage remembers a workspace session — avoid wiping the transcript in
-        // the brief window before that replace runs (e.g. “Full chat” from /workspace/coding-agents).
+        // the brief window before that replace runs (e.g. “Full chat” from /workspace/builder-studio).
         return;
       }
       if (sessionId) {
@@ -2073,7 +2073,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       // repo coding task (not a new app/site/game builder prompt), fire a
       // background preview so the CodingPlanCard
       // appears below the thread without requiring a separate "Plan with
-      // coding agents" click. Preview only — no launch.
+      // Plan a build in chat" click. Preview only — no launch.
       if (!missionModeId && nlProbeText && isLikelyCodingIntent(nlProbeText)) {
         void triggerAutoCodingPlanPreview(nlProbeText);
       }
@@ -3658,7 +3658,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                   >
                     Restored your coding-plan approval card from this browser tab. If it looks
                     stale, run{" "}
-                    <span className="font-medium text-white/85">Plan with coding agents</span>{" "}
+                    <span className="font-medium text-white/85">Plan a build in chat</span>{" "}
                     again.
                   </p>
                 ) : null}

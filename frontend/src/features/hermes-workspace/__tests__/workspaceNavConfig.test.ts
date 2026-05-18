@@ -8,9 +8,10 @@ describe("workspaceNavConfig", () => {
     expect(primaryRailItems.map((i) => i.label)).not.toContain("Chat");
   });
 
-  it("primary rail orders Social then Coding agents", () => {
+  it("primary rail orders Social then Builder Studio", () => {
     expect(primaryRailItems[0]?.label).toBe("Social");
-    expect(primaryRailItems[1]?.label).toBe("Coding agents");
+    expect(primaryRailItems[1]?.label).toBe("Builder Studio");
+    expect(primaryRailItems[1]?.to).toBe("/workspace/builder-studio");
   });
 
   it("library flyout lists Projects first", () => {
