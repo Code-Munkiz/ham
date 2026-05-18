@@ -1033,6 +1033,10 @@ def _builder_artifact_verification_failed(builder_meta: dict[str, Any] | None) -
     return bool((builder_meta or {}).get("artifact_verification_failed"))
 
 
+def _builder_edit_worker_blocked(builder_meta: dict[str, Any] | None) -> bool:
+    return bool((builder_meta or {}).get("builder_edit_worker_blocked"))
+
+
 def _artifact_verification_payload(builder_meta: dict[str, Any] | None) -> dict[str, Any] | None:
     if not builder_meta:
         return None
@@ -1480,7 +1484,7 @@ async def post_chat(
                 builder=builder_meta,
                 artifact_verification=_artifact_verification_payload(builder_meta),
             )
-    if _builder_artifact_verification_failed(builder_meta):
+    if _builder_artifact_verification_failed(builder_meta) or _builder_edit_worker_blocked(builder_meta):
         vf_msg = _builder_verification_failure_assistant_text(builder_prefix, builder_meta)
         store.append_turns(sid, [ChatTurn(role="assistant", content=vf_msg)])
         return ChatResponse(
@@ -1666,7 +1670,7 @@ def post_chat_stream(
                     },
                 )
 
-        if _builder_artifact_verification_failed(builder_meta):
+        if _builder_artifact_verification_failed(builder_meta) or _builder_edit_worker_blocked(builder_meta):
             vf_text = _builder_verification_failure_assistant_text(builder_prefix, builder_meta)
             store.append_turns(sid, [ChatTurn(role="assistant", content=vf_text)])
             msgs = store.list_messages(sid)

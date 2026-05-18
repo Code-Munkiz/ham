@@ -307,6 +307,57 @@ def test_chat_stream_artifact_verification_failure_skips_llm_stream(
     assert "live preview handoff" not in done["messages"][-1]["content"]
 
 
+def test_chat_stream_builder_edit_worker_blocked_skips_llm_stream(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    honest = (
+        "Structured builder edits require a live Hermes gateway on the API host "
+        "(mock gateway mode cannot produce patches). Configure the gateway or try again later.\n\n"
+    )
+
+    def _builder_hook(**_kwargs):  # type: ignore[no-untyped-def]
+        return (
+            honest,
+            {
+                "builder_intent": "build_or_create",
+                "scaffolded": False,
+                "builder_edit_worker_blocked": True,
+                "builder_edit_worker": {"worker": "hermes_gateway", "blocked_reason": "gateway_mock_or_unconfigured"},
+                "source_snapshot_id": "ssnp_existing",
+            },
+        )
+
+    def _no_stream(*_a: object, **_k: object):
+        raise AssertionError("stream_chat_turn must not run when builder edit worker blocked")
+
+    monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _builder_hook)
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", _no_stream)
+
+    res = client.post(
+        "/api/chat/stream",
+        json={"messages": [{"role": "user", "content": "change + and - buttons"}]},
+    )
+    assert res.status_code == 200, res.text
+    events = _parse_ndjson(res.text)
+    assert [e.get("type") for e in events] == ["session", "delta", "done"]
+    done = events[-1]
+    assert done["messages"][-1]["content"] == honest
+    b = done.get("builder") or {}
+    assert b.get("builder_edit_worker_blocked") is True
+    assert (b.get("builder_edit_worker") or {}).get("blocked_reason") == "gateway_mock_or_unconfigured"
+    low = done["messages"][-1]["content"].lower()
+    assert "updated" not in low
+    assert "preview refreshed" not in low
+    assert "live preview handoff" not in done["messages"][-1]["content"]
+    assert "I've generated" not in done["messages"][-1]["content"]
+    sid = str(done["session_id"])
+    detail = client.get(f"/api/chat/sessions/{sid}")
+    assert detail.status_code == 200
+    persisted = detail.json()["messages"][-1]
+    assert persisted["role"] == "assistant"
+    assert persisted["content"] == honest
+
+
 def test_chat_stream_local_repo_ops_not_forced_into_mission_route_when_operator_disabled(
     mock_mode: None,
     monkeypatch: pytest.MonkeyPatch,

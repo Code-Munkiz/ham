@@ -241,25 +241,56 @@ def run_builder_happy_path_hook(
     """Returns optional stream prefix and metadata for /api/chat responses."""
     from src.ham.builder_chat_scaffold import maybe_chat_scaffold_for_turn
 
-    base_intent = classify_builder_chat_intent(last_user_plain)
-    meta: dict[str, Any] = {"builder_intent": base_intent}
     ws = (workspace_id or "").strip()
     pid = (project_id or "").strip()
     if not ws or not pid or not str(last_user_plain or "").strip():
-        return None, meta
-    created_by = ham_actor.user_id if ham_actor is not None else ""
+        base_intent = classify_builder_chat_intent(last_user_plain)
+        return None, {"builder_intent": base_intent}
+
+    from src.ham.builder_edit_worker import (
+        apply_builder_worker_chat_directives,
+        run_builder_edit_worker_maybe,
+    )
     from src.persistence.builder_source_store import get_builder_source_store
 
-    source_rows = get_builder_source_store().list_project_sources(workspace_id=ws, project_id=pid)
+    store = get_builder_source_store()
+    source_rows = store.list_project_sources(workspace_id=ws, project_id=pid)
+    preferred_for_directive = next(
+        (row for row in source_rows if str(row.kind or "").strip().lower() == "chat_scaffold"),
+        source_rows[0] if source_rows else None,
+    )
+    directive = apply_builder_worker_chat_directives(
+        last_user_plain=last_user_plain,
+        project_source=preferred_for_directive,
+        store=store,
+    )
+    effective_plain = directive.cleaned_prompt
+    if directive.updated_source is not None:
+        source_rows = store.list_project_sources(workspace_id=ws, project_id=pid)
+    if directive.assistant_note and not str(effective_plain or "").strip():
+        meta_d: dict[str, Any] = {
+            "builder_intent": "build_or_create",
+            "builder_worker_directive_only": True,
+        }
+        if directive.blocked_reason:
+            meta_d["builder_worker_override_rejected"] = directive.blocked_reason
+        return directive.assistant_note, meta_d
+    # Prefix directive ack when present alongside an edit (preference saved first).
+    directive_prefix = directive.assistant_note or ""
+
+    base_intent = classify_builder_chat_intent(effective_plain)
+    meta: dict[str, Any] = {"builder_intent": base_intent}
+    created_by = ham_actor.user_id if ham_actor is not None else ""
+
     has_active_snapshot = any(bool(row.active_snapshot_id) for row in source_rows)
-    advice_only = is_builder_advice_or_question_turn(last_user_plain)
+    advice_only = is_builder_advice_or_question_turn(effective_plain)
     wants_update = (not advice_only) and (
-        is_builder_edit_like_followup(last_user_plain)
-        or _looks_like_followup_edit(last_user_plain)
-        or _looks_like_active_app_iteration(last_user_plain)
+        is_builder_edit_like_followup(effective_plain)
+        or _looks_like_followup_edit(effective_plain)
+        or _looks_like_active_app_iteration(effective_plain)
     )
     discrete_new = base_intent == "build_or_create" and _looks_like_discrete_new_product_request(
-        last_user_plain
+        effective_plain
     )
     forced_update = bool(has_active_snapshot and wants_update and not discrete_new)
     operation = "update_existing_project" if forced_update else "build_or_create"
@@ -271,11 +302,71 @@ def run_builder_happy_path_hook(
     meta["builder_intent"] = intent_out
     if not forced_update and intent_out != "build_or_create":
         return None, meta
+
+    if operation == "update_existing_project" and has_active_snapshot:
+        preferred = next(
+            (row for row in source_rows if str(row.kind or "").strip().lower() == "chat_scaffold"),
+            source_rows[0] if source_rows else None,
+        )
+        active_id = str(getattr(preferred, "active_snapshot_id", "") or "").strip() if preferred else ""
+        if preferred and active_id:
+            active_snap = next(
+                (
+                    sn
+                    for sn in store.list_source_snapshots(workspace_id=ws, project_id=pid)
+                    if str(sn.id or "").strip() == active_id
+                ),
+                None,
+            )
+            if active_snap is not None:
+                edit_try = run_builder_edit_worker_maybe(
+                    workspace_id=ws,
+                    project_id=pid,
+                    session_id=session_id,
+                    last_user_plain=effective_plain,
+                    created_by=created_by,
+                    operation=operation,
+                    preferred_source=preferred,
+                    active_snapshot=active_snap,
+                )
+                if edit_try is not None:
+                    meta.update(edit_try)
+                    sid_e = str(edit_try.get("source_snapshot_id") or "").strip()
+                    if edit_try.get("builder_edit_worker_blocked"):
+                        reason = str((edit_try.get("builder_edit_worker") or {}).get("blocked_reason") or "").strip()
+                        human = "I could not apply that edit via the Hermes gateway yet."
+                        if reason == "gateway_mock_or_unconfigured":
+                            human = (
+                                "Structured builder edits require a live Hermes gateway on the API host "
+                                "(mock gateway mode cannot produce patches). Configure the gateway or try again later.\n\n"
+                            )
+                        elif reason == "unsupported_worker":
+                            human = "That builder worker is not available for this edit path yet.\n\n"
+                        elif reason in {"invalid_json", "gateway_error"}:
+                            human = (
+                                "The Hermes gateway did not return a usable structured patch for this request.\n\n"
+                            )
+                        elif reason == "verification_failed":
+                            human = (
+                                "The Hermes gateway patch did not verify against your calculator project "
+                                "(+/− styling or preserved theme).\n\n"
+                            )
+                        elif reason == "no_op":
+                            human = "The Hermes gateway returned a no-op patch (no file changes).\n\n"
+                        elif reason:
+                            human = f"I could not complete that builder edit ({reason}).\n\n"
+                        return f"{directive_prefix}{human}", meta
+                    if edit_try.get("scaffolded") and sid_e:
+                        return (
+                            f"{directive_prefix}{_builder_ack_prefix(effective_plain, operation=operation)}",
+                            meta,
+                        )
+
     summary = maybe_chat_scaffold_for_turn(
         workspace_id=ws,
         project_id=pid,
         session_id=session_id,
-        last_user_plain=last_user_plain,
+        last_user_plain=effective_plain,
         created_by=created_by,
         operation=operation,
     )
@@ -288,6 +379,7 @@ def run_builder_happy_path_hook(
         detail = str(ver.get("reason") or "").strip()
         tail = f" ({detail})" if detail else ""
         return (
+            f"{directive_prefix}"
             "I tried to apply that edit, but the generated files did not include what you asked for yet"
             f"{tail}.\n\n",
             meta,
@@ -306,7 +398,7 @@ def run_builder_happy_path_hook(
             if enqueue_meta:
                 meta.update(enqueue_meta)
         return (
-            _builder_ack_prefix(last_user_plain, operation=operation),
+            f"{directive_prefix}{_builder_ack_prefix(effective_plain, operation=operation)}",
             meta,
         )
     if summary.get("deduplicated"):
@@ -326,10 +418,12 @@ def run_builder_happy_path_hook(
                 meta.update(enqueue_meta)
         if operation == "update_existing_project":
             return (
+                f"{directive_prefix}"
                 "I already applied that update for the active project source and will keep the Workbench in sync.\n\n",
                 meta,
             )
         return (
+            f"{directive_prefix}"
             "I already prepared this builder project source from your recent prompt and will keep the Workbench in sync.\n\n",
             meta,
         )

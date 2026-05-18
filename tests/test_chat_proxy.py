@@ -187,6 +187,48 @@ def test_post_chat_artifact_verification_failure_skips_llm_and_is_final_message(
     assert "live preview handoff" not in body["messages"][-1]["content"]
 
 
+def test_post_chat_builder_edit_worker_blocked_skips_llm_and_is_final_message(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    honest = (
+        "Structured builder edits require a live Hermes gateway on the API host "
+        "(mock gateway mode cannot produce patches). Configure the gateway or try again later.\n\n"
+    )
+
+    def _builder_hook(**_kwargs):  # type: ignore[no-untyped-def]
+        return (
+            honest,
+            {
+                "builder_intent": "build_or_create",
+                "scaffolded": False,
+                "builder_edit_worker_blocked": True,
+                "builder_edit_worker": {"worker": "hermes_gateway", "blocked_reason": "gateway_mock_or_unconfigured"},
+                "source_snapshot_id": "ssnp_existing",
+            },
+        )
+
+    def _no_llm(*_a: object, **_k: object) -> str:
+        raise AssertionError("complete_chat_turn must not run when builder edit worker blocked")
+
+    monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _builder_hook)
+    monkeypatch.setattr("src.api.chat.complete_chat_turn", _no_llm)
+    res = client.post(
+        "/api/chat",
+        json={"messages": [{"role": "user", "content": "change + and - buttons"}]},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["messages"][-1]["content"] == honest
+    b = body.get("builder") or {}
+    assert b.get("builder_edit_worker_blocked") is True
+    assert (b.get("builder_edit_worker") or {}).get("blocked_reason") == "gateway_mock_or_unconfigured"
+    low = body["messages"][-1]["content"].lower()
+    assert "updated" not in low
+    assert "preview refreshed" not in low
+    assert "I've generated" not in body["messages"][-1]["content"]
+    assert "live preview handoff" not in body["messages"][-1]["content"]
+
+
 def test_post_chat_unknown_session() -> None:
     res = client.post(
         "/api/chat",
