@@ -105,14 +105,44 @@ export const CODING_AGENT_LABELS = {
   opencodeReadinessNotConfigured: "OpenCode is not configured on this host yet.",
   opencodeReadinessReady: "Ready when configured",
 
-  // Builder settings panel
+  // Builder Studio — connection list (primary surface)
+  builderConnectionsTitle: "Builder connections",
+  builderConnectionsSubtitle:
+    "See whether each builder is connected and ready. HAM still chooses the best option per task in chat and asks before running.",
+
+  builderConnectionClaudeTitle: "Claude",
+  builderConnectionClaudeSubtitle: "Deep reasoning builder for complex codebase edits.",
+
+  builderConnectionCursorTitle: "Cursor",
+  builderConnectionCursorSubtitle: "Connected repo builder for pull-request workflows.",
+
+  builderConnectionFactoryTitle: "Factory Droid",
+  builderConnectionFactorySubtitle: "Controlled builder for structured, auditable workflows.",
+
+  builderConnectionOpencodeSubtitle:
+    "Open builder for managed workspace builds and bring-your-own-model workflows.",
+
+  connectionStatusChecking: "Checking…",
+  connectionStatusNeedsCredentials: "Needs credentials",
+  connectionStatusNeedsConnection: "Needs connection",
+  connectionStatusNeedsRunner: "Needs runner",
+  connectionStatusUnavailable: "Unavailable",
+  connectionStatusFree: "Free",
+
+  actionConnectClaude: "Connect Claude",
+  actionConnectCursor: "Connect Cursor",
+  actionConnectFactory: "Connect Factory",
+  actionConfigureModelAccess: "Configure model access",
+  actionManage: "Manage",
+
+  // Reserved for a future advanced / operator-only preferences surface (not shown in default Builder Studio).
   settingsPanelTitle: "Builder settings",
   settingsPanelSubtitle: "Choose which builders HAM may use and how it picks among them.",
   settingsFactoryDroidLabel: "Controlled managed builder",
   settingsFactoryDroidDescription: "Let HAM choose Factory Droid for controlled, auditable builds.",
-  settingsClaudeAgentLabel: "Premium reasoning builder",
+  settingsClaudeAgentLabel: "Claude",
   settingsClaudeAgentDescription:
-    "Let HAM choose Claude Agent for complex edits requiring deep codebase reasoning.",
+    "Deep reasoning builder for complex codebase edits — connect in Settings when available.",
   settingsOpencodeLabel: "Open / bring-your-own-model builder",
   settingsOpencodeDescription:
     "Let HAM choose OpenCode when you have model access configured. Requires model credentials.",
@@ -123,10 +153,9 @@ export const CODING_AGENT_LABELS = {
   settingsPreferenceModeLabel: "How should HAM pick builders?",
   settingsPreferenceModeRecommended: "Let HAM choose the best builder",
   settingsPreferenceModeOpenCustom: "Prefer open / bring-your-own-model builder",
-  settingsPreferenceModePremiumReasoning: "Prefer premium reasoning builder",
+  settingsPreferenceModePremiumReasoning: "Prefer Claude",
   settingsPreferenceModeConnectedRepo: "Prefer connected repo builder",
-  settingsPreferenceModePremiumUnavailableHint:
-    "Turn on premium reasoning builder above to choose this preference.",
+  settingsPreferenceModePremiumUnavailableHint: "Turn on Claude above to choose this preference.",
   settingsPreferenceModeOpenCustomUnavailableHint:
     "Turn on open / bring-your-own-model builder above to choose this preference.",
   settingsPreferenceModeConnectedRepoUnavailableHint:

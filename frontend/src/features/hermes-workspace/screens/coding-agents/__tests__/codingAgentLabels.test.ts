@@ -43,14 +43,21 @@ describe("CODING_AGENT_LABELS — locked adapter & readiness copy", () => {
     expect(CODING_AGENT_LABELS.comingSoonNote.toLowerCase()).not.toContain("opencode_cli");
   });
 
-  it("uses normie-friendly copy for builder preference label", () => {
+  it("uses normie-friendly copy for builder preference label (reserved)", () => {
     expect(CODING_AGENT_LABELS.settingsPreferenceModeLabel).toBe("How should HAM pick builders?");
+  });
+
+  it("locks Builder Studio builder connection row titles", () => {
+    expect(CODING_AGENT_LABELS.builderConnectionClaudeTitle).toBe("Claude");
+    expect(CODING_AGENT_LABELS.builderConnectionCursorTitle).toBe("Cursor");
+    expect(CODING_AGENT_LABELS.builderConnectionFactoryTitle).toBe("Factory Droid");
+    expect(CODING_AGENT_LABELS.builderConnectionsTitle).toBe("Builder connections");
   });
 
   it("settings panel labels use normie-friendly copy", () => {
     expect(CODING_AGENT_LABELS.settingsPanelTitle).toBe("Builder settings");
     expect(CODING_AGENT_LABELS.settingsFactoryDroidLabel).toBe("Controlled managed builder");
-    expect(CODING_AGENT_LABELS.settingsClaudeAgentLabel).toBe("Premium reasoning builder");
+    expect(CODING_AGENT_LABELS.settingsClaudeAgentLabel).toBe("Claude");
     expect(CODING_AGENT_LABELS.settingsOpencodeLabel).toBe("Open / bring-your-own-model builder");
     expect(CODING_AGENT_LABELS.settingsCursorLabel).toBe("Connected repo builder");
     expect(CODING_AGENT_LABELS.settingsPreferenceModeRecommended).toBe(

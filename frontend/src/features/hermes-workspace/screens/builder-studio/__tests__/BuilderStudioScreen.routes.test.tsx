@@ -17,6 +17,8 @@ vi.mock("@/lib/ham/HamWorkspaceContext", async (importOriginal) => {
 import { BuilderStudioScreen } from "../BuilderStudioScreen";
 import type { HamWorkspaceContextValue } from "@/lib/ham/HamWorkspaceContext";
 import { builderStudioAdapter } from "@/features/hermes-workspace/adapters/builderStudioAdapter";
+import * as api from "@/lib/ham/api";
+import * as codingAgentsAdapter from "@/features/hermes-workspace/adapters/codingAgentsAdapter";
 
 function readyWs(): HamWorkspaceContextValue {
   return {
@@ -80,6 +82,19 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+beforeEach(() => {
+  vi.spyOn(codingAgentsAdapter, "fetchCursorReadiness").mockResolvedValue({
+    readiness: "ready",
+    status: null,
+    error: null,
+  });
+  vi.spyOn(codingAgentsAdapter, "fetchCodingReadinessSnapshot").mockResolvedValue({
+    opencode: "needs_setup",
+    claudeAgent: "ready",
+  });
+  vi.spyOn(api, "listHamProjects").mockResolvedValue({ projects: [] });
+});
+
 describe("BuilderStudioScreen routes", () => {
   it("hides all custom-builder list failure UI on the base route when the list endpoint returns list-not-found", async () => {
     vi.spyOn(builderStudioAdapter, "list").mockResolvedValue({
@@ -132,6 +147,24 @@ describe("BuilderStudioScreen routes", () => {
       screen.getByText(/That builder may have been deleted or is no longer available/i),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Back to Builder Studio" })).toBeInTheDocument();
+  });
+
+  it("shows builder connection rows without preference toggles or native select", async () => {
+    vi.spyOn(builderStudioAdapter, "list").mockResolvedValue({ builders: [] });
+
+    renderAt("/workspace/builder-studio");
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Builder Studio" })).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole("heading", { name: "Claude" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Cursor" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Factory Droid" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "OpenCode" })).toBeInTheDocument();
+    expect(screen.queryByText("Premium reasoning builder")).not.toBeInTheDocument();
+    expect(document.querySelector("input[type='checkbox']")).toBeNull();
+    expect(document.querySelector("select")).toBeNull();
   });
 
   it("opens Create builder as an accessible dialog with solid modal semantics", async () => {
