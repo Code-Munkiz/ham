@@ -229,6 +229,40 @@ def test_post_chat_builder_edit_worker_blocked_skips_llm_and_is_final_message(
     assert "live preview handoff" not in body["messages"][-1]["content"]
 
 
+def test_post_chat_builder_clarification_skips_llm_and_is_final_message(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clar = "Which area should I change—the layout, the logic, or copy?\n\n"
+
+    def _builder_hook(**_kwargs):  # type: ignore[no-untyped-def]
+        return (
+            clar,
+            {
+                "builder_intent": "answer_question",
+                "builder_clarification": True,
+                "builder_action_decision": {"kind": "ask_clarification", "reason": "vague_improvement"},
+            },
+        )
+
+    def _no_llm(*_a: object, **_k: object) -> str:
+        raise AssertionError("complete_chat_turn must not run for builder clarification")
+
+    monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _builder_hook)
+    monkeypatch.setattr("src.api.chat.complete_chat_turn", _no_llm)
+    res = client.post(
+        "/api/chat",
+        json={"messages": [{"role": "user", "content": "clean this up"}]},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["messages"][-1]["content"] == clar.strip()
+    low = body["messages"][-1]["content"].lower()
+    assert "updated" not in low
+    assert "preview refreshed" not in low
+    assert "generated project files" not in low
+    assert "live preview handoff" not in low
+
+
 def test_post_chat_unknown_session() -> None:
     res = client.post(
         "/api/chat",

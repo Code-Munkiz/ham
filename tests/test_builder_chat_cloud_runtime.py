@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -839,6 +841,8 @@ def test_chat_scaffold_tetris_reference_prompt_applies_style_profile(tmp_path: P
 
 def test_builder_hook_followup_edit_updates_existing_project_snapshot(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://127.0.0.1:9")
     store = BuilderSourceStore(store_path=tmp_path / "sources.json")
     set_builder_source_store_for_tests(store)
     first = maybe_chat_scaffold_for_turn(
@@ -850,14 +854,33 @@ def test_builder_hook_followup_edit_updates_existing_project_snapshot(tmp_path: 
     )
     assert first and first.get("scaffolded") is True
     first_snapshot = str(first.get("source_snapshot_id") or "")
-
-    prefix, meta = run_builder_happy_path_hook(
-        workspace_id="ws_a",
-        project_id="pr_a",
-        session_id="sess_iter",
-        last_user_plain="make the board smaller and change the colors",
-        ham_actor=None,
+    snap0 = next(
+        row
+        for row in store.list_source_snapshots(workspace_id="ws_a", project_id="pr_a")
+        if row.id == first_snapshot
     )
+    baseline = dict((snap0.manifest or {}).get("inline_files") or {})
+
+    def fake_turn(_messages: list) -> str:
+        app = str(baseline.get("src/App.tsx") or "")
+        if "ham-board-edit-v1" not in app:
+            app = f"{app}\n// ham-board-edit-v1\n"
+        payload = {
+            "status": "success",
+            "summary": "smaller board",
+            "files": {"src/App.tsx": app},
+            "checks": [],
+        }
+        return json.dumps(payload)
+
+    with patch("src.ham.builder_edit_worker.complete_chat_turn", fake_turn):
+        prefix, meta = run_builder_happy_path_hook(
+            workspace_id="ws_a",
+            project_id="pr_a",
+            session_id="sess_iter",
+            last_user_plain="make the board smaller and change the colors",
+            ham_actor=None,
+        )
     assert prefix is not None
     assert "update the existing project" in prefix.lower()
     assert meta.get("scaffolded") is True
@@ -945,6 +968,8 @@ def test_builder_hook_live_followup_phrases_route_to_update_existing_project(
 
 def test_builder_hook_enhance_prompt_routes_to_update_existing_project(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://127.0.0.1:9")
     store = BuilderSourceStore(store_path=tmp_path / "sources.json")
     set_builder_source_store_for_tests(store)
     first = maybe_chat_scaffold_for_turn(
@@ -956,13 +981,32 @@ def test_builder_hook_enhance_prompt_routes_to_update_existing_project(tmp_path:
     )
     assert first and first.get("scaffolded") is True
 
-    prefix, meta = run_builder_happy_path_hook(
-        workspace_id="ws_a",
-        project_id="pr_a",
-        session_id="sess_enhance",
-        last_user_plain="the tetris game looks boring, enhance it",
-        ham_actor=None,
+    sid1 = str(first.get("source_snapshot_id") or "")
+    snap0 = next(
+        row for row in store.list_source_snapshots(workspace_id="ws_a", project_id="pr_a") if row.id == sid1
     )
+    baseline = dict((snap0.manifest or {}).get("inline_files") or {})
+
+    def fake_turn(_messages: list) -> str:
+        app = str(baseline.get("src/App.tsx") or "")
+        if "ham-enhance-v1" not in app:
+            app = f"{app}\n// ham-enhance-v1\n"
+        payload = {
+            "status": "success",
+            "summary": "enhance visuals",
+            "files": {"src/App.tsx": app},
+            "checks": [],
+        }
+        return json.dumps(payload)
+
+    with patch("src.ham.builder_edit_worker.complete_chat_turn", fake_turn):
+        prefix, meta = run_builder_happy_path_hook(
+            workspace_id="ws_a",
+            project_id="pr_a",
+            session_id="sess_enhance",
+            last_user_plain="the tetris game looks boring, enhance it",
+            ham_actor=None,
+        )
     assert prefix is not None
     assert "update the existing project" in prefix.lower()
     assert meta.get("builder_operation") == "update_existing_project"

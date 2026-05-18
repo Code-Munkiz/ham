@@ -11,6 +11,12 @@ from typing import Any, Callable
 
 from src.ham.builder_chat_cloud_runtime import maybe_enqueue_chat_scaffold_cloud_runtime_job
 from src.ham.builder_chat_scaffold import materialize_inline_files_as_zip_artifact
+from src.ham.builder_mutation_router import (
+    BuilderActionDecision,
+    builder_edit_worker_eligible,
+    classify_builder_project_action,
+    resolve_snapshot_project_template,
+)
 from src.integrations.nous_gateway_client import GatewayCallError, complete_chat_turn
 from src.persistence.builder_source_store import (
     ImportJob,
@@ -24,7 +30,8 @@ BUILDER_CODE_WORKER_META_KEY = "builder_code_worker"
 _MANIFEST_KIND_INLINE = "inline_text_bundle"
 _EDIT_MAX_FILE_BYTES = 60_000
 _EDIT_MAX_TOTAL_TEXT = 200_000
-_ALLOWED_REL_PATHS = frozenset({"src/App.tsx", "src/styles.css"})
+_NEW_WORKER_SRC_PATH = re.compile(r"^src/[\w./-]+\.(?:tsx|ts|jsx|js|css)$")
+_CURRENT_FILES_JSON_BUDGET = 95_000
 _JSON_OBJECT_RE = re.compile(r"\{[\s\S]*\}")
 
 
@@ -66,9 +73,50 @@ def is_operator_plus_minus_blue_purple_border_edit(user_plain: str) -> bool:
     return True
 
 
-def needs_hermes_gateway_edit_path(user_plain: str) -> bool:
-    """True when scaffold/verifier is unlikely to handle the edit; v1 = operator +/- styling."""
-    return is_operator_plus_minus_blue_purple_border_edit(user_plain)
+def needs_hermes_gateway_edit_path(user_plain: str, *, active_template: str | None = "calculator") -> bool:
+    """True when the Hermes edit worker would run for this prompt (tests + diagnostics)."""
+    decision = classify_builder_project_action(
+        user_plain,
+        has_active_snapshot=True,
+        active_template=active_template,
+    )
+    return builder_edit_worker_eligible(
+        user_plain,
+        decision=decision,
+        active_template=active_template,
+    )
+
+
+def _worker_patch_path_allowed(norm: str, baseline: dict[str, str]) -> bool:
+    if norm in baseline:
+        return True
+    return bool(_NEW_WORKER_SRC_PATH.fullmatch(norm))
+
+
+def _worker_current_files_payload(baseline: dict[str, str]) -> dict[str, str]:
+    """Bounded JSON payload of current snapshot text files for the gateway."""
+    budget = _CURRENT_FILES_JSON_BUDGET
+    out: dict[str, str] = {}
+    used = 0
+    for key in ("src/App.tsx", "src/styles.css"):
+        if key not in baseline:
+            continue
+        raw = baseline[key]
+        n = len(raw.encode("utf-8"))
+        if used + n > budget:
+            continue
+        out[key] = raw
+        used += n
+    for key in sorted(baseline.keys()):
+        if key in out:
+            continue
+        raw = baseline[key]
+        n = len(raw.encode("utf-8"))
+        if used + n > budget:
+            continue
+        out[key] = raw
+        used += n
+    return out
 
 
 def resolve_effective_builder_worker_id(project_source: ProjectSource | None) -> str:
@@ -248,7 +296,11 @@ def _forbidden_internal_urls(text: str) -> bool:
     return False
 
 
-def _validate_gateway_patch_payload(data: dict[str, Any]) -> tuple[dict[str, str], str | None]:
+def _validate_gateway_patch_payload(
+    data: dict[str, Any],
+    *,
+    baseline: dict[str, str],
+) -> tuple[dict[str, str], str | None]:
     status = str(data.get("status") or "").strip().lower()
     if status not in {"success", "unsupported", "failed_validation"}:
         return {}, "invalid_status"
@@ -262,7 +314,7 @@ def _validate_gateway_patch_payload(data: dict[str, Any]) -> tuple[dict[str, str
         if not isinstance(k, str) or not isinstance(v, str):
             return {}, "file_entry_invalid"
         norm = k.replace("\\", "/").lstrip("/")
-        if norm not in _ALLOWED_REL_PATHS:
+        if not _worker_patch_path_allowed(norm, baseline):
             return {}, f"path_not_allowed:{norm}"
         if ".." in norm.split("/"):
             return {}, "path_traversal"
@@ -323,6 +375,62 @@ def verify_plus_minus_blue_purple_preserve_calculator(
     return True
 
 
+def verify_general_calculator_edit_preserves_theme(*, before: dict[str, str], after: dict[str, str]) -> bool:
+    """Post-gateway checks for long-tail edits: keep established calculator markers unless explicitly removed."""
+    b_app = (before.get("src/App.tsx") or "").lower()
+    a_app = (after.get("src/App.tsx") or "").lower()
+    b_css = (before.get("src/styles.css") or "").lower()
+    a_css = (after.get("src/styles.css") or "").lower()
+
+    if "calc-digit-multicolor-keys" in b_app and "calc-digit-multicolor-keys" not in a_app:
+        return False
+    if "calc-yellow-digit-border" in b_app and "calc-yellow-digit-border" not in a_app:
+        return False
+    if ".calc-yellow-digit-border" in b_css:
+        if ".calc-yellow-digit-border" not in a_css:
+            return False
+
+    for marker in ("ham-key-op-pm-plus", "ham-key-op-pm-minus"):
+        if marker in b_app and marker not in a_app:
+            return False
+        if marker in b_css and marker not in a_css:
+            return False
+
+    return True
+
+
+def verify_calculator_gateway_patch(
+    *,
+    before: dict[str, str],
+    after: dict[str, str],
+    user_plain: str,
+) -> bool:
+    if is_operator_plus_minus_blue_purple_border_edit(user_plain):
+        return verify_plus_minus_blue_purple_preserve_calculator(before=before, after=after)
+    return verify_general_calculator_edit_preserves_theme(before=before, after=after)
+
+
+def verify_general_project_edit_preserves_baseline(*, before: dict[str, str], after: dict[str, str]) -> bool:
+    """v1: every snapshot file present before the edit must still exist after merge."""
+    for key in before:
+        if key not in after:
+            return False
+    return True
+
+
+def verify_builder_gateway_patch(
+    *,
+    before: dict[str, str],
+    after: dict[str, str],
+    user_plain: str,
+    template: str | None,
+) -> bool:
+    tpl = (template or "").strip().lower()
+    if tpl == "calculator":
+        return verify_calculator_gateway_patch(before=before, after=after, user_plain=user_plain)
+    return verify_general_project_edit_preserves_baseline(before=before, after=after)
+
+
 def _merge_file_maps(baseline: dict[str, str], patch: dict[str, str]) -> dict[str, str]:
     out = dict(baseline)
     out.update(patch)
@@ -347,6 +455,7 @@ def run_builder_edit_worker_maybe(
     preferred_source: ProjectSource,
     active_snapshot: SourceSnapshot,
     complete_turn: Callable[..., str] | None = None,
+    action_decision: BuilderActionDecision | None = None,
 ) -> dict[str, Any] | None:
     """
     Hermes-gateway edit path for eligible long-tail follow-ups.
@@ -356,7 +465,15 @@ def run_builder_edit_worker_maybe(
     """
     if operation != "update_existing_project":
         return None
-    if not needs_hermes_gateway_edit_path(last_user_plain):
+    tpl = resolve_snapshot_project_template(active_snapshot)
+    decision = action_decision or classify_builder_project_action(
+        last_user_plain,
+        has_active_snapshot=True,
+        active_template=tpl,
+    )
+    if decision.kind != "mutate":
+        return None
+    if not builder_edit_worker_eligible(last_user_plain, decision=decision, active_template=tpl):
         return None
 
     worker_id = resolve_effective_builder_worker_id(preferred_source)
@@ -402,26 +519,36 @@ def run_builder_edit_worker_maybe(
         job,
         store,
         "read_files",
-        "Reading current App.tsx and styles.css",
+        "Reading inline snapshot source files",
     )
     job = _append_activity(job, store, "worker_selected", "Selected Hermes gateway as code worker")
 
+    tpl_l = (tpl or "").strip().lower()
+    allowed_list = sorted(baseline.keys())
+    calc_extra = (
+        "For calculator React apps: preserve existing calc-digit-multicolor-keys and calc-yellow-digit-border "
+        "on digit keys unless the user explicitly asks to remove them.\n"
+        "For AC/Clear/Equals or other control keys, change only what the user asked for and keep the rest of the theme.\n"
+        "To style only the + and - operator buttons with blue fill and purple border, add CSS classes "
+        "ham-key-op-pm-plus and ham-key-op-pm-minus to those two buttons only (leave / * unchanged) "
+        "and define matching rules in src/styles.css with visible blue background and purple border."
+        if tpl_l == "calculator"
+        else ""
+    )
     system = (
         "You output exactly one JSON object and nothing else (no markdown, no code fences, no commentary). "
         "Schema keys: status (success|unsupported|failed_validation), summary (string), "
         "files (object mapping relative paths to full UTF-8 file text), checks (string array). "
-        f"Allowed file paths only: {sorted(_ALLOWED_REL_PATHS)}. "
-        "If you cannot safely apply the user request with those files, set status unsupported or failed_validation.\n"
-        "When status is success, files must include every key you modified with complete file contents.\n"
-        "For calculator React apps: preserve existing calc-digit-multicolor-keys and calc-yellow-digit-border "
-        "on digit keys unless the user explicitly asks to remove them.\n"
-        "To style only the + and - operator buttons with blue fill and purple border, add CSS classes "
-        "ham-key-op-pm-plus and ham-key-op-pm-minus to those two buttons only (leave / * unchanged) "
-        "and define matching rules in src/styles.css with visible blue background and purple border."
+        f"Each files key must be either an existing snapshot path from this list: {allowed_list}, "
+        "or a new path under src/ with extension .tsx, .ts, .jsx, .js, or .css only. "
+        "No path traversal, no other paths.\n"
+        "If you cannot safely apply the user request, set status unsupported or failed_validation.\n"
+        "When status is success, files must include complete contents for every path you modified or added.\n"
+        f"{calc_extra}"
     )
     user_payload = {
         "user_request": last_user_plain,
-        "current_files": {k: baseline[k] for k in sorted(baseline.keys()) if k in _ALLOWED_REL_PATHS},
+        "current_files": _worker_current_files_payload(baseline),
     }
     messages = [
         {"role": "system", "content": system},
@@ -487,7 +614,7 @@ def run_builder_edit_worker_maybe(
             "source_snapshot_id": str(active_snapshot.id or "").strip() or None,
         }
 
-    patch_files, err = _validate_gateway_patch_payload(payload)
+    patch_files, err = _validate_gateway_patch_payload(payload, baseline=baseline)
     if err:
         job = store.mark_import_job_failed(
             import_job_id=job.id,
@@ -523,9 +650,21 @@ def run_builder_edit_worker_maybe(
             "source_snapshot_id": str(active_snapshot.id or "").strip() or None,
         }
 
-    job = _append_activity(job, store, "verify", "Verifying + / - operator styling and preserved calculator theme")
+    if tpl_l == "calculator":
+        if is_operator_plus_minus_blue_purple_border_edit(last_user_plain):
+            verify_title = "Verifying + / - operator styling and preserved calculator theme"
+        else:
+            verify_title = "Verifying calculator theme preservation"
+    else:
+        verify_title = "Verifying snapshot files preserved"
+    job = _append_activity(job, store, "verify", verify_title)
 
-    if not verify_plus_minus_blue_purple_preserve_calculator(before=baseline, after=merged):
+    if not verify_builder_gateway_patch(
+        before=baseline,
+        after=merged,
+        user_plain=last_user_plain,
+        template=tpl,
+    ):
         job = store.mark_import_job_failed(
             import_job_id=job.id,
             phase="hermes_edit",
@@ -612,12 +751,19 @@ def run_builder_edit_worker_maybe(
         job = _append_activity(job, store, "preview_refresh", "Preview refresh started")
     job = _append_activity(job, store, "complete", "Builder edit complete")
 
+    if tpl_l == "calculator":
+        if is_operator_plus_minus_blue_purple_border_edit(last_user_plain):
+            check_name = "plus_minus_blue_purple_preserve_calculator"
+        else:
+            check_name = "calculator_theme_preserve"
+    else:
+        check_name = "snapshot_baseline_paths_preserved"
     artifact_verification = {
         "verified": True,
         "skipped": False,
         "status": "ok",
-        "requested_checks": ["plus_minus_blue_purple_preserve_calculator"],
-        "passed_checks": ["plus_minus_blue_purple_preserve_calculator"],
+        "requested_checks": [check_name],
+        "passed_checks": [check_name],
         "failed_checks": [],
         "reason": "",
     }

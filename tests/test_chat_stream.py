@@ -358,6 +358,50 @@ def test_chat_stream_builder_edit_worker_blocked_skips_llm_stream(
     assert persisted["content"] == honest
 
 
+def test_chat_stream_builder_clarification_skips_llm_stream(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clar = "Which part should I edit?\n\n"
+
+    def _builder_hook(**_kwargs):  # type: ignore[no-untyped-def]
+        return (
+            clar,
+            {
+                "builder_intent": "answer_question",
+                "builder_clarification": True,
+                "builder_action_decision": {"kind": "ask_clarification", "reason": "vague_improvement"},
+            },
+        )
+
+    def _no_stream(*_a: object, **_k: object):
+        raise AssertionError("stream_chat_turn must not run for builder clarification")
+
+    monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _builder_hook)
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", _no_stream)
+
+    res = client.post(
+        "/api/chat/stream",
+        json={"messages": [{"role": "user", "content": "make it better"}]},
+    )
+    assert res.status_code == 200, res.text
+    events = _parse_ndjson(res.text)
+    assert [e.get("type") for e in events] == ["session", "delta", "done"]
+    assert events[1].get("type") == "delta"
+    assert events[1].get("text") == clar.strip()
+    done = events[-1]
+    assert done["messages"][-1]["content"] == clar.strip()
+    low = done["messages"][-1]["content"].lower()
+    assert "updated" not in low
+    assert "preview refreshed" not in low
+    assert "generated project files" not in low
+    assert "live preview handoff" not in done["messages"][-1]["content"]
+    assert "I've generated" not in done["messages"][-1]["content"]
+    sid = str(done["session_id"])
+    detail = client.get(f"/api/chat/sessions/{sid}")
+    assert detail.status_code == 200
+    assert detail.json()["messages"][-1]["content"] == clar.strip()
+
+
 def test_chat_stream_local_repo_ops_not_forced_into_mission_route_when_operator_disabled(
     mock_mode: None,
     monkeypatch: pytest.MonkeyPatch,

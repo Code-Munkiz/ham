@@ -42,6 +42,8 @@ def test_classify_builder_chat_intent_buckets(text: str, expected: str) -> None:
         ("what files did you change?", True),
         ("why does it look bad?", True),
         ("explain the code", True),
+        ("what does the AC button do?", True),
+        ("what would you improve about this game?", True),
         ("how would you improve this?", True),
         ("nice make the buttons larger and purple", False),
         ("make the buttons purple", False),

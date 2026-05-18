@@ -9,9 +9,9 @@ from src.ham.clerk_auth import HamActor
 
 from src.ham.builder_chat_intent import (
     classify_builder_chat_intent,
-    is_builder_advice_or_question_turn,
     is_builder_edit_like_followup,
 )
+from src.ham.builder_mutation_router import classify_builder_project_action, resolve_snapshot_project_template
 
 
 def _looks_like_followup_edit(last_user_plain: str) -> bool:
@@ -267,6 +267,19 @@ def run_builder_happy_path_hook(
     effective_plain = directive.cleaned_prompt
     if directive.updated_source is not None:
         source_rows = store.list_project_sources(workspace_id=ws, project_id=pid)
+    has_active_snapshot = any(bool(row.active_snapshot_id) for row in source_rows)
+    active_template: str | None = None
+    if has_active_snapshot:
+        _pref = next(
+            (row for row in source_rows if str(row.kind or "").strip().lower() == "chat_scaffold"),
+            source_rows[0] if source_rows else None,
+        )
+        _aid = str(getattr(_pref, "active_snapshot_id", "") or "").strip() if _pref else ""
+        if _aid:
+            for _sn in store.list_source_snapshots(workspace_id=ws, project_id=pid):
+                if str(_sn.id or "").strip() == _aid:
+                    active_template = resolve_snapshot_project_template(_sn)
+                    break
     if directive.assistant_note and not str(effective_plain or "").strip():
         meta_d: dict[str, Any] = {
             "builder_intent": "build_or_create",
@@ -279,11 +292,24 @@ def run_builder_happy_path_hook(
     directive_prefix = directive.assistant_note or ""
 
     base_intent = classify_builder_chat_intent(effective_plain)
-    meta: dict[str, Any] = {"builder_intent": base_intent}
+    action_decision = classify_builder_project_action(
+        effective_plain,
+        has_active_snapshot=has_active_snapshot,
+        active_template=active_template,
+    )
+    meta: dict[str, Any] = {"builder_intent": base_intent, "builder_action_decision": action_decision.to_safe_dict()}
+    if action_decision.kind == "ask_clarification":
+        clar = action_decision.clarification_prompt or "What should I change?\n\n"
+        return f"{directive_prefix}{clar}", {
+            **meta,
+            "builder_clarification": True,
+            "builder_intent": "answer_question",
+        }
+
+    advice_only = action_decision.kind == "answer_only"
+
     created_by = ham_actor.user_id if ham_actor is not None else ""
 
-    has_active_snapshot = any(bool(row.active_snapshot_id) for row in source_rows)
-    advice_only = is_builder_advice_or_question_turn(effective_plain)
     wants_update = (not advice_only) and (
         is_builder_edit_like_followup(effective_plain)
         or _looks_like_followup_edit(effective_plain)
@@ -328,6 +354,7 @@ def run_builder_happy_path_hook(
                     operation=operation,
                     preferred_source=preferred,
                     active_snapshot=active_snap,
+                    action_decision=action_decision,
                 )
                 if edit_try is not None:
                     meta.update(edit_try)

@@ -33,12 +33,43 @@ def _keypad_context(lowered: str) -> bool:
     )
 
 
+def _targets_specific_control_key_styling(lowered: str) -> bool:
+    """True when the user targets a specific operator/control key, not digit styling broadly."""
+    return bool(
+        re.search(
+            r"(?i)\b("
+            r"ac|all[- ]clear|c\.?a\.?|clear\s+all|ce\b|clear\s+entry|equals?\b|equal\s+button|"
+            r"pause|mute|start|stop|reset|backspace|sign|plus\s+button|minus\s+button|"
+            r"times\s+button|divide\s+button|multiply\s+button|percent\s+button"
+            r")\b",
+            lowered,
+        )
+        or re.search(r"(?i)\+\s+and\s+-\s+|[-+*/]\s+button", lowered)
+    )
+
+
 def _user_requests_purple_digit_style(lowered: str) -> bool:
     if not re.search(r"\b(purple|violet|lavender)\b", lowered):
         return False
     if not _keypad_context(lowered) and not re.search(r"\b(calculator|calc)\b", lowered):
         return False
+    if _targets_specific_control_key_styling(lowered):
+        return False
     return True
+
+
+def _user_requests_light_blue_digits(lowered: str) -> bool:
+    """Digit/calculator palette shift toward blue (scaffold-verified when not purple/multicolor)."""
+    explicit = bool(re.search(r"\b(light\s+blue|light-blue)\b", lowered))
+    generic_blue = bool(re.search(r"\bblue\b", lowered)) and not re.search(
+        r"\b(purple|violet|lavender|multicolor|rainbow)\b",
+        lowered,
+    )
+    if not explicit and not generic_blue:
+        return False
+    if _targets_specific_control_key_styling(lowered):
+        return False
+    return bool(_keypad_context(lowered) or re.search(r"\b(calculator|calc)\b", lowered))
 
 
 def _user_requests_yellow_border(lowered: str) -> bool:
@@ -104,6 +135,25 @@ def _user_requests_equation_flow(lowered: str) -> bool:
     )
 
 
+def list_calculator_scaffold_verification_checks(user_plain: str) -> list[str]:
+    """Requested deterministic verifier checks for calculator scaffolds (same rules as verify_calculator_builder_artifact)."""
+    lowered = _strip_dashboard_tail(user_plain).lower()
+    requested: list[str] = []
+    if _user_requests_purple_digit_style(lowered) and not _user_requests_multicolor(lowered):
+        requested.append("purple_digit_keys")
+    elif _user_requests_light_blue_digits(lowered) and not _user_requests_purple_digit_style(lowered):
+        requested.append("light_blue_digit_keys")
+    if _user_requests_yellow_border(lowered):
+        requested.append("yellow_digit_border")
+    if _user_requests_multicolor(lowered):
+        requested.append("multicolor_digit_keys")
+    if _user_requests_large_buttons(lowered):
+        requested.append("large_buttons")
+    if _user_requests_equation_flow(lowered):
+        requested.append("equation_working_line")
+    return requested
+
+
 def _file_blob(files: dict[str, str]) -> tuple[str, str, str]:
     app_raw = str(files.get("src/App.tsx") or "")
     styles_raw = str(files.get("src/styles.css") or "")
@@ -119,22 +169,9 @@ def verify_calculator_builder_artifact(
     files: dict[str, str],
 ) -> dict[str, Any]:
     """Return a JSON-serializable verification result for calculator scaffolds only."""
-    lowered = _strip_dashboard_tail(user_plain).lower()
-
-    requested: list[str] = []
+    requested = list_calculator_scaffold_verification_checks(user_plain)
     passed: list[str] = []
     failed: list[str] = []
-
-    if _user_requests_purple_digit_style(lowered) and not _user_requests_multicolor(lowered):
-        requested.append("purple_digit_keys")
-    if _user_requests_yellow_border(lowered):
-        requested.append("yellow_digit_border")
-    if _user_requests_multicolor(lowered):
-        requested.append("multicolor_digit_keys")
-    if _user_requests_large_buttons(lowered):
-        requested.append("large_buttons")
-    if _user_requests_equation_flow(lowered):
-        requested.append("equation_working_line")
 
     if not requested:
         return {
@@ -152,6 +189,10 @@ def verify_calculator_builder_artifact(
     if "purple_digit_keys" in requested:
         ok = "calc-digit-purple-keys" in app_l and "calc-digit-light-blue" not in app_l
         (passed if ok else failed).append("purple_digit_keys")
+
+    if "light_blue_digit_keys" in requested:
+        ok = "calc-digit-light-blue" in app_l
+        (passed if ok else failed).append("light_blue_digit_keys")
 
     if "yellow_digit_border" in requested:
         ok = "calc-yellow-digit-border" in app_l and (
@@ -178,6 +219,8 @@ def verify_calculator_builder_artifact(
             reason = "missing yellow border styling on digit keys"
         elif "purple_digit_keys" in failed:
             reason = "missing purple digit styling or light-blue class still present"
+        elif "light_blue_digit_keys" in failed:
+            reason = "missing light-blue digit styling"
         elif "multicolor_digit_keys" in failed:
             reason = "missing multicolor digit styling"
         elif "large_buttons" in failed:

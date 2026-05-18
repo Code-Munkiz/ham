@@ -88,6 +88,9 @@ def is_builder_advice_or_question_turn(user_plain: str) -> bool:
     if not low:
         return False
     advice_patterns = (
+        r"^\s*what\s+does\b",
+        r"^\s*what\s+would\s+you\s+improve\b",
+        r"\bwhat\s+would\s+you\s+improve\b",
         r"^\s*what\s+do\s+you\s+suggest\b",
         r"^\s*what\s+would\s+you\s+suggest\b",
         r"^\s*what\s+are\s+your\s+(thoughts|ideas|suggestions)\b",
@@ -104,6 +107,7 @@ def is_builder_advice_or_question_turn(user_plain: str) -> bool:
         r"^\s*how\s+should\s+we\s+improve\b",
         r"^\s*how\s+could\s+we\s+improve\b",
         r"\bwhat\s+changes?\s+did\s+you\b",
+        r"\bshould\s+i\s+use\b",
     )
     return any(re.search(p, low) for p in advice_patterns)
 
@@ -115,6 +119,18 @@ def is_builder_edit_like_followup(user_plain: str) -> bool:
     low = _norm_chat_1l(user_plain)
     if not low:
         return False
+    if re.search(r"\benhance\b", low):
+        return True
+    if re.search(r"\bas i type\b", low) and re.search(
+        r"\b(number|digit|equation|formula|calculator|calc|show|display|typing)\b",
+        low,
+    ):
+        return True
+    if re.search(r"\bi want\b", low) and re.search(r"\b(calculator|calc)\b", low) and re.search(
+        r"\b(show|display|equation|numbers?|typing)\b",
+        low,
+    ):
+        return True
     if re.search(
         r"\b(make|change|update|adjust|set|turn)\b.{0,72}\b(buttons?|digits?|keys?|keypad|numpad|layout|ui|preview|screen)\b",
         low,

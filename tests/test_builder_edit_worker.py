@@ -13,6 +13,7 @@ from src.ham.builder_edit_worker import (
     needs_hermes_gateway_edit_path,
     resolve_effective_builder_worker_id,
     run_builder_edit_worker_maybe,
+    verify_calculator_gateway_patch,
     verify_plus_minus_blue_purple_preserve_calculator,
 )
 from src.ham.clerk_auth import HamActor
@@ -101,6 +102,20 @@ def test_long_tail_prompt_detected() -> None:
     assert is_operator_plus_minus_blue_purple_border_edit(LONG_TAIL) is True
     assert needs_hermes_gateway_edit_path(LONG_TAIL) is True
     assert is_operator_plus_minus_blue_purple_border_edit("make digits purple") is False
+    assert needs_hermes_gateway_edit_path("make the digit keys purple") is False
+    assert needs_hermes_gateway_edit_path("ham change the AC button to purple") is True
+    assert needs_hermes_gateway_edit_path(
+        "add particle effects when lines clear",
+        active_template="tetris",
+    ) is True
+
+
+def test_verify_general_patch_preserves_theme() -> None:
+    b = _sample_calc_snapshot_files()
+    bad = dict(b)
+    bad["src/App.tsx"] = b["src/App.tsx"].replace("calc-digit-multicolor-keys", "")
+    assert verify_calculator_gateway_patch(before=b, after=bad, user_plain="change the AC button to purple") is False
+    assert verify_calculator_gateway_patch(before=b, after=b, user_plain="change the AC button to purple") is True
 
 
 def test_mock_gateway_blocks_without_snapshot_job(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
@@ -380,7 +395,7 @@ def test_advice_does_not_invoke_worker(monkeypatch: pytest.MonkeyPatch, tmp_path
 
 
 def test_scaffold_edit_not_long_tail(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    """Purple digit follow-up stays on scaffold path (Hermes worker not eligible)."""
+    """Digit purple follow-up stays on scaffold path when verifier lists purple_digit_keys."""
     spy: list[str] = []
 
     def boom(_m: list) -> str:
@@ -482,3 +497,218 @@ def test_hook_invokes_gateway_for_long_tail(monkeypatch: pytest.MonkeyPatch, tmp
     assert meta.get("scaffolded") is True
     assert (meta.get("builder_edit_worker") or {}).get("applied") is True
     assert prefix
+
+
+def test_hook_invokes_gateway_for_ac_purple(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://127.0.0.1:9")
+    baseline = _sample_calc_snapshot_files()
+    invoked: list[bool] = []
+
+    def fake_turn(messages: list) -> str:
+        invoked.append(True)
+        assert "current_files" in messages[-1]["content"]
+        return _valid_gateway_patch_json(baseline)
+
+    store = BuilderSourceStore(store_path=tmp_path / "ac.json")
+    set_builder_source_store_for_tests(store)
+    ws, pid = "wac", "pac"
+    src = ProjectSource(workspace_id=ws, project_id=pid, kind="chat_scaffold", active_snapshot_id="sac")
+    store.upsert_project_source(src)
+    store.upsert_source_snapshot(
+        SourceSnapshot(
+            id="sac",
+            workspace_id=ws,
+            project_id=pid,
+            project_source_id=src.id,
+            metadata={"template": "calculator"},
+            manifest={"kind": "inline_text_bundle", "entries": [], "inline_files": baseline},
+        ),
+    )
+    with patch("src.ham.builder_edit_worker.complete_chat_turn", fake_turn):
+        prefix, meta = run_builder_happy_path_hook(
+            workspace_id=ws,
+            project_id=pid,
+            session_id="sess",
+            last_user_plain="ham change the AC button to purple",
+            ham_actor=_actor(),
+        )
+    assert invoked == [True]
+    assert meta.get("scaffolded") is True
+    assert (meta.get("builder_edit_worker") or {}).get("applied") is True
+    assert prefix
+
+
+def _tetris_min_files() -> dict[str, str]:
+    app = (
+        'import React from "react";\n'
+        "export default function App() {\n"
+        '  return <main className="tetris-root"><p>Tetris</p></main>;\n'
+        "}\n"
+    )
+    css = ".tetris-root { padding: 1rem; }\n"
+    return {"src/App.tsx": app, "src/styles.css": css, "package.json": "{}\n"}
+
+
+def _tetris_patch_json(baseline: dict[str, str]) -> str:
+    app = baseline["src/App.tsx"].replace("<p>Tetris</p>", "<p>Tetris</p>\n{/* ham-particles-v1 */}")
+    payload = {
+        "status": "success",
+        "summary": "particles",
+        "files": {"src/App.tsx": app},
+        "checks": [],
+    }
+    return json.dumps(payload, ensure_ascii=True)
+
+
+def test_tetris_worker_applies_gateway_patch(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://127.0.0.1:9")
+    baseline = _tetris_min_files()
+    store = BuilderSourceStore(store_path=tmp_path / "tr.json")
+    set_builder_source_store_for_tests(store)
+    ws, pid = "wtr", "ptr"
+    src = ProjectSource(workspace_id=ws, project_id=pid, kind="chat_scaffold", active_snapshot_id="str1")
+    store.upsert_project_source(src)
+    store.upsert_source_snapshot(
+        SourceSnapshot(
+            id="str1",
+            workspace_id=ws,
+            project_id=pid,
+            project_source_id=src.id,
+            metadata={"template": "tetris"},
+            manifest={"kind": "inline_text_bundle", "entries": [], "inline_files": baseline},
+        ),
+    )
+    snap = store.list_source_snapshots(workspace_id=ws, project_id=pid)[0]
+
+    out = run_builder_edit_worker_maybe(
+        workspace_id=ws,
+        project_id=pid,
+        session_id="sess",
+        last_user_plain="add particle effects when lines clear",
+        created_by="u1",
+        operation="update_existing_project",
+        preferred_source=src,
+        active_snapshot=snap,
+        complete_turn=lambda _m: _tetris_patch_json(baseline),
+    )
+    assert out and out.get("scaffolded") is True
+    assert str(out.get("source_snapshot_id") or "") != "str1"
+
+
+def test_tetris_worker_rejects_disallowed_path(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://127.0.0.1:9")
+    baseline = _tetris_min_files()
+    store = BuilderSourceStore(store_path=tmp_path / "tr2.json")
+    set_builder_source_store_for_tests(store)
+    ws, pid = "w2", "p2"
+    src = ProjectSource(workspace_id=ws, project_id=pid, kind="chat_scaffold", active_snapshot_id="s2")
+    store.upsert_project_source(src)
+    snap = SourceSnapshot(
+        id="s2",
+        workspace_id=ws,
+        project_id=pid,
+        project_source_id=src.id,
+        metadata={"template": "tetris"},
+        manifest={"kind": "inline_text_bundle", "entries": [], "inline_files": baseline},
+    )
+    store.upsert_source_snapshot(snap)
+
+    def bad_turn(_m: list) -> str:
+        payload = {"status": "success", "summary": "x", "files": {"README.md": "nope"}, "checks": []}
+        return json.dumps(payload)
+
+    out = run_builder_edit_worker_maybe(
+        workspace_id=ws,
+        project_id=pid,
+        session_id="sess",
+        last_user_plain="add particle effects when lines clear",
+        created_by="u1",
+        operation="update_existing_project",
+        preferred_source=src,
+        active_snapshot=snap,
+        complete_turn=bad_turn,
+    )
+    assert out and out.get("builder_edit_worker_blocked")
+
+
+def test_tetris_worker_blocks_no_op_patch(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://127.0.0.1:9")
+    baseline = _tetris_min_files()
+    store = BuilderSourceStore(store_path=tmp_path / "noop.json")
+    set_builder_source_store_for_tests(store)
+    ws, pid = "wn", "pn"
+    src = ProjectSource(workspace_id=ws, project_id=pid, kind="chat_scaffold", active_snapshot_id="sn")
+    store.upsert_project_source(src)
+    snap = SourceSnapshot(
+        id="sn",
+        workspace_id=ws,
+        project_id=pid,
+        project_source_id=src.id,
+        metadata={"template": "tetris"},
+        manifest={"kind": "inline_text_bundle", "entries": [], "inline_files": baseline},
+    )
+    store.upsert_source_snapshot(snap)
+
+    def noop_turn(_m: list) -> str:
+        # Non-empty files object required; identical contents must still fail closed as no_op.
+        return json.dumps(
+            {
+                "status": "success",
+                "summary": "noop",
+                "files": {"src/App.tsx": baseline["src/App.tsx"]},
+                "checks": [],
+            }
+        )
+
+    out = run_builder_edit_worker_maybe(
+        workspace_id=ws,
+        project_id=pid,
+        session_id="sess",
+        last_user_plain="add particle effects when lines clear",
+        created_by="u1",
+        operation="update_existing_project",
+        preferred_source=src,
+        active_snapshot=snap,
+        complete_turn=noop_turn,
+    )
+    assert out and out.get("builder_edit_worker_blocked")
+    assert (out.get("builder_edit_worker") or {}).get("blocked_reason") == "no_op"
+
+
+def test_tetris_advice_does_not_invoke_worker(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    called: list[bool] = []
+
+    def boom(_m: list) -> str:
+        called.append(True)
+        return "{}"
+
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://127.0.0.1:9")
+    store = BuilderSourceStore(store_path=tmp_path / "adv2.json")
+    set_builder_source_store_for_tests(store)
+    ws, pid = "wa2", "pa2"
+    src = ProjectSource(workspace_id=ws, project_id=pid, kind="chat_scaffold", active_snapshot_id="sx2")
+    store.upsert_project_source(src)
+    snap = SourceSnapshot(
+        id="sx2",
+        workspace_id=ws,
+        project_id=pid,
+        project_source_id=src.id,
+        metadata={"template": "tetris"},
+        manifest={"kind": "inline_text_bundle", "entries": [], "inline_files": _tetris_min_files()},
+    )
+    store.upsert_source_snapshot(snap)
+    with patch("src.ham.builder_edit_worker.complete_chat_turn", boom):
+        prefix, meta = run_builder_happy_path_hook(
+            workspace_id=ws,
+            project_id=pid,
+            session_id="sess",
+            last_user_plain="what would you improve about this game?",
+            ham_actor=_actor(),
+        )
+    assert called == []
+    assert prefix is None

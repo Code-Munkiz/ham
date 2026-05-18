@@ -1037,6 +1037,10 @@ def _builder_edit_worker_blocked(builder_meta: dict[str, Any] | None) -> bool:
     return bool((builder_meta or {}).get("builder_edit_worker_blocked"))
 
 
+def _builder_clarification_turn(builder_meta: dict[str, Any] | None) -> bool:
+    return bool((builder_meta or {}).get("builder_clarification"))
+
+
 def _artifact_verification_payload(builder_meta: dict[str, Any] | None) -> dict[str, Any] | None:
     if not builder_meta:
         return None
@@ -1442,6 +1446,20 @@ async def post_chat(
         body=body_eff,
         last_user_plain=last_user_plain,
     )
+    if _builder_clarification_turn(builder_meta):
+        clar_msg = str(builder_prefix or "").strip() or "What should I change?\n\n"
+        store.append_turns(sid, [ChatTurn(role="assistant", content=clar_msg)])
+        return ChatResponse(
+            session_id=sid,
+            messages=store.list_messages(sid),
+            actions=[],
+            active_agent=ChatActiveAgentMeta.model_validate(active_meta) if active_meta else None,
+            operator_result=None,
+            execution_mode=execution_mode,
+            builder=builder_meta,
+            artifact_verification=_artifact_verification_payload(builder_meta),
+            hermes_http_context_budget=None,
+        )
     if (
         body.enable_operator
         and body.messages[-1].role == "user"
@@ -1606,6 +1624,40 @@ def post_chat_stream(
         raise
 
     try:
+        if _builder_clarification_turn(builder_meta):
+            clar_msg = str(builder_prefix or "").strip() or "What should I change?\n\n"
+            store.append_turns(sid, [ChatTurn(role="assistant", content=clar_msg)])
+            msgs = store.list_messages(sid)
+
+            def clarify_only():
+                try:
+                    yield json.dumps({"type": "session", "session_id": sid}) + "\n"
+                    yield json.dumps({"type": "delta", "text": clar_msg}) + "\n"
+                    payload: dict[str, Any] = {
+                        "type": "done",
+                        "session_id": sid,
+                        "messages": msgs,
+                        "actions": [],
+                        "operator_result": None,
+                        "execution_mode": stream_execution_mode,
+                    }
+                    if stream_active_meta:
+                        payload["active_agent"] = stream_active_meta
+                    if builder_meta is not None:
+                        payload["builder"] = builder_meta
+                    _chat_payload_attach_artifact_verification(payload, builder_meta)
+                    yield json.dumps(payload) + "\n"
+                finally:
+                    release_stream_lock()
+
+            return StreamingResponse(
+                clarify_only(),
+                media_type="application/x-ndjson; charset=utf-8",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                },
+            )
         if (
             body.enable_operator
             and body.messages[-1].role == "user"
