@@ -317,6 +317,174 @@ def test_chat_scaffold_calculator_followup_light_blue_and_larger_snapshots(
     _cleanup()
 
 
+def test_chat_scaffold_calculator_purple_overrides_light_blue_with_short_pronoun_prompt(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """'make them purple' must switch off light_blue carry-forward (keypad_context includes pronouns)."""
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    first = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_purple1",
+        session_id="sess_purple1",
+        last_user_plain="build me a clean calculator app",
+        created_by="user_1",
+    )
+    assert first and first.get("scaffolded")
+    second = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_purple1",
+        session_id="sess_purple1",
+        last_user_plain="change the colors of the number pad to light blue and make the buttons larger",
+        created_by="user_1",
+        operation="update_existing_project",
+    )
+    assert second and second.get("scaffolded")
+    third = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_purple1",
+        session_id="sess_purple1",
+        last_user_plain="nice make the buttons larger and make them purple",
+        created_by="user_1",
+        operation="update_existing_project",
+    )
+    assert third and third.get("scaffolded")
+    tid = str(third["source_snapshot_id"])
+    snap3 = next(
+        row
+        for row in store.list_source_snapshots(workspace_id="ws_a", project_id="pr_calc_purple1")
+        if row.id == tid
+    )
+    md3 = snap3.metadata or {}
+    assert md3.get("calculator_digit_area_palette") == "purple"
+    assert md3.get("calculator_purple_digit_keys") is True
+    assert md3.get("calculator_light_blue_digits") is False
+    files = (snap3.manifest or {}).get("inline_files") or {}
+    assert isinstance(files, dict)
+    app = str(files.get("src/App.tsx") or "")
+    styles = str(files.get("src/styles.css") or "").lower()
+    assert "calc-digit-purple-keys" in app
+    assert "calc-digit-light-blue" not in app
+    assert "#d9c4ff" in styles
+    assert "min-height: 3.55rem;" in styles
+    _cleanup()
+
+
+def test_chat_scaffold_calculator_blue_then_explicit_purple_replacement(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    first = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_purple2",
+        session_id="sess_purple2",
+        last_user_plain="build me a clean calculator app",
+        created_by="user_1",
+    )
+    assert first and first.get("scaffolded")
+    second = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_purple2",
+        session_id="sess_purple2",
+        last_user_plain="make the buttons larger and blue",
+        created_by="user_1",
+        operation="update_existing_project",
+    )
+    assert second and second.get("scaffolded")
+    third = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_purple2",
+        session_id="sess_purple2",
+        last_user_plain=(
+            "ham the buttons are still blue bro make them purple instead of blue"
+        ),
+        created_by="user_1",
+        operation="update_existing_project",
+    )
+    assert third and third.get("scaffolded")
+    tid = str(third["source_snapshot_id"])
+    snap3 = next(
+        row
+        for row in store.list_source_snapshots(workspace_id="ws_a", project_id="pr_calc_purple2")
+        if row.id == tid
+    )
+    md3 = snap3.metadata or {}
+    assert md3.get("calculator_digit_area_palette") == "purple"
+    files = (snap3.manifest or {}).get("inline_files") or {}
+    app = str(files.get("src/App.tsx") or "")
+    styles = str(files.get("src/styles.css") or "").lower()
+    assert "calc-digit-purple-keys" in app
+    assert "calc-digit-light-blue" not in app
+    assert "#b8e8ff" not in styles
+    assert "min-height: 3.55rem;" in styles
+    _cleanup()
+
+
+def test_chat_scaffold_calculator_purple_after_flow_preserves_working_line_and_large_buttons(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    first = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_purple3",
+        session_id="sess_purple3",
+        last_user_plain="build me a clean calculator app",
+        created_by="user_1",
+    )
+    assert first and first.get("scaffolded")
+    second = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_purple3",
+        session_id="sess_purple3",
+        last_user_plain="make the buttons larger and blue",
+        created_by="user_1",
+        operation="update_existing_project",
+    )
+    assert second and second.get("scaffolded")
+    third = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_purple3",
+        session_id="sess_purple3",
+        last_user_plain=(
+            "make it so I can input numbers like 8*7=56 and see the flow as I type"
+        ),
+        created_by="user_1",
+        operation="update_existing_project",
+    )
+    assert third and third.get("scaffolded")
+    fourth = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_purple3",
+        session_id="sess_purple3",
+        last_user_plain="make the buttons purple instead of blue",
+        created_by="user_1",
+        operation="update_existing_project",
+    )
+    assert fourth and fourth.get("scaffolded")
+    fid = str(fourth["source_snapshot_id"])
+    snap4 = next(
+        row
+        for row in store.list_source_snapshots(workspace_id="ws_a", project_id="pr_calc_purple3")
+        if row.id == fid
+    )
+    md4 = snap4.metadata or {}
+    assert md4.get("calculator_digit_area_palette") == "purple"
+    assert md4.get("calculator_live_equation_working_line") is True
+    assert md4.get("calculator_large_buttons") is True
+    files = (snap4.manifest or {}).get("inline_files") or {}
+    app = str(files.get("src/App.tsx") or "")
+    styles = str(files.get("src/styles.css") or "").lower()
+    assert "equation-working" in app
+    assert "calc-digit-purple-keys" in app
+    assert "calc-digit-light-blue" not in app
+    assert "#b8e8ff" not in styles
+    assert "min-height: 3.55rem;" in styles
+    _cleanup()
+
+
 def test_chat_scaffold_tetris_reference_prompt_applies_style_profile(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
     store = BuilderSourceStore(store_path=tmp_path / "sources.json")

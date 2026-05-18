@@ -78,9 +78,10 @@ def _derive_calculator_digit_area_palette(lowered: str, pcm: dict[str, Any]) -> 
     prior = _prior_calculator_digit_area_palette(pcm)
     purple_kw = bool(re.search(r"\b(purple|violet|lavender)\b", lowered))
 
+    # Include pronouns — "make *them* purple" targets digit keys without repeating "buttons".
     keypad_context = bool(
         re.search(
-            r"\b(calculator|keypad|numpad|digit\s+buttons|number\s+buttons|digits|keys|buttons)\b",
+            r"\b(calculator|keypad|numpad|digit\s+buttons|number\s+buttons|digits|keys|buttons|them|those|these)\b",
             lowered,
         )
     )
@@ -147,7 +148,8 @@ def _derive_calculator_digit_area_palette(lowered: str, pcm: dict[str, Any]) -> 
 
     if purple_explicit_replace or purple_implicit_carry or purple_first_paint:
         return "purple"
-    if new_blue_paint:
+    # Never re-apply generic blue digit paint on the same turn the user asked for purple.
+    if new_blue_paint and not purple_kw:
         return "light_blue"
     return prior
 
