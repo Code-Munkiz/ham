@@ -492,3 +492,17 @@ Out of scope (deferred):
 - Deleting GitHub's default labels — kept for compatibility with external
   tools that expect them.
 - Wiring labels into branch protection or required-status checks.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on Code-Munkiz/ham via the `gh` CLI. See [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md).
+
+### Triage labels
+
+Five canonical triage roles mapped onto this repo's prefixed `status:*` taxonomy (see also the broader `## Issue label taxonomy` section above). Three new labels — `status:needs-info`, `status:ready-for-agent`, `status:ready-for-human` — must be added to `scripts/sync_github_labels.sh` before the `triage` skill is used. See [docs/agents/triage-labels.md](docs/agents/triage-labels.md).
+
+### Domain docs
+
+Single-context layout: `CONTEXT.md` and `docs/adr/` at the repo root. `CONTEXT.md` is created lazily by `/grill-with-docs` as terms get resolved; ADRs are added for hard-to-reverse decisions. See [docs/agents/domain.md](docs/agents/domain.md).
