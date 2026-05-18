@@ -137,8 +137,13 @@ def test_post_chat_build_intent_bypasses_operator_fallback(
     assert res.status_code == 200, res.text
     body = res.json()
     assert body.get("operator_result") is None
-    assert body.get("builder", {}).get("builder_intent") == "build_or_create"
-    assert "prepare the Workbench" in body["messages"][-1]["content"]
+    builder = body.get("builder") or {}
+    assert builder.get("builder_intent") == "build_or_create"
+    assert builder.get("acknowledgement_template") == (
+        "I'll create the initial project source and prepare the Workbench.\n\n"
+    )
+    visible = body["messages"][-1]["content"]
+    assert "prepare the Workbench" not in visible
 
 
 def test_post_chat_artifact_verification_failure_skips_llm_and_is_final_message(

@@ -94,7 +94,7 @@ class TestBuilderAckPrefix:
 
 class TestSystemPromptBoundary:
     def test_default_prompt_prohibits_managed_mission_for_builder(self) -> None:
-        assert "Do NOT redirect builder prompts to Coding Plan" in _DEFAULT_CHAT_SYSTEM_PROMPT
+        assert "Do NOT redirect to Coding Plan" in _BUILDER_TURN_SYSTEM_INJECTION
 
     def test_default_prompt_still_has_coding_plan_for_repo_mutation(self) -> None:
         assert "Plan with coding agents" in _DEFAULT_CHAT_SYSTEM_PROMPT
@@ -102,8 +102,8 @@ class TestSystemPromptBoundary:
         assert "Managed workspace build approval panel" in _DEFAULT_CHAT_SYSTEM_PROMPT
 
     def test_default_prompt_forbids_managed_mission_language_for_builder(self) -> None:
-        assert 'Do NOT say "Launch a managed mission"' in _DEFAULT_CHAT_SYSTEM_PROMPT
-        assert '"Let me launch a Cloud Agent"' in _DEFAULT_CHAT_SYSTEM_PROMPT
+        assert 'Do NOT say "Launch a managed mission."' in _BUILDER_TURN_SYSTEM_INJECTION
+        assert '"Let me launch a Cloud Agent."' in _BUILDER_TURN_SYSTEM_INJECTION
 
 
 # ---------------------------------------------------------------------------
@@ -212,3 +212,193 @@ class TestPostChatBuilderPromptNoManagedMission:
         assert res.status_code == 200
         data = res.json()
         assert data.get("builder", {}).get("builder_intent") != "build_or_create"
+
+
+# ---------------------------------------------------------------------------
+# Builder acknowledgement dedupe (VAL-BE-ACK-001 / 002 / 003 / 004 / 005 / 007)
+# ---------------------------------------------------------------------------
+
+
+_BUILDER_TEMPLATE_PREFIX = "I'll create the initial project source and prepare the Workbench.\n\n"
+
+
+class TestBuilderAckDedupePostChat:
+    """REST /api/chat build_or_create must NOT prepend templated builder_prefix to visible text."""
+
+    def test_post_chat_build_or_create_no_templated_prefix_in_visible_text(
+        self, mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def _hook(**_kwargs):  # type: ignore[no-untyped-def]
+            return (_BUILDER_TEMPLATE_PREFIX, {"builder_intent": "build_or_create"})
+
+        monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _hook)
+
+        def _fake_complete(messages, **_kwargs):  # type: ignore[no-untyped-def]
+            return "Spinning up your browser game now."
+
+        monkeypatch.setattr("src.api.chat.complete_chat_turn", _fake_complete)
+
+        res = client.post(
+            "/api/chat",
+            json={"messages": [{"role": "user", "content": "build me a game like Tetris"}]},
+        )
+        assert res.status_code == 200, res.text
+        data = res.json()
+        visible = data["messages"][-1]["content"]
+        assert _BUILDER_TEMPLATE_PREFIX not in visible
+        assert visible == "Spinning up your browser game now."
+
+        builder = data.get("builder") or {}
+        assert builder.get("builder_intent") == "build_or_create"
+        assert builder.get("acknowledgement_template") == _BUILDER_TEMPLATE_PREFIX
+
+    def test_post_chat_build_or_create_template_not_duplicated_when_model_repeats(
+        self, mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def _hook(**_kwargs):  # type: ignore[no-untyped-def]
+            return (_BUILDER_TEMPLATE_PREFIX, {"builder_intent": "build_or_create"})
+
+        monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _hook)
+        monkeypatch.setattr(
+            "src.api.chat.complete_chat_turn",
+            lambda _m, **_k: _BUILDER_TEMPLATE_PREFIX + "Done.",
+        )
+
+        res = client.post(
+            "/api/chat",
+            json={"messages": [{"role": "user", "content": "build me a Tetris clone"}]},
+        )
+        assert res.status_code == 200, res.text
+        visible = res.json()["messages"][-1]["content"]
+        assert visible.count(_BUILDER_TEMPLATE_PREFIX) == 1
+
+
+class TestBuilderAckDedupeStream:
+    """Stream /api/chat/stream build_or_create must NOT emit templated builder_prefix as delta."""
+
+    def test_stream_build_or_create_no_templated_prefix_delta(
+        self, mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def _hook(**_kwargs):  # type: ignore[no-untyped-def]
+            return (_BUILDER_TEMPLATE_PREFIX, {"builder_intent": "build_or_create"})
+
+        monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _hook)
+
+        def _fake_stream(messages, **_kwargs):  # type: ignore[no-untyped-def]
+            yield "Spinning up "
+            yield "your browser game now."
+
+        monkeypatch.setattr("src.api.chat.stream_chat_turn", _fake_stream)
+
+        res = client.post(
+            "/api/chat/stream",
+            json={"messages": [{"role": "user", "content": "build me a game like Tetris"}]},
+        )
+        assert res.status_code == 200, res.text
+        events = _parse_ndjson(res.text)
+        deltas = [e.get("text", "") for e in events if e.get("type") == "delta"]
+        assert all(_BUILDER_TEMPLATE_PREFIX not in d for d in deltas)
+
+        done = [e for e in events if e.get("type") == "done"][0]
+        visible = done["messages"][-1]["content"]
+        assert _BUILDER_TEMPLATE_PREFIX not in visible
+        assert visible == "Spinning up your browser game now."
+
+        builder = done.get("builder") or {}
+        assert builder.get("builder_intent") == "build_or_create"
+        assert builder.get("acknowledgement_template") == _BUILDER_TEMPLATE_PREFIX
+
+
+class TestBuilderAckDedupePreservesOtherPaths:
+    """Clarification, verification-failure, early-handoff paths are unchanged."""
+
+    def test_clarification_path_still_visible(
+        self, mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        clar = "Which part should I edit?\n\n"
+
+        def _hook(**_kwargs):  # type: ignore[no-untyped-def]
+            return (
+                clar,
+                {
+                    "builder_intent": "answer_question",
+                    "builder_clarification": True,
+                },
+            )
+
+        monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _hook)
+
+        def _no_stream(*_a: object, **_k: object):
+            raise AssertionError("LLM stream must not run for clarification")
+
+        monkeypatch.setattr("src.api.chat.stream_chat_turn", _no_stream)
+
+        res = client.post(
+            "/api/chat/stream",
+            json={"messages": [{"role": "user", "content": "make it better"}]},
+        )
+        assert res.status_code == 200, res.text
+        events = _parse_ndjson(res.text)
+        done = events[-1]
+        assert done["messages"][-1]["content"] == clar.strip()
+
+    def test_verification_failure_path_still_visible(
+        self, mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        honest = (
+            "I tried to apply that edit, but the generated files did not include what you "
+            "asked for yet (missing yellow border).\n\n"
+        )
+
+        def _hook(**_kwargs):  # type: ignore[no-untyped-def]
+            return (
+                honest,
+                {
+                    "builder_intent": "build_or_create",
+                    "artifact_verification_failed": True,
+                    "artifact_verification": {"verified": False, "reason": "missing yellow border"},
+                },
+            )
+
+        monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _hook)
+
+        def _no_stream(*_a: object, **_k: object):
+            raise AssertionError("LLM stream must not run for verification failure")
+
+        monkeypatch.setattr("src.api.chat.stream_chat_turn", _no_stream)
+
+        res = client.post(
+            "/api/chat/stream",
+            json={"messages": [{"role": "user", "content": "yellow borders"}]},
+        )
+        assert res.status_code == 200, res.text
+        events = _parse_ndjson(res.text)
+        done = events[-1]
+        assert done["messages"][-1]["content"] == honest
+
+    def test_early_handoff_path_still_visible(
+        self, mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def _hook(**_kwargs):  # type: ignore[no-untyped-def]
+            return (
+                _BUILDER_TEMPLATE_PREFIX,
+                {"builder_intent": "build_or_create", "scaffolded": True},
+            )
+
+        monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _hook)
+
+        def _no_stream(*_a: object, **_k: object):
+            raise AssertionError("LLM stream must not run for early-handoff")
+
+        monkeypatch.setattr("src.api.chat.stream_chat_turn", _no_stream)
+
+        res = client.post(
+            "/api/chat/stream",
+            json={"messages": [{"role": "user", "content": "build me a Tetris game"}]},
+        )
+        assert res.status_code == 200, res.text
+        events = _parse_ndjson(res.text)
+        done = events[-1]
+        visible = done["messages"][-1]["content"]
+        assert "prepare the Workbench" in visible
+        assert "started the live preview handoff" in visible

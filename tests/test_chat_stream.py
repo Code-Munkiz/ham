@@ -447,7 +447,7 @@ def test_chat_stream_gateway_failure_done_with_safe_assistant_and_signal(
     assert msgs[-1]["role"] == "assistant"
     body = msgs[-1]["content"]
     assert "secret-upstream" not in body.lower()
-    assert "rejected" in body.lower() or "gateway" in body.lower()
+    assert "try again" in body.lower() or "settings" in body.lower()
 
 
 def test_chat_stream_openrouter_model_rejected_done_with_safe_assistant_and_signal(

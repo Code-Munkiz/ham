@@ -99,3 +99,114 @@ def test_chat_system_prompt_forbids_delegate_task_for_coding_execution() -> None
     # Preferred copy for the managed-workspace build flow.
     assert "managed workspace build" in base
     assert "Review the plan below and approve when ready" in base
+
+
+F_PROVIDER_IDS = (
+    "opencode_cli",
+    "claude_code",
+    "factory_droid_audit",
+    "factory_droid_build",
+    "cursor_cloud",
+)
+
+F_ENV_NAMES = (
+    "HERMES_GATEWAY_API_KEY",
+    "HERMES_GATEWAY_BASE_URL",
+    "HERMES_GATEWAY_MODEL",
+    "HERMES_GATEWAY_MODE",
+    "HAM_DROID_EXEC_TOKEN",
+    "HAM_CURSOR_AGENT_LAUNCH_TOKEN",
+    "HAM_SETTINGS_WRITE_TOKEN",
+    "HAM_RUN_LAUNCH_TOKEN",
+    "OPENROUTER_API_KEY",
+    "ANTHROPIC_API_KEY",
+)
+
+F_OPERATOR_VOCAB = (
+    "proposal_digest",
+    "base_revision",
+    ".ham/runs",
+    "operator.phase",
+)
+
+
+def test_val_prompt_001_length_cap() -> None:
+    """VAL-PROMPT-001: default prompt is ≤ 1800 chars."""
+    assert len(_DEFAULT_CHAT_SYSTEM_PROMPT) <= 1800
+
+
+def test_val_prompt_002_ham_identity() -> None:
+    """VAL-PROMPT-002: Ham identity present (case-sensitive)."""
+    assert "Ham" in _DEFAULT_CHAT_SYSTEM_PROMPT
+    assert "You are **Ham**" in _DEFAULT_CHAT_SYSTEM_PROMPT
+
+
+def test_val_prompt_003_no_fabricated_execution_guardrail() -> None:
+    """VAL-PROMPT-003: no-fabricated-execution guardrail preserved."""
+    base = _DEFAULT_CHAT_SYSTEM_PROMPT
+    assert "No fabricated execution" in base
+    assert "fabricat" in base
+    assert "invent" in base
+    for negated in ("NO shell", "NO git", "NO build", "NO push", "NO PR", "NO filesystem"):
+        assert negated in base, f"missing negation: {negated!r}"
+
+
+def test_val_prompt_004_completion_claim_guardrail() -> None:
+    """VAL-PROMPT-004: completion-claim guardrail preserved."""
+    base = _DEFAULT_CHAT_SYSTEM_PROMPT
+    assert "Completion-claim rule" in base
+    for word in ("done", "built", "shipped", "committed", "pushed"):
+        assert word in base, f"missing completion word: {word!r}"
+    for artifact in ("ham_run_id", "snapshot_id", "pr_url", "control_plane_run_id"):
+        assert artifact in base, f"missing artifact token: {artifact!r}"
+
+
+def test_val_prompt_005_approval_before_mutation_guardrail() -> None:
+    """VAL-PROMPT-005: approval-before-mutation surfaces the approval card flow."""
+    base = _DEFAULT_CHAT_SYSTEM_PROMPT
+    assert "Managed workspace build approval panel" in base
+    assert "Review the plan below and approve when ready" in base
+
+
+def test_val_prompt_006_route_coding_execution_guardrail() -> None:
+    """VAL-PROMPT-006: route coding execution through the real plan/approval flow."""
+    base = _DEFAULT_CHAT_SYSTEM_PROMPT
+    assert "Coding Plan card" in base
+    assert "Plan with coding agents" in base
+
+
+@pytest.mark.parametrize("token", F_PROVIDER_IDS)
+def test_val_prompt_007_no_provider_ids(token: str) -> None:
+    """VAL-PROMPT-007: no raw provider IDs leaked in the default prompt."""
+    assert token not in _DEFAULT_CHAT_SYSTEM_PROMPT
+
+
+@pytest.mark.parametrize("token", F_ENV_NAMES)
+def test_val_prompt_008_no_env_names(token: str) -> None:
+    """VAL-PROMPT-008: no env var names leaked in the default prompt."""
+    assert token not in _DEFAULT_CHAT_SYSTEM_PROMPT
+
+
+@pytest.mark.parametrize("token", F_OPERATOR_VOCAB)
+def test_val_prompt_009_no_operator_vocab(token: str) -> None:
+    """VAL-PROMPT-009: no operator internal vocab leaked in the default prompt."""
+    assert token not in _DEFAULT_CHAT_SYSTEM_PROMPT
+
+
+def test_val_prompt_010_hermes_not_product_brand() -> None:
+    """VAL-PROMPT-010: 'hermes' appears at most once and never as a product brand."""
+    base = _DEFAULT_CHAT_SYSTEM_PROMPT
+    assert base.lower().count("hermes") <= 1
+    for brand in ("Hermes Workspace", "Hermes Agent", "Hermes Hub"):
+        assert brand not in base, f"Hermes used as product brand: {brand!r}"
+
+
+def test_chat_system_prompt_default_returns_string_starting_with_persona() -> None:
+    """``_chat_system_prompt`` with default include_* flags returns a string starting with the new persona."""
+    out = _chat_system_prompt(
+        include_operator_skills=False,
+        include_operator_subagents=False,
+        enable_ui_actions=False,
+    )
+    assert isinstance(out, str)
+    assert out.startswith("You are **Ham**")

@@ -9,7 +9,25 @@ from typing import Any
 import httpx
 import pytest
 
-from src.integrations.nous_gateway_client import GatewayCallError, complete_chat_turn
+from src.integrations.nous_gateway_client import (
+    GatewayCallError,
+    complete_chat_turn,
+    format_gateway_error_user_message,
+)
+
+
+F_ENV_NAMES = (
+    "HERMES_GATEWAY_API_KEY",
+    "HERMES_GATEWAY_BASE_URL",
+    "HERMES_GATEWAY_MODEL",
+    "HERMES_GATEWAY_MODE",
+    "HAM_DROID_EXEC_TOKEN",
+    "HAM_CURSOR_AGENT_LAUNCH_TOKEN",
+    "HAM_SETTINGS_WRITE_TOKEN",
+    "HAM_RUN_LAUNCH_TOKEN",
+    "OPENROUTER_API_KEY",
+    "ANTHROPIC_API_KEY",
+)
 
 
 def _sse_line(content: str) -> str:
@@ -339,3 +357,87 @@ def test_http_context_budget_sent_upstream_excludes_boilerplate_assistant(
     upstream_roles = [m.get("role") for m in snaps[0]]
     assert upstream_roles.count("assistant") == 0
     assert json.dumps(snaps[0]).count("model gateway rejected") == 0
+
+
+_USER_MESSAGE_CODES: tuple[tuple[str, int | None], ...] = (
+    ("UPSTREAM_TIMEOUT", None),
+    ("UPSTREAM_UNAVAILABLE", None),
+    ("STREAM_STALLED", None),
+    ("STREAM_MAX_DURATION", None),
+    ("UPSTREAM_REJECTED", 401),
+    ("UPSTREAM_REJECTED", 403),
+    ("UPSTREAM_REJECTED", 404),
+    ("UPSTREAM_REJECTED", 413),
+    ("UPSTREAM_REJECTED", 422),
+    ("UPSTREAM_REJECTED", 429),
+    ("UPSTREAM_REJECTED", 500),
+    ("UPSTREAM_REJECTED", 502),
+    ("UPSTREAM_REJECTED", None),
+    ("OPENROUTER_MODEL_REJECTED", None),
+    ("CONFIG_ERROR", None),
+    ("UNKNOWN_CODE_FOR_DEFAULT", None),
+)
+
+
+@pytest.mark.parametrize("code,http_status", _USER_MESSAGE_CODES)
+def test_format_gateway_error_user_message_omits_env_names(
+    code: str,
+    http_status: int | None,
+) -> None:
+    exc = GatewayCallError(code, "raw upstream detail kept in logs", http_status=http_status)
+    text = format_gateway_error_user_message(exc)
+    assert isinstance(text, str) and text.strip()
+    for name in F_ENV_NAMES:
+        assert name not in text, f"{code}/{http_status} leaked {name}: {text!r}"
+
+
+@pytest.mark.parametrize(
+    "code,http_status",
+    [
+        ("UPSTREAM_TIMEOUT", None),
+        ("UPSTREAM_UNAVAILABLE", None),
+        ("UPSTREAM_REJECTED", 429),
+        ("UPSTREAM_REJECTED", 500),
+    ],
+)
+def test_format_gateway_error_transient_codes_offer_retry_or_settings(
+    code: str,
+    http_status: int | None,
+) -> None:
+    text = format_gateway_error_user_message(
+        GatewayCallError(code, "detail", http_status=http_status),
+    )
+    lowered = text.lower()
+    assert ("try again" in lowered) or ("settings" in lowered), (
+        f"{code}/{http_status} did not offer retry or Settings: {text!r}"
+    )
+
+
+def test_format_gateway_error_429_is_natural() -> None:
+    text = format_gateway_error_user_message(
+        GatewayCallError("UPSTREAM_REJECTED", "Gateway HTTP 429", http_status=429),
+    )
+    lowered = text.lower()
+    assert ("too many" in lowered) or ("rate" in lowered)
+    assert "try again" in lowered or "moment" in lowered
+
+
+def test_format_gateway_error_timeout_is_natural() -> None:
+    text = format_gateway_error_user_message(GatewayCallError("UPSTREAM_TIMEOUT", "stalled"))
+    lowered = text.lower()
+    assert ("too long" in lowered) or ("taking too long" in lowered)
+
+
+def test_gateway_call_error_structure_unchanged() -> None:
+    exc = GatewayCallError("UPSTREAM_TIMEOUT", "raw upstream detail", http_status=504)
+    assert exc.code == "UPSTREAM_TIMEOUT"
+    assert exc.message == "raw upstream detail"
+    assert exc.http_status == 504
+    assert str(exc) == "raw upstream detail"
+
+
+def test_format_gateway_error_invalid_request_passes_safe_message() -> None:
+    text = format_gateway_error_user_message(GatewayCallError("INVALID_REQUEST", "messages must not be empty"))
+    assert text == "messages must not be empty"
+    for name in F_ENV_NAMES:
+        assert name not in text

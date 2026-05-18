@@ -123,6 +123,10 @@ import {
   readCodingPlanDraft,
 } from "./codingPlanDraftSessionStorage";
 import {
+  buildWorkspaceChatPostureFields,
+  type WorkbenchModePosture,
+} from "./workspaceChatPosture";
+import {
   readWorkspaceLastChatSessionId,
   writeWorkspaceLastChatSessionId,
 } from "./workspaceChatSessionStorage";
@@ -633,6 +637,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [executionMode, setExecutionMode] = React.useState<HamChatExecutionMode | null>(null);
   const [projectId, setProjectId] = React.useState<string | null>(null);
   const [workbenchBounce, setWorkbenchBounce] = React.useState(0);
+  const [explicitWorkbenchMode] = React.useState<WorkbenchModePosture | null>(null);
+  const [explicitWorker] = React.useState<string | null>(null);
   const [codingPlanPreview, setCodingPlanPreview] =
     React.useState<CodingConductorPreviewPayload | null>(null);
   const [codingPlanPrompt, setCodingPlanPrompt] = React.useState<string>("");
@@ -2557,8 +2563,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             ],
             ...(chatModelIdForApi ? { model_id: chatModelIdForApi } : {}),
             ...(effectiveProjectId ? { project_id: effectiveProjectId } : {}),
-            workbench_mode: "agent",
-            worker: "builder",
+            ...buildWorkspaceChatPostureFields({
+              workbenchMode: explicitWorkbenchMode,
+              worker: explicitWorker,
+            }),
             max_mode: false,
             execution_mode_preference: execPrefEffective,
             execution_environment: executionEnvironment,

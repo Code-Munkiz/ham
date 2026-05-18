@@ -58,70 +58,80 @@ def _fallback_eligible(exc: GatewayCallError) -> bool:
 
 
 def format_gateway_error_user_message(exc: GatewayCallError) -> str:
-    """Safe, user-visible explanation (no raw upstream text)."""
+    """Safe, user-visible explanation (no raw upstream text; HAM-natural voice, no env names)."""
     if exc.code == "UPSTREAM_TIMEOUT":
         return (
-            "The model gateway stopped responding in time. "
-            "Try again shortly, or check gateway health if this persists."
+            "The model is taking too long to respond. "
+            "Try again in a moment, or switch models in Settings."
         )
     if exc.code == "UPSTREAM_UNAVAILABLE":
         return (
-            "Chat could not reach the model gateway (connection error). "
-            "Check network and gateway availability, then retry."
+            "I'm having trouble reaching the model right now. "
+            "Try again in a moment, or switch models in Settings."
         )
     if exc.code == "STREAM_STALLED":
         return (
-            "The assistant stream stalled (no new data from the gateway for too long). "
-            "Try again or switch models if this keeps happening."
+            "The reply stalled mid-stream. "
+            "Try again, or switch models in Settings if it keeps happening."
         )
     if exc.code == "STREAM_MAX_DURATION":
         return (
-            "This reply took too long overall and was stopped. "
-            "Try a shorter question or retry."
+            "This reply took too long and was stopped. "
+            "Try a shorter question, or try again."
         )
     if exc.code == "UPSTREAM_REJECTED":
         st = getattr(exc, "http_status", None)
         if st in {401, 403}:
             return (
-                f"The model gateway refused authorization (HTTP {st}). "
-                "An operator should verify Hermes gateway credentials (HERMES_GATEWAY_API_KEY) and that "
-                "HERMES_GATEWAY_BASE_URL reaches the intended Hermes instance."
+                "I can't reach the model right now (authorization issue). "
+                "Try again later, or switch models in Settings."
             )
         if st == 413:
             return (
-                "Your chat context is too large for the model gateway. "
-                "Older thread messages were trimmed for the next attempts; "
+                "This chat thread is too large for the model. "
+                "Older messages were trimmed for the next attempts; "
                 "starting a new chat clears the buildup if this persists."
             )
         if st == 404:
             return (
-                "The model gateway endpoint was not found (HTTP 404). "
-                "Verify HERMES_GATEWAY_BASE_URL and that Hermes exposes OpenAI-compatible /v1/chat/completions."
+                "I can't find the selected model right now. "
+                "Try again, or switch models in Settings."
             )
         if st == 422:
             return (
-                "The model gateway rejected the request or model id (HTTP 422). "
-                "Verify HERMES_GATEWAY_MODEL matches a model your Hermes server accepts."
+                "The selected model didn't accept this request. "
+                "Switch models in Settings and try again."
             )
         if st == 429:
             return (
-                "The model gateway rate-limited this request (HTTP 429). Try again in a moment."
+                "Too many requests for the model right now. "
+                "Give it a moment and try again."
             )
         if st is not None and st >= 500:
             return (
-                "The model gateway returned a server error. Try again shortly or contact support if it continues."
+                "The model returned an error. "
+                "Try again shortly, or switch models in Settings."
             )
-        return "The model gateway rejected the request. Try again or contact support if it continues."
+        return (
+            "I'm having trouble reaching the model right now. "
+            "Try again, or switch models in Settings."
+        )
     if exc.code == "OPENROUTER_MODEL_REJECTED":
         return (
-            "OpenRouter rejected the selected model. Switch back to Hermes Agent / Default "
-            "or choose a recommended model."
+            "That model isn't available right now. "
+            "Switch models in Settings and try again."
         )
     if exc.code == "INVALID_REQUEST":
         return exc.message
     if exc.code == "CONFIG_ERROR":
-        return "Chat is misconfigured on the server. An administrator needs to fix gateway settings."
-    return f"The assistant could not complete this turn ({exc.code})."
+        return (
+            "Chat isn't configured correctly on this server. "
+            "An administrator needs to fix it before I can reply."
+        )
+    return (
+        "I'm having trouble completing this reply right now. "
+        "Try again, or switch models in Settings."
+    )
 
 
 def _stream_stall_sec() -> float:
