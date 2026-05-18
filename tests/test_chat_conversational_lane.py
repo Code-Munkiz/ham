@@ -252,6 +252,80 @@ def test_val_cross_005_builder_rest_env_mix_preserves_ack_dedupe(
     assert assistant_visible.count(builder_prefix) == 0
 
 
+def test_rest_build_or_create_does_not_receive_conversational_model_override(
+    or_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """REST build_or_create lane MUST NOT pass HAM_CHAT_CONVERSATIONAL_MODEL as openrouter_model_override.
+
+    Scrutiny gap: under HERMES_GATEWAY_MODE=openrouter with HAM_CHAT_CONVERSATIONAL_MODEL set, a
+    builder build_or_create turn previously inherited the conversational sentinel as model
+    override. The lane-classification guard in _resolve_chat_openrouter_route gates the env-derived
+    default to normal conversational/direct-answer turns only.
+    """
+    monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", CONV_SLUG)
+    builder_prefix = "I'll create the initial project source and prepare the Workbench.\n\n"
+
+    def _builder_hook(**_kwargs):
+        return (
+            builder_prefix,
+            {"builder_intent": "build_or_create", "scaffolded": True},
+        )
+
+    monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _builder_hook)
+    captured_kwargs: dict[str, Any] = {}
+
+    def _stub_complete(_messages, **kwargs) -> str:
+        captured_kwargs.update(kwargs)
+        return "Builder reply body."
+
+    monkeypatch.setattr("src.api.chat.complete_chat_turn", _stub_complete)
+
+    res = client.post(
+        "/api/chat",
+        json={"messages": [{"role": "user", "content": "build me a Tetris clone"}]},
+    )
+    assert res.status_code == 200, res.text
+    assert "openrouter_model_override" in captured_kwargs
+    assert captured_kwargs["openrouter_model_override"] != CONV_SLUG
+    assert captured_kwargs["openrouter_model_override"] is None
+
+
+def test_stream_build_or_create_does_not_receive_conversational_model_override(
+    or_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Streaming build_or_create lane MUST NOT pass the conversational sentinel as override either.
+
+    Builder turns that don't hit the early-handoff branch (no scaffolded/deduplicated meta) still
+    flow through stream_chat_turn. The lane-classification guard must apply there as well.
+    """
+    monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", CONV_SLUG)
+    builder_prefix = "I'll create the initial project source and prepare the Workbench.\n\n"
+
+    def _builder_hook(**_kwargs):
+        return (
+            builder_prefix,
+            {"builder_intent": "build_or_create"},
+        )
+
+    monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _builder_hook)
+    captured_kwargs: dict[str, Any] = {}
+
+    def _fake_stream(_messages, **kwargs):
+        captured_kwargs.update(kwargs)
+        yield "Builder reply body."
+
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", _fake_stream)
+
+    res = client.post(
+        "/api/chat/stream",
+        json={"messages": [{"role": "user", "content": "build me a Tetris clone"}]},
+    )
+    assert res.status_code == 200, res.text
+    assert "openrouter_model_override" in captured_kwargs
+    assert captured_kwargs["openrouter_model_override"] != CONV_SLUG
+    assert captured_kwargs["openrouter_model_override"] is None
+
+
 def test_val_cross_006_operator_handled_turn_bypasses_env(
     mock_mode: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -401,9 +475,9 @@ def test_val_cross_008_vision_text_fallback_reuses_env_slug(
         },
     )
     assert res.status_code == 200, res.text
-    assert overrides_seen and overrides_seen[0] == CONV_SLUG
-    if len(overrides_seen) >= 2:
-        assert overrides_seen[1] == CONV_SLUG
+    assert len(overrides_seen) == 2, overrides_seen
+    assert call_count["n"] == 2
+    assert overrides_seen == [CONV_SLUG, CONV_SLUG]
 
 
 def test_val_cross_009_startup_notice_emitted_once_per_process(

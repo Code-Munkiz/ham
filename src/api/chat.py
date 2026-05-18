@@ -579,8 +579,14 @@ def _resolve_chat_openrouter_route(
     *,
     body: ChatRequest,
     ham_actor: HamActor | None,
+    allow_conversational_default: bool = True,
 ) -> tuple[str | None, str | None, bool]:
-    """Return (liteLLM model override, user OpenRouter hint key, bypass Hermes-http for LiteLLM)."""
+    """Return (liteLLM model override, user OpenRouter hint key, bypass Hermes-http for LiteLLM).
+
+    ``allow_conversational_default`` gates the HAM_CHAT_CONVERSATIONAL_MODEL fallback. Callers
+    on the builder build_or_create lane pass ``False`` so structured/builder turns preserve
+    existing gateway model behavior instead of receiving the conversational sentinel.
+    """
 
     gw = (os.environ.get("HERMES_GATEWAY_MODE") or "").strip().lower()
     hinted_key = ""
@@ -658,8 +664,11 @@ def _resolve_chat_openrouter_route(
 
     if gw == "openrouter":
         if not mid_stripped:
+            conversational_default = (
+                _chat_conversational_model_default() if allow_conversational_default else None
+            )
             return (
-                _chat_conversational_model_default(),
+                conversational_default,
                 hinted_key if user_key_ready else None,
                 False,
             )
@@ -1470,6 +1479,7 @@ async def post_chat(
     or_override, litellm_hint_key, litellm_http_bypass = _resolve_chat_openrouter_route(
         body=body,
         ham_actor=ham_actor,
+        allow_conversational_default=builder_intent != "build_or_create",
     )
     execution_mode = _execution_mode_payload(body_eff, last_user_plain=last_user_plain)
     execution_mode = _apply_browser_bridge_for_turn(
@@ -1628,6 +1638,7 @@ def post_chat_stream(
     or_override, litellm_hint_key, litellm_http_bypass = _resolve_chat_openrouter_route(
         body=body,
         ham_actor=ham_actor,
+        allow_conversational_default=builder_intent != "build_or_create",
     )
     if not _claim_stream_session(sid):
         raise HTTPException(
