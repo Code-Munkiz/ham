@@ -1,0 +1,45 @@
+# HAM Builder preview-pod janitor — Kubernetes CronJob (Phase 1 #3).
+# Runs every 5 minutes; sweeps expired preview pods + companion Services.
+# See docs/adr/0004-cancel-is-step-boundary-cooperative.md
+#
+# Apply: kubectl apply -f infra/gcp/preview-runtime/janitor-cronjob.yaml
+# Dry-run test: kubectl create job --from=cronjob/ham-preview-janitor ham-janitor-manual --dry-run=client
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ham-preview-janitor
+  namespace: ham-preview
+  labels:
+    app.kubernetes.io/name: ham-preview-janitor
+    app.kubernetes.io/component: janitor
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: ham-preview-janitor
+          containers:
+            - name: janitor
+              image: gcr.io/clarity-staging-488201/ham-api:latest
+              command:
+                - python
+                - scripts/ham_preview_janitor.py
+                - --pods-json
+                - ""
+                - --apply
+              env:
+                - name: KUBECONFIG
+                  value: /etc/kubeconfig/config
+              volumeMounts:
+                - name: kubeconfig
+                  mountPath: /etc/kubeconfig
+                  readOnly: true
+          volumes:
+            - name: kubeconfig
+              secret:
+                secretName: ham-janitor-kubeconfig
