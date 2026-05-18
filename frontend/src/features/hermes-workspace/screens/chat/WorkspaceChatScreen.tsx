@@ -3658,8 +3658,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                   >
                     Restored your coding-plan approval card from this browser tab. If it looks
                     stale, run{" "}
-                    <span className="font-medium text-white/85">Plan a build in chat</span>{" "}
-                    again.
+                    <span className="font-medium text-white/85">Plan a build in chat</span> again.
                   </p>
                 ) : null}
                 {codingPlanLoading ? (

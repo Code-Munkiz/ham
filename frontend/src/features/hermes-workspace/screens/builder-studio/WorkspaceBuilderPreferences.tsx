@@ -3,14 +3,7 @@
  * Task launches happen from workspace chat, not from this surface.
  */
 import * as React from "react";
-import {
-  Bot,
-  ChevronDown,
-  ChevronUp,
-  ScanLine,
-  Settings2,
-  Sparkles,
-} from "lucide-react";
+import { Bot, ChevronDown, ChevronUp, ScanLine, Settings2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import type { ProjectRecord } from "@/lib/ham/types";
 import { listHamProjects } from "@/lib/ham/api";
