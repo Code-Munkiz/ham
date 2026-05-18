@@ -1,0 +1,106 @@
+# HAM Builder preview janitor — staging dry-run CronJob (Option B foundation).
+#
+# Default: every 15 minutes, JSON plan to stdout → Cloud Logging. No --apply.
+#
+# Replace JANITOR_IMAGE before deploy (build docker/ham-preview-janitor/Dockerfile).
+# DO NOT kubectl apply until reviewed — see docs/ops/HAM_PREVIEW_JANITOR_CRONJOB.md
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ham-preview-janitor
+  namespace: ham-builder-preview-spike
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ham-preview-janitor-read
+  namespace: ham-builder-preview-spike
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ham-preview-janitor-read
+  namespace: ham-builder-preview-spike
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ham-preview-janitor-read
+subjects:
+  - kind: ServiceAccount
+    name: ham-preview-janitor
+    namespace: ham-builder-preview-spike
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ham-preview-janitor-dryrun
+  namespace: ham-builder-preview-spike
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: ham-preview-janitor
+            app.kubernetes.io/component: dry-run
+        spec:
+          serviceAccountName: ham-preview-janitor
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            fsGroup: 65532
+          volumes:
+            - name: janitor-tmp
+              emptyDir: {}
+          containers:
+            - name: janitor
+              image: JANITOR_IMAGE_REPLACE_ME
+              imagePullPolicy: IfNotPresent
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                readOnlyRootFilesystem: true
+              volumeMounts:
+                - name: janitor-tmp
+                  mountPath: /tmp
+              resources:
+                requests:
+                  cpu: 25m
+                  memory: 128Mi
+                limits:
+                  cpu: 250m
+                  memory: 256Mi
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  NS="ham-builder-preview-spike"
+                  TMP="/tmp/janitor"
+                  mkdir -p "$TMP"
+                  kubectl get pods -n "$NS" \
+                    -l app.kubernetes.io/name=ham-builder-preview \
+                    -o json > "$TMP/pods.json"
+                  kubectl get svc -n "$NS" -o json > "$TMP/svc.json"
+                  kubectl get endpoints -n "$NS" -o json > "$TMP/ep.json" || true
+                  python /app/scripts/ham_preview_janitor.py \
+                    --pods-json "$TMP/pods.json" \
+                    --services-json "$TMP/svc.json" \
+                    --endpoints-json "$TMP/ep.json"
