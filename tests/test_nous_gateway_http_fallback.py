@@ -27,6 +27,7 @@ F_ENV_NAMES = (
     "HAM_RUN_LAUNCH_TOKEN",
     "OPENROUTER_API_KEY",
     "ANTHROPIC_API_KEY",
+    "HAM_CHAT_CONVERSATIONAL_MODEL",
 )
 
 
@@ -120,6 +121,56 @@ def test_http_retries_fallback_on_429(monkeypatch: pytest.MonkeyPatch) -> None:
         "minimax/minimax-m2.5:free",
         "qwen/qwen3.5-flash-02-23",
     ]
+
+
+def test_http_fallback_ignores_conversational_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """VAL-FALLBACK-002 — HTTP fallback slug stays HAM_CHAT_FALLBACK_MODEL, never the conv env."""
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://10.0.0.1:8642")
+    monkeypatch.setenv("HERMES_GATEWAY_MODEL", "primary-m")
+    monkeypatch.setenv("HAM_CHAT_FALLBACK_MODEL", "hermes-fallback")
+    monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", "anthropic/claude-3.5-sonnet")
+
+    fake = _FakeHttpxClient(
+        [
+            (429, []),
+            (
+                200,
+                [_sse_line("ok-from-fallback"), "data: [DONE]"],
+            ),
+        ],
+    )
+
+    with patch("src.integrations.nous_gateway_client.httpx.Client", return_value=fake):
+        out = complete_chat_turn([{"role": "user", "content": "hi"}])
+
+    assert out == "ok-from-fallback"
+    assert fake.models_seen == ["primary-m", "hermes-fallback"]
+    assert "anthropic/claude-3.5-sonnet" not in fake.models_seen
+    assert "openrouter/anthropic/claude-3.5-sonnet" not in fake.models_seen
+
+
+def test_http_primary_slug_ignores_conversational_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """VAL-FALLBACK-008 — HTTP primary request body's `model` stays HERMES_GATEWAY_MODEL."""
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://10.0.0.1:8642")
+    monkeypatch.setenv("HERMES_GATEWAY_MODEL", "hermes-agent")
+    monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", "anthropic/claude-3.5-sonnet")
+    monkeypatch.delenv("HAM_CHAT_FALLBACK_MODEL", raising=False)
+
+    fake = _FakeHttpxClient(
+        [
+            (200, [_sse_line("ok"), "data: [DONE]"]),
+        ],
+    )
+
+    with patch("src.integrations.nous_gateway_client.httpx.Client", return_value=fake):
+        out = complete_chat_turn([{"role": "user", "content": "hi"}])
+
+    assert out == "ok"
+    assert fake.models_seen == ["hermes-agent"]
+    assert "anthropic/claude-3.5-sonnet" not in fake.models_seen
+    assert "openrouter/anthropic/claude-3.5-sonnet" not in fake.models_seen
 
 
 def test_http_no_fallback_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:

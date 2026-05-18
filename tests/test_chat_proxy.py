@@ -146,9 +146,15 @@ def test_post_chat_build_intent_bypasses_operator_fallback(
     assert "prepare the Workbench" not in visible
 
 
+@pytest.mark.parametrize("conv_env", [None, "openrouter/sentinel-conv:free"])
 def test_post_chat_artifact_verification_failure_skips_llm_and_is_final_message(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch, conv_env: str | None,
 ) -> None:
+    """VAL-LANE-004 — REST verification-failure lane skips LLM under env set/unset."""
+    if conv_env is None:
+        monkeypatch.delenv("HAM_CHAT_CONVERSATIONAL_MODEL", raising=False)
+    else:
+        monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", conv_env)
     honest = (
         "I tried to apply that edit, but the generated files did not include what you asked for yet "
         "(missing yellow border styling on digit keys).\n\n"
@@ -192,9 +198,15 @@ def test_post_chat_artifact_verification_failure_skips_llm_and_is_final_message(
     assert "live preview handoff" not in body["messages"][-1]["content"]
 
 
+@pytest.mark.parametrize("conv_env", [None, "openrouter/sentinel-conv:free"])
 def test_post_chat_builder_edit_worker_blocked_skips_llm_and_is_final_message(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch, conv_env: str | None,
 ) -> None:
+    """VAL-LANE-005 — REST edit-worker-blocked lane skips LLM under env set/unset."""
+    if conv_env is None:
+        monkeypatch.delenv("HAM_CHAT_CONVERSATIONAL_MODEL", raising=False)
+    else:
+        monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", conv_env)
     honest = (
         "Structured builder edits require a live Hermes gateway on the API host "
         "(mock gateway mode cannot produce patches). Configure the gateway or try again later.\n\n"
@@ -234,9 +246,15 @@ def test_post_chat_builder_edit_worker_blocked_skips_llm_and_is_final_message(
     assert "live preview handoff" not in body["messages"][-1]["content"]
 
 
+@pytest.mark.parametrize("conv_env", [None, "openrouter/sentinel-conv:free"])
 def test_post_chat_builder_clarification_skips_llm_and_is_final_message(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch, conv_env: str | None,
 ) -> None:
+    """VAL-LANE-003 — REST builder clarification lane skips LLM under env set/unset."""
+    if conv_env is None:
+        monkeypatch.delenv("HAM_CHAT_CONVERSATIONAL_MODEL", raising=False)
+    else:
+        monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", conv_env)
     clar = "Which area should I change—the layout, the logic, or copy?\n\n"
 
     def _builder_hook(**_kwargs):  # type: ignore[no-untyped-def]
@@ -731,3 +749,297 @@ def test_phase3_browser_bridge_escalates_to_machine_on_partial(monkeypatch: pyte
     assert out["selected_mode"] == "machine"
     assert out["escalated_from"] == "browser"
     assert out["escalation_trigger"] == "partial"
+
+
+# ---------------------------------------------------------------------------
+# Conversational env-isolation: operator-handled / structured-actions /
+# non-conversational lanes (VAL-LANE-006 / VAL-LANE-012 / VAL-SAFETY-010)
+# ---------------------------------------------------------------------------
+
+
+_CONV_SENTINEL = "openrouter/sentinel-conv:free"
+
+
+@pytest.mark.parametrize("conv_env", [None, _CONV_SENTINEL])
+def test_post_chat_operator_handled_skips_llm_under_conversational_env(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch, conv_env: str | None,
+) -> None:
+    """VAL-LANE-006 — operator-handled lane never invokes the LLM, regardless of conv env."""
+    from src.ham.chat_operator import OperatorTurnResult
+
+    if conv_env is None:
+        monkeypatch.delenv("HAM_CHAT_CONVERSATIONAL_MODEL", raising=False)
+    else:
+        monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", conv_env)
+
+    op_result = OperatorTurnResult(
+        handled=True,
+        intent="bridge_run",
+        ok=True,
+        data={"reason_code": "test_handled"},
+    )
+
+    monkeypatch.setattr("src.api.chat.process_operator_turn", lambda **_kw: op_result)
+
+    def _no_llm(*_a: object, **_k: object) -> str:
+        raise AssertionError("complete_chat_turn must not run when operator handles the turn")
+
+    monkeypatch.setattr("src.api.chat.complete_chat_turn", _no_llm)
+
+    res = client.post(
+        "/api/chat",
+        json={
+            "messages": [{"role": "user", "content": "trigger operator path"}],
+            "enable_operator": True,
+        },
+    )
+    assert res.status_code == 200, res.text
+    data = res.json()
+    op_payload = data.get("operator_result")
+    assert isinstance(op_payload, dict)
+    assert op_payload.get("handled") is True
+    assert op_payload.get("intent") == "bridge_run"
+    assistant_text = data["messages"][-1]["content"]
+    assert "HAM_CHAT_CONVERSATIONAL_MODEL" not in assistant_text
+    assert _CONV_SENTINEL not in assistant_text
+
+
+def test_post_chat_structured_actions_shape_invariant_under_conversational_env(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-LANE-012 — structured `actions` array is byte-identical under env-unset and env-set."""
+
+    def _fixture_turn(_msgs: list, **_kwargs) -> str:
+        return (
+            "Opening settings.\n"
+            'HAM_UI_ACTIONS_JSON: {"actions":[{"type":"toast","level":"success","message":"ok"},'
+            '{"type":"navigate","path":"/workspace/settings"}]}'
+        )
+
+    monkeypatch.setattr("src.api.chat.complete_chat_turn", _fixture_turn)
+
+    monkeypatch.delenv("HAM_CHAT_CONVERSATIONAL_MODEL", raising=False)
+    baseline = client.post(
+        "/api/chat",
+        json={"messages": [{"role": "user", "content": "open settings"}], "enable_ui_actions": True},
+    )
+    assert baseline.status_code == 200, baseline.text
+    baseline_actions = baseline.json()["actions"]
+
+    monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", _CONV_SENTINEL)
+    env_set = client.post(
+        "/api/chat",
+        json={"messages": [{"role": "user", "content": "open settings"}], "enable_ui_actions": True},
+    )
+    assert env_set.status_code == 200, env_set.text
+    env_set_actions = env_set.json()["actions"]
+
+    assert baseline_actions == env_set_actions
+    assert baseline_actions, "fixture should produce at least one action"
+
+
+def _build_or_create_hook(**_kwargs):  # type: ignore[no-untyped-def]
+    return (
+        "I'll create the initial project source and prepare the Workbench.\n\n",
+        {"builder_intent": "build_or_create", "scaffolded": True},
+    )
+
+
+def _clarification_hook(**_kwargs):  # type: ignore[no-untyped-def]
+    return (
+        "Which area should I change?\n\n",
+        {
+            "builder_intent": "answer_question",
+            "builder_clarification": True,
+            "builder_action_decision": {"kind": "ask_clarification", "reason": "vague_improvement"},
+        },
+    )
+
+
+def _verification_failed_hook(**_kwargs):  # type: ignore[no-untyped-def]
+    return (
+        "I tried to apply that edit, but verification failed.\n\n",
+        {
+            "builder_intent": "build_or_create",
+            "scaffolded": False,
+            "artifact_verification_failed": True,
+            "artifact_verification": {"verified": False, "reason": "missing border"},
+        },
+    )
+
+
+def _edit_worker_blocked_hook(**_kwargs):  # type: ignore[no-untyped-def]
+    return (
+        "Structured builder edits require a live Hermes gateway.\n\n",
+        {
+            "builder_intent": "build_or_create",
+            "scaffolded": False,
+            "builder_edit_worker_blocked": True,
+            "builder_edit_worker": {"worker": "hermes_gateway", "blocked_reason": "gateway_mock"},
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    ("lane_id", "hook"),
+    [
+        ("build_or_create", _build_or_create_hook),
+        ("clarification", _clarification_hook),
+        ("verification_failed", _verification_failed_hook),
+        ("edit_worker_blocked", _edit_worker_blocked_hook),
+    ],
+)
+def test_non_conversational_lanes_ignore_conversational_env(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch, lane_id: str, hook: object,
+) -> None:
+    """VAL-SAFETY-010 — non-conversational lanes never leak the conversational env."""
+    monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", _CONV_SENTINEL)
+    monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", hook)
+
+    if lane_id == "build_or_create":
+        captured: dict[str, object] = {}
+
+        def _capture(_msgs: list, **kwargs) -> str:
+            captured.update(kwargs)
+            return "Builder reply."
+
+        monkeypatch.setattr("src.api.chat.complete_chat_turn", _capture)
+        res = client.post(
+            "/api/chat",
+            json={"messages": [{"role": "user", "content": "build me a Tetris clone"}]},
+        )
+        assert res.status_code == 200, res.text
+        assistant_text = res.json()["messages"][-1]["content"]
+        assert "HAM_CHAT_CONVERSATIONAL_MODEL" not in assistant_text
+        assert _CONV_SENTINEL not in assistant_text
+        return
+
+    def _no_llm(*_a: object, **_k: object) -> str:
+        raise AssertionError(
+            f"complete_chat_turn must not run for non-conversational lane {lane_id}"
+        )
+
+    monkeypatch.setattr("src.api.chat.complete_chat_turn", _no_llm)
+
+    res = client.post(
+        "/api/chat",
+        json={"messages": [{"role": "user", "content": f"trigger lane {lane_id}"}]},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assistant_text = body["messages"][-1]["content"]
+    assert "HAM_CHAT_CONVERSATIONAL_MODEL" not in assistant_text
+    assert _CONV_SENTINEL not in assistant_text
+    builder_meta = body.get("builder") or {}
+    if lane_id == "clarification":
+        assert builder_meta.get("builder_clarification") is True
+    elif lane_id == "verification_failed":
+        assert builder_meta.get("artifact_verification_failed") is True
+    elif lane_id == "edit_worker_blocked":
+        assert builder_meta.get("builder_edit_worker_blocked") is True
+
+
+_BYOK_OR_KEY = "sk-or-v1-byok-fake-key-only-for-tests-000000000"
+
+
+def _byok_test_actor() -> HamActor:
+    return HamActor(
+        user_id="user_byok",
+        org_id="o1",
+        session_id="s_byok",
+        email="byok@good.test",
+        permissions=frozenset(),
+        org_role=None,
+        raw_permission_claim=None,
+    )
+
+
+def test_chat_byok_explicit_model_id_wins_over_conversational_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-SAFETY-008 — BYOK + explicit model_id always wins over the conversational env."""
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://10.0.0.1:8642")
+    monkeypatch.setenv("HERMES_GATEWAY_MODEL", "minimax/minimax-m2.5:free")
+    monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", "openrouter/sentinel-conv:free")
+
+    actor = _byok_test_actor()
+    monkeypatch.setattr(
+        "src.api.chat._resolve_chat_clerk_context",
+        lambda *_a, **_k: (actor, None),
+    )
+    monkeypatch.setattr(
+        "src.api.chat.resolve_connected_tool_secret_plaintext",
+        lambda _actor, tool_id: _BYOK_OR_KEY if tool_id == "openrouter" else None,
+    )
+    monkeypatch.setattr(
+        "src.api.models_catalog.has_connected_tool_credential_record",
+        lambda _actor, tool_id: tool_id == "openrouter",
+    )
+
+    seen: list[dict[str, object]] = []
+
+    def _stub_completion(*_a, **kwargs):
+        seen.append(dict(kwargs))
+
+        class _Choice:
+            def __init__(self) -> None:
+                self.delta = type("D", (), {"content": "ok"})()
+
+        class _Chunk:
+            def __init__(self) -> None:
+                self.choices = [_Choice()]
+
+        yield _Chunk()
+
+    with patch("litellm.completion", side_effect=_stub_completion):
+        res = client.post(
+            "/api/chat",
+            json={
+                "messages": [{"role": "user", "content": "hi"}],
+                "model_id": "openrouter:default",
+            },
+        )
+
+    assert res.status_code == 200, res.text
+    assert seen, "litellm.completion was not invoked via BYOK route"
+    model_used = seen[0].get("model")
+    api_key_used = seen[0].get("api_key")
+    assert model_used != "openrouter/sentinel-conv:free"
+    assert "sentinel-conv" not in str(model_used)
+    assert api_key_used == _BYOK_OR_KEY
+
+
+def test_non_conversational_lanes_ignore_conversational_env_operator_handled(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-SAFETY-010 (operator subcase) — operator-handled never leaks conv env."""
+    from src.ham.chat_operator import OperatorTurnResult
+
+    monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", _CONV_SENTINEL)
+    op_result = OperatorTurnResult(
+        handled=True,
+        intent="bridge_run",
+        ok=True,
+        data={"reason_code": "lane_isolation"},
+    )
+    monkeypatch.setattr("src.api.chat.process_operator_turn", lambda **_kw: op_result)
+
+    def _no_llm(*_a: object, **_k: object) -> str:
+        raise AssertionError("complete_chat_turn must not run for operator-handled lane")
+
+    monkeypatch.setattr("src.api.chat.complete_chat_turn", _no_llm)
+    res = client.post(
+        "/api/chat",
+        json={
+            "messages": [{"role": "user", "content": "trigger operator"}],
+            "enable_operator": True,
+        },
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    op_payload = body.get("operator_result") or {}
+    assert op_payload.get("handled") is True
+    assistant_text = body["messages"][-1]["content"]
+    assert "HAM_CHAT_CONVERSATIONAL_MODEL" not in assistant_text
+    assert _CONV_SENTINEL not in assistant_text

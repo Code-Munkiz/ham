@@ -120,6 +120,7 @@ F_ENV_NAMES = (
     "HAM_RUN_LAUNCH_TOKEN",
     "OPENROUTER_API_KEY",
     "ANTHROPIC_API_KEY",
+    "HAM_CHAT_CONVERSATIONAL_MODEL",
 )
 
 F_OPERATOR_VOCAB = (
@@ -210,3 +211,20 @@ def test_chat_system_prompt_default_returns_string_starting_with_persona() -> No
     )
     assert isinstance(out, str)
     assert out.startswith("You are **Ham**")
+
+
+def test_val_prompt_008_excludes_conversational_lane_env_name() -> None:
+    """VAL-SAFETY-001 — the conversational-lane env var name never appears in default-chat copy."""
+    assert "HAM_CHAT_CONVERSATIONAL_MODEL" not in _DEFAULT_CHAT_SYSTEM_PROMPT
+    assembled = _chat_system_prompt(
+        include_operator_skills=False,
+        include_operator_subagents=False,
+        enable_ui_actions=False,
+    )
+    assert "HAM_CHAT_CONVERSATIONAL_MODEL" not in assembled
+    assembled_with_ui = _chat_system_prompt(
+        include_operator_skills=False,
+        include_operator_subagents=False,
+        enable_ui_actions=True,
+    )
+    assert "HAM_CHAT_CONVERSATIONAL_MODEL" not in assembled_with_ui

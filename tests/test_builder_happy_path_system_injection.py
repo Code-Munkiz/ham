@@ -272,6 +272,38 @@ class TestBuilderAckDedupePostChat:
         visible = res.json()["messages"][-1]["content"]
         assert visible.count(_BUILDER_TEMPLATE_PREFIX) == 1
 
+    @pytest.mark.parametrize("conv_env", [None, "openrouter/sentinel-conv:free"])
+    def test_post_chat_build_or_create_lane_isolation_under_conversational_env(
+        self, mock_mode: None, monkeypatch: pytest.MonkeyPatch, conv_env: str | None,
+    ) -> None:
+        """VAL-LANE-001 — REST build_or_create response is unaffected by HAM_CHAT_CONVERSATIONAL_MODEL."""
+        if conv_env is None:
+            monkeypatch.delenv("HAM_CHAT_CONVERSATIONAL_MODEL", raising=False)
+        else:
+            monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", conv_env)
+
+        def _hook(**_kwargs):  # type: ignore[no-untyped-def]
+            return (_BUILDER_TEMPLATE_PREFIX, {"builder_intent": "build_or_create"})
+
+        monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _hook)
+        monkeypatch.setattr(
+            "src.api.chat.complete_chat_turn",
+            lambda _m, **_k: "Spinning up your browser game now.",
+        )
+
+        res = client.post(
+            "/api/chat",
+            json={"messages": [{"role": "user", "content": "build me a game like Tetris"}]},
+        )
+        assert res.status_code == 200, res.text
+        data = res.json()
+        visible = data["messages"][-1]["content"]
+        assert visible == "Spinning up your browser game now."
+        assert _BUILDER_TEMPLATE_PREFIX not in visible
+        builder = data.get("builder") or {}
+        assert builder.get("builder_intent") == "build_or_create"
+        assert builder.get("acknowledgement_template") == _BUILDER_TEMPLATE_PREFIX
+
 
 class TestBuilderAckDedupeStream:
     """Stream /api/chat/stream build_or_create must NOT emit templated builder_prefix as delta."""
