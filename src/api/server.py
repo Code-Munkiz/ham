@@ -62,6 +62,8 @@ from src.api.workspace_tools import router as workspace_tools_router
 from src.api.workspace_voice_settings import router as workspace_voice_settings_router
 from src.api.workspaces import router as workspaces_router
 from src.api.builder_sources import router as builder_sources_router
+from src.api.request_id_middleware import request_id_middleware
+from src.ham import sentry_wiring
 from src.ham.agent_profiles import agents_config_from_merged
 from src.ham.clerk_auth import HamActor, clerk_authorization_is_clerk_session
 from src.memory_heist import context_engine_dashboard_payload, discover_config
@@ -69,6 +71,8 @@ from src.persistence.project_store import get_project_store
 from src.persistence.run_store import RunStore
 from src.registry.droids import DEFAULT_DROID_REGISTRY
 from src.registry.profiles import DEFAULT_PROFILE_REGISTRY
+
+sentry_wiring.init()
 
 app = FastAPI(title="HAM API", version="0.1.0")
 
@@ -544,4 +548,4 @@ async def list_project_runs(
 # needs Access-Control-Allow-Private-Network. Default CORS includes production Vercel; merge via HAM_CORS_ORIGINS.
 # Keep the FastAPI instance for OpenAPI and introspection; uvicorn entrypoint is the wrapped ASGI `app`.
 fastapi_app = app
-app = private_network_access_middleware(fastapi_app)
+app = request_id_middleware(private_network_access_middleware(fastapi_app))
