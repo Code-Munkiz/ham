@@ -81,7 +81,7 @@ afterEach(() => {
 });
 
 describe("BuilderStudioScreen routes", () => {
-  it("shows a soft custom-builders unavailable state on the base route when the list endpoint returns list-not-found", async () => {
+  it("hides all custom-builder list failure UI on the base route when the list endpoint returns list-not-found", async () => {
     vi.spyOn(builderStudioAdapter, "list").mockResolvedValue({
       builders: [],
       error: { kind: "builders_list_not_found" },
@@ -90,19 +90,20 @@ describe("BuilderStudioScreen routes", () => {
     renderAt("/workspace/builder-studio");
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("heading", { name: "Custom builders aren't available here yet" }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Builder Studio" })).toBeInTheDocument();
     });
     expect(
-      screen.queryByRole("heading", { name: "Couldn't load custom builders" }),
+      screen.queryByText(/Custom builders aren't available here yet/i),
     ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Couldn't load custom builders/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Try again in a moment/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
     expect(
       screen.queryByText(/That builder may have been deleted or is no longer available/i),
     ).not.toBeInTheDocument();
   });
 
-  it("shows a compact list warning for non-404 list failures, not a large failure card title", async () => {
+  it("hides list failure chrome on the base route for generic list errors", async () => {
     vi.spyOn(builderStudioAdapter, "list").mockResolvedValue({
       builders: [],
       error: { kind: "unknown", message: "Temporary outage" },
@@ -111,12 +112,12 @@ describe("BuilderStudioScreen routes", () => {
     renderAt("/workspace/builder-studio");
 
     await waitFor(() => {
-      expect(screen.getByRole("status")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Builder Studio" })).toBeInTheDocument();
     });
-    expect(screen.getByText("Temporary outage")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: "Couldn't load custom builders" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Temporary outage")).not.toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Couldn't load custom builders/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Try again in a moment/i)).not.toBeInTheDocument();
   });
 
   it("shows a scoped not-found card on detail route when the id is not in the loaded list", async () => {

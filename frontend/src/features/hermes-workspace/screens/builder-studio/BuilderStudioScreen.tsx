@@ -75,6 +75,8 @@ export function BuilderStudioScreen() {
   }, [params.builderId, builders]);
 
   const detailRouteBuilderId = params.builderId?.trim() ?? "";
+  /** Base `/workspace/builder-studio` — list failures stay off-screen; detail deep-links may surface list/load copy. */
+  const isBaseBuilderStudioRoute = !detailRouteBuilderId;
   const isSoftListUnavailable = error?.kind === "builders_list_not_found";
   const showDetailNotFound = Boolean(
     detailRouteBuilderId &&
@@ -142,7 +144,7 @@ export function BuilderStudioScreen() {
         />
       ) : null}
 
-      {isListHardError ? (
+      {isListHardError && !isBaseBuilderStudioRoute ? (
         <div
           role="status"
           className="flex flex-col gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[0.05] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
@@ -160,7 +162,7 @@ export function BuilderStudioScreen() {
         </div>
       ) : null}
 
-      {!loading && isSoftListUnavailable && !showDetailNotFound ? (
+      {!loading && isSoftListUnavailable && !showDetailNotFound && !isBaseBuilderStudioRoute ? (
         <WorkspaceSurfaceStateCard
           title={SOFT_CUSTOM_BUILDERS_UNAVAILABLE_TITLE}
           description={SOFT_CUSTOM_BUILDERS_UNAVAILABLE_BODY}
