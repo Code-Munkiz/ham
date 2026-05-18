@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+
 from src.ham.builder_artifact_verifier import (
     verify_builder_scaffold_artifact,
     verify_calculator_builder_artifact,
@@ -864,6 +866,80 @@ def test_builder_hook_followup_edit_updates_existing_project_snapshot(tmp_path: 
     assert second_snapshot and second_snapshot != first_snapshot
     source_rows = store.list_project_sources(workspace_id="ws_a", project_id="pr_a")
     assert source_rows and source_rows[0].active_snapshot_id == second_snapshot
+    _cleanup()
+
+
+def test_builder_hook_advice_prompt_does_not_invoke_scaffold_with_active_snapshot(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    first = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_a",
+        session_id="sess_advice_gate",
+        last_user_plain="build me a game like Tetris",
+        created_by="user_1",
+    )
+    assert first and first.get("scaffolded") is True
+
+    def _boom(**_kwargs: object) -> None:  # type: ignore[no-untyped-def]
+        raise AssertionError("maybe_chat_scaffold_for_turn must not run for advice-only prompts")
+
+    monkeypatch.setattr("src.ham.builder_chat_scaffold.maybe_chat_scaffold_for_turn", _boom)
+
+    prefix, meta = run_builder_happy_path_hook(
+        workspace_id="ws_a",
+        project_id="pr_a",
+        session_id="sess_advice_gate",
+        last_user_plain="what files did you change?",
+        ham_actor=None,
+    )
+    assert prefix is None
+    assert meta.get("builder_intent") == "answer_question"
+    _cleanup()
+
+
+@pytest.mark.parametrize(
+    "last_user_plain",
+    [
+        "nice make them have a yellow border around the buttons",
+        "make the buttons random colors not just purple",
+    ],
+)
+def test_builder_hook_live_followup_phrases_route_to_update_existing_project(
+    tmp_path: Path, monkeypatch, last_user_plain: str,
+) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    first = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_live_fu",
+        session_id="sess_live_fu_calc",
+        last_user_plain="ham build me a calculator app",
+        created_by="user_1",
+    )
+    assert first and first.get("scaffolded") is True
+    first_snap = str(first.get("source_snapshot_id") or "")
+
+    prefix, meta = run_builder_happy_path_hook(
+        workspace_id="ws_a",
+        project_id="pr_live_fu",
+        session_id="sess_live_fu_calc",
+        last_user_plain=last_user_plain,
+        ham_actor=None,
+    )
+    assert prefix is not None
+    assert meta.get("builder_intent") == "build_or_create"
+    assert meta.get("builder_operation") == "update_existing_project"
+    assert meta.get("artifact_verification_failed") is not True
+    second_snap = str(meta.get("source_snapshot_id") or "")
+    assert second_snap and second_snap != first_snap
+    assert meta.get("scaffolded") is True
+    source_rows = store.list_project_sources(workspace_id="ws_a", project_id="pr_live_fu")
+    assert source_rows and source_rows[0].active_snapshot_id == second_snap
     _cleanup()
 
 

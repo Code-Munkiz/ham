@@ -205,6 +205,10 @@ def _gateway_status_code(code: str) -> int:
 _MAX_SYSTEM_PROMPT_CHARS = 12_000
 _URL_IN_TEXT_RE = re.compile(r"https?://[^\s)]+", re.IGNORECASE)
 _STREAM_PARTIAL_NOTE = "\n\nConnection interrupted. Ask me to continue."
+_STREAM_PRETOKEN_ABORT_ASSISTANT = (
+    "The response was interrupted before I could complete it. "
+    "Please ask me to continue or retry the edit."
+)
 _STREAM_CHECKPOINT_MIN_CHARS = 800
 _STREAM_CHECKPOINT_MIN_SEC = 1.5
 _BUILDER_STREAM_HANDOFF_MESSAGE = (
@@ -1886,9 +1890,16 @@ def post_chat_stream(
                     ) + "\n"
             finally:
                 # If stream was interrupted (generator closed), save partial content.
-                if not stream_completed and pieces:
+                if not stream_completed:
                     try:
-                        checkpoint_partial(interrupted=True)
+                        if pieces:
+                            checkpoint_partial(interrupted=True)
+                        else:
+                            store.upsert_assistant_turn(
+                                sid,
+                                assistant_turn_id,
+                                _STREAM_PRETOKEN_ABORT_ASSISTANT,
+                            )
                     except Exception:
                         pass  # Best-effort: don't crash on cleanup
                 release_stream_lock()

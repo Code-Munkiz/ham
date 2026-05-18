@@ -78,6 +78,80 @@ _BUILD_PATTERNS = (
 )
 
 
+def _norm_chat_1l(user_plain: str) -> str:
+    return " ".join(str(user_plain or "").replace("\r", " ").replace("\n", " ").split()).strip().lower()
+
+
+def is_builder_advice_or_question_turn(user_plain: str) -> bool:
+    """Phrasing that should not auto-mutate the active Builder project (checked before edit heuristics)."""
+    low = _norm_chat_1l(user_plain)
+    if not low:
+        return False
+    advice_patterns = (
+        r"^\s*what\s+do\s+you\s+suggest\b",
+        r"^\s*what\s+would\s+you\s+suggest\b",
+        r"^\s*what\s+are\s+your\s+(thoughts|ideas|suggestions)\b",
+        r"\bwhy\s+does\b",
+        r"\bwhy\s+is\b",
+        r"\bwhy\s+do\b",
+        r"\bwhy\s+did\b",
+        r"\bexplain\s+the\s+(code|changes|files?)\b",
+        r"^\s*explain\s+(how|what|why)\b",
+        r"\bexplain\s+how\b",
+        r"\bwhat\s+files?\s+(did|have|were)\b",
+        r"\bwhich\s+files?\s+did\b",
+        r"^\s*how\s+would\s+you\s+improve\b",
+        r"^\s*how\s+should\s+we\s+improve\b",
+        r"^\s*how\s+could\s+we\s+improve\b",
+        r"\bwhat\s+changes?\s+did\s+you\b",
+    )
+    return any(re.search(p, low) for p in advice_patterns)
+
+
+def is_builder_edit_like_followup(user_plain: str) -> bool:
+    """True when the user is asking for concrete app/UI/source edits (not Q&A-only), never raises."""
+    if is_builder_advice_or_question_turn(user_plain):
+        return False
+    low = _norm_chat_1l(user_plain)
+    if not low:
+        return False
+    if re.search(
+        r"\b(make|change|update|adjust|set|turn)\b.{0,72}\b(buttons?|digits?|keys?|keypad|numpad|layout|ui|preview|screen)\b",
+        low,
+    ):
+        return True
+    if re.search(
+        r"\b(buttons?|digits?|keys?)\b.{0,48}\b(purple|violet|lavender|yellow|gold|amber)\b",
+        low,
+    ):
+        return True
+    if re.search(
+        r"\b(change|turn|make)\b.{0,48}\b(buttons?|digits?|keys?)\b.{0,48}\b(purple|to\s+purple|violet)\b",
+        low,
+    ):
+        return True
+    if re.search(r"\b(add|give)\b.{0,64}\b(border|outline|ring)\b", low) and re.search(
+        r"\b(yellow|gold|amber|buttons?|digits?|keys?|around)\b",
+        low,
+    ):
+        return True
+    if re.search(r"\b(random|different)\s+colors?\b", low) and re.search(
+        r"\b(buttons?|keys?|digits?|them|those|these)\b",
+        low,
+    ):
+        return True
+    if re.search(r"\b(layout|ui)\b.{0,48}\b(wider|narrower|taller|larger|smaller)\b", low):
+        return True
+    if re.search(
+        r"\b(make|make\s+it)\b.{0,48}\b(look|feel)\b.{0,32}\b(modern|polished|cleaner|sleeker)\b",
+        low,
+    ):
+        return True
+    if re.search(r"^\s*nice\b", low) and re.search(r"\b(make|change|update|add|remove)\b", low):
+        return True
+    return False
+
+
 def classify_builder_chat_intent(user_plain: str) -> BuilderChatIntent:
     """Return MVP intent bucket; never raises."""
     text = " ".join(str(user_plain or "").replace("\r", " ").replace("\n", " ").split()).strip()

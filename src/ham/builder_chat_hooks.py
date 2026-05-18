@@ -7,6 +7,12 @@ from typing import Any
 
 from src.ham.clerk_auth import HamActor
 
+from src.ham.builder_chat_intent import (
+    classify_builder_chat_intent,
+    is_builder_advice_or_question_turn,
+    is_builder_edit_like_followup,
+)
+
 
 def _looks_like_followup_edit(last_user_plain: str) -> bool:
     text = (last_user_plain or "").strip().lower()
@@ -38,9 +44,9 @@ def _looks_like_followup_edit(last_user_plain: str) -> bool:
         r"\binstead\b",
         r"\bas well\b",
         r"\bmore like\b",
-        r"\bchange\b",
-        r"\bupdate\b",
-        r"\badd\b",
+        r"\bchange\b.{0,48}\b(the|it|this|those|these|colors?|styles?|buttons?|layout|spacing)\b",
+        r"\bupdate\b.{0,48}\b(the|it|this|colors?|styles?|buttons?|layout|ui|code)\b",
+        r"\badd\b.{0,64}\b(border|shadow|styles?|animations?|sounds?|buttons?|features?|more)\b",
         r"\bremove\b",
         r"\btry again\b",
         r"\benhance\b",
@@ -233,7 +239,6 @@ def run_builder_happy_path_hook(
     ham_actor: HamActor | None,
 ) -> tuple[str | None, dict[str, Any]]:
     """Returns optional stream prefix and metadata for /api/chat responses."""
-    from src.ham.builder_chat_intent import classify_builder_chat_intent
     from src.ham.builder_chat_scaffold import maybe_chat_scaffold_for_turn
 
     base_intent = classify_builder_chat_intent(last_user_plain)
@@ -247,8 +252,11 @@ def run_builder_happy_path_hook(
 
     source_rows = get_builder_source_store().list_project_sources(workspace_id=ws, project_id=pid)
     has_active_snapshot = any(bool(row.active_snapshot_id) for row in source_rows)
-    wants_update = _looks_like_followup_edit(last_user_plain) or _looks_like_active_app_iteration(
-        last_user_plain
+    advice_only = is_builder_advice_or_question_turn(last_user_plain)
+    wants_update = (not advice_only) and (
+        is_builder_edit_like_followup(last_user_plain)
+        or _looks_like_followup_edit(last_user_plain)
+        or _looks_like_active_app_iteration(last_user_plain)
     )
     discrete_new = base_intent == "build_or_create" and _looks_like_discrete_new_product_request(
         last_user_plain
