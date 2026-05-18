@@ -634,6 +634,51 @@ def test_tetris_worker_rejects_disallowed_path(monkeypatch: pytest.MonkeyPatch, 
     assert out and out.get("builder_edit_worker_blocked")
 
 
+def test_tetris_worker_rejects_empty_existing_file_patch(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """Gateway must not be able to wipe an existing snapshot path with an empty string (verify_* allows keys-only)."""
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://127.0.0.1:9")
+    baseline = _tetris_min_files()
+    store = BuilderSourceStore(store_path=tmp_path / "empty.json")
+    set_builder_source_store_for_tests(store)
+    ws, pid = "we", "pe"
+    src = ProjectSource(workspace_id=ws, project_id=pid, kind="chat_scaffold", active_snapshot_id="se")
+    store.upsert_project_source(src)
+    snap = SourceSnapshot(
+        id="se",
+        workspace_id=ws,
+        project_id=pid,
+        project_source_id=src.id,
+        metadata={"template": "tetris"},
+        manifest={"kind": "inline_text_bundle", "entries": [], "inline_files": baseline},
+    )
+    store.upsert_source_snapshot(snap)
+
+    def empty_turn(_m: list) -> str:
+        return json.dumps(
+            {
+                "status": "success",
+                "summary": "bad",
+                "files": {"src/App.tsx": ""},
+                "checks": [],
+            }
+        )
+
+    out = run_builder_edit_worker_maybe(
+        workspace_id=ws,
+        project_id=pid,
+        session_id="sess",
+        last_user_plain="add particle effects when lines clear",
+        created_by="u1",
+        operation="update_existing_project",
+        preferred_source=src,
+        active_snapshot=snap,
+        complete_turn=empty_turn,
+    )
+    assert out and out.get("builder_edit_worker_blocked")
+    assert (out.get("builder_edit_worker") or {}).get("blocked_reason") == "empty_file_content"
+
+
 def test_tetris_worker_blocks_no_op_patch(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
     monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://127.0.0.1:9")
