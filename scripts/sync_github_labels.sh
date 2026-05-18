@@ -43,8 +43,11 @@ create_or_update "severity:medium"   "fbca04" "Partial degradation; workaround e
 create_or_update "severity:low"      "c5def5" "Cosmetic; minor inconvenience"
 
 echo "==> status"
-create_or_update "status:needs-triage" "bfd4f2" "Awaiting initial review and label assignment"
-create_or_update "status:blocked"      "5319e7" "Waiting on external dependency or decision"
+create_or_update "status:needs-triage"     "bfd4f2" "Awaiting initial review and label assignment"
+create_or_update "status:blocked"          "5319e7" "Waiting on external dependency or decision"
+create_or_update "status:needs-info"       "fef2c0" "Waiting on reporter for more information"
+create_or_update "status:ready-for-agent"  "0e8a16" "Fully specified; AFK agent (Factory/Cursor/Claude) can pick up"
+create_or_update "status:ready-for-human"  "1d76db" "Requires human implementation"
 
 echo "==> area"
 create_or_update "area:frontend" "1d76db" "Vite + React workspace UI"
