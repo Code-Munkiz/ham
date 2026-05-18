@@ -6,11 +6,14 @@ import sys
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_serializer
 
 from src.ham.builder_plan import CloudRuntimeJobStatus, ErrorEnvelope
+
+# Phase 0 Literal + v1.x wire statuses the runtime still emits until fully migrated.
+CloudRuntimeJobStoreStatus = CloudRuntimeJobStatus | Literal["unsupported"]
 
 _DEFAULT_STORE_PATH = Path.home() / ".ham" / "builder_runtime_jobs.json"
 
@@ -32,7 +35,7 @@ class CloudRuntimeJob(BaseModel):
     project_id: str
     source_snapshot_id: str | None = None
     runtime_session_id: str | None = None
-    status: CloudRuntimeJobStatus = "queued"
+    status: CloudRuntimeJobStoreStatus = "queued"
     phase: str = "received"
     provider: str = "disabled"
     requested_by: str | None = None
@@ -49,7 +52,7 @@ class CloudRuntimeJob(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     @field_serializer("status")
-    def _serialize_status_for_wire(self, value: CloudRuntimeJobStatus) -> str:
+    def _serialize_status_for_wire(self, value: CloudRuntimeJobStoreStatus) -> str:
         # v1.x workers/API use "succeeded"; Phase 0 Literal uses "completed".
         if value == "completed":
             return "succeeded"
@@ -69,7 +72,15 @@ class BuilderRuntimeJobStore:
     def __init__(self, store_path: Path | None = None) -> None:
         self._path = Path(store_path) if store_path is not None else _DEFAULT_STORE_PATH
 
-    _VALID_STATUSES = {"queued", "running", "cancelling", "cancelled", "completed", "failed"}
+    _VALID_STATUSES = {
+        "queued",
+        "running",
+        "cancelling",
+        "cancelled",
+        "completed",
+        "failed",
+        "unsupported",
+    }
     _LEGACY_STATUS_ALIASES = {"succeeded": "completed", "success": "completed"}
 
     def list_cloud_runtime_jobs(self, *, workspace_id: str, project_id: str) -> list[CloudRuntimeJob]:
@@ -107,7 +118,7 @@ class BuilderRuntimeJobStore:
         return item
 
     @classmethod
-    def _coerce_incoming_status(cls, status: Any) -> CloudRuntimeJobStatus:
+    def _coerce_incoming_status(cls, status: Any) -> CloudRuntimeJobStoreStatus:
         if isinstance(status, str):
             alias = cls._LEGACY_STATUS_ALIASES.get(status)
             if alias is not None:
