@@ -3,6 +3,10 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from src.ham.builder_artifact_verifier import (
+    verify_builder_scaffold_artifact,
+    verify_calculator_builder_artifact,
+)
 from src.ham.builder_chat_cloud_runtime import maybe_enqueue_chat_scaffold_cloud_runtime_job
 from src.ham.builder_chat_hooks import run_builder_happy_path_hook
 from src.ham.builder_chat_scaffold import (
@@ -482,6 +486,323 @@ def test_chat_scaffold_calculator_purple_after_flow_preserves_working_line_and_l
     assert "calc-digit-light-blue" not in app
     assert "#b8e8ff" not in styles
     assert "min-height: 3.55rem;" in styles
+    _cleanup()
+
+
+def test_chat_scaffold_calculator_purple_composes_yellow_border(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Purple keypad class must stack with yellow border class and CSS across turns."""
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    first = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_purple_yellow",
+        session_id="sess_purple_yellow",
+        last_user_plain="build me a calculator app",
+        created_by="user_1",
+    )
+    assert first and first.get("scaffolded")
+    second = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_purple_yellow",
+        session_id="sess_purple_yellow",
+        last_user_plain="nice make the buttons larger and make them purple",
+        created_by="user_1",
+        operation="update_existing_project",
+    )
+    assert second and second.get("scaffolded")
+    third = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_purple_yellow",
+        session_id="sess_purple_yellow",
+        last_user_plain="nice make them have a yellow border around the buttons",
+        created_by="user_1",
+        operation="update_existing_project",
+    )
+    assert third and third.get("scaffolded")
+    tid = str(third["source_snapshot_id"])
+    snap = next(
+        row
+        for row in store.list_source_snapshots(workspace_id="ws_a", project_id="pr_calc_purple_yellow")
+        if row.id == tid
+    )
+    md = snap.metadata or {}
+    assert md.get("calculator_digit_area_palette") == "purple"
+    assert md.get("calculator_button_border") == "yellow"
+    assert md.get("calculator_digit_yellow_border") is True
+    assert md.get("calculator_large_buttons") is True
+    files = (snap.manifest or {}).get("inline_files") or {}
+    app = str(files.get("src/App.tsx") or "")
+    styles = str(files.get("src/styles.css") or "").lower()
+    assert "calc-digit-purple-keys" in app
+    assert "calc-yellow-digit-border" in app
+    assert "calc-digit-light-blue" not in app
+    assert "#d9c4ff" in styles
+    assert "#facc15" in styles
+    assert "min-height: 3.55rem;" in styles
+    _cleanup()
+
+
+def test_chat_scaffold_calculator_multicolor_replaces_purple_keeps_yellow_border(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Multicolor must replace purple palette but carry yellow border forward."""
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    first = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_multi_yellow",
+        session_id="sess_multi_yellow",
+        last_user_plain="build me a calculator app",
+        created_by="user_1",
+    )
+    assert first and first.get("scaffolded")
+    second = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_multi_yellow",
+        session_id="sess_multi_yellow",
+        last_user_plain="make the buttons purple",
+        created_by="user_1",
+        operation="update_existing_project",
+    )
+    assert second and second.get("scaffolded")
+    third = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_multi_yellow",
+        session_id="sess_multi_yellow",
+        last_user_plain="make them have a yellow border",
+        created_by="user_1",
+        operation="update_existing_project",
+    )
+    assert third and third.get("scaffolded")
+    fourth = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_multi_yellow",
+        session_id="sess_multi_yellow",
+        last_user_plain="make the buttons random colors not just purple",
+        created_by="user_1",
+        operation="update_existing_project",
+    )
+    assert fourth and fourth.get("scaffolded")
+    tid = str(fourth["source_snapshot_id"])
+    snap = next(
+        row
+        for row in store.list_source_snapshots(workspace_id="ws_a", project_id="pr_calc_multi_yellow")
+        if row.id == tid
+    )
+    md = snap.metadata or {}
+    assert md.get("calculator_digit_area_palette") == "multicolor"
+    assert md.get("calculator_multicolor_digit_keys") is True
+    assert md.get("calculator_button_border") == "yellow"
+    assert md.get("calculator_digit_yellow_border") is True
+    assert md.get("calculator_purple_digit_keys") is not True
+    files = (snap.manifest or {}).get("inline_files") or {}
+    app = str(files.get("src/App.tsx") or "")
+    styles = str(files.get("src/styles.css") or "").lower()
+    assert "calc-digit-multicolor-keys" in app
+    assert "calc-yellow-digit-border" in app
+    assert "calc-digit-purple-keys" not in app
+    assert "#facc15" in styles
+    assert "#e84855" in styles
+    assert ".calc-digit-multicolor-keys" in styles
+    _cleanup()
+
+
+def test_chat_scaffold_calculator_flow_large_purple_then_yellow_border(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Equation flow and large buttons survive purple + yellow-border follow-ups."""
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    first = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_flow_py_yellow",
+        session_id="sess_flow_py_yellow",
+        last_user_plain="build me a calculator app",
+        created_by="user_1",
+    )
+    assert first and first.get("scaffolded")
+    second = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_flow_py_yellow",
+        session_id="sess_flow_py_yellow",
+        last_user_plain="make the buttons larger and blue",
+        created_by="user_1",
+        operation="update_existing_project",
+    )
+    assert second and second.get("scaffolded")
+    third = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_flow_py_yellow",
+        session_id="sess_flow_py_yellow",
+        last_user_plain=(
+            "make it so I can input numbers like 8*7=56 and see the flow as I type"
+        ),
+        created_by="user_1",
+        operation="update_existing_project",
+    )
+    assert third and third.get("scaffolded")
+    fourth = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_flow_py_yellow",
+        session_id="sess_flow_py_yellow",
+        last_user_plain="make the buttons purple instead of blue",
+        created_by="user_1",
+        operation="update_existing_project",
+    )
+    assert fourth and fourth.get("scaffolded")
+    fifth = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_calc_flow_py_yellow",
+        session_id="sess_flow_py_yellow",
+        last_user_plain="add a yellow border around the buttons",
+        created_by="user_1",
+        operation="update_existing_project",
+    )
+    assert fifth and fifth.get("scaffolded")
+    tid = str(fifth["source_snapshot_id"])
+    snap = next(
+        row
+        for row in store.list_source_snapshots(workspace_id="ws_a", project_id="pr_calc_flow_py_yellow")
+        if row.id == tid
+    )
+    md = snap.metadata or {}
+    assert md.get("calculator_digit_area_palette") == "purple"
+    assert md.get("calculator_button_border") == "yellow"
+    assert md.get("calculator_live_equation_working_line") is True
+    assert md.get("calculator_large_buttons") is True
+    files = (snap.manifest or {}).get("inline_files") or {}
+    app = str(files.get("src/App.tsx") or "")
+    styles = str(files.get("src/styles.css") or "").lower()
+    assert "equation-working" in app
+    assert "calc-digit-purple-keys" in app
+    assert "calc-yellow-digit-border" in app
+    assert "calc-digit-light-blue" not in app
+    assert "#b8e8ff" not in styles
+    assert "#d9c4ff" in styles
+    assert "#facc15" in styles
+    assert "min-height: 3.55rem;" in styles
+    _cleanup()
+
+
+def test_builder_artifact_verifier_purple_request_passes_on_scaffold_output(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    out = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_vfy_purple",
+        session_id="sess_vfy_purple",
+        last_user_plain="build calculator with a purple number pad",
+        created_by="user_1",
+        operation="build_or_create",
+    )
+    assert out and out.get("scaffolded")
+    ver = out.get("artifact_verification") or {}
+    assert ver.get("verified") is True
+    assert ver.get("skipped") is False
+    assert "purple_digit_keys" in ver.get("requested_checks", [])
+    assert "purple_digit_keys" in ver.get("passed_checks", [])
+    _cleanup()
+
+
+def test_builder_artifact_verifier_yellow_border_fails_when_markers_missing() -> None:
+    bad_files = {
+        "src/App.tsx": '<main className="calc-page calc-digit-purple-keys">\n',
+        "src/styles.css": ".calc-digit-purple-keys .keypad button { color: red; }\n",
+    }
+    result = verify_calculator_builder_artifact(
+        "nice make them have a yellow border around the buttons",
+        files=bad_files,
+    )
+    assert result["verified"] is False
+    assert result["skipped"] is False
+    assert "yellow_digit_border" in result["requested_checks"]
+    assert "yellow_digit_border" in result["failed_checks"]
+
+
+def test_builder_artifact_verifier_skipped_for_generic_calculator_build(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    out = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_vfy_generic",
+        session_id="sess_vfy_generic",
+        last_user_plain="build me a clean calculator app",
+        created_by="user_1",
+    )
+    assert out and out.get("scaffolded")
+    ver = out.get("artifact_verification") or {}
+    assert ver.get("skipped") is True
+    assert ver.get("verified") is True
+    assert ver.get("requested_checks") == []
+    _cleanup()
+
+
+def test_builder_artifact_verifier_skips_non_calculator_template() -> None:
+    result = verify_builder_scaffold_artifact(
+        "add a yellow border around the buttons",
+        {"template": "react_scaffold"},
+        {"src/App.tsx": "", "src/styles.css": ""},
+        "update_existing_project",
+    )
+    assert result["skipped"] is True
+    assert result["verified"] is True
+
+
+def test_builder_hook_honest_prefix_when_artifact_verification_fails(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    first = maybe_chat_scaffold_for_turn(
+        workspace_id="ws_a",
+        project_id="pr_hook_vfy",
+        session_id="sess_hook_vfy",
+        last_user_plain="build me a calculator app",
+        created_by="user_1",
+    )
+    assert first and first.get("scaffolded")
+    first_sid = str(first["source_snapshot_id"])
+
+    def _fail_verify(*_a: object, **_kw: object) -> dict:
+        return {
+            "verified": False,
+            "skipped": False,
+            "status": "failed",
+            "requested_checks": ["yellow_digit_border"],
+            "passed_checks": [],
+            "failed_checks": ["yellow_digit_border"],
+            "reason": "missing yellow border styling on digit keys",
+        }
+
+    monkeypatch.setattr("src.ham.builder_chat_scaffold.verify_builder_scaffold_artifact", _fail_verify)
+
+    prefix, meta = run_builder_happy_path_hook(
+        workspace_id="ws_a",
+        project_id="pr_hook_vfy",
+        session_id="sess_hook_vfy",
+        last_user_plain="add a yellow border around the number buttons",
+        ham_actor=None,
+    )
+    assert prefix is not None
+    assert "tried to apply" in prefix.lower()
+    assert "yellow border" in prefix.lower() or "digit keys" in prefix.lower()
+    assert "i'll update the existing project" not in prefix.lower()
+    assert meta.get("artifact_verification_failed") is True
+    assert meta.get("scaffolded") is False
+    source_rows = store.list_project_sources(workspace_id="ws_a", project_id="pr_hook_vfy")
+    assert source_rows and source_rows[0].active_snapshot_id == first_sid
     _cleanup()
 
 

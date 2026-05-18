@@ -12,6 +12,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 
+from src.ham.builder_artifact_verifier import verify_builder_scaffold_artifact
 from src.ham.builder_chat_intent import classify_builder_chat_intent
 from src.persistence.builder_source_store import (
     ImportJob,
@@ -65,13 +66,70 @@ def _is_calculator_prompt(user_plain: str) -> bool:
 
 def _prior_calculator_digit_area_palette(pcm: dict[str, Any]) -> str:
     raw = str(pcm.get("calculator_digit_area_palette") or "").strip().lower()
-    if raw in {"light_blue", "purple", "none"}:
+    if raw in {"light_blue", "purple", "none", "multicolor"}:
         return raw
+    if pcm.get("calculator_multicolor_digit_keys") is True:
+        return "multicolor"
     if pcm.get("calculator_purple_digit_keys") is True:
         return "purple"
     if pcm.get("calculator_light_blue_digits") is True:
         return "light_blue"
     return "none"
+
+
+def _calculator_yellow_border_requested(lowered: str) -> bool:
+    """Detect yellow/gold/amber border or outline on digit keys (keypad-context aware)."""
+    if re.search(r"\byellow\b.*\bborder\b|\bborder\b.*\byellow\b|\byellow\b.{0,32}\boutline\b", lowered):
+        return True
+    if re.search(
+        r"\b(gold|amber)\b.{0,40}\bborder\b|\bborder\b.{0,40}\b(gold|amber)\b|\b#\s*facc15\b",
+        lowered,
+    ):
+        return True
+    if re.search(r"\b(yellow|gold|amber)\b.{0,72}\b(border|outline|ring)\b", lowered):
+        return True
+    if re.search(r"\b(border|outline|ring)\b.{0,72}\b(yellow|gold|amber)\b", lowered):
+        return True
+    if (
+        re.search(r"\bborder\b|\boutline\b", lowered)
+        and re.search(r"\byellow\b|\bgold\b|\bamber\b|#\s*facc15\b|\b#\s*[ef][a-f0-9]{5}\b", lowered)
+        and re.search(
+            r"\b(buttons?|digits?|numbers?|keys?|keypad|numpad|them|those|these|calc|calculator)\b",
+            lowered,
+        )
+    ):
+        return True
+    return False
+
+
+def _prior_calculator_button_border(pcm: dict[str, Any]) -> str:
+    raw = str(pcm.get("calculator_button_border") or "").strip().lower()
+    if raw in {"yellow", "none"}:
+        return raw
+    if pcm.get("calculator_digit_yellow_border") is True:
+        return "yellow"
+    return "none"
+
+
+def _derive_calculator_button_border(lowered: str, pcm: dict[str, Any]) -> str:
+    """Explicit keyboard border style; carry forward unless user asks to add/remove."""
+    prior = _prior_calculator_button_border(pcm)
+    if _calculator_yellow_border_requested(lowered):
+        return "yellow"
+    if re.search(
+        r"\b(remove|drop|lose|delete|clear|without|no)\b.{0,48}\b(yellow|gold|amber)\b.{0,32}\b(border|outline)\b",
+        lowered,
+    ) or re.search(
+        r"\b(remove|drop)\b.{0,32}\b(border|outline)\b.{0,24}\b(yellow|gold|amber)\b",
+        lowered,
+    ):
+        return "none"
+    if re.search(
+        r"\b(remove|without|no)\b.{0,24}\b(border|outline)\b",
+        lowered,
+    ) and not re.search(r"\b(add|give|yellow|gold|amber)\b", lowered):
+        return "none"
+    return prior
 
 
 def _derive_calculator_digit_area_palette(lowered: str, pcm: dict[str, Any]) -> str:
@@ -145,6 +203,22 @@ def _derive_calculator_digit_area_palette(lowered: str, pcm: dict[str, Any]) -> 
             and re.search(r"\b(color|colour|style|hue|shade)\b", lowered)
         )
     )
+
+    multicolor_intent = bool(
+        re.search(
+            r"\b(random\s+colors?|multicolor|multi[\s-]?color|rainbow|"
+            r"different\s+colors?|each\s+(a\s+)?different\s+color|variety\s+of\s+colors?|"
+            r"not\s+just\s+purple|not\s+only\s+purple|each\s+button\s+(a\s+)?different|"
+            r"multi[\s-]?hue|assorted\s+colors?)\b",
+            lowered,
+        )
+        and (
+            keypad_context
+            or re.search(r"\b(buttons?|keys?|digits?|them|those|these)\b", lowered)
+        )
+    )
+    if multicolor_intent:
+        return "multicolor"
 
     if purple_explicit_replace or purple_implicit_carry or purple_first_paint:
         return "purple"
@@ -1008,23 +1082,8 @@ def _build_react_scaffold_files(
     if use_calculator_template:
         pcm = dict(previous_calculator_meta or {})
         lowered = _strip_dashboard_attachment_tail(user_plain).lower()
-        yellow_digit_border_prev = bool(pcm.get("calculator_digit_yellow_border"))
-        yellow_border_requested = bool(
-            re.search(r"\byellow\b.*\bborder\b|\bborder\b.*\byellow\b|\byellow\b.{0,32}\boutline\b", lowered)
-            or re.search(
-                r"\b(gold|amber)\b.{0,40}\bborder\b|\bborder\b.{0,40}\b(gold|amber)\b|\b#\s*facc15\b",
-                lowered,
-            )
-            or (
-                re.search(r"\bborder\b|\boutline\b", lowered)
-                and re.search(r"\byellow\b|\bgold\b|\bamber\b|#\s*facc15\b|\b#\s*[ef][a-f0-9]{5}\b", lowered)
-                and re.search(
-                    r"\b(buttons?|digits?|numbers?|keys?|keypad|numpad|them|those|these|calc|calculator)\b",
-                    lowered,
-                )
-            )
-        )
-        yellow_digit_border = bool(yellow_digit_border_prev or yellow_border_requested)
+        button_border = _derive_calculator_button_border(lowered, pcm)
+        yellow_digit_border = button_border == "yellow"
         include_history = bool(re.search(r"\bhistory\b", lowered)) or bool(
             pcm.get("calculator_history_enabled"),
         )
@@ -1072,6 +1131,65 @@ def _build_react_scaffold_files(
                 "  border: 1px solid rgba(74, 32, 120, 0.35);\n"
                 "}\n"
             )
+        elif digit_palette == "multicolor":
+            # Deterministic rainbow: keypad child indices match _calculator_app_tsx order.
+            keypad_css_digit_block = (
+                ".calc-digit-multicolor-keys .keypad > button.ham-key-digit:nth-child(5) {\n"
+                "  background: #e84855;\n"
+                "  color: #fff;\n"
+                "  border: 1px solid rgba(0, 0, 0, 0.22);\n"
+                "}\n"
+                ".calc-digit-multicolor-keys .keypad > button.ham-key-digit:nth-child(6) {\n"
+                "  background: #ff9f1c;\n"
+                "  color: #1a0f00;\n"
+                "  border: 1px solid rgba(0, 0, 0, 0.22);\n"
+                "}\n"
+                ".calc-digit-multicolor-keys .keypad > button.ham-key-digit:nth-child(7) {\n"
+                "  background: #ffca3a;\n"
+                "  color: #1a1400;\n"
+                "  border: 1px solid rgba(0, 0, 0, 0.22);\n"
+                "}\n"
+                ".calc-digit-multicolor-keys .keypad > button.ham-key-digit:nth-child(9) {\n"
+                "  background: #8ac926;\n"
+                "  color: #0b1a05;\n"
+                "  border: 1px solid rgba(0, 0, 0, 0.22);\n"
+                "}\n"
+                ".calc-digit-multicolor-keys .keypad > button.ham-key-digit:nth-child(10) {\n"
+                "  background: #1982c4;\n"
+                "  color: #fff;\n"
+                "  border: 1px solid rgba(0, 0, 0, 0.22);\n"
+                "}\n"
+                ".calc-digit-multicolor-keys .keypad > button.ham-key-digit:nth-child(11) {\n"
+                "  background: #6a4c93;\n"
+                "  color: #f5f0ff;\n"
+                "  border: 1px solid rgba(0, 0, 0, 0.22);\n"
+                "}\n"
+                ".calc-digit-multicolor-keys .keypad > button.ham-key-digit:nth-child(13) {\n"
+                "  background: #ff595e;\n"
+                "  color: #fff;\n"
+                "  border: 1px solid rgba(0, 0, 0, 0.22);\n"
+                "}\n"
+                ".calc-digit-multicolor-keys .keypad > button.ham-key-digit:nth-child(14) {\n"
+                "  background: #2ec4b6;\n"
+                "  color: #031a18;\n"
+                "  border: 1px solid rgba(0, 0, 0, 0.22);\n"
+                "}\n"
+                ".calc-digit-multicolor-keys .keypad > button.ham-key-digit:nth-child(15) {\n"
+                "  background: #9b5de5;\n"
+                "  color: #fff;\n"
+                "  border: 1px solid rgba(0, 0, 0, 0.22);\n"
+                "}\n"
+                ".calc-digit-multicolor-keys .keypad > button.ham-key-digit:nth-child(16) {\n"
+                "  background: #00bbf9;\n"
+                "  color: #001a24;\n"
+                "  border: 1px solid rgba(0, 0, 0, 0.22);\n"
+                "}\n"
+                ".calc-digit-multicolor-keys .keypad > button.ham-key-digit:nth-child(17) {\n"
+                "  background: #f15bb5;\n"
+                "  color: #1a0510;\n"
+                "  border: 1px solid rgba(0, 0, 0, 0.22);\n"
+                "}\n"
+            )
         keypad_yellow_border_css = ""
         if yellow_digit_border:
             keypad_yellow_border_css = (
@@ -1085,6 +1203,8 @@ def _build_react_scaffold_files(
             css_classes.append("calc-digit-light-blue")
         elif digit_palette == "purple":
             css_classes.append("calc-digit-purple-keys")
+        elif digit_palette == "multicolor":
+            css_classes.append("calc-digit-multicolor-keys")
         if yellow_digit_border:
             css_classes.append("calc-yellow-digit-border")
         main_class_attr = " ".join(css_classes)
@@ -1107,6 +1227,8 @@ def _build_react_scaffold_files(
             readme_extra_lines.append("- Light blue styling on digit keys when requested.")
         if digit_palette == "purple":
             readme_extra_lines.append("- Purple styling on digit keys when requested.")
+        if digit_palette == "multicolor":
+            readme_extra_lines.append("- Deterministic multicolor digit keys (rainbow palette).")
         if yellow_digit_border:
             readme_extra_lines.append("- Yellow border / outline on digit keys when requested.")
         if large_buttons:
@@ -1247,7 +1369,13 @@ def _build_react_scaffold_files(
                             "  filter: none;\n"
                             "}\n"
                             if digit_palette == "purple"
-                            else ""
+                            else (
+                                ".calc-digit-multicolor-keys .keypad > button.ham-key-digit:hover {\n"
+                                "  filter: brightness(1.12);\n"
+                                "}\n"
+                                if digit_palette == "multicolor"
+                                else ""
+                            )
                         )
                     )
                     + ".keypad button.ham-key-eq { background: #27a884; }\n"
@@ -1285,6 +1413,8 @@ def _build_react_scaffold_files(
                 "calculator_digit_area_palette": digit_palette,
                 "calculator_light_blue_digits": digit_palette == "light_blue",
                 "calculator_purple_digit_keys": digit_palette == "purple",
+                "calculator_multicolor_digit_keys": digit_palette == "multicolor",
+                "calculator_button_border": button_border,
                 "calculator_polished": polished,
                 "calculator_live_equation_working_line": show_equation_working_line,
                 "calculator_digit_yellow_border": yellow_digit_border,
@@ -1493,12 +1623,15 @@ def maybe_chat_scaffold_for_turn(
     previous_reference_requested = False
     previous_template: str | None = None
     previous_calculator_meta: dict[str, Any] = {}
+    active_snapshot_id_for_verification: str | None = None
     if operation == "update_existing_project":
         preferred_source = next(
             (row for row in source_rows_existing if str(row.kind or "").strip().lower() == "chat_scaffold"),
             source_rows_existing[0] if source_rows_existing else None,
         )
         active_snapshot_id = str(getattr(preferred_source, "active_snapshot_id", "") or "").strip()
+        if active_snapshot_id:
+            active_snapshot_id_for_verification = active_snapshot_id
         previous_snapshot_obj: SourceSnapshot | None = None
         if active_snapshot_id:
             previous_snapshot_obj = next(
@@ -1517,9 +1650,11 @@ def maybe_chat_scaffold_for_turn(
                         "calculator_light_blue_digits",
                         "calculator_digit_area_palette",
                         "calculator_purple_digit_keys",
+                        "calculator_multicolor_digit_keys",
                         "calculator_polished",
                         "calculator_live_equation_working_line",
                         "calculator_digit_yellow_border",
+                        "calculator_button_border",
                     ):
                         if ck in prev_meta:
                             previous_calculator_meta[ck] = prev_meta[ck]
@@ -1537,6 +1672,22 @@ def maybe_chat_scaffold_for_turn(
         previous_template=previous_template,
         previous_calculator_meta=previous_calculator_meta,
     )
+    artifact_verification = verify_builder_scaffold_artifact(
+        last_user_plain,
+        scaffold_meta,
+        files,
+        operation,
+    )
+    if not artifact_verification.get("verified"):
+        return {
+            "builder_intent": "build_or_create",
+            "builder_operation": operation,
+            "scaffolded": False,
+            "artifact_verification_failed": True,
+            "artifact_verification": artifact_verification,
+            "source_snapshot_id": active_snapshot_id_for_verification,
+        }
+
     entries_manifest: list[dict[str, Any]] = []
     total_bytes = 0
     for path, text in sorted(files.items()):
@@ -1693,6 +1844,7 @@ def maybe_chat_scaffold_for_turn(
         "style_profile_id": scaffold_meta.get("style_profile_id"),
         "style_requested": scaffold_meta.get("style_requested"),
         "reference_requested": scaffold_meta.get("reference_requested"),
+        "artifact_verification": artifact_verification,
     }
 
 

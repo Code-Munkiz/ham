@@ -275,6 +275,15 @@ def run_builder_happy_path_hook(
         return None, meta
     meta.update(summary)
     sid = str(summary.get("source_snapshot_id") or "").strip()
+    if summary.get("artifact_verification_failed"):
+        ver = summary.get("artifact_verification") or {}
+        detail = str(ver.get("reason") or "").strip()
+        tail = f" ({detail})" if detail else ""
+        return (
+            "I tried to apply that edit, but the generated files did not include what you asked for yet"
+            f"{tail}.\n\n",
+            meta,
+        )
     if summary.get("scaffolded"):
         from src.ham.builder_chat_cloud_runtime import maybe_enqueue_chat_scaffold_cloud_runtime_job
 

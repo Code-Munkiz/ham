@@ -266,6 +266,47 @@ def test_chat_stream_build_intent_handoffs_without_long_llm_stream(
     assert "Connection interrupted. Ask me to continue." not in assistant
 
 
+def test_chat_stream_artifact_verification_failure_skips_llm_stream(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    honest = (
+        "I tried to apply that edit, but the generated files did not include what you asked for yet "
+        "(missing yellow border styling on digit keys).\n\n"
+    )
+
+    def _builder_hook(**_kwargs):  # type: ignore[no-untyped-def]
+        return (
+            honest,
+            {
+                "builder_intent": "build_or_create",
+                "scaffolded": False,
+                "artifact_verification_failed": True,
+                "artifact_verification": {
+                    "verified": False,
+                    "reason": "missing yellow border styling on digit keys",
+                },
+            },
+        )
+
+    def _no_stream(*_a: object, **_k: object):
+        raise AssertionError("stream_chat_turn must not run when artifact verification failed")
+
+    monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _builder_hook)
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", _no_stream)
+
+    res = client.post(
+        "/api/chat/stream",
+        json={"messages": [{"role": "user", "content": "yellow border please"}]},
+    )
+    assert res.status_code == 200, res.text
+    events = _parse_ndjson(res.text)
+    assert [e.get("type") for e in events] == ["session", "delta", "done"]
+    done = events[-1]
+    assert done.get("artifact_verification", {}).get("verified") is False
+    assert done["messages"][-1]["content"] == honest
+    assert "live preview handoff" not in done["messages"][-1]["content"]
+
+
 def test_chat_stream_local_repo_ops_not_forced_into_mission_route_when_operator_disabled(
     mock_mode: None,
     monkeypatch: pytest.MonkeyPatch,

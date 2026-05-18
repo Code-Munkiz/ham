@@ -179,6 +179,7 @@ class ChatResponse(BaseModel):
     operator_result: dict[str, Any] | None = None
     execution_mode: dict[str, Any] | None = None
     builder: dict[str, Any] | None = None
+    artifact_verification: dict[str, Any] | None = None
     hermes_http_context_budget: dict[str, Any] | None = None
 
 
@@ -1024,6 +1025,44 @@ def _builder_stream_should_handoff_early(builder_intent: str, builder_meta: dict
     return bool(meta.get("scaffolded") or meta.get("deduplicated"))
 
 
+def _builder_artifact_verification_failed(builder_meta: dict[str, Any] | None) -> bool:
+    return bool((builder_meta or {}).get("artifact_verification_failed"))
+
+
+def _artifact_verification_payload(builder_meta: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not builder_meta:
+        return None
+    av = builder_meta.get("artifact_verification")
+    return av if isinstance(av, dict) else None
+
+
+def _builder_verification_failure_assistant_text(
+    builder_prefix: str | None,
+    builder_meta: dict[str, Any] | None,
+) -> str:
+    raw = str(builder_prefix or "")
+    if raw.strip():
+        return raw
+    ver = _artifact_verification_payload(builder_meta)
+    if ver:
+        r = str(ver.get("reason") or "").strip()
+        if r:
+            return (
+                "I tried to apply that edit, but the generated files did not include "
+                f"what you asked for yet ({r}).\n\n"
+            )
+    return "I tried to apply that edit, but the generated files did not verify.\n\n"
+
+
+def _chat_payload_attach_artifact_verification(
+    payload: dict[str, Any],
+    builder_meta: dict[str, Any] | None,
+) -> None:
+    av = _artifact_verification_payload(builder_meta)
+    if av is not None:
+        payload["artifact_verification"] = av
+
+
 def _builder_stream_handoff_text(builder_prefix: str | None) -> str:
     prefix = str(builder_prefix or "").strip()
     if not prefix:
@@ -1435,7 +1474,22 @@ async def post_chat(
                 operator_result=op.model_dump(mode="json"),
                 execution_mode=execution_mode,
                 builder=builder_meta,
+                artifact_verification=_artifact_verification_payload(builder_meta),
             )
+    if _builder_artifact_verification_failed(builder_meta):
+        vf_msg = _builder_verification_failure_assistant_text(builder_prefix, builder_meta)
+        store.append_turns(sid, [ChatTurn(role="assistant", content=vf_msg)])
+        return ChatResponse(
+            session_id=sid,
+            messages=store.list_messages(sid),
+            actions=[],
+            active_agent=ChatActiveAgentMeta.model_validate(active_meta) if active_meta else None,
+            operator_result=None,
+            execution_mode=execution_mode,
+            builder=builder_meta,
+            artifact_verification=_artifact_verification_payload(builder_meta),
+            hermes_http_context_budget=None,
+        )
     llm_messages = _inject_builder_turn_system(llm_messages, builder_intent)
     budget_diag_rest: dict[str, Any] = {}
     try:
@@ -1468,6 +1522,7 @@ async def post_chat(
         operator_result=None,
         execution_mode=execution_mode,
         builder=builder_meta,
+        artifact_verification=_artifact_verification_payload(builder_meta),
         hermes_http_context_budget=dict(budget_diag_rest) if budget_diag_rest else None,
     )
 
@@ -1593,6 +1648,7 @@ def post_chat_stream(
                             payload["active_agent"] = stream_active_meta
                         if builder_meta is not None:
                             payload["builder"] = builder_meta
+                        _chat_payload_attach_artifact_verification(payload, builder_meta)
                         yield json.dumps(payload) + "\n"
                     finally:
                         release_stream_lock()
@@ -1605,6 +1661,41 @@ def post_chat_stream(
                         "X-Accel-Buffering": "no",
                     },
                 )
+
+        if _builder_artifact_verification_failed(builder_meta):
+            vf_text = _builder_verification_failure_assistant_text(builder_prefix, builder_meta)
+            store.append_turns(sid, [ChatTurn(role="assistant", content=vf_text)])
+            msgs = store.list_messages(sid)
+
+            def builder_verification_fail_only():
+                try:
+                    yield json.dumps({"type": "session", "session_id": sid}) + "\n"
+                    yield json.dumps({"type": "delta", "text": vf_text}) + "\n"
+                    payload: dict[str, Any] = {
+                        "type": "done",
+                        "session_id": sid,
+                        "messages": msgs,
+                        "actions": [],
+                        "operator_result": None,
+                        "execution_mode": stream_execution_mode,
+                    }
+                    if stream_active_meta:
+                        payload["active_agent"] = stream_active_meta
+                    if builder_meta is not None:
+                        payload["builder"] = builder_meta
+                    _chat_payload_attach_artifact_verification(payload, builder_meta)
+                    yield json.dumps(payload) + "\n"
+                finally:
+                    release_stream_lock()
+
+            return StreamingResponse(
+                builder_verification_fail_only(),
+                media_type="application/x-ndjson; charset=utf-8",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                },
+            )
 
         if _builder_stream_should_handoff_early(builder_intent, builder_meta):
             handoff_text = _builder_stream_handoff_text(builder_prefix)
@@ -1627,6 +1718,7 @@ def post_chat_stream(
                         payload["active_agent"] = stream_active_meta
                     if builder_meta is not None:
                         payload["builder"] = builder_meta
+                    _chat_payload_attach_artifact_verification(payload, builder_meta)
                     yield json.dumps(payload) + "\n"
                 finally:
                     release_stream_lock()
@@ -1745,6 +1837,7 @@ def post_chat_stream(
                             payload_err["active_agent"] = stream_active_meta
                         if builder_meta is not None:
                             payload_err["builder"] = builder_meta
+                        _chat_payload_attach_artifact_verification(payload_err, builder_meta)
                         if budget_diag_stream:
                             payload_err["hermes_http_context_budget"] = dict(budget_diag_stream)
                         yield json.dumps(payload_err) + "\n"
@@ -1779,6 +1872,7 @@ def post_chat_stream(
                         payload["active_agent"] = stream_active_meta
                     if builder_meta is not None:
                         payload["builder"] = builder_meta
+                    _chat_payload_attach_artifact_verification(payload, builder_meta)
                     if budget_diag_stream:
                         payload["hermes_http_context_budget"] = dict(budget_diag_stream)
                     yield json.dumps(payload) + "\n"

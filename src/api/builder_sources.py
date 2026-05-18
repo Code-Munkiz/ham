@@ -2868,6 +2868,22 @@ async def chat_builder_snapshot_file(
         created_by=actor.user_id if actor is not None else "",
         operation="update_existing_project",
     )
+    if scaffold_result and scaffold_result.get("artifact_verification_failed"):
+        ver = scaffold_result.get("artifact_verification") or {}
+        detail = str(ver.get("reason") or "").strip()
+        tail = f" ({detail})" if detail else ""
+        return {
+            "project_id": project_id,
+            "previous_snapshot_id": snap.id,
+            "new_snapshot_id": None,
+            "changed_files": [],
+            "preview_refresh_requested": False,
+            "assistant_message": (
+                "I tried to apply that edit, but the generated files did not include what you asked for yet"
+                f"{tail}."
+            ),
+            "artifact_verification": ver,
+        }
     if scaffold_result and scaffold_result.get("scaffolded") and scaffold_result.get("source_snapshot_id"):
         new_snapshot_id = str(scaffold_result.get("source_snapshot_id"))
         new_snap = _source_snapshot_for_project_or_404(

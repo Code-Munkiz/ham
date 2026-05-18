@@ -141,6 +141,52 @@ def test_post_chat_build_intent_bypasses_operator_fallback(
     assert "prepare the Workbench" in body["messages"][-1]["content"]
 
 
+def test_post_chat_artifact_verification_failure_skips_llm_and_is_final_message(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    honest = (
+        "I tried to apply that edit, but the generated files did not include what you asked for yet "
+        "(missing yellow border styling on digit keys).\n\n"
+    )
+
+    def _builder_hook(**_kwargs):  # type: ignore[no-untyped-def]
+        return (
+            honest,
+            {
+                "builder_intent": "build_or_create",
+                "scaffolded": False,
+                "artifact_verification_failed": True,
+                "artifact_verification": {
+                    "verified": False,
+                    "skipped": False,
+                    "status": "failed",
+                    "requested_checks": ["yellow_digit_border"],
+                    "passed_checks": [],
+                    "failed_checks": ["yellow_digit_border"],
+                    "reason": "missing yellow border styling on digit keys",
+                },
+            },
+        )
+
+    def _no_llm(*_a: object, **_k: object) -> str:
+        raise AssertionError("complete_chat_turn must not run when artifact verification failed")
+
+    monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _builder_hook)
+    monkeypatch.setattr("src.api.chat.complete_chat_turn", _no_llm)
+    res = client.post(
+        "/api/chat",
+        json={"messages": [{"role": "user", "content": "add yellow border"}]},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    av = body.get("artifact_verification")
+    assert isinstance(av, dict)
+    assert av.get("verified") is False
+    assert body["messages"][-1]["content"] == honest
+    assert "I've generated" not in body["messages"][-1]["content"]
+    assert "live preview handoff" not in body["messages"][-1]["content"]
+
+
 def test_post_chat_unknown_session() -> None:
     res = client.post(
         "/api/chat",

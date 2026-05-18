@@ -859,3 +859,102 @@ def test_builder_snapshot_file_chat_edit_mode_creates_new_snapshot(tmp_path: Pat
 
     set_project_store_for_tests(None)
     set_builder_source_store_for_tests(None)
+
+
+def test_builder_snapshot_file_chat_edit_mode_verification_failure_returns_honest_payload(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """File-chat returns an honest payload when maybe_chat_scaffold reports verification failure."""
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    project = project_store.make_record(name="alpha-project", root=str(tmp_path), metadata={"workspace_id": ws_id})
+    project_store.register(project)
+    set_project_store_for_tests(project_store)
+    builder_store = BuilderSourceStore(store_path=tmp_path / "builder_sources.json")
+    source = builder_store.upsert_project_source(
+        ProjectSource(
+            workspace_id=ws_id,
+            project_id=project.id,
+            kind="chat_scaffold",
+            metadata={"chat_scaffold": "1"},
+        )
+    )
+    snap = builder_store.upsert_source_snapshot(
+        SourceSnapshot(
+            workspace_id=ws_id,
+            project_id=project.id,
+            project_source_id=source.id,
+            manifest={
+                "kind": "inline_text_bundle",
+                "entries": [{"path": "src/App.tsx", "size_bytes": 20}],
+                "inline_files": {"src/App.tsx": "export default function App() { return null; }\n"},
+            },
+        )
+    )
+    source.active_snapshot_id = snap.id
+    builder_store.upsert_project_source(source)
+    set_builder_source_store_for_tests(builder_store)
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+
+    snapshot_rows_before = builder_store.list_source_snapshots(workspace_id=ws_id, project_id=project.id)
+
+    def _fake_maybe_chat_scaffold(**_kwargs: object) -> dict:
+        return {
+            "builder_intent": "build_or_create",
+            "builder_operation": "update_existing_project",
+            "scaffolded": False,
+            "artifact_verification_failed": True,
+            "artifact_verification": {
+                "verified": False,
+                "skipped": False,
+                "status": "failed",
+                "requested_checks": ["yellow_digit_border"],
+                "passed_checks": [],
+                "failed_checks": ["yellow_digit_border"],
+                "reason": "missing yellow border styling on digit keys",
+            },
+            "source_snapshot_id": snap.id,
+        }
+
+    monkeypatch.setattr(
+        "src.ham.builder_chat_scaffold.maybe_chat_scaffold_for_turn",
+        _fake_maybe_chat_scaffold,
+    )
+
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project.id}/builder/source-snapshots/{snap.id}/files/chat",
+        json={
+            "path": "src/App.tsx",
+            "user_message": "add a yellow border around the buttons",
+            "mode": "edit",
+        },
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["project_id"] == project.id
+    assert body["previous_snapshot_id"] == snap.id
+    assert body["new_snapshot_id"] is None
+    assert body["preview_refresh_requested"] is False
+    assert body["changed_files"] == []
+    av = body.get("artifact_verification")
+    assert isinstance(av, dict)
+    assert av.get("verified") is False
+    msg = str(body.get("assistant_message") or "")
+    assert "I tried to apply that edit" in msg
+    assert "missing yellow border styling on digit keys" in msg
+    assert "Applied file-scoped edit" not in msg
+    low = msg.lower()
+    assert (
+        "preview refreshed" not in low
+        and "preview refresh" not in low
+        and "refreshed the workbench preview" not in low
+    )
+    snapshot_rows_after = builder_store.list_source_snapshots(workspace_id=ws_id, project_id=project.id)
+    assert len(snapshot_rows_after) == len(snapshot_rows_before)
+    assert {r.id for r in snapshot_rows_after} == {r.id for r in snapshot_rows_before}
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
