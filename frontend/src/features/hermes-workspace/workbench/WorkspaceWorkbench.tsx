@@ -61,6 +61,8 @@ import { detectPreviewIframeProxySignals } from "@/features/hermes-workspace/wor
 import { cn } from "@/lib/utils";
 import { ProjectSourceIntakeDialog } from "./ProjectSourceIntakeDialog";
 import { WorkbenchProjectSettingsPanel } from "./WorkbenchProjectSettingsPanel";
+import { MobilePreviewFrame } from "./preview/MobilePreviewFrame";
+import { DEFAULT_DEVICE_PRESET } from "./preview/devicePresets";
 
 /** Treat newest snapshot row by snapshot `created_at` (ordering is not positional). */
 function latestListedSourceSnapshotId(rows: BuilderSourceSnapshotRecord[]): string | null {
@@ -462,6 +464,7 @@ function WorkbenchPreviewPanel({
   });
   const [snapshots, setSnapshots] = React.useState<BuilderSourceSnapshotRecord[]>([]);
   const [previewViewport, setPreviewViewport] = React.useState<"desktop" | "mobile">("desktop");
+  const [mobilePreset] = React.useState(DEFAULT_DEVICE_PRESET);
   const [iframeProxyError, setIframeProxyError] = React.useState<string | null>(null);
   /** True after warmup retries exhausted; cleared on Refresh or preview identity changes. */
   const [iframeProxyWarmupPaused, setIframeProxyWarmupPaused] = React.useState(false);
@@ -1272,13 +1275,19 @@ function WorkbenchPreviewPanel({
               className="relative min-h-0 w-full flex-1 overflow-hidden"
               data-testid="hww-preview-frame-wrap"
             >
+              {previewViewport === "mobile" ? (
+                <MobilePreviewFrame
+                  preset={mobilePreset}
+                  previewUrl={previewUrl}
+                  iframeKey={`${previewUrl || "preview"}|${preview?.runtime_session_id || ""}|${iframeReloadNonce}`}
+                />
+              ) : (
               <iframe
                 key={`${previewUrl || "preview"}|${preview?.runtime_session_id || ""}|${preview?.preview_endpoint_id || ""}|${preview?.source_snapshot_id || ""}|${iframeReloadNonce}`}
                 title="App preview"
                 src={previewUrl}
                 className={cn(
                   "block h-full min-h-0 w-full rounded-md border border-white/[0.12] bg-black/20",
-                  previewViewport === "mobile" ? "max-w-[390px]" : "",
                 )}
                 data-testid="hww-preview-iframe"
                 sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
@@ -1347,6 +1356,7 @@ function WorkbenchPreviewPanel({
                   }
                 }}
               />
+              )}
               {visualEditModeActive ? (
                 <button
                   type="button"
