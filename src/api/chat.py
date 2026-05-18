@@ -7,7 +7,7 @@ import os
 import re
 import time
 from pathlib import Path
-from threading import RLock
+from threading import Lock, RLock
 from types import SimpleNamespace
 from typing import Any, Literal, Self
 from uuid import uuid4
@@ -406,6 +406,39 @@ def _record_operator_audit(
     )
 
 
+_CHAT_CONVERSATIONAL_MODEL_ENV = "HAM_CHAT_CONVERSATIONAL_MODEL"
+_CHAT_CONVERSATIONAL_MODEL_NOTICE_LOCK = Lock()
+_chat_conversational_model_notice_emitted = False
+
+
+def _chat_conversational_model_default() -> str | None:
+    raw = os.environ.get(_CHAT_CONVERSATIONAL_MODEL_ENV)
+    if raw is None:
+        return None
+    stripped = raw.strip()
+    if not stripped:
+        return None
+    if "\n" in stripped or "\r" in stripped:
+        return None
+    normalized = stripped if stripped.startswith("openrouter/") else f"openrouter/{stripped}"
+    _emit_chat_conversational_model_notice_once(normalized)
+    return normalized
+
+
+def _emit_chat_conversational_model_notice_once(model_id: str) -> None:
+    global _chat_conversational_model_notice_emitted
+    if _chat_conversational_model_notice_emitted:
+        return
+    with _CHAT_CONVERSATIONAL_MODEL_NOTICE_LOCK:
+        if _chat_conversational_model_notice_emitted:
+            return
+        _chat_conversational_model_notice_emitted = True
+        _LOG.info(
+            "chat_conversational_model: lane enabled (env-derived model id)",
+            extra={"chat_conversational_model": model_id},
+        )
+
+
 # Shipped default so the model is product-aware without requiring env (override with HAM_CHAT_SYSTEM_PROMPT).
 _DEFAULT_CHAT_SYSTEM_PROMPT = """
 You are **Ham**, the in-dashboard copilot for the Ham workspace. Speak in first person — warm, concise, specific. Use short paragraphs or tight bullets and offer concrete next steps. You cannot see the user's screen, route, or settings; if context matters, ask them to describe it.
@@ -625,7 +658,11 @@ def _resolve_chat_openrouter_route(
 
     if gw == "openrouter":
         if not mid_stripped:
-            return None, hinted_key if user_key_ready else None, False
+            return (
+                _chat_conversational_model_default(),
+                hinted_key if user_key_ready else None,
+                False,
+            )
         try:
             model_override = resolve_model_id_for_chat(mid_stripped, ham_actor)
         except ValueError as exc:

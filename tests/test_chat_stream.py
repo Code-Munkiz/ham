@@ -138,14 +138,26 @@ def test_chat_stream_releases_lock_when_execution_mode_raises(
         ),
     ],
 )
+@pytest.mark.parametrize("conv_env", [None, "openrouter/sentinel-conv:free"])
 def test_chat_stream_routes_agent_intents_when_operator_disabled(
     mock_mode: None,
     monkeypatch: pytest.MonkeyPatch,
     prompt: str,
     expected_intent: str,
     expected_reason_code: str,
+    conv_env: str | None,
 ) -> None:
+    """VAL-LANE-007 — agent-router lane short-circuits without LLM under env set/unset."""
+    if conv_env is None:
+        monkeypatch.delenv("HAM_CHAT_CONVERSATIONAL_MODEL", raising=False)
+    else:
+        monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", conv_env)
     monkeypatch.setenv("HAM_CHAT_OPERATOR", "false")
+
+    def _no_stream(*_a: object, **_k: object):
+        raise AssertionError("stream_chat_turn must not run for agent-router short-circuit")
+
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", _no_stream)
     res = client.post(
         "/api/chat/stream",
         json={"messages": [{"role": "user", "content": prompt}]},
@@ -238,9 +250,16 @@ def test_chat_stream_build_intent_bypasses_operator_fallback(mock_mode: None, mo
     assert "prepare the Workbench" in done["messages"][-1]["content"]
 
 
+@pytest.mark.parametrize("conv_env", [None, "openrouter/sentinel-conv:free"])
 def test_chat_stream_build_intent_handoffs_without_long_llm_stream(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch, conv_env: str | None,
 ) -> None:
+    """VAL-LANE-002 — early-handoff lane never invokes stream_chat_turn under env set/unset."""
+    if conv_env is None:
+        monkeypatch.delenv("HAM_CHAT_CONVERSATIONAL_MODEL", raising=False)
+    else:
+        monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", conv_env)
+
     def _builder_hook(**_kwargs):  # type: ignore[no-untyped-def]
         return (
             "I'll create the initial project source and prepare the Workbench.\n\n",
@@ -266,9 +285,15 @@ def test_chat_stream_build_intent_handoffs_without_long_llm_stream(
     assert "Connection interrupted. Ask me to continue." not in assistant
 
 
+@pytest.mark.parametrize("conv_env", [None, "openrouter/sentinel-conv:free"])
 def test_chat_stream_artifact_verification_failure_skips_llm_stream(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch, conv_env: str | None,
 ) -> None:
+    """VAL-LANE-004 — verification-failure lane skips LLM under env set/unset."""
+    if conv_env is None:
+        monkeypatch.delenv("HAM_CHAT_CONVERSATIONAL_MODEL", raising=False)
+    else:
+        monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", conv_env)
     honest = (
         "I tried to apply that edit, but the generated files did not include what you asked for yet "
         "(missing yellow border styling on digit keys).\n\n"
@@ -307,9 +332,15 @@ def test_chat_stream_artifact_verification_failure_skips_llm_stream(
     assert "live preview handoff" not in done["messages"][-1]["content"]
 
 
+@pytest.mark.parametrize("conv_env", [None, "openrouter/sentinel-conv:free"])
 def test_chat_stream_builder_edit_worker_blocked_skips_llm_stream(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch, conv_env: str | None,
 ) -> None:
+    """VAL-LANE-005 — edit-worker-blocked lane skips LLM under env set/unset."""
+    if conv_env is None:
+        monkeypatch.delenv("HAM_CHAT_CONVERSATIONAL_MODEL", raising=False)
+    else:
+        monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", conv_env)
     honest = (
         "Structured builder edits require a live Hermes gateway on the API host "
         "(mock gateway mode cannot produce patches). Configure the gateway or try again later.\n\n"
@@ -358,9 +389,15 @@ def test_chat_stream_builder_edit_worker_blocked_skips_llm_stream(
     assert persisted["content"] == honest
 
 
+@pytest.mark.parametrize("conv_env", [None, "openrouter/sentinel-conv:free"])
 def test_chat_stream_builder_clarification_skips_llm_stream(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch, conv_env: str | None,
 ) -> None:
+    """VAL-LANE-003 — builder clarification lane skips LLM under env set/unset."""
+    if conv_env is None:
+        monkeypatch.delenv("HAM_CHAT_CONVERSATIONAL_MODEL", raising=False)
+    else:
+        monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", conv_env)
     clar = "Which part should I edit?\n\n"
 
     def _builder_hook(**_kwargs):  # type: ignore[no-untyped-def]
@@ -476,6 +513,109 @@ def test_chat_stream_openrouter_model_rejected_done_with_safe_assistant_and_sign
     assert len(assistants) == 1
     body = msgs[-1]["content"]
     assert "secret-provider" not in body.lower()
+
+
+def test_chat_stream_vision_text_fallback_preserves_conversational_model_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-FALLBACK-006 — the vision text-fallback retry reuses the same env-derived override."""
+    from src.api import chat as chat_mod
+
+    monkeypatch.setattr(chat_mod, "_chat_conversational_model_notice_emitted", False, raising=True)
+    monkeypatch.setattr(
+        chat_mod, "_CHAT_CONVERSATIONAL_MODEL_NOTICE_LOCK", threading.Lock(), raising=True,
+    )
+
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-hamtests-only-fake-key-000000000")
+    monkeypatch.setenv(
+        "HAM_CHAT_CONVERSATIONAL_MODEL",
+        "openrouter/anthropic/claude-3.5-haiku",
+    )
+    monkeypatch.setenv("HAM_CHAT_VISION_UPSTREAM_TEXT_FALLBACK", "1")
+
+    overrides_seen: list[str | None] = []
+    call_count = {"n": 0}
+
+    def fake_stream(messages, **kwargs):  # type: ignore[no-untyped-def]
+        overrides_seen.append(kwargs.get("openrouter_model_override"))
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            raise GatewayCallError("UPSTREAM_REJECTED", "vision rejected", http_status=400)
+        yield "ok"
+
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", fake_stream)
+
+    image_data_url = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
+    res = client.post(
+        "/api/chat/stream",
+        json={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": {
+                        "h": "ham_chat_user_v1",
+                        "text": "describe this",
+                        "images": [
+                            {
+                                "name": "tiny.png",
+                                "mime": "image/png",
+                                "data_url": image_data_url,
+                            }
+                        ],
+                    },
+                }
+            ]
+        },
+    )
+    assert res.status_code == 200, res.text
+    assert overrides_seen, "stream_chat_turn was not invoked"
+    expected = "openrouter/anthropic/claude-3.5-haiku"
+    assert overrides_seen[0] == expected
+    if len(overrides_seen) >= 2:
+        assert overrides_seen[1] == expected
+
+
+def test_chat_stream_conversational_model_rejected_done_with_safe_assistant_and_signal(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-FALLBACK-007 — env-derived slug rejected by LiteLLM → safe assistant + gateway_error signal."""
+    from src.api import chat as chat_mod
+
+    monkeypatch.setattr(chat_mod, "_chat_conversational_model_notice_emitted", False, raising=True)
+    monkeypatch.setattr(
+        chat_mod, "_CHAT_CONVERSATIONAL_MODEL_NOTICE_LOCK", threading.Lock(), raising=True,
+    )
+    monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", "openrouter/never-resolves:bad")
+
+    def failing_stream(*_a, **_k):
+        raise GatewayCallError(
+            "OPENROUTER_MODEL_REJECTED",
+            "secret-rejection-body-do-not-show-users",
+            http_status=400,
+        )
+
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", failing_stream)
+
+    res = client.post(
+        "/api/chat/stream",
+        json={"messages": [{"role": "user", "content": "x"}]},
+    )
+    assert res.status_code == 200, res.text
+    events = _parse_ndjson(res.text)
+    assert events[-1]["type"] == "done"
+    done = events[-1]
+    assert done.get("gateway_error") == {
+        "code": "OPENROUTER_MODEL_REJECTED",
+        "upstream_http_status": 400,
+    }
+    msgs = done["messages"]
+    assistants = [m for m in msgs if m["role"] == "assistant"]
+    assert len(assistants) == 1
+    body = msgs[-1]["content"]
+    assert "secret-rejection" not in body.lower()
+    assert "HAM_CHAT_CONVERSATIONAL_MODEL" not in body
+    assert "never-resolves:bad" not in body
 
 
 def test_chat_stream_done_includes_active_agent_meta(
@@ -1053,3 +1193,54 @@ def test_chat_stream_accepts_ham_chat_user_v2(
     done = [e for e in _parse_ndjson(res.text) if e["type"] == "done"][0]
     user_msgs = [m for m in done["messages"] if m["role"] == "user"]
     assert "ham_chat_user_v2" in user_msgs[-1]["content"]
+
+
+# ---------------------------------------------------------------------------
+# VAL-LANE-006 — operator-handled stream lane never invokes the LLM, regardless
+# of the conversational env var.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("conv_env", [None, "openrouter/sentinel-conv:free"])
+def test_chat_stream_operator_handled_skips_llm_under_conversational_env(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch, conv_env: str | None,
+) -> None:
+    """VAL-LANE-006 — stream operator-handled lane never calls stream_chat_turn under env set/unset."""
+    from src.ham.chat_operator import OperatorTurnResult
+
+    if conv_env is None:
+        monkeypatch.delenv("HAM_CHAT_CONVERSATIONAL_MODEL", raising=False)
+    else:
+        monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", conv_env)
+
+    op_result = OperatorTurnResult(
+        handled=True,
+        intent="bridge_run",
+        ok=True,
+        data={"reason_code": "stream_handled"},
+    )
+    monkeypatch.setattr("src.api.chat.process_operator_turn", lambda **_kw: op_result)
+
+    def _no_stream(*_a: object, **_k: object):
+        raise AssertionError("stream_chat_turn must not run when operator handles the turn")
+
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", _no_stream)
+
+    res = client.post(
+        "/api/chat/stream",
+        json={
+            "messages": [{"role": "user", "content": "trigger operator path"}],
+            "enable_operator": True,
+        },
+    )
+    assert res.status_code == 200, res.text
+    events = _parse_ndjson(res.text)
+    done = [e for e in events if e.get("type") == "done"][0]
+    op_payload = done.get("operator_result")
+    assert isinstance(op_payload, dict)
+    assert op_payload.get("handled") is True
+    assert op_payload.get("intent") == "bridge_run"
+    assistant_text = done["messages"][-1]["content"]
+    assert "HAM_CHAT_CONVERSATIONAL_MODEL" not in assistant_text
+    if conv_env is not None:
+        assert conv_env not in assistant_text
