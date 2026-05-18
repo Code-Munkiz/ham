@@ -48,6 +48,8 @@ export type AdapterError =
   | { kind: "validation"; message: string }
   | { kind: "auth" }
   | { kind: "not_found" }
+  /** List endpoint missing or workspace has no list resource — not a single-builder delete state. */
+  | { kind: "builders_list_not_found" }
   | { kind: "duplicate" }
   | { kind: "unavailable" }
   | { kind: "unknown"; message: string };
@@ -56,7 +58,9 @@ const FEATURE_DISABLED_COPY = "Builder Studio is being prepared — check back s
 const VALIDATION_GENERIC_COPY = "That permission combination isn't allowed for safety reasons.";
 const UNAVAILABLE_COPY = "Couldn't reach Builder Studio right now. Try again in a moment.";
 const UNKNOWN_SAVE_COPY = "Couldn't save the builder. Try again in a moment.";
-const UNKNOWN_LOAD_COPY = "Couldn't load Builder Studio. Try again in a moment.";
+const UNKNOWN_LOAD_COPY = "Couldn't load custom builders. Try again in a moment.";
+const LIST_NOT_FOUND_COPY =
+  "We couldn't load your custom builders for this workspace. Try refreshing. If this keeps happening, Builder Studio may not be available here yet.";
 
 function workspacesPath(workspaceId: string, suffix: string): string {
   return `${BASE}/${encodeURIComponent(workspaceId)}/custom-builders${suffix}`;
@@ -128,6 +132,9 @@ export const builderStudioAdapter = {
         credentials: "include",
       });
       if (!res.ok) {
+        if (res.status === 404) {
+          return { builders: [], error: { kind: "builders_list_not_found" } };
+        }
         return { builders: [], error: await mapErrorResponse(res, UNKNOWN_LOAD_COPY) };
       }
       const body = (await safeJson(res)) as ListResponse | null;
@@ -272,7 +279,9 @@ export function adapterErrorMessage(error: AdapterError): string {
     case "auth":
       return "Please sign in again to manage Builder Studio.";
     case "not_found":
-      return "That builder isn't available anymore.";
+      return "That builder may have been deleted or is no longer available.";
+    case "builders_list_not_found":
+      return LIST_NOT_FOUND_COPY;
     case "duplicate":
       return "A builder with that id already exists. Pick a different id.";
     case "unavailable":

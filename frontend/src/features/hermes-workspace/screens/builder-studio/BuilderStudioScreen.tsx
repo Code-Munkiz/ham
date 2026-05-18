@@ -60,13 +60,24 @@ export function BuilderStudioScreen() {
 
   React.useEffect(() => {
     if (!params.builderId) {
-      setSelected((current) => (current ? null : current));
+      setSelected(null);
       return;
     }
-    if (!builders.length) return;
+    if (!builders.length) {
+      setSelected(null);
+      return;
+    }
     const found = builders.find((b) => b.builder_id === params.builderId) ?? null;
     setSelected(found);
   }, [params.builderId, builders]);
+
+  const detailRouteBuilderId = params.builderId?.trim() ?? "";
+  const showDetailNotFound = Boolean(
+    detailRouteBuilderId &&
+    !loading &&
+    !error &&
+    !builders.some((b) => b.builder_id === detailRouteBuilderId),
+  );
 
   const isOperator = false;
 
@@ -122,14 +133,32 @@ export function BuilderStudioScreen() {
         />
       ) : null}
 
-      {error && error.kind !== "feature_disabled" ? (
+      {error && error.kind !== "feature_disabled" && !showDetailNotFound ? (
         <WorkspaceSurfaceStateCard
-          title="Couldn't load Builder Studio"
+          title="Couldn't load custom builders"
           description={adapterErrorMessage(error)}
           tone="amber"
           primaryAction={
             <Button type="button" size="sm" variant="secondary" onClick={() => void refresh()}>
               Retry
+            </Button>
+          }
+        />
+      ) : null}
+
+      {showDetailNotFound ? (
+        <WorkspaceSurfaceStateCard
+          title="Builder not found"
+          description="That builder may have been deleted or is no longer available."
+          tone="amber"
+          primaryAction={
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => navigate("/workspace/builder-studio")}
+            >
+              Back to Builder Studio
             </Button>
           }
         />
@@ -146,10 +175,10 @@ export function BuilderStudioScreen() {
         </div>
       ) : null}
 
-      {!loading && !error && builders.length === 0 ? (
+      {!loading && !error && !showDetailNotFound && builders.length === 0 ? (
         <WorkspaceSurfaceStateCard
-          title="No custom builders yet"
-          description="Create one to give HAM a reusable recipe for what you're building."
+          title="No custom builders yet."
+          description="Create a builder to give HAM a reusable build style, stack, and safety profile."
           primaryAction={
             <Button type="button" size="sm" onClick={() => setWizardOpen(true)}>
               Create builder
@@ -158,7 +187,7 @@ export function BuilderStudioScreen() {
         />
       ) : null}
 
-      {!loading && !error && builders.length > 0 ? (
+      {!loading && !error && !showDetailNotFound && builders.length > 0 ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {builders.map((b) => (
             <BuilderCard

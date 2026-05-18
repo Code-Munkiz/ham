@@ -80,6 +80,13 @@ describe("builderStudioAdapter.list", () => {
     expect(error?.kind).toBe("unavailable");
   });
 
+  it("returns builders_list_not_found error on list 404 (distinct from single-builder not_found)", async () => {
+    vi.spyOn(api, "hamApiFetch").mockResolvedValue(emptyResponse(404, { detail: "nope" }));
+    const { builders, error } = await builderStudioAdapter.list("ws_abc");
+    expect(builders).toEqual([]);
+    expect(error).toEqual({ kind: "builders_list_not_found" });
+  });
+
   it("wraps thrown network errors instead of re-throwing", async () => {
     vi.spyOn(api, "hamApiFetch").mockRejectedValue(new Error("network down"));
     const { builders, error } = await builderStudioAdapter.list("ws_abc");

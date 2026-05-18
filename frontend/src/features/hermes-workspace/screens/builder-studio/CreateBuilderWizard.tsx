@@ -122,6 +122,14 @@ export function CreateBuilderWizard({
   const [previewError, setPreviewError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
 
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   const update = (patch: Partial<DraftState>) => setDraft((d) => ({ ...d, ...patch }));
 
   const setName = (next: string) => {
@@ -180,27 +188,43 @@ export function CreateBuilderWizard({
     onCreated(result.builder);
   };
 
-  const labelCls = "block text-xs font-medium text-[var(--theme-muted)]";
+  const labelCls = "block text-xs font-medium text-white/80";
   const inputCls =
-    "mt-1 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-sm text-[var(--theme-text)]";
+    "mt-1 w-full rounded-md border border-white/15 bg-[#111920] px-3 py-2 text-sm text-white placeholder:text-white/35 shadow-inner shadow-black/30";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center">
+    <div
+      className="fixed inset-0 z-[120] flex items-end justify-center bg-black/80 p-4 backdrop-blur-sm sm:items-center"
+      role="presentation"
+      onClick={onClose}
+    >
       <div
-        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[var(--theme-bg)] shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-builder-wizard-title"
+        className="relative z-[121] flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-white/20 bg-[#0a1016] shadow-[0_24px_80px_rgba(0,0,0,0.65)] ring-1 ring-black/40 dark:bg-[#0a1016]"
         style={{ color: "var(--theme-text)" }}
+        onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-2 border-b border-white/10 px-5 py-4">
+        <div className="flex items-start justify-between gap-2 border-b border-white/15 bg-[#0d141c] px-5 py-4">
           <div>
-            <h2 className="text-base font-semibold">Create a builder</h2>
-            <p className="mt-0.5 text-xs text-[var(--theme-muted)]">Step {stepIndex(step)} of 4</p>
+            <h2 id="create-builder-wizard-title" className="text-base font-semibold text-white">
+              Create a builder
+            </h2>
+            <p className="mt-0.5 text-xs text-white/65">Step {stepIndex(step)} of 4</p>
           </div>
-          <Button type="button" size="sm" variant="ghost" onClick={onClose}>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={onClose}
+            className="text-white/80 hover:bg-white/10 hover:text-white"
+          >
             Cancel
           </Button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-[#0a1016] px-5 py-4">
           {step === "identity" ? (
             <section className="space-y-3">
               <label className={labelCls}>
@@ -226,7 +250,7 @@ export function CreateBuilderWizard({
                   spellCheck={false}
                   autoComplete="off"
                 />
-                <span className="mt-1 block text-[10px] text-[var(--theme-muted)]">
+                <span className="mt-1 block text-[10px] text-white/55">
                   Lowercase letters, numbers, dashes, and underscores only.
                 </span>
               </label>
@@ -255,7 +279,7 @@ export function CreateBuilderWizard({
 
           {step === "skill" ? (
             <section className="space-y-3">
-              <p className="text-xs text-[var(--theme-muted)]">
+              <p className="text-xs text-white/70">
                 Pick the kinds of tasks HAM should consider this builder for.
               </p>
               <div className="grid gap-2 sm:grid-cols-2">
@@ -264,7 +288,7 @@ export function CreateBuilderWizard({
                   return (
                     <label
                       key={kind}
-                      className="flex cursor-pointer items-center gap-2 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2"
+                      className="flex cursor-pointer items-center gap-2 rounded-xl border border-white/15 bg-[#141c26] px-3 py-2"
                     >
                       <input
                         type="checkbox"
@@ -272,9 +296,7 @@ export function CreateBuilderWizard({
                         onChange={() => toggleTaskKind(kind)}
                         className="h-3.5 w-3.5 accent-[var(--theme-accent)]"
                       />
-                      <span className="text-sm text-[var(--theme-text)]">
-                        {TASK_KIND_LABELS[kind]}
-                      </span>
+                      <span className="text-sm text-white/95">{TASK_KIND_LABELS[kind]}</span>
                     </label>
                   );
                 })}
@@ -289,7 +311,7 @@ export function CreateBuilderWizard({
                 onChange={(next) => update({ permission_preset: next })}
                 showAdvanced={draft.show_advanced}
               />
-              <label className="flex items-center gap-2 text-[11px] text-[var(--theme-muted)]">
+              <label className="flex items-center gap-2 text-[11px] text-white/70">
                 <input
                   type="checkbox"
                   checked={draft.show_advanced}
@@ -338,16 +360,16 @@ export function CreateBuilderWizard({
 
           {step === "preview" ? (
             <section className="space-y-3 text-sm">
-              <h3 className="text-sm font-semibold text-[var(--theme-text)]">Ready to save</h3>
-              <p className="text-xs text-[var(--theme-muted)]">
+              <h3 className="text-sm font-semibold text-white">Ready to save</h3>
+              <p className="text-xs text-white/70">
                 Review what HAM will remember about this builder.
               </p>
               {previewSummary ? (
-                <div className="rounded-xl border border-emerald-300/30 bg-emerald-300/[0.04] p-3 text-xs text-[var(--theme-text)]">
+                <div className="rounded-xl border border-emerald-300/30 bg-emerald-950/40 p-3 text-xs text-emerald-50">
                   {previewSummary}
                 </div>
               ) : null}
-              <dl className="grid gap-2 text-xs text-[var(--theme-muted)]">
+              <dl className="grid gap-2 text-xs text-white/65">
                 <Row k="Name" v={draft.name} />
                 <Row k="Id" v={draft.builder_id} />
                 <Row k="Description" v={draft.description || "—"} />
@@ -418,7 +440,7 @@ function WizardFooter({
   if (step === "skill") nextDisabled = !canAdvanceFromSkill;
 
   return (
-    <div className="flex items-center justify-end gap-2 border-t border-white/10 px-5 py-3">
+    <div className="flex items-center justify-end gap-2 border-t border-white/15 bg-[#0d141c] px-5 py-3">
       <Button type="button" size="sm" variant="ghost" onClick={onBack} disabled={backDisabled}>
         Back
       </Button>
@@ -442,8 +464,8 @@ function WizardFooter({
 function Row({ k, v }: { k: string; v: string }) {
   return (
     <div className="grid grid-cols-[6rem,1fr] gap-2">
-      <dt className="text-[var(--theme-muted)]">{k}</dt>
-      <dd className="break-words text-[var(--theme-text)]">{v}</dd>
+      <dt className="text-white/60">{k}</dt>
+      <dd className="break-words text-white/95">{v}</dd>
     </div>
   );
 }
@@ -463,12 +485,12 @@ function RadioGroup<T extends string>({
 }) {
   return (
     <fieldset className="space-y-1">
-      <legend className="text-xs font-medium text-[var(--theme-muted)]">{legend}</legend>
+      <legend className="text-xs font-medium text-white/75">{legend}</legend>
       <div className="grid gap-1.5 sm:grid-cols-2">
         {values.map((v) => (
           <label
             key={v}
-            className="flex cursor-pointer items-center gap-2 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-1.5 text-xs"
+            className="flex cursor-pointer items-center gap-2 rounded-md border border-white/15 bg-[#141c26] px-3 py-1.5 text-xs"
           >
             <input
               type="radio"
@@ -476,7 +498,7 @@ function RadioGroup<T extends string>({
               onChange={() => onChange(v)}
               className="h-3.5 w-3.5 accent-[var(--theme-accent)]"
             />
-            <span className="text-[var(--theme-text)]">{labels[v]}</span>
+            <span className="text-white/95">{labels[v]}</span>
           </label>
         ))}
       </div>

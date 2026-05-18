@@ -27,7 +27,7 @@ export function PermissionPresetSelector({
 
   return (
     <fieldset className="space-y-2">
-      <legend className="text-xs font-medium text-[var(--theme-muted)]">Safety level</legend>
+      <legend className="text-xs font-medium text-white/75">Safety level</legend>
       <div className="grid gap-2 sm:grid-cols-2">
         {presets.map((preset) => {
           const selected = value === preset;
@@ -37,8 +37,8 @@ export function PermissionPresetSelector({
               className={
                 "flex cursor-pointer flex-col gap-1 rounded-xl border px-3 py-2 transition-colors " +
                 (selected
-                  ? "border-emerald-300/40 bg-emerald-300/[0.06]"
-                  : "border-[var(--theme-border)] bg-[var(--theme-bg)] hover:border-white/20")
+                  ? "border-emerald-300/40 bg-emerald-950/35"
+                  : "border-white/15 bg-[#141c26] hover:border-white/25")
               }
             >
               <div className="flex items-center gap-2">
@@ -50,11 +50,11 @@ export function PermissionPresetSelector({
                   onChange={() => onChange(preset)}
                   className="h-3.5 w-3.5 accent-[var(--theme-accent)]"
                 />
-                <span className="text-sm font-medium text-[var(--theme-text)]">
+                <span className="text-sm font-medium text-white/95">
                   {PERMISSION_PRESET_LABELS[preset]}
                 </span>
               </div>
-              <span className="text-[11px] leading-snug text-[var(--theme-muted)]">
+              <span className="text-[11px] leading-snug text-white/65">
                 {permissionPresetPreview(preset)}
               </span>
               {preset === "custom" ? (
