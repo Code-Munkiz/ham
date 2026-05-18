@@ -21,6 +21,9 @@ import { BUILDER_STUDIO_GUIDANCE } from "./builderStudioLabels";
 import { WorkspaceBuilderPreferences } from "./WorkspaceBuilderPreferences";
 
 const FEATURE_DISABLED_COPY = "Builder Studio is being prepared — check back soon.";
+const SOFT_CUSTOM_BUILDERS_UNAVAILABLE_TITLE = "Custom builders aren't available here yet";
+const SOFT_CUSTOM_BUILDERS_UNAVAILABLE_BODY =
+  "Builder settings are still available. Once custom builder storage is enabled, your builders will appear here.";
 
 export function BuilderStudioScreen() {
   const ctx = useHamWorkspace();
@@ -72,12 +75,18 @@ export function BuilderStudioScreen() {
   }, [params.builderId, builders]);
 
   const detailRouteBuilderId = params.builderId?.trim() ?? "";
+  const isSoftListUnavailable = error?.kind === "builders_list_not_found";
   const showDetailNotFound = Boolean(
     detailRouteBuilderId &&
     !loading &&
     !error &&
     !builders.some((b) => b.builder_id === detailRouteBuilderId),
   );
+  const isListHardError =
+    Boolean(error) &&
+    error.kind !== "feature_disabled" &&
+    !isSoftListUnavailable &&
+    !showDetailNotFound;
 
   const isOperator = false;
 
@@ -133,11 +142,29 @@ export function BuilderStudioScreen() {
         />
       ) : null}
 
-      {error && error.kind !== "feature_disabled" && !showDetailNotFound ? (
+      {isListHardError ? (
+        <div
+          role="status"
+          className="flex flex-col gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[0.05] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <p className="text-xs leading-relaxed text-amber-100/90">{adapterErrorMessage(error!)}</p>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="shrink-0"
+            onClick={() => void refresh()}
+          >
+            Retry
+          </Button>
+        </div>
+      ) : null}
+
+      {!loading && isSoftListUnavailable && !showDetailNotFound ? (
         <WorkspaceSurfaceStateCard
-          title="Couldn't load custom builders"
-          description={adapterErrorMessage(error)}
-          tone="amber"
+          title={SOFT_CUSTOM_BUILDERS_UNAVAILABLE_TITLE}
+          description={SOFT_CUSTOM_BUILDERS_UNAVAILABLE_BODY}
+          tone="neutral"
           primaryAction={
             <Button type="button" size="sm" variant="secondary" onClick={() => void refresh()}>
               Retry

@@ -202,6 +202,29 @@ export interface LaunchOutcome {
   errorMessage: string | null;
 }
 
+/** One round-trip for managed-workspace provider rows (OpenCode + Claude Agent). */
+export async function fetchCodingReadinessSnapshot(): Promise<{
+  opencode: CodingAgentReadiness;
+  claudeAgent: CodingAgentReadiness;
+}> {
+  try {
+    const res = await hamApiFetch("/api/coding/readiness");
+    if (!res.ok) return { opencode: "needs_setup", claudeAgent: "needs_setup" };
+    const body = (await res.json()) as {
+      providers?: Array<{ provider: string; available: boolean }>;
+    };
+    const providers = body.providers ?? [];
+    const oc = providers.find((p) => p.provider === "opencode_cli");
+    const ca = providers.find((p) => p.provider === "claude_agent");
+    return {
+      opencode: oc?.available ? "ready" : "needs_setup",
+      claudeAgent: ca?.available ? "ready" : "needs_setup",
+    };
+  } catch {
+    return { opencode: "needs_setup", claudeAgent: "needs_setup" };
+  }
+}
+
 /**
  * Probe the server-side coding readiness for the OpenCode lane.
  *
@@ -211,17 +234,8 @@ export interface LaunchOutcome {
  * crashes; the user can install / configure OpenCode and refresh.
  */
 export async function fetchOpencodeReadinessForCodingAgentsScreen(): Promise<CodingAgentReadiness> {
-  try {
-    const res = await hamApiFetch("/api/coding/readiness");
-    if (!res.ok) return "needs_setup";
-    const body = (await res.json()) as {
-      providers?: Array<{ provider: string; available: boolean }>;
-    };
-    const row = (body.providers ?? []).find((p) => p.provider === "opencode_cli");
-    return row?.available ? "ready" : "needs_setup";
-  } catch {
-    return "needs_setup";
-  }
+  const snap = await fetchCodingReadinessSnapshot();
+  return snap.opencode;
 }
 
 export async function fetchCursorReadiness(): Promise<{

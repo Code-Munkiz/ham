@@ -3,14 +3,14 @@
  * Task launches happen from workspace chat, not from this surface.
  */
 import * as React from "react";
-import { Bot, ChevronDown, ChevronUp, ScanLine, Settings2, Sparkles } from "lucide-react";
+import { Bot, Brain, ChevronDown, ChevronUp, ScanLine, Settings2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import type { ProjectRecord } from "@/lib/ham/types";
 import { listHamProjects } from "@/lib/ham/api";
 import {
   fetchCodingAgentAccessSettings,
+  fetchCodingReadinessSnapshot,
   fetchCursorReadiness,
-  fetchOpencodeReadinessForCodingAgentsScreen,
   patchCodingAgentAccessSettings,
   type CodingAgentAccessSettings,
   type CodingAgentReadiness,
@@ -149,6 +149,7 @@ function ProviderRow({
   readinessError,
   readinessLoading,
   droidReady,
+  claudeAgentReadiness,
   opencodeReadiness,
   settingsOpen,
   onToggleSettings,
@@ -157,6 +158,7 @@ function ProviderRow({
   readinessError: string | null;
   readinessLoading: boolean;
   droidReady: boolean;
+  claudeAgentReadiness: CodingAgentReadiness;
   opencodeReadiness: CodingAgentReadiness;
   settingsOpen: boolean;
   onToggleSettings: () => void;
@@ -179,6 +181,14 @@ function ProviderRow({
         <ScanLine className="h-4 w-4 text-[var(--theme-accent)]" />
         <span className="text-sm font-semibold text-[var(--theme-text)]">Factory Droid</span>
         <CodingAgentReadinessPill readiness={droidReady ? "ready" : "needs_setup"} />
+      </div>
+      <span className="text-[var(--theme-muted)]">·</span>
+      <div className="flex items-center gap-2">
+        <Brain className="h-4 w-4 text-[var(--theme-accent)]" />
+        <span className="text-sm font-semibold text-[var(--theme-text)]">
+          {CODING_AGENT_LABELS.settingsClaudeAgentLabel}
+        </span>
+        <CodingAgentReadinessPill readiness={claudeAgentReadiness} />
       </div>
       <span className="text-[var(--theme-muted)]">·</span>
       <div className="flex items-center gap-2">
@@ -210,6 +220,8 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
   const [readinessLoading, setReadinessLoading] = React.useState(true);
   const [opencodeReadiness, setOpencodeReadiness] =
     React.useState<CodingAgentReadiness>("needs_setup");
+  const [claudeAgentReadiness, setClaudeAgentReadiness] =
+    React.useState<CodingAgentReadiness>("needs_setup");
   const [agentSettings, setAgentSettings] = React.useState<CodingAgentAccessSettings | null>(null);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [droidReady, setDroidReady] = React.useState(false);
@@ -217,9 +229,9 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
   const refresh = React.useCallback(async () => {
     setReadinessLoading(true);
     setReadinessError(null);
-    const [r, oc, settingsResult, projectsRes] = await Promise.all([
+    const [r, codingSnap, settingsResult, projectsRes] = await Promise.all([
       fetchCursorReadiness(),
-      fetchOpencodeReadinessForCodingAgentsScreen(),
+      fetchCodingReadinessSnapshot(),
       fetchCodingAgentAccessSettings(workspaceId),
       listHamProjects().catch(() => ({ projects: [] as ProjectRecord[] })),
     ]);
@@ -228,7 +240,8 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
       setAgentSettings(settingsResult.settings);
     }
     setReadiness(r.readiness);
-    setOpencodeReadiness(oc);
+    setOpencodeReadiness(codingSnap.opencode);
+    setClaudeAgentReadiness(codingSnap.claudeAgent);
     if (r.error) setReadinessError(r.error);
     setReadinessLoading(false);
   }, [workspaceId]);
@@ -244,6 +257,7 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
         readinessError={readinessError}
         readinessLoading={readinessLoading}
         droidReady={droidReady}
+        claudeAgentReadiness={claudeAgentReadiness}
         opencodeReadiness={opencodeReadiness}
         settingsOpen={settingsOpen}
         onToggleSettings={() => setSettingsOpen((v) => !v)}

@@ -81,7 +81,7 @@ afterEach(() => {
 });
 
 describe("BuilderStudioScreen routes", () => {
-  it("does not show missing-builder copy on the base route when the list endpoint returns list-not-found", async () => {
+  it("shows a soft custom-builders unavailable state on the base route when the list endpoint returns list-not-found", async () => {
     vi.spyOn(builderStudioAdapter, "list").mockResolvedValue({
       builders: [],
       error: { kind: "builders_list_not_found" },
@@ -91,11 +91,31 @@ describe("BuilderStudioScreen routes", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole("heading", { name: "Couldn't load custom builders" }),
+        screen.getByRole("heading", { name: "Custom builders aren't available here yet" }),
       ).toBeInTheDocument();
     });
     expect(
+      screen.queryByRole("heading", { name: "Couldn't load custom builders" }),
+    ).not.toBeInTheDocument();
+    expect(
       screen.queryByText(/That builder may have been deleted or is no longer available/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows a compact list warning for non-404 list failures, not a large failure card title", async () => {
+    vi.spyOn(builderStudioAdapter, "list").mockResolvedValue({
+      builders: [],
+      error: { kind: "unknown", message: "Temporary outage" },
+    });
+
+    renderAt("/workspace/builder-studio");
+
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Temporary outage")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Couldn't load custom builders" }),
     ).not.toBeInTheDocument();
   });
 

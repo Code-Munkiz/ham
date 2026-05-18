@@ -9,6 +9,7 @@ import {
   deriveDroidRunStatus,
   droidRunStatusLabel,
   fetchDroidAuditRunsForProject,
+  fetchCodingReadinessSnapshot,
   fetchOpencodeReadinessForCodingAgentsScreen,
   launchDroidAuditFlow,
   launchNewCodingTask,
@@ -600,6 +601,65 @@ describe("launchDroidAuditFlow", () => {
     });
     expect(out.ok).toBe(false);
     expect(out.errorMessage).toBe(CODING_AGENT_LABELS.auditDeploymentNotReady);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Coding readiness snapshot (OpenCode + Premium reasoning / Claude Agent)
+// ---------------------------------------------------------------------------
+
+describe("fetchCodingReadinessSnapshot", () => {
+  function makeResponse(body: unknown, status = 200): Response {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  it("returns ready for opencode_cli and claude_agent when both are available", async () => {
+    vi.spyOn(api, "hamApiFetch").mockResolvedValue(
+      makeResponse({
+        providers: [
+          { provider: "claude_agent", available: true },
+          { provider: "opencode_cli", available: true },
+        ],
+      }),
+    );
+    const out = await fetchCodingReadinessSnapshot();
+    expect(out).toEqual({ opencode: "ready", claudeAgent: "ready" });
+  });
+
+  it("maps missing or unavailable claude_agent row to needs_setup", async () => {
+    vi.spyOn(api, "hamApiFetch").mockResolvedValue(
+      makeResponse({
+        providers: [
+          { provider: "opencode_cli", available: true },
+          { provider: "claude_agent", available: false },
+        ],
+      }),
+    );
+    const out = await fetchCodingReadinessSnapshot();
+    expect(out).toEqual({ opencode: "ready", claudeAgent: "needs_setup" });
+  });
+
+  it("does not treat legacy claude_code rows as the premium reasoning lane", async () => {
+    vi.spyOn(api, "hamApiFetch").mockResolvedValue(
+      makeResponse({
+        providers: [
+          { provider: "claude_code", available: true },
+          { provider: "claude_agent", available: false },
+        ],
+      }),
+    );
+    const out = await fetchCodingReadinessSnapshot();
+    expect(out.claudeAgent).toBe("needs_setup");
+    expect(out.opencode).toBe("needs_setup");
+  });
+
+  it("returns needs_setup for both when the readiness request is not ok", async () => {
+    vi.spyOn(api, "hamApiFetch").mockResolvedValue(makeResponse({}, 503));
+    const out = await fetchCodingReadinessSnapshot();
+    expect(out).toEqual({ opencode: "needs_setup", claudeAgent: "needs_setup" });
   });
 });
 
