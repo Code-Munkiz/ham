@@ -8,7 +8,25 @@ from src.api.chat import (
     _DEFAULT_CHAT_SYSTEM_PROMPT,
     _MAX_SYSTEM_PROMPT_CHARS,
     _chat_system_prompt,
+    _fit_system_prompt_under_cap_with_vision_tail,
 )
+from src.ham.chat_user_content import vision_system_suffix
+
+
+def test_fit_system_prompt_preserves_vision_suffix_when_base_overflows_cap() -> None:
+    """Multimodal system assembly used to slice ``combined[:cap]``, dropping the vision tail."""
+    suf = vision_system_suffix()
+    assert len(suf) < _MAX_SYSTEM_PROMPT_CHARS
+    pad_len = _MAX_SYSTEM_PROMPT_CHARS - len(suf) + 500
+    base = "p" * pad_len
+    out = _fit_system_prompt_under_cap_with_vision_tail(
+        base,
+        vision_tail=suf,
+        max_chars=_MAX_SYSTEM_PROMPT_CHARS,
+    )
+    assert out.endswith(suf)
+    assert len(out) == _MAX_SYSTEM_PROMPT_CHARS
+    assert "**Vision (workspace chat):**" in out
 
 
 def test_chat_system_prompt_preserves_ui_actions_when_skills_catalog_is_huge(
