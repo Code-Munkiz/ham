@@ -167,6 +167,45 @@ export const CODING_AGENT_LABELS = {
 
   settingsSaveError: "Couldn't save builder settings. Try again.",
   settingsLoadError: "Couldn't load builder settings.",
+
+  // Builder connection detail panel (inline in Builder Studio)
+  builderPanelOpenDetailsPrefix: "Open details for",
+  builderPanelRowDetailHint: "Details",
+  builderPanelCloseAria: "Close builder details",
+  builderPanelGoodForHeading: "Good for",
+  builderPanelRequiresHeading: "Requires",
+  builderPanelStatusHeading: "Current status",
+  builderPanelNextStepHeading: "Safe next step",
+  builderPanelNextStepCaption:
+    "Take the primary action to connect or adjust this builder. Additional links open related workspace settings when you need more control.",
+
+  /** Pipe-separated; split for bullet list. Never “Claude Code.” */
+  builderPanelClaudeGoodFor: "Complex edits|Reasoning-heavy refactors|Codebase understanding",
+  builderPanelClaudeRequires:
+    "Claude Agent must be enabled with valid Anthropic or Claude credentials, or backend authentication.",
+  builderPanelPrimaryManageClaude: "Manage Claude",
+  builderPanelPrimaryConnectClaude: "Connect Claude",
+
+  builderPanelCursorGoodFor:
+    "Repo-connected changes|Pull-request-oriented work|Cursor-authenticated workflows",
+  builderPanelCursorRequires: "A Cursor connection and an eligible workspace or repository state.",
+  builderPanelPrimaryManageCursor: "Manage Cursor",
+  builderPanelPrimaryConnectCursor: "Connect Cursor",
+
+  builderPanelFactoryGoodFor:
+    "Deterministic tasks|Repository audits|Controlled, structured workflows",
+  builderPanelFactoryRequires: "Factory entitlement, runner availability, and project readiness.",
+  builderPanelPrimarySetupRunner: "Set up runner",
+  builderPanelPrimaryManageFactory: "Manage Factory",
+  builderPanelSecondaryOpenProjects: "Open projects",
+
+  builderPanelOpencodeGoodFor:
+    "Open or free builder workflows|Managed workspace builds|Bring-your-own-model and provider workflows",
+  builderPanelOpencodeRequires:
+    "OpenCode runtime or exec access. Model access is optional for some modes; provider-specific flows may need keys handled in settings.",
+  builderPanelSecondaryOpenModelSettings: "Open model settings",
+
+  builderPanelSecondaryConnectedTools: "Open connected tools",
 } as const;
 
 export type CodingAgentLabels = typeof CODING_AGENT_LABELS;
