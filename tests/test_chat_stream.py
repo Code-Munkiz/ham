@@ -569,11 +569,10 @@ def test_chat_stream_vision_text_fallback_preserves_conversational_model_overrid
         },
     )
     assert res.status_code == 200, res.text
-    assert overrides_seen, "stream_chat_turn was not invoked"
     expected = "openrouter/anthropic/claude-3.5-haiku"
-    assert overrides_seen[0] == expected
-    if len(overrides_seen) >= 2:
-        assert overrides_seen[1] == expected
+    assert len(overrides_seen) == 2, overrides_seen
+    assert call_count["n"] == 2
+    assert overrides_seen == [expected, expected]
 
 
 def test_chat_stream_conversational_model_rejected_done_with_safe_assistant_and_signal(
