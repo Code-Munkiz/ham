@@ -1,7 +1,8 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as api from "@/lib/ham/api";
 import * as codingAgentsAdapter from "@/features/hermes-workspace/adapters/codingAgentsAdapter";
+import { CODING_AGENT_LABELS } from "@/features/hermes-workspace/screens/coding-agents/codingAgentLabels";
 import { WorkspaceBuilderPreferences } from "../WorkspaceBuilderPreferences";
 
 let codingSnapSpy: ReturnType<typeof vi.spyOn>;
@@ -35,6 +36,20 @@ afterEach(() => {
 });
 
 describe("WorkspaceBuilderPreferences readiness row", () => {
+  it("opens builder preference mode in a dark-themed menu, not a native select", async () => {
+    render(<WorkspaceBuilderPreferences workspaceId="ws_1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: CODING_AGENT_LABELS.settingsPanelTitle }));
+
+    await waitFor(() => {
+      expect(screen.getByText(CODING_AGENT_LABELS.settingsPreferenceModeLabel)).toBeInTheDocument();
+    });
+    expect(document.querySelector("select")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /Let HAM choose the best builder/i }),
+    ).toBeInTheDocument();
+  });
+
   it("shows Premium reasoning builder as ready when the snapshot reports claude_agent available", async () => {
     render(<WorkspaceBuilderPreferences workspaceId="ws_1" />);
 

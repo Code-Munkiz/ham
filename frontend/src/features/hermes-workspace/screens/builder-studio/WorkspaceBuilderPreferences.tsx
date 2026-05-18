@@ -3,8 +3,11 @@
  * Task launches happen from workspace chat, not from this surface.
  */
 import * as React from "react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Bot, Brain, ChevronDown, ChevronUp, ScanLine, Settings2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { ProjectRecord } from "@/lib/ham/types";
 import { listHamProjects } from "@/lib/ham/api";
 import {
@@ -18,6 +21,121 @@ import {
 } from "../../adapters/codingAgentsAdapter";
 import { CodingAgentReadinessPill } from "../coding-agents/CodingAgentReadinessPill";
 import { CODING_AGENT_LABELS } from "../coding-agents/codingAgentLabels";
+
+function preferenceModeOptionDisabled(
+  mode: PreferenceMode,
+  s: CodingAgentAccessSettings | null,
+): boolean {
+  if (!s) return false;
+  if (mode === "prefer_premium_reasoning") return !s.allow_claude_agent;
+  if (mode === "prefer_open_custom") return !s.allow_opencode;
+  if (mode === "prefer_connected_repo") return !s.allow_cursor;
+  return false;
+}
+
+function preferenceModeUnavailableHint(mode: PreferenceMode): string | null {
+  if (mode === "prefer_premium_reasoning") {
+    return CODING_AGENT_LABELS.settingsPreferenceModePremiumUnavailableHint;
+  }
+  if (mode === "prefer_open_custom") {
+    return CODING_AGENT_LABELS.settingsPreferenceModeOpenCustomUnavailableHint;
+  }
+  if (mode === "prefer_connected_repo") {
+    return CODING_AGENT_LABELS.settingsPreferenceModeConnectedRepoUnavailableHint;
+  }
+  return null;
+}
+
+function PreferenceModeDropdown({
+  modeOptions,
+  value,
+  settings,
+  onChange,
+  labelId,
+}: {
+  modeOptions: { value: PreferenceMode; label: string }[];
+  value: PreferenceMode;
+  settings: CodingAgentAccessSettings | null;
+  onChange: (next: PreferenceMode) => void;
+  labelId: string;
+}) {
+  const currentLabel =
+    modeOptions.find((o) => o.value === value)?.label ??
+    CODING_AGENT_LABELS.settingsPreferenceModeRecommended;
+
+  const controlBaseId = labelId.replace(/-label$/, "");
+  const triggerId = `${controlBaseId}-trigger`;
+  const valueRegionId = `${controlBaseId}-value`;
+
+  return (
+    <DropdownMenu.Root modal={false}>
+      <DropdownMenu.Trigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          id={triggerId}
+          aria-labelledby={`${labelId} ${valueRegionId}`}
+          className="mt-1 h-auto min-h-10 w-full justify-between gap-2 border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-left text-sm font-normal text-[var(--theme-text)] hover:bg-[var(--theme-bg)]"
+        >
+          <span id={valueRegionId} className="min-w-0 flex-1 truncate">
+            {currentLabel}
+          </span>
+          <ChevronDown className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+        </Button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="start"
+          sideOffset={6}
+          className={cn(
+            "z-[200] max-h-[min(320px,60vh)] min-w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto rounded-xl border border-white/12",
+            "bg-[#0c141c] p-1 shadow-[0_12px_40px_rgba(0,0,0,0.55)]",
+          )}
+          onCloseAutoFocus={(e) => e.preventDefault()}
+        >
+          {modeOptions.map((opt) => {
+            const dis = preferenceModeOptionDisabled(opt.value, settings);
+            const hint = dis ? preferenceModeUnavailableHint(opt.value) : null;
+            const selected = value === opt.value;
+            return (
+              <DropdownMenu.Item
+                key={opt.value}
+                disabled={dis}
+                textValue={opt.label}
+                className={cn(
+                  "mx-0 flex cursor-pointer flex-col gap-0.5 rounded-md px-2.5 py-2 text-left text-sm outline-none",
+                  "data-[highlighted]:bg-white/[0.08]",
+                  dis
+                    ? "cursor-not-allowed bg-white/[0.02] text-white/70 data-[disabled]:pointer-events-none data-[disabled]:opacity-100"
+                    : "text-white/95",
+                )}
+                onSelect={() => {
+                  onChange(opt.value);
+                }}
+              >
+                <span className="flex items-start justify-between gap-2">
+                  <span className="min-w-0 font-medium leading-snug">{opt.label}</span>
+                  {selected ? (
+                    <span
+                      className="shrink-0 text-[11px] font-semibold text-emerald-300/90"
+                      aria-hidden
+                    >
+                      ✓
+                    </span>
+                  ) : null}
+                </span>
+                {dis && hint ? (
+                  <span className="text-[11px] leading-snug text-white/55">{hint}</span>
+                ) : null}
+                {dis ? <span className="sr-only">Unavailable</span> : null}
+              </DropdownMenu.Item>
+            );
+          })}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
 
 function ToggleRow({
   label,
@@ -125,20 +243,20 @@ function AgentSettingsPanel({
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-[var(--theme-muted)]">
+        <label
+          id="builder-studio-preference-mode-label"
+          htmlFor="builder-studio-preference-mode-trigger"
+          className="block text-xs font-medium text-[var(--theme-muted)]"
+        >
           {CODING_AGENT_LABELS.settingsPreferenceModeLabel}
-          <select
-            className="mt-1 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-sm text-[var(--theme-text)]"
-            value={s?.preference_mode ?? "recommended"}
-            onChange={(e) => void patch({ preference_mode: e.target.value as PreferenceMode })}
-          >
-            {modeOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
         </label>
+        <PreferenceModeDropdown
+          labelId="builder-studio-preference-mode-label"
+          modeOptions={modeOptions}
+          value={s?.preference_mode ?? "recommended"}
+          settings={s}
+          onChange={(next) => void patch({ preference_mode: next })}
+        />
       </div>
     </section>
   );

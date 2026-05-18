@@ -43,6 +43,10 @@ describe("CODING_AGENT_LABELS — locked adapter & readiness copy", () => {
     expect(CODING_AGENT_LABELS.comingSoonNote.toLowerCase()).not.toContain("opencode_cli");
   });
 
+  it("uses normie-friendly copy for builder preference label", () => {
+    expect(CODING_AGENT_LABELS.settingsPreferenceModeLabel).toBe("How should HAM pick builders?");
+  });
+
   it("settings panel labels use normie-friendly copy", () => {
     expect(CODING_AGENT_LABELS.settingsPanelTitle).toBe("Builder settings");
     expect(CODING_AGENT_LABELS.settingsFactoryDroidLabel).toBe("Controlled managed builder");

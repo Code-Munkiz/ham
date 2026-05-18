@@ -120,12 +120,17 @@ export const CODING_AGENT_LABELS = {
   settingsCursorDescription:
     "Let HAM choose Cursor for connected repository pull-request workflows.",
 
-  settingsPreferenceModeLabel: "How should HAM choose?",
+  settingsPreferenceModeLabel: "How should HAM pick builders?",
   settingsPreferenceModeRecommended: "Let HAM choose the best builder",
   settingsPreferenceModeOpenCustom: "Prefer open / bring-your-own-model builder",
   settingsPreferenceModePremiumReasoning: "Prefer premium reasoning builder",
   settingsPreferenceModeConnectedRepo: "Prefer connected repo builder",
-
+  settingsPreferenceModePremiumUnavailableHint:
+    "Turn on premium reasoning builder above to choose this preference.",
+  settingsPreferenceModeOpenCustomUnavailableHint:
+    "Turn on open / bring-your-own-model builder above to choose this preference.",
+  settingsPreferenceModeConnectedRepoUnavailableHint:
+    "Turn on connected repo builder above to choose this preference.",
   settingsStatusReady: "Ready",
   settingsStatusNeedsModelAccess: "Needs model access",
   settingsStatusNeedsConnectedRepo: "Needs connected repo",
