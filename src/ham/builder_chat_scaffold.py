@@ -52,13 +52,23 @@ _MAX_FILES = 24
 _MODEL_UNAVAILABLE_MARKER: tuple = ("model_access_required", None)
 
 
-def _llm_scaffold_failed_marker(error_code: str) -> tuple[str, str]:
+def _llm_scaffold_failed_marker(error_code: str, model_slug: str | None = None) -> tuple[str, ...]:
+    slug = str(model_slug or "").strip()
+    if slug:
+        return ("llm_scaffold_failed", error_code, slug)
     return ("llm_scaffold_failed", error_code)
 
 
 def _parse_llm_scaffold_failed(value: object) -> str | None:
-    if isinstance(value, tuple) and len(value) == 2 and value[0] == "llm_scaffold_failed":
+    if isinstance(value, tuple) and len(value) >= 2 and value[0] == "llm_scaffold_failed":
         return str(value[1])
+    return None
+
+
+def _parse_llm_scaffold_failed_model(value: object) -> str | None:
+    if isinstance(value, tuple) and len(value) >= 3 and value[0] == "llm_scaffold_failed":
+        slug = str(value[2] or "").strip()
+        return slug or None
     return None
 
 
@@ -1659,6 +1669,7 @@ def _maybe_llm_scaffold_replace(
     # Local imports keep the deterministic path free of LLM client overhead.
     from src.ham.builder_llm_scaffold import (  # noqa: PLC0415
         LLMScaffoldError,
+        _get_scaffold_model,
         generate_scaffold,
     )
     from src.ham.builder_plan import Plan, Step  # noqa: PLC0415
@@ -1676,6 +1687,8 @@ def _maybe_llm_scaffold_replace(
             resolved_model = resolve_model_id_for_chat(mid, ham_actor)
         except ValueError:
             resolved_model = None
+
+    effective_model = _get_scaffold_model(model_override=resolved_model)
 
     try:
         synthetic_plan = Plan(
@@ -1708,11 +1721,11 @@ def _maybe_llm_scaffold_replace(
             model_override=resolved_model,
         )
     except LLMScaffoldError as exc:
-        return _llm_scaffold_failed_marker(exc.error_code)
+        return _llm_scaffold_failed_marker(exc.error_code, effective_model)
     except Exception:  # noqa: BLE001
         from src.ham.builder_error_codes import STEP_MODEL_UNAVAILABLE  # noqa: PLC0415
 
-        return _llm_scaffold_failed_marker(STEP_MODEL_UNAVAILABLE)
+        return _llm_scaffold_failed_marker(STEP_MODEL_UNAVAILABLE, effective_model)
 
     if not result.file_changes:
         return None
@@ -1860,13 +1873,17 @@ def maybe_chat_scaffold_for_turn(
             }
         llm_failed_code = _parse_llm_scaffold_failed(replaced)
         if llm_failed_code:
-            return {
+            failed_meta: dict[str, Any] = {
                 "builder_intent": "build_or_create",
                 "builder_operation": operation,
                 "scaffolded": False,
                 "llm_scaffold_failed": True,
                 "llm_scaffold_error_code": llm_failed_code,
             }
+            failed_model = _parse_llm_scaffold_failed_model(replaced)
+            if failed_model:
+                failed_meta["llm_scaffold_failed_model"] = failed_model
+            return failed_meta
         if (
             isinstance(replaced, tuple)
             and len(replaced) == 2

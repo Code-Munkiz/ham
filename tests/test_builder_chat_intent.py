@@ -28,11 +28,25 @@ from src.ham.builder_chat_intent import (
         ("does this make sense?", "answer_question"),
         ("HAM we need to build a commission tracker", "build_or_create"),
         ("make a SaaS dashboard", "build_or_create"),
+        ("build me a game", "build_or_create"),
+        ("try building a game like asteroids again", "build_or_create"),
+        ("let's build a feature", "build_or_create"),
         ("", "answer_question"),
     ],
 )
 def test_classify_builder_chat_intent_buckets(text: str, expected: str) -> None:
     assert classify_builder_chat_intent(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "this builds character",
+        "building blocks are fun",
+    ],
+)
+def test_building_inflection_avoids_false_positive_build_intent(text: str) -> None:
+    assert classify_builder_chat_intent(text) != "build_or_create"
 
 
 @pytest.mark.parametrize(

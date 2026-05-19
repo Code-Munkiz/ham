@@ -75,6 +75,8 @@ _BUILD_PATTERNS = (
     r"\bi need (to build|a build)\b",
     r"\bwe need to build\b",
     r"\bham.{0,12}build\b",
+    r"\btry\s+building\b",
+    r"\bbuilding\b\s+\w*\s*(game|app|clone|website|tool|site|page|component|prototype|mvp)\b",
 )
 
 

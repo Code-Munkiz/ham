@@ -229,8 +229,14 @@ def _model_access_required_message(*, operation: str) -> str:
     )
 
 
-def _llm_scaffold_failure_message(*, operation: str, error_code: str) -> str:
+def _llm_scaffold_failure_message(
+    *,
+    operation: str,
+    error_code: str,
+    model_slug: str | None = None,
+) -> str:
     is_edit = operation == "update_existing_project"
+    model_label = str(model_slug or "").strip()
     if error_code == STEP_VERIFICATION_FAILED:
         if is_edit:
             return (
@@ -240,6 +246,18 @@ def _llm_scaffold_failure_message(*, operation: str, error_code: str) -> str:
         return (
             "I couldn't build this yet because the model response wasn't valid scaffold JSON. "
             "Try again or pick a different chat model.\n\n"
+        )
+    if model_label:
+        if is_edit:
+            return (
+                f"I couldn't apply that edit yet because the {model_label} model call failed. "
+                "Check Connected Tools (OpenRouter key) or pick a different model in "
+                "Settings, then try again.\n\n"
+            )
+        return (
+            f"I couldn't build this yet because the {model_label} model call failed. "
+            "Check Connected Tools (OpenRouter key) or pick a different model in "
+            "Settings, then try again.\n\n"
         )
     if is_edit:
         return (
@@ -476,8 +494,9 @@ def run_builder_happy_path_hook(
         )
     if summary.get("llm_scaffold_failed"):
         error_code = str(summary.get("llm_scaffold_error_code") or STEP_MODEL_UNAVAILABLE).strip()
+        failed_model = str(summary.get("llm_scaffold_failed_model") or "").strip() or None
         return (
-            f"{directive_prefix}{_llm_scaffold_failure_message(operation=builder_operation, error_code=error_code)}",
+            f"{directive_prefix}{_llm_scaffold_failure_message(operation=builder_operation, error_code=error_code, model_slug=failed_model)}",
             meta,
         )
     if summary.get("artifact_verification_failed"):

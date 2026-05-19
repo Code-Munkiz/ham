@@ -11,8 +11,26 @@ from fastapi.testclient import TestClient
 
 from src.api.server import app
 from src.ham.builder_error_codes import STEP_MODEL_UNAVAILABLE
+from src.ham.builder_llm_scaffold import LLMScaffoldError
+from src.ham.clerk_auth import HamActor
+from src.persistence.builder_source_store import (
+    BuilderSourceStore,
+    set_builder_source_store_for_tests,
+)
 
 client = TestClient(app)
+
+
+def _byo_actor(uid: str = "user_byo") -> HamActor:
+    return HamActor(
+        user_id=uid,
+        org_id=None,
+        session_id=None,
+        email=f"{uid}@example.com",
+        permissions=frozenset(),
+        org_role=None,
+        raw_permission_claim=None,
+    )
 
 
 def _parse_ndjson(text: str) -> list[dict[str, Any]]:
@@ -115,3 +133,41 @@ def test_spaceship_stream_model_access_required_rest(
     assistant = data["messages"][-1]["content"]
     assert "cannot build this without model access" in assistant.lower()
     assert data.get("builder", {}).get("model_access_required") is True
+
+
+def test_llm_scaffold_failure_surfaces_model_slug_in_meta_and_message(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.ham.builder_chat_hooks import run_builder_happy_path_hook
+
+    resolved_model = "openrouter/anthropic/claude-3.5-haiku"
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    actor = _byo_actor()
+    try:
+        with patch(
+            "src.llm_client.resolve_openrouter_api_key_for_actor",
+            return_value="sk-or-v1-connectedtoolskey000000000000",
+        ), patch(
+            "src.ham.builder_llm_scaffold._get_scaffold_model",
+            return_value=resolved_model,
+        ), patch(
+            "src.ham.builder_llm_scaffold.generate_scaffold",
+            side_effect=LLMScaffoldError("model call failed", error_code=STEP_MODEL_UNAVAILABLE),
+        ):
+            prefix, meta = run_builder_happy_path_hook(
+                workspace_id="ws_model_fail",
+                project_id="proj_model_fail",
+                session_id="sess_model_fail",
+                last_user_plain="build me a game like asteroids",
+                ham_actor=actor,
+            )
+        assert meta.get("llm_scaffold_failed") is True
+        assert meta.get("llm_scaffold_failed_model") == resolved_model
+        assert resolved_model in prefix
+        assert "couldn't build this yet because the" in prefix.lower()
+        assert "connected tools" in prefix.lower()
+    finally:
+        set_builder_source_store_for_tests(None)
