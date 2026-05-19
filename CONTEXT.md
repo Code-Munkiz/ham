@@ -13,7 +13,7 @@ A single atomic operation inside a **Plan** — coarse-grained, human-readable g
 _Avoid_: task, subtask, action, todo item (use **Step**).
 
 **Planner**:
-The component that turns a user message + project context into a **Plan**. Replaces today's regex `route_agent_intent` for builder mutation turns.
+The component that turns a user message + project context into a **Plan**. Runs inline in `POST /api/chat/stream` for builder-mutation turns (after `route_agent_intent` classifies the turn type and `builder_mutation_router` flags it as a mutation). Calls the user's BYO OpenRouter key via `complete_chat_messages_openrouter`; falls back to today's regex `route_agent_intent` flow when no key is configured (per ADR-0009). Streams Plan generation to the chat surface as it produces output.
 _Avoid_: orchestrator (that's something else), router, classifier.
 
 **Worker**:
@@ -38,6 +38,22 @@ _Avoid_: event stream (too generic), feed (used by older API).
 **ErrorEnvelope**:
 The shape of error data emitted in SSE failure events and stored in `CloudRuntimeJob.last_error`. Carries free-string `error_code` (from a documented catalog), `error_message`, optional `error_details`, plus `retriable` and `fatal` flags.
 _Avoid_: error payload, exception envelope (use **ErrorEnvelope**).
+
+**Dispatcher endpoint**:
+The internal FastAPI route `POST /api/internal/dispatch-worker` that receives push deliveries from Cloud Tasks (per ADR-0007) and schedules a Worker GKE pod. OIDC-authenticated. Returns 200 immediately after scheduling; does not wait for the Worker to finish. The dispatcher is the bridge between the queue and the Worker host.
+_Avoid_: queue handler, worker launcher.
+
+**Step executor**:
+The CLI-agentic runtime that the **Worker** invokes to actually execute one **Step**. Today: `src/tools/droid_executor.py` or one of the Hermes adapters under `src/ham/worker_adapters/`. The Worker is an orchestrator over the Step executor — it does not embed its own LLM agent loop (per `AGENTS.md` CLI-first execution surface).
+_Avoid_: agent, runtime (overloaded).
+
+**Approval card**:
+The UI affordance that surfaces a proposed **Plan** for user review. Renders as a rich inline message in the chat thread (one Approval card per chat turn that produced a Plan). Approve / Re-plan buttons; destructive Steps highlighted. On approval, transforms in-place into an **In-flight card** rather than disappearing.
+_Avoid_: review dialog, plan modal (these are different UX patterns we did not choose).
+
+**In-flight card**:
+The Approval card after approval — same visual position in the chat thread, but with per-Step status indicators that update via the SSE stream as Steps progress. Cancel button visible while job is running. On terminal status (completed / failed / cancelled) the card freezes with a summary line.
+_Avoid_: progress panel, run status widget.
 
 ## Relationships
 
