@@ -626,3 +626,94 @@ def report_json(plan: JanitorPlan, *, apply_flag_passed: bool) -> str:
         apply_flag_passed=apply_flag_passed,
     )
     return json.dumps(payload, indent=2, sort_keys=True)
+
+
+# ---------------------------------------------------------------------------
+# Live job-level TTL janitor (Phase 1 #3)
+# ---------------------------------------------------------------------------
+
+
+def run_live_job_janitor(
+    *,
+    store: "BuilderRuntimeJobStoreProtocol",
+    all_workspace_ids: list[str],
+    all_project_ids: list[str],
+    now: datetime | None = None,
+    dry_run: bool = False,
+) -> dict[str, int]:
+    """Cancel/reap CloudRuntimeJobs whose TTL has elapsed.
+
+    Implements ADR-0004 cancel protocol at the store level: timed-out active
+    jobs are updated to ``failed`` with a ``worker.worker_timeout`` error.
+    Terminal jobs whose entry still exists are left in the store (reap = no-op
+    at the store layer; pod cleanup is handled by the pod-level janitor).
+
+    Args:
+        store: Job store to read and write records.
+        all_workspace_ids: Workspace IDs to sweep (caller supplies scope).
+        all_project_ids: Project IDs to sweep (caller supplies scope).
+        now: Override current time (defaults to UTC now).
+        dry_run: If True, evaluate but do not mutate the store.
+
+    Returns:
+        Dict with ``cancelled``, ``reap_logged``, ``kept`` counts.
+    """
+    from src.ham.builder_error_codes import WORKER_TIMEOUT, make_error
+    from src.ham.janitor_policies import evaluate
+    from src.persistence.builder_runtime_job_store import CloudRuntimeJob
+
+    when = now or datetime.now(UTC)
+    counts = {"cancelled": 0, "reap_logged": 0, "kept": 0}
+
+    for workspace_id in all_workspace_ids:
+        for project_id in all_project_ids:
+            jobs = store.list_cloud_runtime_jobs(
+                workspace_id=workspace_id, project_id=project_id
+            )
+            for job in jobs:
+                decision = evaluate(job, when)
+                if decision == "cancel":
+                    if not dry_run:
+                        err = make_error(
+                            WORKER_TIMEOUT,
+                            f"Job {job.id!r} exceeded TTL of {job.ttl_seconds}s; "
+                            "force-cancelled by janitor.",
+                            fatal=True,
+                            retriable=False,
+                            details={
+                                "timeout_seconds": job.ttl_seconds,
+                                "janitor": "live_job_janitor",
+                            },
+                        )
+                        updated = job.model_copy(
+                            update={
+                                "status": "failed",
+                                "phase": "janitor_timeout",
+                                "last_error": err,
+                                "error_code": err.error_code,
+                                "error_message": err.error_message,
+                                "completed_at": when.replace(microsecond=0)
+                                .isoformat()
+                                .replace("+00:00", "Z"),
+                                "updated_at": when.replace(microsecond=0)
+                                .isoformat()
+                                .replace("+00:00", "Z"),
+                            }
+                        )
+                        store.upsert_cloud_runtime_job(updated)
+                    counts["cancelled"] += 1
+                elif decision == "reap":
+                    # Terminal — pod-level reap is handled by the pod janitor;
+                    # log the count for observability.
+                    counts["reap_logged"] += 1
+                else:
+                    counts["kept"] += 1
+
+    return counts
+
+
+# Import guard: avoid circular import at module load (only used in run_live_job_janitor)
+from typing import TYPE_CHECKING  # noqa: E402
+
+if TYPE_CHECKING:
+    from src.persistence.builder_runtime_job_store import BuilderRuntimeJobStoreProtocol

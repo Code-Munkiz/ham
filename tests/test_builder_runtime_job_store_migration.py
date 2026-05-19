@@ -157,3 +157,55 @@ class TestBackwardCompatWrite:
         assert written["error_code"] == "gate.plan_stale"
         assert written["error_message"] == "drift"
         assert written["last_error"]["error_code"] == "gate.plan_stale"
+
+
+# ── TTL field migration (Phase 1 #3) ────────────────────────────
+
+
+class TestTtlFieldMigration:
+    def test_old_record_without_ttl_fields_loads_with_defaults(self, store: BuilderRuntimeJobStore):
+        """Records created before Phase 1 #3 have no ttl_seconds/ttl_deadline."""
+        old_record = {
+            "id": "crjb_old_ttl",
+            "version": "1.0.0",
+            "workspace_id": "ws_ttl",
+            "project_id": "proj_ttl",
+            "status": "running",
+            "phase": "received",
+            "provider": "disabled",
+            "created_at": _TS,
+            "updated_at": _TS,
+            "metadata": {},
+        }
+        raw = {"cloud_runtime_jobs": [old_record]}
+        store._path.parent.mkdir(parents=True, exist_ok=True)
+        store._path.write_text(json.dumps(raw), encoding="utf-8")
+
+        jobs = store.list_cloud_runtime_jobs(workspace_id="ws_ttl", project_id="proj_ttl")
+        assert len(jobs) == 1
+        job = jobs[0]
+        assert job.ttl_seconds == 3600
+        assert job.ttl_deadline is None
+
+    def test_new_record_with_ttl_fields_round_trips(self, store: BuilderRuntimeJobStore):
+        job = CloudRuntimeJob(
+            workspace_id="ws_ttl",
+            project_id="proj_ttl",
+            ttl_seconds=1800,
+            ttl_deadline="2026-05-18T13:00:00Z",
+        )
+        store.upsert_cloud_runtime_job(job)
+        loaded = store.get_cloud_runtime_job(
+            workspace_id="ws_ttl", project_id="proj_ttl", job_id=job.id
+        )
+        assert loaded is not None
+        assert loaded.ttl_seconds == 1800
+        assert loaded.ttl_deadline == "2026-05-18T13:00:00Z"
+
+    def test_default_ttl_seconds_is_3600(self):
+        job = CloudRuntimeJob(workspace_id="ws", project_id="proj")
+        assert job.ttl_seconds == 3600
+
+    def test_default_ttl_deadline_is_none(self):
+        job = CloudRuntimeJob(workspace_id="ws", project_id="proj")
+        assert job.ttl_deadline is None
