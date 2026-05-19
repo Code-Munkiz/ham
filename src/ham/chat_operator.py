@@ -2,6 +2,24 @@
 Server-side operator execution for dashboard chat — real reads/writes via ProjectStore,
 settings preview/apply, RunStore, and optional one-shot bridge launch.
 
+Conductor ownership boundary (see AGENTS.md → "HAM bet"):
+
+- This module is the **canonical user-facing path for operator and
+  agent-launch turns** in Workspace Chat. ``format_operator_assistant_message``
+  is the single source of transcript copy for operator intents
+  (``list_projects``, ``inspect_run``, ``cursor_agent_*``, etc.); raw
+  provider IDs / env names / runs-store paths are quarantined by
+  ``_friendly_blocking_reason`` and pinned by
+  ``tests/test_chat_operator_visible_copy.py``.
+- Agent intent classification is delegated to
+  ``src/ham/agent_router.route_agent_intent`` (structured signal only).
+- The chat dispatcher in ``src/api/chat.py`` gates this path off when
+  ``builder_intent == "build_or_create"`` so the builder happy-path in
+  ``src/ham/builder_chat_hooks.py`` owns those turns end-to-end. There is
+  no on-turn overlap between this operator copy and builder ack copy.
+- The CodingPlanCard preview contract (``src/api/coding_conductor.py``)
+  is a separate frontend-driven surface; this module does not invoke it.
+
 Natural-language triggers are intentionally narrow; explicit ``ChatRequest.operator`` is supported
 for confirm/apply flows from the UI.
 """

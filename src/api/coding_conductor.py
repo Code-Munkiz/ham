@@ -1,6 +1,20 @@
 """
 Read-only chat-first conductor preview — POST /api/coding/conductor/preview.
 
+Conductor ownership boundary (see AGENTS.md → "HAM bet"):
+
+- This module is the **canonical structured-signal conductor** for the
+  CodingPlanCard surface. It classifies the user's prompt, snapshots
+  provider readiness, and returns ranked candidates + a single ``chosen``
+  recommendation. The frontend card renders the ``label`` / ``reason`` /
+  ``output_kind`` fields; this module never writes user-facing transcript
+  copy directly.
+- Builder-happy-path acks live in ``src/ham/builder_chat_hooks.py``.
+- Operator / agent-launch transcript copy lives in
+  ``src/ham/chat_operator.format_operator_assistant_message``.
+- ``src/ham/agent_router.py`` and ``src/ham/coding_router/*`` are pure
+  structured-signal providers; they do not generate user copy.
+
 Phase 2A. The conductor classifies the user's prompt, snapshots provider
 readiness, and returns a ranked list of provider candidates with a single
 ``chosen`` recommendation. **It does not launch any provider.** Provider

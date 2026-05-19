@@ -1,4 +1,22 @@
-"""Chat turn hooks for workspace builder happy-path (project + scaffold)."""
+"""Chat turn hooks for workspace builder happy-path (project + scaffold).
+
+Conductor ownership boundary (see AGENTS.md → "HAM bet"):
+
+- This module is the **canonical user-facing path for Builder turns**
+  (``classify_builder_chat_intent`` → ``build_or_create`` /
+  ``answer_question`` / ``plan_only``). Builder ack copy, clarification
+  prompts, and verification-failure copy are produced here.
+- The chat dispatcher in ``src/api/chat.py`` runs this hook first per
+  turn; when ``builder_intent == "build_or_create"`` (or the hook
+  short-circuits with clarification / verification failure) the operator
+  path in ``src/ham/chat_operator.py`` is gated off, so the two paths
+  never both emit user copy on the same turn.
+- Builder intent classification is in
+  ``src/ham/builder_chat_intent.classify_builder_chat_intent`` (structured
+  signal only).
+- The CodingPlanCard preview contract (``src/api/coding_conductor.py``)
+  is a separate frontend-driven surface; this module does not invoke it.
+"""
 
 from __future__ import annotations
 

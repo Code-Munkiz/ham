@@ -1,4 +1,19 @@
-"""Provider-agnostic agent intent router for Workspace Chat."""
+"""Provider-agnostic agent intent router for Workspace Chat.
+
+Conductor ownership boundary (see AGENTS.md → "HAM bet"):
+
+- This module is a **structured-signal provider** consumed by
+  ``src/ham/chat_operator.try_heuristic_intent`` for operator/agent-launch
+  turns. It returns :class:`AgentRouteResult` (intent / mode / provider /
+  task / repo_ref / branch / missing / reason_code) and never produces
+  user-facing transcript copy.
+- The canonical user-facing operator path is
+  ``src/ham/chat_operator.format_operator_assistant_message``.
+- The canonical user-facing builder happy-path is
+  ``src/ham/builder_chat_hooks.run_builder_happy_path_hook``.
+- The CodingPlanCard preview contract is
+  ``src/api/coding_conductor.post_coding_conductor_preview``.
+"""
 
 from __future__ import annotations
 
