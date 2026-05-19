@@ -288,6 +288,37 @@ def test_rest_build_or_create_does_not_receive_conversational_model_override(
     assert "openrouter_model_override" in captured_kwargs
     assert captured_kwargs["openrouter_model_override"] != CONV_SLUG
     assert captured_kwargs["openrouter_model_override"] is None
+    assert captured_kwargs.get("http_model_override") is None
+
+
+def test_rest_build_or_create_http_mode_does_not_receive_http_model_override(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-LANE-001 — REST builder build_or_create lane never receives http_model_override either."""
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://10.0.0.1:8642")
+    monkeypatch.setenv("HERMES_GATEWAY_MODEL", "primary-m")
+    monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", CONV_SLUG)
+    builder_prefix = "I'll create the initial project source and prepare the Workbench.\n\n"
+
+    def _builder_hook(**_kwargs):
+        return (builder_prefix, {"builder_intent": "build_or_create", "scaffolded": True})
+
+    monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _builder_hook)
+    captured_kwargs: dict[str, Any] = {}
+
+    def _stub_complete(_messages, **kwargs):  # type: ignore[no-untyped-def]
+        captured_kwargs.update(kwargs)
+        return "Builder reply body."
+
+    monkeypatch.setattr("src.api.chat.complete_chat_turn", _stub_complete)
+    res = client.post(
+        "/api/chat",
+        json={"messages": [{"role": "user", "content": "build a tracker"}]},
+    )
+    assert res.status_code == 200, res.text
+    assert captured_kwargs.get("http_model_override") is None
+    assert captured_kwargs.get("openrouter_model_override") is None
 
 
 def test_stream_build_or_create_does_not_receive_conversational_model_override(
@@ -324,6 +355,103 @@ def test_stream_build_or_create_does_not_receive_conversational_model_override(
     assert "openrouter_model_override" in captured_kwargs
     assert captured_kwargs["openrouter_model_override"] != CONV_SLUG
     assert captured_kwargs["openrouter_model_override"] is None
+    assert captured_kwargs.get("http_model_override") is None
+
+
+def test_structured_action_turn_does_not_receive_http_conversational_override(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-LANE-006 — structured/UI-action turns must not receive http_model_override."""
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://10.0.0.1:8642")
+    monkeypatch.setenv("HERMES_GATEWAY_MODEL", "primary-m")
+    monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", CONV_SLUG)
+
+    def _hook(**_kwargs):
+        return (
+            "Structured edit preview.\n\n",
+            {
+                "builder_intent": "build_or_create",
+                "scaffolded": False,
+                "builder_edit_worker_blocked": True,
+                "builder_edit_worker": {"worker": "hermes_gateway", "blocked_reason": "gateway_mock"},
+            },
+        )
+
+    monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _hook)
+
+    def _no_llm(*_a: object, **_k: object) -> str:
+        raise AssertionError("structured/blocked lane must not call complete_chat_turn")
+
+    monkeypatch.setattr("src.api.chat.complete_chat_turn", _no_llm)
+
+    res = client.post(
+        "/api/chat",
+        json={"messages": [{"role": "user", "content": "edit X"}]},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assistant = body["messages"][-1]["content"]
+    assert "HAM_CHAT_CONVERSATIONAL_MODEL" not in assistant
+    assert CONV_SLUG not in assistant
+
+
+def test_chat_byok_explicit_model_id_wins_over_http_conversational_env_stream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-HTTP-004 — stream BYOK + explicit model_id wins; http_model_override stays None."""
+    from src.ham.clerk_auth import HamActor
+
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://10.0.0.1:8642")
+    monkeypatch.setenv("HERMES_GATEWAY_MODEL", "minimax/minimax-m2.5:free")
+    monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", "openrouter/sentinel-conv:free")
+
+    actor = HamActor(
+        user_id="user_byok_stream",
+        org_id="o1",
+        session_id="s_byok_stream",
+        email="byok_stream@good.test",
+        permissions=frozenset(),
+        org_role=None,
+        raw_permission_claim=None,
+    )
+    monkeypatch.setattr(
+        "src.api.chat._resolve_chat_clerk_context",
+        lambda *_a, **_k: (actor, None),
+    )
+    byok_key = "sk-or-v1-byok-fake-stream-key-only-for-tests-0000"
+    monkeypatch.setattr(
+        "src.api.chat.resolve_connected_tool_secret_plaintext",
+        lambda _actor, tool_id: byok_key if tool_id == "openrouter" else None,
+    )
+    monkeypatch.setattr(
+        "src.api.models_catalog.has_connected_tool_credential_record",
+        lambda _actor, tool_id: tool_id == "openrouter",
+    )
+
+    captured_kwargs: dict[str, Any] = {}
+
+    def _fake_stream(_messages, **kwargs):
+        captured_kwargs.update(kwargs)
+        yield "ok"
+
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", _fake_stream)
+
+    res = client.post(
+        "/api/chat/stream",
+        json={
+            "messages": [{"role": "user", "content": "hi"}],
+            "model_id": "openrouter:default",
+        },
+    )
+    assert res.status_code == 200, res.text
+    assert captured_kwargs.get("http_model_override") is None
+    assert captured_kwargs.get("force_openrouter_litellm_route") is True
+    assert captured_kwargs.get("openrouter_model_override") not in (
+        None,
+        "openrouter/sentinel-conv:free",
+    )
 
 
 def test_val_cross_006_operator_handled_turn_bypasses_env(
@@ -362,10 +490,10 @@ def test_val_cross_006_operator_handled_turn_bypasses_env(
     assert CONV_SLUG not in assistant_text
 
 
-def test_val_cross_007_http_fallback_unaffected_by_conversational_env(
+def test_val_cross_007_http_fallback_uses_conversational_primary_then_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """VAL-CROSS-007 — HTTP 429 → HAM_CHAT_FALLBACK_MODEL retry; conv env never reaches HTTP body."""
+    """VAL-CROSS-010 — HTTP 429 retry uses HAM_CHAT_FALLBACK_MODEL; primary is the conv slug."""
     monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
     monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://10.0.0.1:8642")
     monkeypatch.setenv("HERMES_GATEWAY_MODEL", "primary-m")
@@ -429,9 +557,8 @@ def test_val_cross_007_http_fallback_unaffected_by_conversational_env(
             json={"messages": [{"role": "user", "content": "hi"}]},
         )
     assert res.status_code == 200, res.text
-    assert captured_models == ["primary-m", "fallback-m"]
-    assert CONV_SLUG not in captured_models
-    assert "anthropic/claude-3.5-haiku" not in captured_models
+    assert captured_models == [CONV_SLUG, "fallback-m"]
+    assert "primary-m" not in captured_models
 
 
 def test_val_cross_008_vision_text_fallback_reuses_env_slug(

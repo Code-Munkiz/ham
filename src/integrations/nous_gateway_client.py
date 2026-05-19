@@ -281,6 +281,17 @@ def _mock_assistant_text(messages: list[dict[str, Any]]) -> str:
     return f"Mock assistant reply. Last message: {snippet}"
 
 
+def _normalize_http_model_override(http_model_override: str | None) -> str | None:
+    if http_model_override is None:
+        return None
+    stripped = http_model_override.strip()
+    if not stripped:
+        return None
+    if "\n" in stripped or "\r" in stripped:
+        return None
+    return stripped
+
+
 def stream_chat_turn(
     messages: list[dict[str, Any]],
     *,
@@ -289,6 +300,7 @@ def stream_chat_turn(
     openrouter_litellm_api_key: str | None = None,
     force_openrouter_litellm_route: bool = False,
     gateway_context_budget_diag: dict[str, Any] | None = None,
+    http_model_override: str | None = None,
 ) -> Iterator[str]:
     """
     Stream one completion as content deltas (OpenAI-style ``delta.content`` chunks).
@@ -366,7 +378,9 @@ def stream_chat_turn(
         )
 
     api_key = (os.environ.get("HERMES_GATEWAY_API_KEY") or "").strip()
-    primary = (os.environ.get("HERMES_GATEWAY_MODEL") or DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    configured_primary = (os.environ.get("HERMES_GATEWAY_MODEL") or DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    primary_override = _normalize_http_model_override(http_model_override)
+    primary = primary_override or configured_primary
     fallback = (os.environ.get("HAM_CHAT_FALLBACK_MODEL") or "").strip()
 
     from src.ham.hermes_http_context_budget import apply_hermes_http_context_budget
@@ -426,6 +440,7 @@ def complete_chat_turn(
     openrouter_litellm_api_key: str | None = None,
     force_openrouter_litellm_route: bool = False,
     gateway_context_budget_diag: dict[str, Any] | None = None,
+    http_model_override: str | None = None,
 ) -> str:
     """
     Run one non-streaming completion. `messages` are OpenAI-style dicts with role + content.
@@ -441,5 +456,6 @@ def complete_chat_turn(
             openrouter_litellm_api_key=openrouter_litellm_api_key,
             force_openrouter_litellm_route=force_openrouter_litellm_route,
             gateway_context_budget_diag=gateway_context_budget_diag,
+            http_model_override=http_model_override,
         ),
     ).strip()
