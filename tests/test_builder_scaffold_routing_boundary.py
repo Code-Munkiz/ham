@@ -78,7 +78,10 @@ def test_legacy_set_is_empty_after_retirement() -> None:
 
 def test_generate_scaffold_signature_is_invariant() -> None:
     sig = inspect.signature(generate_scaffold)
-    assert list(sig.parameters.keys()) == ["plan", "project_id", "workspace_id"]
+    assert list(sig.parameters.keys())[:3] == ["plan", "project_id", "workspace_id"]
+    ham_actor = sig.parameters.get("ham_actor")
+    assert ham_actor is not None
+    assert ham_actor.default is None
     hints = get_type_hints(generate_scaffold)
     assert hints["plan"] is Plan
     assert hints["return"] is ScaffoldResult

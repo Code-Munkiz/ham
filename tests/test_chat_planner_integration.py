@@ -96,7 +96,7 @@ class TestPlannerPathWithKey:
         """A plan_proposed SSE event with the plan_id is emitted for mutation turns."""
         plan = _fake_plan()
 
-        monkeypatch.setattr("src.api.chat.normalized_openrouter_api_key", lambda: "sk-or-test")
+        monkeypatch.setattr("src.api.chat.resolve_openrouter_api_key_for_actor", lambda ham_actor=None: "sk-or-test")
         monkeypatch.setattr(
             "src.api.chat.run_builder_happy_path_hook",
             lambda **_kw: (None, mutation_builder_meta),
@@ -145,7 +145,7 @@ class TestPlannerPathWithKey:
         """Planner path does NOT emit delta events (it's not an LLM stream)."""
         plan = _fake_plan()
 
-        monkeypatch.setattr("src.api.chat.normalized_openrouter_api_key", lambda: "sk-or-test")
+        monkeypatch.setattr("src.api.chat.resolve_openrouter_api_key_for_actor", lambda ham_actor=None: "sk-or-test")
         monkeypatch.setattr(
             "src.api.chat.run_builder_happy_path_hook",
             lambda **_kw: (None, mutation_builder_meta),
@@ -174,7 +174,7 @@ class TestPlannerPathWithKey:
         """The LLM stream is bypassed entirely on the planner path."""
         plan = _fake_plan()
 
-        monkeypatch.setattr("src.api.chat.normalized_openrouter_api_key", lambda: "sk-or-test")
+        monkeypatch.setattr("src.api.chat.resolve_openrouter_api_key_for_actor", lambda ham_actor=None: "sk-or-test")
         monkeypatch.setattr(
             "src.api.chat.run_builder_happy_path_hook",
             lambda **_kw: (None, mutation_builder_meta),
@@ -208,7 +208,7 @@ class TestPlannerPathWithKey:
         """done event carries the builder metadata block."""
         plan = _fake_plan()
 
-        monkeypatch.setattr("src.api.chat.normalized_openrouter_api_key", lambda: "sk-or-test")
+        monkeypatch.setattr("src.api.chat.resolve_openrouter_api_key_for_actor", lambda ham_actor=None: "sk-or-test")
         monkeypatch.setattr(
             "src.api.chat.run_builder_happy_path_hook",
             lambda **_kw: (None, mutation_builder_meta),
@@ -242,7 +242,7 @@ class TestPlannerPathWithKey:
             captured.update(kwargs)
             return plan
 
-        monkeypatch.setattr("src.api.chat.normalized_openrouter_api_key", lambda: "sk-or-test")
+        monkeypatch.setattr("src.api.chat.resolve_openrouter_api_key_for_actor", lambda ham_actor=None: "sk-or-test")
         monkeypatch.setattr(
             "src.api.chat.run_builder_happy_path_hook",
             lambda **_kw: (None, mutation_builder_meta),
@@ -278,7 +278,7 @@ class TestPlannerErrorHandling:
         mutation_builder_meta: dict[str, Any],
     ) -> None:
         """error SSE with PLANNER_INVALID_OUTPUT code is emitted when planner fails."""
-        monkeypatch.setattr("src.api.chat.normalized_openrouter_api_key", lambda: "sk-or-test")
+        monkeypatch.setattr("src.api.chat.resolve_openrouter_api_key_for_actor", lambda ham_actor=None: "sk-or-test")
         monkeypatch.setattr(
             "src.api.chat.run_builder_happy_path_hook",
             lambda **_kw: (None, mutation_builder_meta),
@@ -313,7 +313,7 @@ class TestPlannerErrorHandling:
         mutation_builder_meta: dict[str, Any],
     ) -> None:
         """plan_proposed must NOT appear when PlannerOutputInvalidError is raised."""
-        monkeypatch.setattr("src.api.chat.normalized_openrouter_api_key", lambda: "sk-or-test")
+        monkeypatch.setattr("src.api.chat.resolve_openrouter_api_key_for_actor", lambda ham_actor=None: "sk-or-test")
         monkeypatch.setattr(
             "src.api.chat.run_builder_happy_path_hook",
             lambda **_kw: (None, mutation_builder_meta),
@@ -342,7 +342,7 @@ class TestPlannerErrorHandling:
         mutation_builder_meta: dict[str, Any],
     ) -> None:
         """Stream lock is released after PlannerOutputInvalidError so session is not stuck."""
-        monkeypatch.setattr("src.api.chat.normalized_openrouter_api_key", lambda: "sk-or-test")
+        monkeypatch.setattr("src.api.chat.resolve_openrouter_api_key_for_actor", lambda ham_actor=None: "sk-or-test")
 
         def _failing_hook(**_kw: Any) -> tuple[None, dict[str, Any]]:
             return None, mutation_builder_meta
@@ -396,7 +396,7 @@ class TestPlannerNoKeyFallthrough:
         mutation_builder_meta: dict[str, Any],
     ) -> None:
         """Without a key, stream_chat_turn runs and plan_proposed is NOT emitted."""
-        monkeypatch.setattr("src.api.chat.normalized_openrouter_api_key", lambda: "")
+        monkeypatch.setattr("src.api.chat.resolve_openrouter_api_key_for_actor", lambda ham_actor=None: "")
         monkeypatch.setattr(
             "src.api.chat.run_builder_happy_path_hook",
             lambda **_kw: (None, mutation_builder_meta),
@@ -428,7 +428,7 @@ class TestPlannerNoKeyFallthrough:
         mutation_builder_meta: dict[str, Any],
     ) -> None:
         """Fallthrough produces a done event like any normal stream turn."""
-        monkeypatch.setattr("src.api.chat.normalized_openrouter_api_key", lambda: "")
+        monkeypatch.setattr("src.api.chat.resolve_openrouter_api_key_for_actor", lambda ham_actor=None: "")
         monkeypatch.setattr(
             "src.api.chat.run_builder_happy_path_hook",
             lambda **_kw: (None, mutation_builder_meta),
@@ -463,7 +463,7 @@ class TestNonMutationTurnsUnchanged:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """answer_only builder turns should not enter the planner path."""
-        monkeypatch.setattr("src.api.chat.normalized_openrouter_api_key", lambda: "sk-or-test")
+        monkeypatch.setattr("src.api.chat.resolve_openrouter_api_key_for_actor", lambda ham_actor=None: "sk-or-test")
         monkeypatch.setattr(
             "src.api.chat.run_builder_happy_path_hook",
             lambda **_kw: (
@@ -502,7 +502,7 @@ class TestNonMutationTurnsUnchanged:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Turns without builder_action_decision do not enter the planner path."""
-        monkeypatch.setattr("src.api.chat.normalized_openrouter_api_key", lambda: "sk-or-test")
+        monkeypatch.setattr("src.api.chat.resolve_openrouter_api_key_for_actor", lambda ham_actor=None: "sk-or-test")
         monkeypatch.setattr(
             "src.api.chat.run_builder_happy_path_hook",
             lambda **_kw: (None, {"builder_intent": "answer_question"}),
@@ -527,7 +527,7 @@ class TestNonMutationTurnsUnchanged:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Standard non-builder chat turns (no workspace/project) are completely unaffected."""
-        monkeypatch.setattr("src.api.chat.normalized_openrouter_api_key", lambda: "sk-or-test")
+        monkeypatch.setattr("src.api.chat.resolve_openrouter_api_key_for_actor", lambda ham_actor=None: "sk-or-test")
 
         res = client.post(
             "/api/chat/stream",
@@ -548,7 +548,7 @@ class TestNonMutationTurnsUnchanged:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """ask_clarification turns are handled by the clarification exit, not the planner."""
-        monkeypatch.setattr("src.api.chat.normalized_openrouter_api_key", lambda: "sk-or-test")
+        monkeypatch.setattr("src.api.chat.resolve_openrouter_api_key_for_actor", lambda ham_actor=None: "sk-or-test")
         monkeypatch.setattr(
             "src.api.chat.run_builder_happy_path_hook",
             lambda **_kw: (

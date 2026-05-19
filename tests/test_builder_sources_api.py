@@ -805,7 +805,35 @@ def test_builder_snapshot_file_chat_explain_mode_returns_message_without_snapsho
 
 
 def test_builder_snapshot_file_chat_edit_mode_creates_new_snapshot(tmp_path: Path, monkeypatch) -> None:
+    from src.ham.builder_llm_scaffold import ScaffoldResult
+
     monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    for name in ("OPENROUTER_API_KEY", "HAM_OPENROUTER_API_KEY", "HAM_PLANNER_OPENROUTER_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(
+        "src.llm_client.resolve_openrouter_api_key_for_actor",
+        lambda ham_actor=None: "sk-or-v1-testkey0000000000000000",
+    )
+    monkeypatch.setattr(
+        "src.ham.builder_llm_scaffold.generate_scaffold",
+        lambda *args, **kwargs: ScaffoldResult(
+            file_changes=[
+                (
+                    "src/App.tsx",
+                    "export default function App() {\n"
+                    "  return (\n"
+                    "    <main>\n"
+                    "      <button className=\"large\">Calc</button>\n"
+                    "      <aside className=\"history\">History</aside>\n"
+                    "    </main>\n"
+                    "  );\n"
+                    "}\n",
+                ),
+                ("package.json", '{"name":"calc","version":"0.0.1"}\n'),
+            ],
+            assertions=["history panel visible"],
+        ),
+    )
     ws_store = InMemoryWorkspaceStore()
     ws_id = "ws_aaaaaaaaaaaaaaaa"
     _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
