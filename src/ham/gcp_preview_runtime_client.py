@@ -388,6 +388,16 @@ class LiveGkePreviewRuntimeClient:
         return list(payload.get("items") or [])
 
     def create_preview_pod(self, *, manifest: dict[str, Any]) -> PreviewPodRef:
+        from src.ham.preview_pool import PreviewAcquireSpec, get_preview_pool
+
+        pool = get_preview_pool(self)
+        if pool is not None:
+            if pool._warm_manifest_template is None:
+                pool._warm_manifest_template = manifest
+            return pool.acquire(PreviewAcquireSpec(manifest=manifest))
+        return self._create_preview_pod_direct(manifest=manifest)
+
+    def _create_preview_pod_direct(self, *, manifest: dict[str, Any]) -> PreviewPodRef:
         metadata = manifest.get("metadata") or {}
         namespace = str(metadata.get("namespace") or "default")
         pod_name = str(metadata.get("name") or "").strip()
