@@ -169,4 +169,88 @@ describe("PlanCard", () => {
       /Cancelled after Step/,
     );
   });
+
+  it("expands step error details on step_failed", () => {
+    const events: SSEEvent[] = [
+      {
+        version: "1.0.0",
+        seq: 1,
+        job_id: "crjb_1",
+        plan_id: "pln_test",
+        occurred_at: "2026-05-19T00:00:00Z",
+        event: {
+          type: "step_failed",
+          step_id: "stp_1",
+          step_index: 0,
+          error: {
+            version: "1.0.0",
+            error_code: "step.step_failed",
+            error_message: "Build broke",
+            error_details: { hint: "check logs" },
+            retriable: true,
+            fatal: true,
+            occurred_at: "2026-05-19T00:00:00Z",
+          },
+        },
+      },
+    ];
+    render(
+      <PlanCard
+        plan={samplePlan()}
+        approvalState="approved"
+        phase="in_flight"
+        testStreamEvents={events}
+      />,
+    );
+    fireEvent.click(screen.getByText("Show error"));
+    expect(screen.getByTestId("plan-card-step-error-code-0")).toHaveTextContent("step.step_failed");
+    expect(screen.getByText("Build broke")).toBeInTheDocument();
+  });
+
+  it("fires onJobFailed once for job_failed SSE", () => {
+    const onJobFailed = vi.fn();
+    const events: SSEEvent[] = [
+      {
+        version: "1.0.0",
+        seq: 1,
+        job_id: "crjb_1",
+        plan_id: "pln_test",
+        occurred_at: "2026-05-19T00:00:00Z",
+        event: {
+          type: "job_failed",
+          error: {
+            version: "1.0.0",
+            error_code: "step.step_failed",
+            error_message: "Terminal failure",
+            error_details: null,
+            retriable: false,
+            fatal: true,
+            occurred_at: "2026-05-19T00:00:00Z",
+          },
+        },
+      },
+    ];
+    const { rerender } = render(
+      <PlanCard
+        plan={samplePlan()}
+        approvalState="approved"
+        phase="frozen"
+        testStreamEvents={events}
+        onJobFailed={onJobFailed}
+      />,
+    );
+    rerender(
+      <PlanCard
+        plan={samplePlan()}
+        approvalState="approved"
+        phase="frozen"
+        testStreamEvents={events}
+        onJobFailed={onJobFailed}
+      />,
+    );
+    expect(onJobFailed).toHaveBeenCalledTimes(1);
+    expect(onJobFailed).toHaveBeenCalledWith(
+      expect.objectContaining({ error_message: "Terminal failure" }),
+    );
+  });
 });

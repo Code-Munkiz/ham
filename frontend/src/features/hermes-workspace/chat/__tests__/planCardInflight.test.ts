@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import type { Plan, SSEEvent } from "@/lib/ham/builderPlan";
 
 import {
+  buildStepErrors,
   buildStepStatuses,
   deriveCancelUiState,
   deriveInflightPhase,
+  extractJobFailedError,
   frozenSummaryLine,
   shouldShowStalledCancelWarning,
 } from "../planCardInflight";
@@ -92,6 +94,52 @@ describe("planCardInflight", () => {
     ]);
     expect(summary).toMatch(/Cancelled after Step 2 of 2/);
     expect(summary).toMatch(/Step 1/);
+  });
+
+  it("maps runtime_error to most recent step", () => {
+    const plan = samplePlan();
+    const errors = buildStepErrors(plan, [
+      ev("step_started", { step_id: "stp_1", step_index: 0, title: "One" }),
+      ev("step_completed", { step_id: "stp_1", step_index: 0 }),
+      ev("step_started", { step_id: "stp_2", step_index: 1, title: "Two" }),
+      {
+        ...ev("runtime_error"),
+        event: {
+          type: "runtime_error",
+          error: {
+            version: "1.0.0",
+            error_code: "worker.internal_error",
+            error_message: "boom",
+            error_details: null,
+            retriable: false,
+            fatal: true,
+            occurred_at: "2026-05-19T00:00:00Z",
+          },
+        },
+      },
+    ]);
+    expect(errors[1]?.error_message).toBe("boom");
+  });
+
+  it("extracts job_failed error envelope", () => {
+    const err = extractJobFailedError([
+      {
+        ...ev("job_failed"),
+        event: {
+          type: "job_failed",
+          error: {
+            version: "1.0.0",
+            error_code: "step.step_failed",
+            error_message: "done",
+            error_details: null,
+            retriable: false,
+            fatal: true,
+            occurred_at: "2026-05-19T00:00:00Z",
+          },
+        },
+      },
+    ]);
+    expect(err?.error_message).toBe("done");
   });
 
   it("shows 30s stalled cancel warning", () => {

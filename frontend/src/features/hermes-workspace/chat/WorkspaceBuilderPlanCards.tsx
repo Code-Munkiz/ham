@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import type { Plan, PlanApprovalRecord } from "@/lib/ham/builderPlan";
+import type { ErrorEnvelope, Plan, PlanApprovalRecord } from "@/lib/ham/builderPlan";
 import {
   BuilderPlanApiError,
   approveBuilderPlan,
@@ -9,6 +9,7 @@ import {
 import { BuilderJobApiError, cancelBuilderJob } from "@/lib/ham/builderJobApi";
 
 import { PlanCard, type PlanCardPhase } from "./PlanCard";
+import { PlanJobFailureAssistant } from "./PlanJobFailureAssistant";
 
 export type BuilderPlanCardEntry = {
   planId: string;
@@ -18,6 +19,7 @@ export type BuilderPlanCardEntry = {
   busyBanner: string | null;
   jobId: string | null;
   loadError: string | null;
+  jobFailedError: ErrorEnvelope | null;
 };
 
 type WorkspaceBuilderPlanCardsProps = {
@@ -35,6 +37,7 @@ export function createEmptyBuilderPlanEntry(planId: string): BuilderPlanCardEntr
     busyBanner: null,
     jobId: null,
     loadError: null,
+    jobFailedError: null,
   };
 }
 
@@ -55,6 +58,7 @@ export async function loadBuilderPlanEntry(planId: string): Promise<BuilderPlanC
       busyBanner: null,
       jobId: null,
       loadError: null,
+      jobFailedError: null,
     };
   } catch (err) {
     return {
@@ -70,6 +74,7 @@ export function WorkspaceBuilderPlanCards({
   onReplanMessage,
 }: WorkspaceBuilderPlanCardsProps) {
   const [approvingPlanId, setApprovingPlanId] = React.useState<string | null>(null);
+  const [forceReplanPlanId, setForceReplanPlanId] = React.useState<string | null>(null);
   if (!entries.length) return null;
 
   const patchEntry = (planId: string, patch: Partial<BuilderPlanCardEntry>) => {
@@ -101,71 +106,81 @@ export function WorkspaceBuilderPlanCards({
           );
         }
         return (
-          <PlanCard
-            key={entry.planId}
-            plan={entry.plan}
-            approvalState={entry.approval.state}
-            phase={entry.phase}
-            busyBanner={entry.busyBanner}
-            approving={approvingPlanId === entry.planId}
-            onApprove={async () => {
-              setApprovingPlanId(entry.planId);
-              patchEntry(entry.planId, { busyBanner: null });
-              try {
-                const result = await approveBuilderPlan(entry.planId);
-                patchEntry(entry.planId, {
-                  phase: "approved_waiting",
-                  approval: {
-                    ...entry.approval!,
-                    state: "approved",
-                    approved_at: new Date().toISOString(),
-                  },
-                  jobId: result.job_id,
-                  busyBanner: null,
-                });
-              } catch (err) {
-                if (err instanceof BuilderPlanApiError && err.code === "project_busy") {
+          <React.Fragment key={entry.planId}>
+            <PlanCard
+              plan={entry.plan}
+              approvalState={entry.approval.state}
+              phase={entry.phase}
+              busyBanner={entry.busyBanner}
+              approving={approvingPlanId === entry.planId}
+              onApprove={async () => {
+                setApprovingPlanId(entry.planId);
+                patchEntry(entry.planId, { busyBanner: null });
+                try {
+                  const result = await approveBuilderPlan(entry.planId);
                   patchEntry(entry.planId, {
-                    busyBanner: "Another build is running for this project; cancel it first",
+                    phase: "approved_waiting",
+                    approval: {
+                      ...entry.approval!,
+                      state: "approved",
+                      approved_at: new Date().toISOString(),
+                    },
+                    jobId: result.job_id,
+                    busyBanner: null,
                   });
-                  return;
-                }
-                if (err instanceof BuilderPlanApiError && err.code === "plan_stale") {
-                  patchEntry(entry.planId, {
-                    phase: "stale",
-                    approval: { ...entry.approval!, state: "stale" },
-                  });
-                  return;
-                }
-                patchEntry(entry.planId, {
-                  busyBanner: err instanceof Error ? err.message : "Approve failed",
-                });
-              } finally {
-                setApprovingPlanId(null);
-              }
-            }}
-            jobId={entry.jobId}
-            onReplan={(text) => onReplanMessage(text)}
-            onCancelJob={
-              entry.jobId
-                ? async () => {
-                    try {
-                      await cancelBuilderJob(entry.jobId!);
-                    } catch (err) {
-                      if (
-                        err instanceof BuilderJobApiError &&
-                        err.code === "job_already_terminal"
-                      ) {
-                        return;
-                      }
-                      patchEntry(entry.planId, {
-                        busyBanner: err instanceof Error ? err.message : "Cancel failed",
-                      });
-                    }
+                } catch (err) {
+                  if (err instanceof BuilderPlanApiError && err.code === "project_busy") {
+                    patchEntry(entry.planId, {
+                      busyBanner: "Another build is running for this project; cancel it first",
+                    });
+                    return;
                   }
-                : undefined
-            }
-          />
+                  if (err instanceof BuilderPlanApiError && err.code === "plan_stale") {
+                    patchEntry(entry.planId, {
+                      phase: "stale",
+                      approval: { ...entry.approval!, state: "stale" },
+                    });
+                    return;
+                  }
+                  patchEntry(entry.planId, {
+                    busyBanner: err instanceof Error ? err.message : "Approve failed",
+                  });
+                } finally {
+                  setApprovingPlanId(null);
+                }
+              }}
+              jobId={entry.jobId}
+              onReplan={(text) => onReplanMessage(text)}
+              onCancelJob={
+                entry.jobId
+                  ? async () => {
+                      try {
+                        await cancelBuilderJob(entry.jobId!);
+                      } catch (err) {
+                        if (
+                          err instanceof BuilderJobApiError &&
+                          err.code === "job_already_terminal"
+                        ) {
+                          return;
+                        }
+                        patchEntry(entry.planId, {
+                          busyBanner: err instanceof Error ? err.message : "Cancel failed",
+                        });
+                      }
+                    }
+                  : undefined
+              }
+              forceReplanOpen={forceReplanPlanId === entry.planId}
+              onJobFailed={(error) => patchEntry(entry.planId, { jobFailedError: error })}
+            />
+            {entry.jobFailedError ? (
+              <PlanJobFailureAssistant
+                error={entry.jobFailedError}
+                onTryAgain={() => onReplanMessage(entry.plan!.user_message)}
+                onEditReplan={() => setForceReplanPlanId(entry.planId)}
+              />
+            ) : null}
+          </React.Fragment>
         );
       })}
     </div>
