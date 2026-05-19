@@ -103,10 +103,22 @@ if [[ ! -f "$ENV_FILE" ]]; then
 fi
 # Reminder: --env-vars-file replaces the revision's plain env vars entirely; do not deploy a mock-only
 # YAML to staging if the service must use HERMES_GATEWAY_MODE=http or openrouter (see DEPLOY_CLOUD_RUN.md).
+# Non-secret Docker build labels (`HAM_BUILD_SHA`, `HAM_BUILD_TIME`, `HAM_SERVICE_VERSION`) are injected via
+# `scripts/cloudbuild_ham_api.yaml` + `gcloud builds submit --substitutions=...`; see Dockerfile ARG mirrors.
 
 if [[ "${SKIP_BUILD:-0}" != "1" ]]; then
   echo "Building and pushing ${IMAGE} ..."
-  gcloud builds submit --tag "${IMAGE}" . --project="${PROJECT_ID}"
+  #
+  # Wire git SHA + UTC timestamp into the image so /api/status and /api/build-info
+  # expose sanitized metadata on Cloud Run. Empty values preserve local-docker fallbacks.
+  HAM_BUILD_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
+  HAM_BUILD_TIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || true)"
+  HAM_SVC_VER="${HAM_SERVICE_VERSION:-0.1.0}"
+  gcloud builds submit \
+    --project="${PROJECT_ID}" \
+    --config="${ROOT}/scripts/cloudbuild_ham_api.yaml" \
+    --substitutions="_IMAGE=${IMAGE},_HAM_BUILD_SHA=${HAM_BUILD_SHA},_HAM_BUILD_TIME=${HAM_BUILD_TIME},_HAM_SERVICE_VERSION=${HAM_SVC_VER}" \
+    "${ROOT}"
 else
   echo "SKIP_BUILD=1 — deploying image ${IMAGE}"
 fi

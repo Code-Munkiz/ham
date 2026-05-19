@@ -38,7 +38,7 @@ class TestInjectBuilderTurnSystem:
         result = _inject_builder_turn_system(msgs, "build_or_create")
         assert "Builder turn override" in result[0]["content"]
         assert "base" in result[0]["content"]
-        assert "Do NOT say" in result[0]["content"]
+        assert "Do NOT imply" in result[0]["content"]
 
     def test_injection_creates_system_if_missing(self) -> None:
         msgs = [{"role": "user", "content": "build a game"}]
@@ -47,12 +47,13 @@ class TestInjectBuilderTurnSystem:
         assert "Builder turn override" in result[0]["content"]
         assert result[1]["role"] == "user"
 
-    def test_injection_prohibits_managed_mission_language(self) -> None:
+    def test_injection_blocks_fake_shipped_language(self) -> None:
         text = _BUILDER_TURN_SYSTEM_INJECTION
-        assert "Launch a managed mission" in text
-        assert "launch a Cloud Agent" in text
+        assert "Builder turn override" in text
+        assert '"ready"' in text or '"complete"' in text
         assert "Plan with coding agents" in text
-        assert "can't build directly from chat" in text
+        assert "Cloud Agent narration" in text
+        assert "managed mission" not in text.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -93,17 +94,15 @@ class TestBuilderAckPrefix:
 
 
 class TestSystemPromptBoundary:
-    def test_default_prompt_prohibits_managed_mission_for_builder(self) -> None:
-        assert "Do NOT redirect to Coding Plan" in _BUILDER_TURN_SYSTEM_INJECTION
-
     def test_default_prompt_still_has_coding_plan_for_repo_mutation(self) -> None:
         assert "Plan with coding agents" in _DEFAULT_CHAT_SYSTEM_PROMPT
         assert "Coding Plan card" in _DEFAULT_CHAT_SYSTEM_PROMPT
         assert "Managed workspace build approval panel" in _DEFAULT_CHAT_SYSTEM_PROMPT
 
-    def test_default_prompt_forbids_managed_mission_language_for_builder(self) -> None:
-        assert 'Do NOT say "Launch a managed mission."' in _BUILDER_TURN_SYSTEM_INJECTION
-        assert '"Let me launch a Cloud Agent."' in _BUILDER_TURN_SYSTEM_INJECTION
+    def test_default_prompt_pins_builder_without_managed_mission_phrasing(self) -> None:
+        assert "Do NOT imply" in _BUILDER_TURN_SYSTEM_INJECTION
+        assert "never autosubmit" in _BUILDER_TURN_SYSTEM_INJECTION.lower()
+        assert "managed mission" not in _BUILDER_TURN_SYSTEM_INJECTION.lower()
 
 
 # ---------------------------------------------------------------------------

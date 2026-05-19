@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from src.api.chat import (
+    _BUILDER_TURN_SYSTEM_INJECTION,
     _DEFAULT_CHAT_SYSTEM_PROMPT,
     _MAX_SYSTEM_PROMPT_CHARS,
     _chat_system_prompt,
@@ -96,11 +97,8 @@ def test_chat_system_prompt_forbids_delegate_task_for_coding_execution() -> None
         "system prompt must explicitly forbid delegate_task as a coding-execution route"
     )
     assert "Do NOT suggest `delegate_task`" in base or "Do NOT suggest" in base
-    # Preferred copy for the managed-workspace build flow.
-    assert "managed workspace build" in base
-    assert "Review the plan below and approve when ready" in base
-
-
+    # Preferred approval copy for workspace-scoped planner/build flows (neutral wording — no jargon).
+    assert "approve before Builder work starts" in base
 F_PROVIDER_IDS = (
     "opencode_cli",
     "claude_code",
@@ -134,12 +132,11 @@ F_OPERATOR_VOCAB = (
 def test_val_prompt_001_length_cap() -> None:
     """VAL-PROMPT-001 + VAL-BRAND-006: default prompt stays under the concise cap.
 
-    Cap raised from 1800 to 2900 to fit the HAM brand canon (first code monkey launched
-    into space), no-denial guidance, and casual self-description voice block while still
-    bounding prompt growth — the assembly cap ``_MAX_SYSTEM_PROMPT_CHARS`` (12_000) is
-    unchanged and large skill/subagent catalogs must not crowd out this base prompt.
+    Cap bumped from 1800 → 2900 → ~3300 to fit canon + Builder Studio grounding + stronger
+    fabrication/outcome wording while `_MAX_SYSTEM_PROMPT_CHARS`` (12_000) still bounds full
+    assembly with huge skill/subagent catalogs.
     """
-    assert len(_DEFAULT_CHAT_SYSTEM_PROMPT) <= 2900
+    assert len(_DEFAULT_CHAT_SYSTEM_PROMPT) <= 3350
 
 
 def test_val_prompt_002_ham_identity() -> None:
@@ -162,7 +159,7 @@ def test_val_prompt_004_completion_claim_guardrail() -> None:
     """VAL-PROMPT-004: completion-claim guardrail preserved."""
     base = _DEFAULT_CHAT_SYSTEM_PROMPT
     assert "Completion-claim rule" in base
-    for word in ("done", "built", "shipped", "committed", "pushed"):
+    for word in ("done", "ready", "built", "generated", "shipped", "committed", "pushed"):
         assert word in base, f"missing completion word: {word!r}"
     for artifact in ("ham_run_id", "snapshot_id", "pr_url", "control_plane_run_id"):
         assert artifact in base, f"missing artifact token: {artifact!r}"
@@ -172,7 +169,7 @@ def test_val_prompt_005_approval_before_mutation_guardrail() -> None:
     """VAL-PROMPT-005: approval-before-mutation surfaces the approval card flow."""
     base = _DEFAULT_CHAT_SYSTEM_PROMPT
     assert "Managed workspace build approval panel" in base
-    assert "Review the plan below and approve when ready" in base
+    assert "approve before Builder work starts" in base
 
 
 def test_val_prompt_006_route_coding_execution_guardrail() -> None:
@@ -217,6 +214,20 @@ def test_chat_system_prompt_default_returns_string_starting_with_persona() -> No
     )
     assert isinstance(out, str)
     assert out.startswith("You are **Ham**")
+
+
+def test_default_prompt_grounds_builder_studio_plainly() -> None:
+    """VAL-BETA-BS — Builder Studio framing matches product onboarding copy."""
+    base = _DEFAULT_CHAT_SYSTEM_PROMPT
+    assert "**Builder Studio.**" in base
+    low = base.lower()
+    assert "builder studio configures" in low or "inside builder studio" in low
+
+
+def test_default_prompt_avoids_managed_mission_operator_jargon() -> None:
+    """VAL-JARGON-MM — planner-style chat avoids operator mission-registry language."""
+    assert "managed mission" not in _DEFAULT_CHAT_SYSTEM_PROMPT.lower()
+    assert "managed mission" not in _BUILDER_TURN_SYSTEM_INJECTION.lower()
 
 
 def test_default_prompt_contains_ham_brand_canon() -> None:

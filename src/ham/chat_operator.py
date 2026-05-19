@@ -2154,7 +2154,7 @@ def _dispatch_intent(
             return _reasoned_block(
                 intent,
                 "missing_mission_context",
-                "I could not find a recent managed mission for this workspace yet.",
+                "I couldn't find a recent Cursor agent run tracked for this workspace yet.",
             )
         aid_raw = mission.cursor_agent_id
         project_for_status = _mission_project_id(mission) or pid
@@ -2212,7 +2212,7 @@ def _dispatch_intent(
             return _reasoned_block(
                 intent,
                 "missing_mission_context",
-                "I could not find a recent managed mission for this workspace yet.",
+                "I couldn't find a recent Cursor agent run tracked for this workspace yet.",
             )
         return OperatorTurnResult(
             handled=True,
@@ -2239,7 +2239,7 @@ def _dispatch_intent(
             return _reasoned_block(
                 intent,
                 "missing_mission_context",
-                "I could not find a managed mission to cancel for this workspace.",
+                "I couldn't find a Cursor agent run to cancel for this workspace.",
             )
         return OperatorTurnResult(
             handled=True,

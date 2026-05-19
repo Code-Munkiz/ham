@@ -141,6 +141,16 @@ def test_build_info_falls_back_to_unprefixed_env(
     assert res.json().get("git_sha") == "ccccccc"
 
 
+def test_build_info_accepts_full_git_sha(
+    client: TestClient, clean_build_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hex40 = "a" * 40
+    monkeypatch.setenv("HAM_BUILD_SHA", hex40)
+    res = client.get("/api/build-info")
+    assert res.status_code == 200, res.text
+    assert res.json().get("git_sha") == hex40
+
+
 def test_build_info_response_does_not_leak_internal_tokens(
     client: TestClient, clean_build_env: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:

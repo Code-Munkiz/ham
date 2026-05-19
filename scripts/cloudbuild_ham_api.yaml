@@ -1,0 +1,21 @@
+# Ham API Docker image — invoked by scripts/deploy_ham_api_cloud_run.sh.
+# Set _IMAGE and build metadata via --substitutions (see deploy script header).
+
+substitutions:
+  _HAM_BUILD_SHA: ""
+  _HAM_BUILD_TIME: ""
+  _HAM_SERVICE_VERSION: "0.1.0"
+  _IMAGE: ""
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --tag=${_IMAGE}
+      - --build-arg=HAM_BUILD_SHA=${_HAM_BUILD_SHA}
+      - --build-arg=HAM_BUILD_TIME=${_HAM_BUILD_TIME}
+      - --build-arg=HAM_SERVICE_VERSION=${_HAM_SERVICE_VERSION}
+      - .
+
+images:
+  - ${_IMAGE}
