@@ -1,6 +1,6 @@
 # Manus Parity Roadmap
 
-**Status:** Phase 0 + Phase 1 shipped 2026-05-19. Phase 2 design pending (planner UI, approval gate, SSE replacing polling, cancel button, runtime errors → chat, LLM-generated scaffolds).
+**Status:** Tier 1 shipped 2026-05-19; Tier 2 design pending.
 **Scope:** What needs to be true for HAM to operate like Manus 1.6 / Replit Agent 3-4 / Base44 as an end-to-end chat-to-app builder, sized for a 3-5 person team.
 **Related:**
 [BUILDER_PLATFORM_NORTH_STAR.md](BUILDER_PLATFORM_NORTH_STAR.md) ·
@@ -42,14 +42,14 @@ The third critical item — **unrestricted network egress** from preview pods �
 
 | # | Item | Why | Shipped |
 |---|---|---|---|
-| 1 | Planner / todo-list step with human approval gate | Universal pattern across all three platforms; today HAM has only regex intent classification | (Phase 2 — requires planner/worker to exist) |
-| 2 | LLM-generated scaffolds | [src/ham/builder_chat_scaffold.py](../src/ham/builder_chat_scaffold.py) is deterministic templates only — works for calculator/tetris, fails for anything else | (Phase 2 — requires planner/worker to exist) |
-| 3 | SSE / WebSocket streaming (replace polling) | Activity feed is polled; Manus/Replit stream curated events | (Phase 2 — requires planner/worker to exist) |
-| 4 | Cancel button with cooperative interrupt | Runaway agent runs are unrecoverable except by killing the pod | (Phase 2 — requires planner/worker to exist) |
-| 5 | Runtime errors from preview pod → chat | Today the preview is a black box — crashes show a blank screen, not a chat message | (Phase 2 — requires planner/worker to exist) |
+| 1 | Planner / todo-list step with human approval gate | Universal pattern across all three platforms; today HAM has only regex intent classification | PRs #366 #367 #368 (refs #356 #358 #359) |
+| 2 | LLM-generated scaffolds | [src/ham/builder_chat_scaffold.py](../src/ham/builder_chat_scaffold.py) is deterministic templates only — works for calculator/tetris, fails for anything else | PR #364 (refs #361) |
+| 3 | SSE / WebSocket streaming (replace polling) | Activity feed is polled; Manus/Replit stream curated events | PR #365 (refs #357) |
+| 4 | Cancel button with cooperative interrupt | Runaway agent runs are unrecoverable except by killing the pod | PR #368 (refs #359) |
+| 5 | Runtime errors from preview pod → chat | Today the preview is a black box — crashes show a blank screen, not a chat message | PR #369 (refs #360) |
 | 6 | ✅ NetworkPolicy on preview pods | **Biggest security gap.** gVisor is in place ([gcp_preview_worker_manifest.py:65-82](../src/ham/gcp_preview_worker_manifest.py#L65-L82)) but pods can reach any external IP — exfiltrate, mine, hit internal services | PR #347 |
 | 7 | ✅ Live preview janitor + job TTL | Jobs in `running` state linger forever if worker crashes; live janitor + TTL fields shipped | PR #349 |
-| 8 | Queue (Cloud Tasks / Pub/Sub) between API and runtime worker | Currently synchronous — API restart loses in-flight builds | (Phase 2 — requires planner/worker to exist) |
+| 8 | Queue (Cloud Tasks / Pub/Sub) between API and runtime worker | Currently synchronous — API restart loses in-flight builds | PR #363 (refs #355) |
 | 9 | ✅ Sentry SDK + request-ID middleware | Zero error tracking today; production failures disappear | PR #348 |
 
 ### Tier 2 — user retention
@@ -166,8 +166,8 @@ Without these, cloud agents will over-build.
 
 - **Phase 0**: Completed in one working session (contracts locked; PRs #334–#338 merged 2026-05-18).
 - **Phase 1**: Completed in ~1–2 days wall-clock with parallel Factory agents (PRs #347–#353 merged 2026-05-18 / 2026-05-19).
-- **Phase 2**: 3–5 days with human review per PR (planner, approval gate, SSE, cancel, runtime errors → chat, LLM scaffolds, queue).
-- **Tier 1 complete**: Remaining Tier 1 items (#1–#5, #8) depend on Phase 2; estimate 1–2 weeks after Phase 2 design.
+- **Phase 2**: Completed with human review per PR (planner, approval gate, SSE, cancel, runtime errors → chat, LLM scaffolds, queue) via PRs #363–#370 on 2026-05-19.
+- **Tier 1 complete**: All Tier 1 items (#1–#9) are now marked shipped on `main`.
 
 ## Skills toolkit
 
