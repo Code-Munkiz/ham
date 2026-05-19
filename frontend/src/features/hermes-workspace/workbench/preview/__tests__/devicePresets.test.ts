@@ -3,11 +3,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import {
-  DEFAULT_DEVICE_PRESET,
-  DEVICE_PRESETS,
-  getOrientedDimensions,
-} from "../devicePresets";
+import { DEFAULT_DEVICE_PRESET, DEVICE_PRESETS, getOrientedDimensions } from "../devicePresets";
 
 describe("DEVICE_PRESETS", () => {
   it("contains at least iPhone 14, Pixel 7, iPad Mini", () => {

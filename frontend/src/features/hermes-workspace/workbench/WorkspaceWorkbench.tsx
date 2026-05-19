@@ -1282,80 +1282,80 @@ function WorkbenchPreviewPanel({
                   iframeKey={`${previewUrl || "preview"}|${preview?.runtime_session_id || ""}|${iframeReloadNonce}`}
                 />
               ) : (
-              <iframe
-                key={`${previewUrl || "preview"}|${preview?.runtime_session_id || ""}|${preview?.preview_endpoint_id || ""}|${preview?.source_snapshot_id || ""}|${iframeReloadNonce}`}
-                title="App preview"
-                src={previewUrl}
-                className={cn(
-                  "block h-full min-h-0 w-full rounded-md border border-white/[0.12] bg-black/20",
-                )}
-                data-testid="hww-preview-iframe"
-                sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-                onLoad={(event) => {
-                  const frame = event.currentTarget;
-                  try {
-                    const doc = frame.contentDocument;
-                    const frameText = String(doc?.body?.innerText || "").trim();
-                    const contentType = String(doc?.contentType || "").toLowerCase();
-                    const iframeSignals = detectPreviewIframeProxySignals(frameText, contentType);
-                    if (iframeSignals.previewProxyWarmupLike) {
-                      const upstreamUnavailable = iframeSignals.upstreamUnavailableMarked;
-                      if (
-                        upstreamUnavailable &&
-                        previewIframeUpstreamLooksHardBroken({
-                          preview,
-                          job: cloudRuntimeLatestJob,
-                        })
-                      ) {
+                <iframe
+                  key={`${previewUrl || "preview"}|${preview?.runtime_session_id || ""}|${preview?.preview_endpoint_id || ""}|${preview?.source_snapshot_id || ""}|${iframeReloadNonce}`}
+                  title="App preview"
+                  src={previewUrl}
+                  className={cn(
+                    "block h-full min-h-0 w-full rounded-md border border-white/[0.12] bg-black/20",
+                  )}
+                  data-testid="hww-preview-iframe"
+                  sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+                  onLoad={(event) => {
+                    const frame = event.currentTarget;
+                    try {
+                      const doc = frame.contentDocument;
+                      const frameText = String(doc?.body?.innerText || "").trim();
+                      const contentType = String(doc?.contentType || "").toLowerCase();
+                      const iframeSignals = detectPreviewIframeProxySignals(frameText, contentType);
+                      if (iframeSignals.previewProxyWarmupLike) {
+                        const upstreamUnavailable = iframeSignals.upstreamUnavailableMarked;
+                        if (
+                          upstreamUnavailable &&
+                          previewIframeUpstreamLooksHardBroken({
+                            preview,
+                            job: cloudRuntimeLatestJob,
+                          })
+                        ) {
+                          if (iframeProxyRetryTimerRef.current != null) {
+                            window.clearTimeout(iframeProxyRetryTimerRef.current);
+                            iframeProxyRetryTimerRef.current = null;
+                          }
+                          iframeProxyStrikeRef.current = 0;
+                          void refreshPreviewRuntimeStatus({ includeLifecycle: true });
+                          setIframeProxyWarmupPaused(true);
+                          setIframeProxyError("PREVIEW_PROXY_FAILED");
+                          return;
+                        }
+                        iframeProxyStrikeRef.current += 1;
+                        void refreshPreviewRuntimeStatus({ includeLifecycle: false });
                         if (iframeProxyRetryTimerRef.current != null) {
                           window.clearTimeout(iframeProxyRetryTimerRef.current);
                           iframeProxyRetryTimerRef.current = null;
                         }
-                        iframeProxyStrikeRef.current = 0;
-                        void refreshPreviewRuntimeStatus({ includeLifecycle: true });
-                        setIframeProxyWarmupPaused(true);
-                        setIframeProxyError("PREVIEW_PROXY_FAILED");
+                        const strike = iframeProxyStrikeRef.current;
+                        if (strike > IFRAME_PROXY_WARMUP_MAX_ATTEMPTS) {
+                          if (iframeProxyRetryTimerRef.current != null) {
+                            window.clearTimeout(iframeProxyRetryTimerRef.current);
+                            iframeProxyRetryTimerRef.current = null;
+                          }
+                          setIframeProxyWarmupPaused(true);
+                          setIframeProxyError("PREVIEW_PROXY_FAILED");
+                        } else {
+                          setIframeProxyWarmupPaused(false);
+                          const exp = Math.min(5, Math.max(0, strike - 1));
+                          const delayMs = Math.min(
+                            12_000,
+                            IFRAME_PROXY_WARMUP_BASE_DELAY_MS * Math.pow(2, exp),
+                          );
+                          setIframeProxyError("PREVIEW_PROXY_WARMUP");
+                          iframeProxyRetryTimerRef.current = window.setTimeout(() => {
+                            iframeProxyRetryTimerRef.current = null;
+                            setIframeReloadNonce((n) => n + 1);
+                            setIframeProxyError(null);
+                          }, delayMs);
+                        }
                         return;
                       }
-                      iframeProxyStrikeRef.current += 1;
-                      void refreshPreviewRuntimeStatus({ includeLifecycle: false });
-                      if (iframeProxyRetryTimerRef.current != null) {
-                        window.clearTimeout(iframeProxyRetryTimerRef.current);
-                        iframeProxyRetryTimerRef.current = null;
-                      }
-                      const strike = iframeProxyStrikeRef.current;
-                      if (strike > IFRAME_PROXY_WARMUP_MAX_ATTEMPTS) {
-                        if (iframeProxyRetryTimerRef.current != null) {
-                          window.clearTimeout(iframeProxyRetryTimerRef.current);
-                          iframeProxyRetryTimerRef.current = null;
-                        }
-                        setIframeProxyWarmupPaused(true);
-                        setIframeProxyError("PREVIEW_PROXY_FAILED");
-                      } else {
-                        setIframeProxyWarmupPaused(false);
-                        const exp = Math.min(5, Math.max(0, strike - 1));
-                        const delayMs = Math.min(
-                          12_000,
-                          IFRAME_PROXY_WARMUP_BASE_DELAY_MS * Math.pow(2, exp),
-                        );
-                        setIframeProxyError("PREVIEW_PROXY_WARMUP");
-                        iframeProxyRetryTimerRef.current = window.setTimeout(() => {
-                          iframeProxyRetryTimerRef.current = null;
-                          setIframeReloadNonce((n) => n + 1);
-                          setIframeProxyError(null);
-                        }, delayMs);
-                      }
-                      return;
+                      iframeProxyStrikeRef.current = 0;
+                      setIframeProxyWarmupPaused(false);
+                      setIframeProxyError(null);
+                    } catch {
+                      // Cross-origin restrictions should not apply for same-origin preview proxy,
+                      // but keep this tolerant in case browser sandbox policies vary.
                     }
-                    iframeProxyStrikeRef.current = 0;
-                    setIframeProxyWarmupPaused(false);
-                    setIframeProxyError(null);
-                  } catch {
-                    // Cross-origin restrictions should not apply for same-origin preview proxy,
-                    // but keep this tolerant in case browser sandbox policies vary.
-                  }
-                }}
-              />
+                  }}
+                />
               )}
               {visualEditModeActive ? (
                 <button
