@@ -1,0 +1,29 @@
+# HAM Builder package allowlist — Phase 1 #6 (Tier 1 #15).
+# Source of truth for allowed npm/pip packages in builder previews.
+# Adding a package is a single edit here; no code change required.
+#
+# Security note: this is a separate layer from the NetworkPolicy egress allowlist
+# (infra/gcp/preview-runtime/networkpolicy-preview.yaml). Host-level policy
+# defends against malicious code in legitimate packages; this list defends
+# against malicious packages themselves (typo-squatting, supply-chain attacks).
+#
+# Initial entries cover every package the existing template scaffolds install.
+# Add packages via tracked PR with security-aware review.
+
+version: "1"
+
+npm:
+  # React core (builder_chat_scaffold.py templates)
+  - react
+  - react-dom
+  # Build tooling
+  - vite
+  - "@vitejs/plugin-react"
+  - typescript
+
+pip:
+  # Python web backend (FastAPI + Pydantic)
+  - fastapi
+  - pydantic
+  - uvicorn
+  - starlette

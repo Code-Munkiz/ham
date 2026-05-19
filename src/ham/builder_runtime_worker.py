@@ -35,6 +35,7 @@ from src.ham.gcp_preview_source_bundle import (
     package_source_files_to_zip,
 )
 from src.ham.gcp_preview_worker_manifest import build_gke_preview_pod_manifest
+from src.ham.package_allowlist import check_install_allowed
 from src.persistence.builder_runtime_job_store import CloudRuntimeJob
 from src.persistence.builder_source_store import get_builder_source_store
 from src.persistence.builder_runtime_store import PreviewEndpoint, RuntimeSession, get_builder_runtime_store
@@ -1062,7 +1063,19 @@ def execute_cloud_runtime_job(job: CloudRuntimeJob) -> CloudRuntimeExecutionResu
             )
         if state.status != "failed":
             lifecycle_stage = "install"
-            state = provider.run_command(state=state, command=["npm", "install"], stage="install")
+            denial = check_install_allowed(["npm", "install"], source_files=source_files)
+            if denial is not None:
+                state = SandboxRuntimeState(
+                    **{
+                        **state.__dict__,
+                        "status": "failed",
+                        "updated_at": _utc_now_iso(),
+                        "error_code": denial.error_code,
+                        "error_message": denial.error_message,
+                    }
+                )
+            else:
+                state = provider.run_command(state=state, command=["npm", "install"], stage="install")
         if state.status != "failed":
             lifecycle_stage = "start"
             state = provider.run_command(
