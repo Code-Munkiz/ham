@@ -1417,3 +1417,149 @@ def test_preview_operator_diagnostics_no_secrets(
     # gate_states values must be booleans, not the actual env string values.
     assert isinstance(diag["gate_states"]["opencode_enabled"], bool)
     assert isinstance(diag["gate_states"]["opencode_execution_enabled"], bool)
+
+
+# ---------------------------------------------------------------------------
+# Provider product label branding (VAL-PROVIDER-001 / VAL-PROVIDER-003)
+# ---------------------------------------------------------------------------
+
+
+_APPROVED_PRODUCT_NAMES = ("Claude", "OpenCode", "Factory Droid", "Cursor")
+
+_BANNED_VISIBLE_LABEL_PHRASES = (
+    "Open Builder",
+    "Controlled Builder",
+    "Connected Repo Builder",
+    "Premium Reasoning Builder",
+    "Local editor",
+    "Local single-file edit",
+    "Code insights",
+    "Claude Code",
+    "Claude Agent",
+)
+
+_RAW_PROVIDER_IDS_IN_DISPLAY_COPY = (
+    "opencode_cli",
+    "claude_code",
+    "claude_agent",
+    "factory_droid_audit",
+    "factory_droid_build",
+    "cursor_cloud",
+)
+
+
+def test_preview_labels_use_approved_product_brand_names(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    normie_actor: HamActor,
+    tmp_path: Path,
+    cleanup_overrides: None,
+) -> None:
+    """Every non-conversational candidate's ``label`` carries an approved
+    product brand (Claude / OpenCode / Factory Droid / Cursor) and never
+    surfaces a legacy internal builder name as the user-facing identity.
+    """
+    _make_build_ready(monkeypatch)
+    _make_audit_ready(monkeypatch)
+    _make_cursor_ready(monkeypatch)
+    rec = _register_project(
+        isolated_store,
+        name="p_brand",
+        root=tmp_path,
+        build_lane_enabled=True,
+        github_repo="Code-Munkiz/ham",
+    )
+    res = _post(
+        _client(normie_actor),
+        user_prompt="Refactor the chat router for clarity.",
+        project_id=rec.id,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    for c in body["candidates"]:
+        if c["provider"] == "no_agent":
+            continue
+        label = c["label"]
+        assert any(brand in label for brand in _APPROVED_PRODUCT_NAMES), (
+            f"candidate label {label!r} for provider {c['provider']} "
+            f"lacks an approved product brand"
+        )
+        for banned in _BANNED_VISIBLE_LABEL_PHRASES:
+            assert banned not in label, (
+                f"candidate label {label!r} contains banned legacy phrase {banned!r}"
+            )
+
+
+def test_preview_display_fields_omit_raw_provider_ids(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    normie_actor: HamActor,
+    tmp_path: Path,
+    cleanup_overrides: None,
+) -> None:
+    """Display fields (``label``, ``reason``, blockers, recommendation_reason)
+    never expose raw provider id tokens; raw IDs may remain only in the
+    machine-oriented ``provider`` field for client routing."""
+    _make_build_ready(monkeypatch)
+    _make_audit_ready(monkeypatch)
+    _make_cursor_ready(monkeypatch)
+    rec = _register_project(
+        isolated_store,
+        name="p_no_raw_ids",
+        root=tmp_path,
+        build_lane_enabled=True,
+        github_repo="Code-Munkiz/ham",
+    )
+    res = _post(
+        _client(normie_actor),
+        user_prompt="Audit the persistence layer.",
+        project_id=rec.id,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    for raw in _RAW_PROVIDER_IDS_IN_DISPLAY_COPY:
+        for c in body["candidates"]:
+            assert raw not in c["label"], f"candidate label leaks raw id {raw!r}"
+            assert raw not in c["reason"], f"candidate reason leaks raw id {raw!r}"
+            for b in c["blockers"]:
+                assert raw not in b, f"candidate blocker leaks raw id {raw!r}"
+        assert raw not in body["recommendation_reason"], (
+            f"recommendation_reason leaks raw id {raw!r}"
+        )
+        for b in body["blockers"]:
+            assert raw not in b, f"response blocker leaks raw id {raw!r}"
+
+
+def test_preview_claude_code_is_not_runnable_normal_lane(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    normie_actor: HamActor,
+    tmp_path: Path,
+    cleanup_overrides: None,
+) -> None:
+    """`claude_code` must never be the chosen runnable normal lane, and if it
+    appears at all it must use the product brand 'Claude' without
+    surfacing 'Claude Code' as a user-facing identity (VAL-PROVIDER-002)."""
+    _make_build_ready(monkeypatch)
+    _make_cursor_ready(monkeypatch)
+    rec = _register_project(
+        isolated_store,
+        name="p_claude_code_guard",
+        root=tmp_path,
+        build_lane_enabled=True,
+        github_repo="Code-Munkiz/ham",
+    )
+    res = _post(
+        _client(normie_actor),
+        user_prompt="Explain how the audit lane works.",
+        project_id=rec.id,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    if body["chosen"] is not None:
+        assert body["chosen"]["provider"] != "claude_code"
+    for c in body["candidates"]:
+        if c["provider"] == "claude_code":
+            assert c["available"] is False
+            assert "Claude Code" not in c["label"]
+            assert "Claude" in c["label"]

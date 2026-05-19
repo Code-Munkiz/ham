@@ -51,10 +51,9 @@ _BLOCKER_BUILD_LANE_HOST = (
     "Contact your workspace operator."
 )
 _BLOCKER_CURSOR_KEY = "Cursor team key is not configured for this workspace."
-_BLOCKER_CLAUDE_SDK = "Claude Code is not available on this host."
-_BLOCKER_CLAUDE_AUTH = "Claude Code is installed, but no authentication channel is configured."
-# Permanent blocker: claude_code has no launch route in HAM; always shown as blocked.
-_BLOCKER_CLAUDE_NOT_LAUNCHED = "Local single-file editor is coming in a future release."
+_BLOCKER_CLAUDE_SDK = "Claude is not available on this host."
+_BLOCKER_CLAUDE_AUTH = "Claude is installed, but no authentication channel is configured."
+_BLOCKER_CLAUDE_NOT_LAUNCHED = "Claude (planned) is coming in a future release."
 
 
 # ---------------------------------------------------------------------------

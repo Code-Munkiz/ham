@@ -139,7 +139,7 @@ describe("codingPlanCardCopy", () => {
       provider: "factory_droid_build",
       will_open_pull_request: true,
     });
-    expect(githubPr).toBe("Low-risk pull request");
+    expect(githubPr).toBe("Factory Droid build");
   });
 
   it("cardLabelForCandidate falls back to per-provider label for non-build providers", () => {
@@ -147,7 +147,7 @@ describe("codingPlanCardCopy", () => {
       "Conversational answer",
     );
     expect(cardLabelForCandidate({ provider: "cursor_cloud", will_open_pull_request: true })).toBe(
-      "Cursor pull request",
+      "Cursor",
     );
   });
 
@@ -277,15 +277,51 @@ describe("builderLabelForCandidate", () => {
     }
   });
 
-  it("maps known providers to expected labels", () => {
-    expect(builderLabelForCandidate({ provider: "opencode_cli" })).toBe("Open Builder");
-    expect(builderLabelForCandidate({ provider: "claude_agent" })).toBe(
-      "Premium Reasoning Builder",
+  it("maps known providers to approved product labels", () => {
+    expect(builderLabelForCandidate({ provider: "opencode_cli" })).toBe("OpenCode");
+    expect(builderLabelForCandidate({ provider: "claude_agent" })).toBe("Claude");
+    expect(builderLabelForCandidate({ provider: "claude_code" })).toBe("Claude");
+    expect(builderLabelForCandidate({ provider: "factory_droid_audit" })).toBe(
+      "Factory Droid audit",
     );
-    expect(builderLabelForCandidate({ provider: "factory_droid_build" })).toBe(
+    expect(builderLabelForCandidate({ provider: "factory_droid_build" })).toBe("Factory Droid");
+    expect(builderLabelForCandidate({ provider: "cursor_cloud" })).toBe("Cursor");
+  });
+
+  it("renders provider chip labels using approved product names only", () => {
+    const APPROVED = ["Claude", "OpenCode", "Factory Droid", "Cursor"];
+    for (const p of PROVIDERS) {
+      if (p === "no_agent") continue;
+      const label = providerLabelForCard(p);
+      expect(
+        APPROVED.some((brand) => label.includes(brand)),
+        `provider ${p} label "${label}" lacks an approved product name`,
+      ).toBe(true);
+    }
+  });
+
+  it("never renders legacy/internal builder names in card labels", () => {
+    const BANNED_VISIBLE = [
+      "Open Builder",
       "Controlled Builder",
-    );
-    expect(builderLabelForCandidate({ provider: "cursor_cloud" })).toBe("Connected Repo Builder");
+      "Connected Repo Builder",
+      "Premium Reasoning Builder",
+      "Local editor",
+      "Local single-file edit",
+      "Code insights",
+      "Claude Code",
+      "Claude Agent",
+    ];
+    for (const p of PROVIDERS) {
+      const headline = builderLabelForCandidate({ provider: p });
+      const chip = providerLabelForCard(p);
+      for (const banned of BANNED_VISIBLE) {
+        expect(headline).not.toBe(banned);
+        expect(chip).not.toBe(banned);
+        expect(headline).not.toContain(banned);
+        expect(chip).not.toContain(banned);
+      }
+    }
   });
 });
 

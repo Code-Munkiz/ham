@@ -119,27 +119,28 @@ export function shouldShowOpenCodeAffordance(payload: CodingConductorPreviewPayl
 }
 
 /**
- * Normie-friendly builder labels shown in the main card headline.
+ * Product-branded builder labels shown in the main card headline.
+ * Approved product names only: Claude, OpenCode, Factory Droid, Cursor.
  * Never expose raw provider ids or technical routing vocabulary here.
  */
 const USER_FACING_BUILDER_LABEL: Record<CodingConductorProviderKind, string> = {
   no_agent: "Conversational answer",
-  factory_droid_audit: "Code insights",
-  factory_droid_build: "Controlled Builder",
-  cursor_cloud: "Connected Repo Builder",
-  claude_code: "Local editor",
-  claude_agent: "Premium Reasoning Builder",
-  opencode_cli: "Open Builder",
+  factory_droid_audit: "Factory Droid audit",
+  factory_droid_build: "Factory Droid",
+  cursor_cloud: "Cursor",
+  claude_code: "Claude",
+  claude_agent: "Claude",
+  opencode_cli: "OpenCode",
 };
 
 const PROVIDER_LABEL: Record<CodingConductorProviderKind, string> = {
   no_agent: "Conversational answer",
-  factory_droid_audit: "Read-only audit",
-  factory_droid_build: "Low-risk pull request",
-  cursor_cloud: "Cursor pull request",
-  claude_code: "Local single-file edit",
-  claude_agent: "Claude Agent (preview)",
-  opencode_cli: "OpenCode managed workspace build",
+  factory_droid_audit: "Factory Droid audit",
+  factory_droid_build: "Factory Droid build",
+  cursor_cloud: "Cursor",
+  claude_code: "Claude",
+  claude_agent: "Claude (preview)",
+  opencode_cli: "OpenCode",
 };
 
 export type ClaudeAgentReadinessState =
@@ -150,11 +151,11 @@ export type ClaudeAgentReadinessState =
   | "configured";
 
 export const CLAUDE_AGENT_STATUS_COPY: Record<ClaudeAgentReadinessState, string> = {
-  disabled: "Claude Agent is not configured yet.",
-  not_configured: "Claude Agent can help with codebase edits once configured.",
-  sdk_missing: "Claude Agent SDK is not installed on this server yet.",
-  runner_unavailable: "Claude Agent runner is not reachable right now.",
-  configured: "HAM will recommend Claude Agent when it is the right tool.",
+  disabled: "Claude is not configured yet.",
+  not_configured: "Claude can help with codebase edits once configured.",
+  sdk_missing: "Claude is not installed on this server yet.",
+  runner_unavailable: "Claude is not reachable right now.",
+  configured: "HAM will recommend Claude when it is the right tool.",
 };
 
 export function claudeAgentStatusCopy(state: ClaudeAgentReadinessState): string {
@@ -165,7 +166,7 @@ export function claudeAgentStatusCopy(state: ClaudeAgentReadinessState): string 
 // different output (managed snapshot, not a PR). Mirrors the server-side
 // ``_FACTORY_DROID_BUILD_MANAGED_LABEL`` in ``src/api/coding_conductor.py``
 // so chat copy stays consistent across the API and UI.
-export const FACTORY_DROID_BUILD_MANAGED_LABEL = "Managed workspace build";
+export const FACTORY_DROID_BUILD_MANAGED_LABEL = "Factory Droid build";
 
 const OUTPUT_KIND_COPY: Record<CodingConductorOutputKind, string> = {
   answer: "An answer in chat",
@@ -221,8 +222,9 @@ export function cardLabelForCandidate(
 }
 
 /**
- * User-friendly builder label for the chosen candidate shown in the card headline.
- * Uses normie names (e.g. "Open Builder") instead of technical provider labels.
+ * Product-branded builder label for the chosen candidate shown in the card
+ * headline. Uses approved product names (Claude, OpenCode, Factory Droid,
+ * Cursor) instead of technical or legacy internal builder names.
  */
 export function builderLabelForCandidate(c: Pick<CodingConductorCandidate, "provider">): string {
   return USER_FACING_BUILDER_LABEL[c.provider];
@@ -305,4 +307,5 @@ export const FORBIDDEN_CARD_TOKENS = [
   "factory_droid",
   "cursor_cloud",
   "claude_agent",
+  "claude_code",
 ] as const;

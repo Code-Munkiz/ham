@@ -100,8 +100,12 @@ describe("CodingPlanCard", () => {
 
     const { card } = renderWithDigest(p);
 
-    // Headline shows normie builder label, not raw provider id.
+    // Headline shows approved product label, not raw provider id or
+    // legacy internal builder name.
     expect(card.querySelector('[data-hww-coding-plan="headline"]')!.textContent).toContain(
+      "Cursor",
+    );
+    expect(card.querySelector('[data-hww-coding-plan="headline"]')!.textContent).not.toContain(
       "Connected Repo Builder",
     );
     // Plan description is shown in the main view.

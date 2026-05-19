@@ -8,9 +8,9 @@ import type { CodingConductorCandidate, CodingConductorPreviewPayload } from "@/
 function candidate(over: Partial<CodingConductorCandidate> = {}): CodingConductorCandidate {
   return {
     provider: "claude_agent",
-    label: "Claude Agent (preview)",
+    label: "Claude (preview)",
     available: false,
-    reason: "Claude Agent is not configured yet.",
+    reason: "Claude is not configured yet.",
     blockers: [],
     confidence: 0.5,
     output_kind: "answer",
@@ -55,9 +55,12 @@ describe("CodingPlanCard — claude_agent provider scaffold", () => {
     });
     const { container } = render(<CodingPlanCard payload={p} />);
     const card = container.querySelector('[data-hww-coding-plan="card"]') as HTMLElement;
-    // Normie builder label is shown; raw provider id must not appear.
-    expect(card.textContent).toContain("Premium Reasoning Builder");
+    // Approved product label is shown; raw provider id and legacy
+    // internal builder names must never appear.
+    expect(card.textContent).toContain("Claude");
     expect(card.textContent?.toLowerCase()).not.toContain("claude_agent");
+    expect(card.textContent).not.toContain("Premium Reasoning Builder");
+    expect(card.textContent).not.toContain("Claude Code");
   });
 
   it("does not render any active approve/launch/preview button for claude_agent", () => {
@@ -97,7 +100,7 @@ describe("CodingPlanCard — claude_agent provider scaffold", () => {
   });
 
   it("returns the disabled status copy from claudeAgentStatusCopy", () => {
-    expect(claudeAgentStatusCopy("disabled")).toBe("Claude Agent is not configured yet.");
+    expect(claudeAgentStatusCopy("disabled")).toBe("Claude is not configured yet.");
   });
 
   it("never includes env names or internal workflow ids in any status copy", () => {

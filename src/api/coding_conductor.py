@@ -74,19 +74,18 @@ router = APIRouter(
 
 _LABEL: dict[ProviderKind, str] = {
     "no_agent": "Conversational answer",
-    "factory_droid_audit": "Read-only audit",
-    "factory_droid_build": "Low-risk pull request",
-    "cursor_cloud": "Cursor pull request",
-    "claude_code": "Local single-file edit",
-    "claude_agent": "Managed workspace edit (Claude Agent)",
-    "opencode_cli": "Managed workspace edit (OpenCode)",
+    "factory_droid_audit": "Factory Droid audit",
+    "factory_droid_build": "Factory Droid build",
+    "cursor_cloud": "Cursor",
+    "claude_code": "Claude",
+    "claude_agent": "Claude (preview)",
+    "opencode_cli": "OpenCode",
 }
 
 # Managed-workspace flavor of ``factory_droid_build``: the provider id is the
-# same, but the output is a managed snapshot, not a PR. The label/reason must
-# reflect that so chat copy does not read "Low-risk pull request" for a flow
-# that never opens a PR.
-_FACTORY_DROID_BUILD_MANAGED_LABEL = "Managed workspace build"
+# same, but the output is a managed snapshot, not a PR. The label/reason
+# still leads with the product brand for the user-facing identity.
+_FACTORY_DROID_BUILD_MANAGED_LABEL = "Factory Droid build"
 _FACTORY_DROID_BUILD_MANAGED_REASON = (
     "Managed workspace build with a minimal diff and a preview snapshot."
 )

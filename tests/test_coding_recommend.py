@@ -78,7 +78,7 @@ def _readiness(
         ProviderReadiness(
             provider="claude_code",
             available=claude,
-            blockers=() if claude else ("Claude Code is not available on this host.",),
+            blockers=() if claude else ("Claude is not available on this host.",),
         ),
     )
     return WorkspaceReadiness(
