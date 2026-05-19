@@ -1576,6 +1576,7 @@ async def post_chat(
         session_id=sid,
         last_user_plain=last_user_plain,
         ham_actor=ham_actor,
+        model_id=body.model_id,
     )
     builder_intent = str((builder_meta or {}).get("builder_intent") or "").strip().lower()
     if (
@@ -1736,6 +1737,7 @@ def post_chat_stream(
         session_id=sid,
         last_user_plain=last_user_plain,
         ham_actor=ham_actor,
+        model_id=body.model_id,
     )
     builder_intent = str((builder_meta or {}).get("builder_intent") or "").strip().lower()
     if (

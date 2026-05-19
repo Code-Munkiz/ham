@@ -262,11 +262,9 @@ def verify_builder_scaffold_artifact(
             "passed_checks": [],
             "failed_checks": ["non_placeholder_initial_scaffold"],
             "reason": (
-                "Initial scaffold for arbitrary apps requires an OpenRouter API key "
-                "(BYO via Settings) so HAM can generate real source. Without one, the "
-                "only built-in initial templates are 'calculator' and 'tetris'. Either "
-                "configure a key, ask for one of those templates, or describe an edit "
-                "to an existing project."
+                "Initial scaffold requires an OpenRouter API key (BYO via Connected Tools) "
+                "so HAM can generate real source with the LLM scaffold. Configure OpenRouter "
+                "in Settings and try again."
             ),
         }
 

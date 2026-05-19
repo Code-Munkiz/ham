@@ -23,6 +23,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from src.ham.builder_error_codes import STEP_MODEL_UNAVAILABLE, STEP_VERIFICATION_FAILED
 from src.ham.clerk_auth import HamActor
 
 from src.ham.builder_chat_intent import (
@@ -216,6 +217,51 @@ def _builder_ack_prefix(
     return "I'll create the initial project source and prepare the Workbench.\n\n"
 
 
+def _model_access_required_message(*, operation: str) -> str:
+    if operation == "update_existing_project":
+        return (
+            "I cannot apply that edit without model access. "
+            "Connect OpenRouter in Settings (Connected Tools) and try again.\n\n"
+        )
+    return (
+        "I cannot build this without model access. "
+        "Connect OpenRouter in Settings (Connected Tools) and try again.\n\n"
+    )
+
+
+def _llm_scaffold_failure_message(*, operation: str, error_code: str) -> str:
+    is_edit = operation == "update_existing_project"
+    if error_code == STEP_VERIFICATION_FAILED:
+        if is_edit:
+            return (
+                "I couldn't apply that edit yet because the model response wasn't valid "
+                "scaffold JSON. Try again or pick a different chat model.\n\n"
+            )
+        return (
+            "I couldn't build this yet because the model response wasn't valid scaffold JSON. "
+            "Try again or pick a different chat model.\n\n"
+        )
+    if is_edit:
+        return (
+            "I couldn't apply that edit yet because the OpenRouter model call failed. "
+            "Check Connected Tools (OpenRouter key) and your selected chat model, then try again.\n\n"
+        )
+    return (
+        "I couldn't build this yet because the OpenRouter model call failed. "
+        "Check Connected Tools (OpenRouter key) and your selected chat model, then try again.\n\n"
+    )
+
+
+def _artifact_verification_failure_message(*, operation: str, detail: str) -> str:
+    tail = f" ({detail})" if detail else ""
+    if operation == "update_existing_project":
+        return (
+            "I tried to apply that edit, but the generated files did not include "
+            f"what you asked for yet{tail}.\n\n"
+        )
+    return f"I couldn't build that yet{tail}.\n\n"
+
+
 def resolve_effective_chat_project_id(
     *,
     workspace_id: str | None,
@@ -255,6 +301,7 @@ def run_builder_happy_path_hook(
     session_id: str,
     last_user_plain: str,
     ham_actor: HamActor | None,
+    model_id: str | None = None,
 ) -> tuple[str | None, dict[str, Any]]:
     """Returns optional stream prefix and metadata for /api/chat responses."""
     from src.ham.builder_chat_scaffold import maybe_chat_scaffold_for_turn
@@ -415,25 +462,29 @@ def run_builder_happy_path_hook(
         created_by=created_by,
         operation=operation,
         ham_actor=ham_actor,
+        model_id=model_id,
     )
     if not summary:
         return None, meta
     meta.update(summary)
     sid = str(summary.get("source_snapshot_id") or "").strip()
+    builder_operation = str(summary.get("builder_operation") or operation).strip()
     if summary.get("model_access_required"):
         return (
-            f"{directive_prefix}I cannot build this without model access. "
-            "Please configure model access and try again.\n\n",
+            f"{directive_prefix}{_model_access_required_message(operation=builder_operation)}",
+            meta,
+        )
+    if summary.get("llm_scaffold_failed"):
+        error_code = str(summary.get("llm_scaffold_error_code") or STEP_MODEL_UNAVAILABLE).strip()
+        return (
+            f"{directive_prefix}{_llm_scaffold_failure_message(operation=builder_operation, error_code=error_code)}",
             meta,
         )
     if summary.get("artifact_verification_failed"):
         ver = summary.get("artifact_verification") or {}
         detail = str(ver.get("reason") or "").strip()
-        tail = f" ({detail})" if detail else ""
         return (
-            f"{directive_prefix}"
-            "I tried to apply that edit, but the generated files did not include what you asked for yet"
-            f"{tail}.\n\n",
+            f"{directive_prefix}{_artifact_verification_failure_message(operation=builder_operation, detail=detail)}",
             meta,
         )
     if summary.get("scaffolded"):

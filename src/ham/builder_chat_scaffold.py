@@ -52,6 +52,16 @@ _MAX_FILES = 24
 _MODEL_UNAVAILABLE_MARKER: tuple = ("model_access_required", None)
 
 
+def _llm_scaffold_failed_marker(error_code: str) -> tuple[str, str]:
+    return ("llm_scaffold_failed", error_code)
+
+
+def _parse_llm_scaffold_failed(value: object) -> str | None:
+    if isinstance(value, tuple) and len(value) == 2 and value[0] == "llm_scaffold_failed":
+        return str(value[1])
+    return None
+
+
 def _strip_dashboard_attachment_tail(user_plain: str) -> str:
     text = str(user_plain or "").strip()
     if not text:
@@ -1632,13 +1642,13 @@ def _maybe_llm_scaffold_replace(
     files: dict[str, str],
     scaffold_meta: dict[str, Any],
     ham_actor: HamActor | None = None,
-) -> tuple[dict[str, str], dict[str, Any]] | None:
+    model_id: str | None = None,
+) -> tuple[dict[str, str], dict[str, Any]] | tuple[str, str | None] | tuple[str, str]:
     """Try replacing a placeholder scaffold with real LLM-generated source.
 
-    Returns the new ``(files, meta)`` tuple on success, or ``None`` on any
-    failure (no OpenRouter key, LLM error, validation error, etc.). The caller
-    keeps the placeholder + the ``placeholder_fallback`` flag so the artifact
-    verifier rejects it and the chat surface fails honestly.
+    Returns ``(files, meta)`` on success, ``_MODEL_UNAVAILABLE_MARKER`` when
+    no OpenRouter key is configured, or ``("llm_scaffold_failed", error_code)``
+    when the LLM call or parse fails.
 
     Wires the chat-stream build_or_create path into the same generator the
     Worker pod's LLM-scaffold Step uses (ADR-0011), without needing the full
@@ -1656,6 +1666,16 @@ def _maybe_llm_scaffold_replace(
 
     if not resolve_openrouter_api_key_for_actor(ham_actor):
         return _MODEL_UNAVAILABLE_MARKER
+
+    resolved_model: str | None = None
+    mid = (model_id or "").strip()
+    if mid:
+        try:
+            from src.api.models_catalog import resolve_model_id_for_chat  # noqa: PLC0415
+
+            resolved_model = resolve_model_id_for_chat(mid, ham_actor)
+        except ValueError:
+            resolved_model = None
 
     try:
         synthetic_plan = Plan(
@@ -1675,7 +1695,9 @@ def _maybe_llm_scaffold_replace(
             },
         )
     except Exception:  # noqa: BLE001
-        return None
+        from src.ham.builder_error_codes import STEP_VERIFICATION_FAILED  # noqa: PLC0415
+
+        return _llm_scaffold_failed_marker(STEP_VERIFICATION_FAILED)
 
     try:
         result = generate_scaffold(
@@ -1683,11 +1705,14 @@ def _maybe_llm_scaffold_replace(
             project_id=project_id,
             workspace_id=workspace_id,
             ham_actor=ham_actor,
+            model_override=resolved_model,
         )
-    except LLMScaffoldError:
-        return None
+    except LLMScaffoldError as exc:
+        return _llm_scaffold_failed_marker(exc.error_code)
     except Exception:  # noqa: BLE001
-        return None
+        from src.ham.builder_error_codes import STEP_MODEL_UNAVAILABLE  # noqa: PLC0415
+
+        return _llm_scaffold_failed_marker(STEP_MODEL_UNAVAILABLE)
 
     if not result.file_changes:
         return None
@@ -1707,7 +1732,9 @@ def _maybe_llm_scaffold_replace(
         new_files[norm] = body
 
     if not new_files:
-        return None
+        from src.ham.builder_error_codes import STEP_VERIFICATION_FAILED  # noqa: PLC0415
+
+        return _llm_scaffold_failed_marker(STEP_VERIFICATION_FAILED)
 
     # Carry forward non-template metadata; mark the source so downstream
     # consumers (verifier, snapshot metadata) know this is a real generation.
@@ -1728,6 +1755,7 @@ def maybe_chat_scaffold_for_turn(
     created_by: str,
     operation: str = "build_or_create",
     ham_actor: HamActor | None = None,
+    model_id: str | None = None,
 ) -> dict[str, Any] | None:
     """If eligible, create ProjectSource + snapshot + import job; return summary dict."""
     ws = (workspace_id or "").strip()
@@ -1821,6 +1849,7 @@ def maybe_chat_scaffold_for_turn(
             files=files,
             scaffold_meta=scaffold_meta,
             ham_actor=ham_actor,
+            model_id=model_id,
         )
         if replaced is _MODEL_UNAVAILABLE_MARKER:
             return {
@@ -1829,7 +1858,21 @@ def maybe_chat_scaffold_for_turn(
                 "scaffolded": False,
                 "model_access_required": True,
             }
-        if replaced is not None:
+        llm_failed_code = _parse_llm_scaffold_failed(replaced)
+        if llm_failed_code:
+            return {
+                "builder_intent": "build_or_create",
+                "builder_operation": operation,
+                "scaffolded": False,
+                "llm_scaffold_failed": True,
+                "llm_scaffold_error_code": llm_failed_code,
+            }
+        if (
+            isinstance(replaced, tuple)
+            and len(replaced) == 2
+            and isinstance(replaced[0], dict)
+            and isinstance(replaced[1], dict)
+        ):
             files, scaffold_meta = replaced
 
     artifact_verification = verify_builder_scaffold_artifact(

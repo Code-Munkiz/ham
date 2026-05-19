@@ -40,7 +40,7 @@ from src.ham.builder_plan import Plan
 from src.llm_client import (
     complete_chat_messages_openrouter,
     resolve_openrouter_api_key_for_actor,
-    resolve_openrouter_model_name_for_chat,
+    resolve_openrouter_model_name,
 )
 
 _LOG = logging.getLogger(__name__)
@@ -202,18 +202,24 @@ def _parse_scaffold_result(raw: str) -> ScaffoldResult:
     return ScaffoldResult(file_changes=file_changes, assertions=assertions)
 
 
-def _get_scaffold_model() -> str:
+def _get_scaffold_model(*, model_override: str | None = None) -> str:
     """Resolve the model to use for LLM scaffold calls.
 
-    Honours ``HAM_PLANNER_MODEL`` env override (same as the Planner, per the
-    design spec); falls back to ``resolve_openrouter_model_name_for_chat()``.
+    Resolution order: explicit ``model_override`` (from chat ``model_id``),
+    then ``HAM_PLANNER_MODEL``, then ``DEFAULT_MODEL`` via
+    :func:`resolve_openrouter_model_name` (not ``HERMES_GATEWAY_MODEL``).
     """
-    override = (os.environ.get("HAM_PLANNER_MODEL") or "").strip()
-    if not override:
-        return resolve_openrouter_model_name_for_chat()
-    if override.startswith("openrouter/"):
-        return override
-    return f"openrouter/{override}"
+    explicit = (model_override or "").strip()
+    if explicit:
+        if explicit.startswith("openrouter/"):
+            return explicit
+        return f"openrouter/{explicit}"
+    planner = (os.environ.get("HAM_PLANNER_MODEL") or "").strip()
+    if planner:
+        if planner.startswith("openrouter/"):
+            return planner
+        return f"openrouter/{planner}"
+    return resolve_openrouter_model_name()
 
 
 def _build_scaffold_messages(
@@ -254,6 +260,7 @@ def generate_scaffold(
     workspace_id: str,
     *,
     ham_actor: Any | None = None,
+    model_override: str | None = None,
 ) -> ScaffoldResult:
     """Generate a project scaffold via one LLM call (BYO OpenRouter key).
 
@@ -284,7 +291,7 @@ def generate_scaffold(
             error_code=STEP_MODEL_UNAVAILABLE,
         )
 
-    model = _get_scaffold_model()
+    model = _get_scaffold_model(model_override=model_override)
     template_kind = (plan.metadata or {}).get("template_kind", "")
     kit = get_kit_for_template_kind(template_kind)
 
@@ -300,11 +307,12 @@ def generate_scaffold(
         )
         result = _parse_scaffold_result(raw)
         _LOG.info(
-            "LLM scaffold produced %d file(s) for plan=%s project=%s workspace=%s",
+            "LLM scaffold produced %d file(s) for plan=%s project=%s workspace=%s model=%s",
             len(result.file_changes),
             plan.plan_id,
             project_id,
             workspace_id,
+            model,
         )
         return result
     except (json.JSONDecodeError, ValueError) as first_exc:
@@ -313,6 +321,16 @@ def generate_scaffold(
             type(first_exc).__name__,
             first_exc,
         )
+    except RuntimeError as llm_exc:
+        raise LLMScaffoldError(
+            f"LLM API error during scaffold (attempt 1): {llm_exc}",
+            error_code=STEP_MODEL_UNAVAILABLE,
+        ) from llm_exc
+    except Exception as llm_exc:  # noqa: BLE001
+        raise LLMScaffoldError(
+            f"LLM error during scaffold (attempt 1): {llm_exc}",
+            error_code=STEP_MODEL_UNAVAILABLE,
+        ) from llm_exc
 
     # --- Attempt 2 (stricter prompt) ---
     messages2 = _build_scaffold_messages(

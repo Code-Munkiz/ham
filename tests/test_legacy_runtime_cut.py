@@ -343,3 +343,117 @@ def test_spaceship_prompt_with_actor_byo_key_scaffolds(
         assert "Spaceship Shooter" in app_tsx
     finally:
         set_builder_source_store_for_tests(None)
+
+
+def test_spaceship_prompt_llm_failure_surfaces_error_code(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    from src.ham.builder_chat_scaffold import maybe_chat_scaffold_for_turn
+    from src.ham.builder_error_codes import STEP_MODEL_UNAVAILABLE
+    from src.ham.builder_llm_scaffold import LLMScaffoldError
+    from src.persistence.builder_source_store import (
+        BuilderSourceStore,
+        set_builder_source_store_for_tests,
+    )
+
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    actor = _byo_actor()
+    try:
+        with patch(
+            "src.llm_client.resolve_openrouter_api_key_for_actor",
+            return_value="sk-or-v1-connectedtoolskey000000000000",
+        ), patch(
+            "src.ham.builder_llm_scaffold.generate_scaffold",
+            side_effect=LLMScaffoldError("model call failed", error_code=STEP_MODEL_UNAVAILABLE),
+        ):
+            summary = maybe_chat_scaffold_for_turn(
+                workspace_id="ws_cut_test",
+                project_id="proj_cut_test",
+                session_id="sess_spaceship_llm_fail",
+                last_user_plain="build me a game where i can shoot things in a spaceship",
+                created_by=actor.user_id,
+                ham_actor=actor,
+            )
+        assert summary is not None
+        assert summary.get("llm_scaffold_failed") is True
+        assert summary.get("llm_scaffold_error_code") == STEP_MODEL_UNAVAILABLE
+        assert summary.get("artifact_verification_failed") is not True
+        assert summary.get("scaffolded") is False
+    finally:
+        set_builder_source_store_for_tests(None)
+
+
+def test_spaceship_prompt_threads_model_id_to_generate_scaffold(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    from src.ham.builder_chat_scaffold import maybe_chat_scaffold_for_turn
+    from src.ham.builder_llm_scaffold import ScaffoldResult
+    from src.persistence.builder_source_store import (
+        BuilderSourceStore,
+        set_builder_source_store_for_tests,
+    )
+
+    fake_result = ScaffoldResult(
+        file_changes=[("src/App.tsx", "export default function App(){return null;}")],
+        assertions=[],
+    )
+
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    actor = _byo_actor()
+    try:
+        with patch(
+            "src.llm_client.resolve_openrouter_api_key_for_actor",
+            return_value="sk-or-v1-connectedtoolskey000000000000",
+        ), patch(
+            "src.api.models_catalog.resolve_model_id_for_chat",
+            return_value="openrouter/qwen/qwen3-coder:free",
+        ) as resolve_model_mock, patch(
+            "src.ham.builder_llm_scaffold.generate_scaffold",
+            return_value=fake_result,
+        ) as gen_mock:
+            summary = maybe_chat_scaffold_for_turn(
+                workspace_id="ws_cut_test",
+                project_id="proj_cut_test",
+                session_id="sess_spaceship_model_thread",
+                last_user_plain="build me a game where i can shoot things in a spaceship",
+                created_by=actor.user_id,
+                ham_actor=actor,
+                model_id="qwen/qwen3-coder:free",
+            )
+        resolve_model_mock.assert_called_once_with("qwen/qwen3-coder:free", actor)
+        assert gen_mock.call_args.kwargs.get("model_override") == "openrouter/qwen/qwen3-coder:free"
+        assert summary is not None
+        assert summary.get("scaffolded") is True
+    finally:
+        set_builder_source_store_for_tests(None)
+
+
+def test_build_failure_message_is_operation_aware() -> None:
+    from src.ham.builder_chat_hooks import _llm_scaffold_failure_message
+    from src.ham.builder_error_codes import STEP_MODEL_UNAVAILABLE, STEP_VERIFICATION_FAILED
+
+    build_msg = _llm_scaffold_failure_message(
+        operation="build_or_create",
+        error_code=STEP_MODEL_UNAVAILABLE,
+    )
+    edit_msg = _llm_scaffold_failure_message(
+        operation="update_existing_project",
+        error_code=STEP_MODEL_UNAVAILABLE,
+    )
+    assert "build" in build_msg.lower()
+    assert "apply that edit" in edit_msg.lower()
+    parse_msg = _llm_scaffold_failure_message(
+        operation="build_or_create",
+        error_code=STEP_VERIFICATION_FAILED,
+    )
+    assert "valid scaffold json" in parse_msg.lower()
