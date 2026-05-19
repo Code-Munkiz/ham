@@ -1,4 +1,4 @@
-import type { Plan, SSEEvent } from "@/lib/ham/builderPlan";
+import type { ErrorEnvelope, Plan, SSEEvent } from "@/lib/ham/builderPlan";
 
 export type StepRunStatus = "pending" | "running" | "completed" | "failed";
 
@@ -115,6 +115,59 @@ export function frozenSummaryLine(plan: Plan, events: SSEEvent[]): string | null
     return `Plan failed after ${n} ${m}.`;
   }
 
+  return null;
+}
+
+export type StepErrorView = {
+  error_code: string;
+  error_message: string;
+  error_details_preview: string | null;
+};
+
+export function truncateErrorDetails(details: Record<string, unknown> | null): string | null {
+  if (!details || Object.keys(details).length === 0) return null;
+  const raw = JSON.stringify(details);
+  if (raw.length <= 160) return raw;
+  return `${raw.slice(0, 157)}…`;
+}
+
+export function buildStepErrors(plan: Plan, events: SSEEvent[]): (StepErrorView | null)[] {
+  const errors: (StepErrorView | null)[] = plan.steps.map(() => null);
+  let lastRunningIdx = 0;
+
+  for (const ev of events) {
+    const payload = ev.event;
+    if (payload.type === "step_started") {
+      const idx = plan.steps.findIndex((s) => s.step_id === payload.step_id);
+      if (idx >= 0) lastRunningIdx = idx;
+    }
+    if (payload.type === "step_failed") {
+      const idx = plan.steps.findIndex((s) => s.step_id === payload.step_id);
+      if (idx >= 0) {
+        errors[idx] = {
+          error_code: payload.error.error_code,
+          error_message: payload.error.error_message,
+          error_details_preview: truncateErrorDetails(payload.error.error_details),
+        };
+      }
+    }
+    if (payload.type === "runtime_error") {
+      errors[lastRunningIdx] = {
+        error_code: payload.error.error_code,
+        error_message: payload.error.error_message,
+        error_details_preview: truncateErrorDetails(payload.error.error_details),
+      };
+    }
+  }
+
+  return errors;
+}
+
+export function extractJobFailedError(events: SSEEvent[]): ErrorEnvelope | null {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const payload = events[i]!.event;
+    if (payload.type === "job_failed") return payload.error;
+  }
   return null;
 }
 

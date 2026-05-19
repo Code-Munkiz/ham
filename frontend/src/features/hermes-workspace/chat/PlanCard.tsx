@@ -5,16 +5,18 @@
 import * as React from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
-import type { Plan, PlanApprovalState, SSEEvent } from "@/lib/ham/builderPlan";
+import type { ErrorEnvelope, Plan, PlanApprovalState, SSEEvent } from "@/lib/ham/builderPlan";
 import { useJobStream } from "@/lib/ham/useJobStream";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
 import {
+  buildStepErrors,
   buildStepStatuses,
   cancelStatusLine,
   deriveCancelUiState,
   deriveInflightPhase,
+  extractJobFailedError,
   frozenSummaryLine,
   shouldShowStalledCancelWarning,
   stepStatusGlyph,
@@ -43,6 +45,8 @@ export type PlanCardProps = {
   onApprove?: () => void | Promise<void>;
   onReplan?: (request: string) => void;
   onCancelJob?: () => void | Promise<void>;
+  onJobFailed?: (error: ErrorEnvelope) => void;
+  forceReplanOpen?: boolean;
 };
 
 function planSummaryLine(plan: Plan): string {
@@ -65,9 +69,13 @@ export function PlanCard({
   onApprove,
   onReplan,
   onCancelJob,
+  onJobFailed,
+  forceReplanOpen = false,
 }: PlanCardProps) {
   const [expanded, setExpanded] = React.useState(false);
   const [replanOpen, setReplanOpen] = React.useState(false);
+  const [expandedStepErrors, setExpandedStepErrors] = React.useState<Record<number, boolean>>({});
+  const jobFailedNotifiedRef = React.useRef(false);
   const [replanText, setReplanText] = React.useState("");
   const [cancelClicked, setCancelClicked] = React.useState(false);
   const [cancelClickedAtMs, setCancelClickedAtMs] = React.useState<number | null>(null);
@@ -88,6 +96,19 @@ export function PlanCard({
     const id = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, [cancelClicked, cancelClickedAtMs]);
+
+  React.useEffect(() => {
+    if (forceReplanOpen) setReplanOpen(true);
+  }, [forceReplanOpen]);
+
+  React.useEffect(() => {
+    if (jobFailedNotifiedRef.current) return;
+    const err = extractJobFailedError(streamEvents);
+    if (err) {
+      jobFailedNotifiedRef.current = true;
+      onJobFailed?.(err);
+    }
+  }, [streamEvents, onJobFailed]);
 
   if (phase === "superseded") {
     return (
@@ -117,6 +138,7 @@ export function PlanCard({
   const frozen = resolvedPhase === "frozen";
 
   const stepStatuses = buildStepStatuses(plan, streamEvents);
+  const stepErrors = buildStepErrors(plan, streamEvents);
   const cancelState = deriveCancelUiState(streamEvents, cancelClicked);
   const cancelLine = cancelStatusLine(cancelState);
   const summaryFooter = frozen ? frozenSummaryLine(plan, streamEvents) : null;
@@ -215,6 +237,35 @@ export function PlanCard({
               </div>
               {step.description ? (
                 <p className="mt-0.5 pl-5 text-[11px] text-white/55">{step.description}</p>
+              ) : null}
+              {stepErrors[index] ? (
+                <div className="mt-1 pl-5" data-testid={`plan-card-step-error-${index}`}>
+                  <button
+                    type="button"
+                    className="text-[11px] text-red-300 underline-offset-2 hover:underline"
+                    onClick={() =>
+                      setExpandedStepErrors((prev) => ({ ...prev, [index]: !prev[index] }))
+                    }
+                  >
+                    {expandedStepErrors[index] ? "Hide error" : "Show error"}
+                  </button>
+                  {expandedStepErrors[index] ? (
+                    <div className="mt-1 space-y-1 rounded border border-red-500/30 bg-red-950/40 p-2">
+                      <code
+                        className="rounded bg-black/40 px-1 py-0.5 font-mono text-[10px] text-red-200"
+                        data-testid={`plan-card-step-error-code-${index}`}
+                      >
+                        {stepErrors[index]!.error_code}
+                      </code>
+                      <p className="text-[11px] text-red-100">{stepErrors[index]!.error_message}</p>
+                      {stepErrors[index]!.error_details_preview ? (
+                        <pre className="max-h-24 overflow-auto whitespace-pre-wrap font-mono text-[10px] text-red-200/80">
+                          {stepErrors[index]!.error_details_preview}
+                        </pre>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
               ) : null}
             </li>
           ))}
