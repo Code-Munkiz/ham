@@ -414,6 +414,7 @@ def run_builder_happy_path_hook(
         last_user_plain=effective_plain,
         created_by=created_by,
         operation=operation,
+        ham_actor=ham_actor,
     )
     if not summary:
         return None, meta

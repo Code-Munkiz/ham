@@ -95,7 +95,7 @@ from src.integrations.nous_gateway_client import (
     format_gateway_error_user_message,
     stream_chat_turn,
 )
-from src.llm_client import normalized_openrouter_api_key, openrouter_api_key_is_plausible
+from src.llm_client import openrouter_api_key_is_plausible, resolve_openrouter_api_key_for_actor
 from src.memory_heist import browser_policy_from_config, discover_config
 from src.metadata_stamps import ScanMode
 from src.persistence.chat_session_store import ChatTurn, build_chat_session_store
@@ -1953,7 +1953,7 @@ def post_chat_stream(
         _builder_action_kind = str(
             ((builder_meta or {}).get("builder_action_decision") or {}).get("kind") or ""
         ).strip()
-        if _builder_action_kind == "mutate" and normalized_openrouter_api_key():
+        if _builder_action_kind == "mutate" and resolve_openrouter_api_key_for_actor(ham_actor):
             from src.ham.builder_planner import PlannerOutputInvalidError, produce_plan
 
             _planner_workspace_id = _normalized_workspace_id(body_eff.workspace_id) or ""
@@ -1973,6 +1973,7 @@ def post_chat_stream(
                             workspace_id=_planner_workspace_id,
                             requested_by=_planner_requested_by,
                             conversation_history=_planner_history,
+                            ham_actor=ham_actor,
                         )
                         if plan is not None:
                             yield json.dumps({"type": "plan_proposed", "plan_id": plan.plan_id}) + "\n"

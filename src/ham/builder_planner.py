@@ -27,7 +27,7 @@ from src.ham.builder_error_codes import INTERNAL_ERROR, make_error
 from src.ham.builder_plan import Plan, PlanApprovalRecord, Step
 from src.llm_client import (
     complete_chat_messages_openrouter,
-    normalized_openrouter_api_key,
+    resolve_openrouter_api_key_for_actor,
     resolve_openrouter_model_name_for_chat,
 )
 from src.persistence.builder_plan_store import (
@@ -212,6 +212,7 @@ def produce_plan(
     conversation_history: list[Any],
     source_snapshot_id: str | None = None,
     store: BuilderPlanStoreProtocol | None = None,
+    ham_actor: Any | None = None,
 ) -> Plan | None:
     """Turn a user message into a Plan.
 
@@ -223,7 +224,7 @@ def produce_plan(
         PlannerOutputInvalidError — when the LLM output fails Pydantic
             validation twice.
     """
-    api_key = normalized_openrouter_api_key()
+    api_key = resolve_openrouter_api_key_for_actor(ham_actor)
     if not api_key:
         _LOG.debug("No OpenRouter key configured — skipping Planner (ADR-0009 fallback)")
         return None

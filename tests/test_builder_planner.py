@@ -112,8 +112,8 @@ class TestExtractJson:
 class TestProducePlanNoKey:
     def test_returns_none_when_no_openrouter_key(self, monkeypatch):
         monkeypatch.setattr(
-            "src.ham.builder_planner.normalized_openrouter_api_key",
-            lambda: "",
+            "src.ham.builder_planner.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "",
         )
         store = _InMemoryPlanStore()
         result = produce_plan(
@@ -128,6 +128,49 @@ class TestProducePlanNoKey:
         assert len(store._plans) == 0
 
 
+class TestProducePlanActorKey:
+    def test_actor_connected_tools_key_enables_planner(self, monkeypatch):
+        from src.ham.clerk_auth import HamActor
+
+        actor = HamActor(
+            user_id="user_byo",
+            org_id=None,
+            session_id=None,
+            email="user_byo@example.com",
+            permissions=frozenset(),
+            org_role=None,
+            raw_permission_claim=None,
+        )
+        seen: list[Any | None] = []
+
+        def _resolve(ham_actor: Any | None = None) -> str:
+            seen.append(ham_actor)
+            return "sk-or-test-key" if ham_actor is actor else ""
+
+        monkeypatch.setattr(
+            "src.ham.builder_planner.resolve_openrouter_api_key_for_actor",
+            _resolve,
+        )
+        monkeypatch.setattr(
+            "src.ham.builder_planner.complete_chat_messages_openrouter",
+            lambda messages, **kwargs: _VALID_LLM_JSON,
+        )
+        store = _InMemoryPlanStore()
+
+        plan = produce_plan(
+            user_message="Add login",
+            project_id="proj_test",
+            workspace_id="ws_test",
+            requested_by=actor.user_id,
+            conversation_history=[],
+            store=store,
+            ham_actor=actor,
+        )
+
+        assert plan is not None
+        assert seen == [actor]
+
+
 # ---------------------------------------------------------------------------
 # produce_plan — success path
 # ---------------------------------------------------------------------------
@@ -136,8 +179,8 @@ class TestProducePlanNoKey:
 class TestProducePlanSuccess:
     def test_success_returns_plan_and_writes_to_store(self, monkeypatch):
         monkeypatch.setattr(
-            "src.ham.builder_planner.normalized_openrouter_api_key",
-            lambda: "sk-or-test-key",
+            "src.ham.builder_planner.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
         )
         monkeypatch.setattr(
             "src.ham.builder_planner.complete_chat_messages_openrouter",
@@ -164,8 +207,8 @@ class TestProducePlanSuccess:
 
     def test_plan_persisted_to_store(self, monkeypatch):
         monkeypatch.setattr(
-            "src.ham.builder_planner.normalized_openrouter_api_key",
-            lambda: "sk-or-test-key",
+            "src.ham.builder_planner.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
         )
         monkeypatch.setattr(
             "src.ham.builder_planner.complete_chat_messages_openrouter",
@@ -189,8 +232,8 @@ class TestProducePlanSuccess:
 
     def test_approval_record_written_as_proposed(self, monkeypatch):
         monkeypatch.setattr(
-            "src.ham.builder_planner.normalized_openrouter_api_key",
-            lambda: "sk-or-test-key",
+            "src.ham.builder_planner.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
         )
         monkeypatch.setattr(
             "src.ham.builder_planner.complete_chat_messages_openrouter",
@@ -215,8 +258,8 @@ class TestProducePlanSuccess:
 
     def test_source_snapshot_id_propagated(self, monkeypatch):
         monkeypatch.setattr(
-            "src.ham.builder_planner.normalized_openrouter_api_key",
-            lambda: "sk-or-test-key",
+            "src.ham.builder_planner.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
         )
         monkeypatch.setattr(
             "src.ham.builder_planner.complete_chat_messages_openrouter",
@@ -240,8 +283,8 @@ class TestProducePlanSuccess:
     def test_conversation_history_dict_format(self, monkeypatch):
         """Conversation history as plain dicts should not raise."""
         monkeypatch.setattr(
-            "src.ham.builder_planner.normalized_openrouter_api_key",
-            lambda: "sk-or-test-key",
+            "src.ham.builder_planner.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
         )
         captured_messages: list[Any] = []
 
@@ -283,8 +326,8 @@ class TestProducePlanSuccess:
 class TestProducePlanRetry:
     def test_retries_once_on_invalid_json(self, monkeypatch):
         monkeypatch.setattr(
-            "src.ham.builder_planner.normalized_openrouter_api_key",
-            lambda: "sk-or-test-key",
+            "src.ham.builder_planner.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
         )
         call_count = 0
 
@@ -315,8 +358,8 @@ class TestProducePlanRetry:
 
     def test_raises_planner_output_invalid_after_two_failures(self, monkeypatch):
         monkeypatch.setattr(
-            "src.ham.builder_planner.normalized_openrouter_api_key",
-            lambda: "sk-or-test-key",
+            "src.ham.builder_planner.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
         )
         monkeypatch.setattr(
             "src.ham.builder_planner.complete_chat_messages_openrouter",
@@ -336,8 +379,8 @@ class TestProducePlanRetry:
 
     def test_no_plan_stored_on_failure(self, monkeypatch):
         monkeypatch.setattr(
-            "src.ham.builder_planner.normalized_openrouter_api_key",
-            lambda: "sk-or-test-key",
+            "src.ham.builder_planner.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
         )
         monkeypatch.setattr(
             "src.ham.builder_planner.complete_chat_messages_openrouter",
@@ -368,8 +411,8 @@ class TestProducePlanModelSelection:
     def test_uses_ham_planner_model_env(self, monkeypatch):
         monkeypatch.setenv("HAM_PLANNER_MODEL", "gpt-4o-mini")
         monkeypatch.setattr(
-            "src.ham.builder_planner.normalized_openrouter_api_key",
-            lambda: "sk-or-test-key",
+            "src.ham.builder_planner.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
         )
         captured: list[str] = []
 
@@ -406,8 +449,8 @@ class TestProducePlanEdgeCases:
         """Plan with zero steps should fail Pydantic validation (steps list can't be empty
         by product rules, but the schema allows it — test that extra="forbid" isn't violated)."""
         monkeypatch.setattr(
-            "src.ham.builder_planner.normalized_openrouter_api_key",
-            lambda: "sk-or-test-key",
+            "src.ham.builder_planner.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
         )
         # Return JSON with empty steps but valid planner_confidence
         monkeypatch.setattr(
@@ -430,8 +473,8 @@ class TestProducePlanEdgeCases:
 
     def test_llm_json_in_markdown_fence_is_parsed(self, monkeypatch):
         monkeypatch.setattr(
-            "src.ham.builder_planner.normalized_openrouter_api_key",
-            lambda: "sk-or-test-key",
+            "src.ham.builder_planner.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
         )
         fenced_json = (
             "```json\n"

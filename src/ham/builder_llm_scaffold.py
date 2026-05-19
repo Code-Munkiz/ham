@@ -39,7 +39,7 @@ from src.ham.builder_kits import (
 from src.ham.builder_plan import Plan
 from src.llm_client import (
     complete_chat_messages_openrouter,
-    normalized_openrouter_api_key,
+    resolve_openrouter_api_key_for_actor,
     resolve_openrouter_model_name_for_chat,
 )
 
@@ -252,6 +252,8 @@ def generate_scaffold(
     plan: Plan,
     project_id: str,
     workspace_id: str,
+    *,
+    ham_actor: Any | None = None,
 ) -> ScaffoldResult:
     """Generate a project scaffold via one LLM call (BYO OpenRouter key).
 
@@ -275,7 +277,7 @@ def generate_scaffold(
             fails JSON validation after two attempts
             (``error_code = STEP_VERIFICATION_FAILED``).
     """
-    api_key = normalized_openrouter_api_key()
+    api_key = resolve_openrouter_api_key_for_actor(ham_actor)
     if not api_key:
         raise LLMScaffoldError(
             "No OpenRouter API key configured — LLM scaffold cannot run",

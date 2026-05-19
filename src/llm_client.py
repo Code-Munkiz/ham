@@ -36,7 +36,11 @@ def resolve_openrouter_model_name() -> str:
 
 
 def normalized_openrouter_api_key() -> str:
-    """Effective OpenRouter key: workspace-stored credential wins, else env (may be empty)."""
+    """Global/legacy OpenRouter key: file-backed workspace store, else env (may be empty).
+
+    For dashboard Builder LLM paths with a signed-in user, prefer
+    :func:`resolve_openrouter_api_key_for_actor` so per-user Connected Tools BYOK wins.
+    """
     try:
         from src.persistence.workspace_tool_credentials import (
             get_effective_openrouter_api_key,
@@ -45,6 +49,29 @@ def normalized_openrouter_api_key() -> str:
         return get_effective_openrouter_api_key()
     except ImportError:
         return (os.getenv("OPENROUTER_API_KEY") or "").strip()
+
+
+def resolve_openrouter_api_key_for_actor(actor: Any | None = None) -> str:
+    """Resolve OpenRouter key for Builder/chat BYOK: Connected Tools first, then global fallback.
+
+    Resolution order:
+    1. When ``actor`` is present, decrypt/read ``openrouter`` from Connected Tools (Firestore).
+    2. Otherwise (or when absent/implausible), :func:`normalized_openrouter_api_key`.
+    """
+    if actor is not None:
+        try:
+            from src.persistence.connected_tool_credentials import (
+                resolve_connected_tool_secret_plaintext,
+            )
+
+            connected = (
+                resolve_connected_tool_secret_plaintext(actor, "openrouter") or ""
+            ).strip()
+            if connected and openrouter_api_key_is_plausible(connected):
+                return connected
+        except Exception:
+            pass
+    return normalized_openrouter_api_key()
 
 
 def openrouter_api_key_is_plausible(raw: str | None = None) -> bool:

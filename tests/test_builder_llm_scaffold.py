@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import pytest
 
@@ -269,8 +270,8 @@ class TestBuildScaffoldMessages:
 class TestGenerateScaffoldNoKey:
     def test_raises_llm_scaffold_error_when_no_api_key(self, monkeypatch):
         monkeypatch.setattr(
-            "src.ham.builder_llm_scaffold.normalized_openrouter_api_key",
-            lambda: "",
+            "src.ham.builder_llm_scaffold.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "",
         )
         plan = _make_plan()
         with pytest.raises(LLMScaffoldError) as exc_info:
@@ -279,8 +280,8 @@ class TestGenerateScaffoldNoKey:
 
     def test_no_key_error_message_is_informative(self, monkeypatch):
         monkeypatch.setattr(
-            "src.ham.builder_llm_scaffold.normalized_openrouter_api_key",
-            lambda: "",
+            "src.ham.builder_llm_scaffold.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "",
         )
         plan = _make_plan()
         with pytest.raises(LLMScaffoldError) as exc_info:
@@ -294,10 +295,46 @@ class TestGenerateScaffoldNoKey:
 
 
 class TestGenerateScaffoldSuccess:
+    def test_passes_ham_actor_to_key_resolver(self, monkeypatch):
+        from src.ham.clerk_auth import HamActor
+
+        actor = HamActor(
+            user_id="user_byo",
+            org_id=None,
+            session_id=None,
+            email="user_byo@example.com",
+            permissions=frozenset(),
+            org_role=None,
+            raw_permission_claim=None,
+        )
+        seen: list[Any | None] = []
+
+        def _resolve(ham_actor: Any | None = None) -> str:
+            seen.append(ham_actor)
+            return "sk-or-test-key" if ham_actor is actor else ""
+
+        monkeypatch.setattr(
+            "src.ham.builder_llm_scaffold.resolve_openrouter_api_key_for_actor",
+            _resolve,
+        )
+        monkeypatch.setattr(
+            "src.ham.builder_llm_scaffold.complete_chat_messages_openrouter",
+            lambda messages, **kwargs: _VALID_LLM_JSON,
+        )
+        plan = _make_plan()
+        result = generate_scaffold(
+            plan,
+            project_id="proj_test",
+            workspace_id="ws_test",
+            ham_actor=actor,
+        )
+        assert isinstance(result, ScaffoldResult)
+        assert seen == [actor]
+
     def test_returns_scaffold_result_on_success(self, monkeypatch):
         monkeypatch.setattr(
-            "src.ham.builder_llm_scaffold.normalized_openrouter_api_key",
-            lambda: "sk-or-test-key",
+            "src.ham.builder_llm_scaffold.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
         )
         monkeypatch.setattr(
             "src.ham.builder_llm_scaffold.complete_chat_messages_openrouter",
@@ -309,8 +346,8 @@ class TestGenerateScaffoldSuccess:
 
     def test_file_changes_populated(self, monkeypatch):
         monkeypatch.setattr(
-            "src.ham.builder_llm_scaffold.normalized_openrouter_api_key",
-            lambda: "sk-or-test-key",
+            "src.ham.builder_llm_scaffold.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
         )
         monkeypatch.setattr(
             "src.ham.builder_llm_scaffold.complete_chat_messages_openrouter",
@@ -322,8 +359,8 @@ class TestGenerateScaffoldSuccess:
 
     def test_assertions_populated(self, monkeypatch):
         monkeypatch.setattr(
-            "src.ham.builder_llm_scaffold.normalized_openrouter_api_key",
-            lambda: "sk-or-test-key",
+            "src.ham.builder_llm_scaffold.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
         )
         monkeypatch.setattr(
             "src.ham.builder_llm_scaffold.complete_chat_messages_openrouter",
@@ -335,8 +372,8 @@ class TestGenerateScaffoldSuccess:
 
     def test_minimal_json_succeeds(self, monkeypatch):
         monkeypatch.setattr(
-            "src.ham.builder_llm_scaffold.normalized_openrouter_api_key",
-            lambda: "sk-or-test-key",
+            "src.ham.builder_llm_scaffold.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
         )
         monkeypatch.setattr(
             "src.ham.builder_llm_scaffold.complete_chat_messages_openrouter",
@@ -350,8 +387,8 @@ class TestGenerateScaffoldSuccess:
 
     def test_llm_receives_template_kind_in_messages(self, monkeypatch):
         monkeypatch.setattr(
-            "src.ham.builder_llm_scaffold.normalized_openrouter_api_key",
-            lambda: "sk-or-test-key",
+            "src.ham.builder_llm_scaffold.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
         )
         captured: list[list[dict]] = []
 
@@ -378,8 +415,8 @@ class TestGenerateScaffoldSuccess:
 class TestGenerateScaffoldRetry:
     def test_retries_once_on_invalid_json(self, monkeypatch):
         monkeypatch.setattr(
-            "src.ham.builder_llm_scaffold.normalized_openrouter_api_key",
-            lambda: "sk-or-test-key",
+            "src.ham.builder_llm_scaffold.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
         )
         call_count = 0
 
@@ -401,8 +438,8 @@ class TestGenerateScaffoldRetry:
 
     def test_raises_after_two_json_failures(self, monkeypatch):
         monkeypatch.setattr(
-            "src.ham.builder_llm_scaffold.normalized_openrouter_api_key",
-            lambda: "sk-or-test-key",
+            "src.ham.builder_llm_scaffold.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
         )
         monkeypatch.setattr(
             "src.ham.builder_llm_scaffold.complete_chat_messages_openrouter",
@@ -415,8 +452,8 @@ class TestGenerateScaffoldRetry:
 
     def test_raises_after_two_empty_file_changes(self, monkeypatch):
         monkeypatch.setattr(
-            "src.ham.builder_llm_scaffold.normalized_openrouter_api_key",
-            lambda: "sk-or-test-key",
+            "src.ham.builder_llm_scaffold.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
         )
         # Produces valid JSON but empty file_changes — both attempts fail
         monkeypatch.setattr(
@@ -431,8 +468,8 @@ class TestGenerateScaffoldRetry:
     def test_retry_uses_stricter_system_prompt(self, monkeypatch):
         """Second attempt's system message should contain the strictness text."""
         monkeypatch.setattr(
-            "src.ham.builder_llm_scaffold.normalized_openrouter_api_key",
-            lambda: "sk-or-test-key",
+            "src.ham.builder_llm_scaffold.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
         )
         system_prompts: list[str] = []
         call_count = 0

@@ -205,3 +205,141 @@ def test_legacy_prompts_without_api_key_signal_model_access_required(
         assert snaps == []
     finally:
         set_builder_source_store_for_tests(None)
+
+
+# ---------------------------------------------------------------------------
+# 7. Per-actor Connected Tools OpenRouter key (BYO resolver)
+# ---------------------------------------------------------------------------
+
+
+def _byo_actor(uid: str = "user_byo"):
+    from src.ham.clerk_auth import HamActor
+
+    return HamActor(
+        user_id=uid,
+        org_id=None,
+        session_id=None,
+        email=f"{uid}@example.com",
+        permissions=frozenset(),
+        org_role=None,
+        raw_permission_claim=None,
+    )
+
+
+def test_actor_connected_tools_key_wins_over_env_fallback(monkeypatch) -> None:
+    from unittest.mock import patch
+
+    from src.llm_client import resolve_openrouter_api_key_for_actor
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-envfallbackkey000000000000")
+    actor = _byo_actor()
+    with patch(
+        "src.persistence.connected_tool_credentials.resolve_connected_tool_secret_plaintext",
+        return_value="sk-or-v1-connectedtoolskey000000000000",
+    ) as resolve_mock:
+        key = resolve_openrouter_api_key_for_actor(actor)
+    resolve_mock.assert_called_once_with(actor, "openrouter")
+    assert key == "sk-or-v1-connectedtoolskey000000000000"
+    assert key != "sk-or-v1-envfallbackkey000000000000"
+
+
+def test_spaceship_prompt_no_key_signals_model_access_required(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    from src.ham.builder_chat_scaffold import maybe_chat_scaffold_for_turn
+    from src.persistence.builder_source_store import (
+        BuilderSourceStore,
+        set_builder_source_store_for_tests,
+    )
+
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    try:
+        with patch(
+            "src.llm_client.resolve_openrouter_api_key_for_actor",
+            return_value="",
+        ):
+            summary = maybe_chat_scaffold_for_turn(
+                workspace_id="ws_cut_test",
+                project_id="proj_cut_test",
+                session_id="sess_spaceship_no_key",
+                last_user_plain="build me a game where i can shoot things in a spaceship",
+                created_by="user_1",
+            )
+        assert summary is not None
+        assert summary.get("model_access_required") is True
+        assert summary.get("scaffolded") is False
+        snaps = store.list_source_snapshots(
+            workspace_id="ws_cut_test", project_id="proj_cut_test"
+        )
+        assert snaps == []
+    finally:
+        set_builder_source_store_for_tests(None)
+
+
+def test_spaceship_prompt_with_actor_byo_key_scaffolds(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    from src.ham.builder_chat_scaffold import maybe_chat_scaffold_for_turn
+    from src.ham.builder_llm_scaffold import ScaffoldResult
+    from src.persistence.builder_source_store import (
+        BuilderSourceStore,
+        set_builder_source_store_for_tests,
+    )
+
+    fake_app = (
+        'import React from "react";\n'
+        "export default function App() {\n"
+        "  return <main><h1>Spaceship Shooter</h1><canvas /></main>;\n"
+        "}\n"
+    )
+    fake_result = ScaffoldResult(
+        file_changes=[("src/App.tsx", fake_app), ("package.json", "{}")],
+        assertions=["canvas renders"],
+    )
+
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    actor = _byo_actor()
+    try:
+        with patch(
+            "src.persistence.connected_tool_credentials.resolve_connected_tool_secret_plaintext",
+            return_value="sk-or-v1-connectedtoolskey000000000000",
+        ), patch(
+            "src.ham.builder_llm_scaffold.generate_scaffold",
+            return_value=fake_result,
+        ) as gen_mock:
+            summary = maybe_chat_scaffold_for_turn(
+                workspace_id="ws_cut_test",
+                project_id="proj_cut_test",
+                session_id="sess_spaceship_actor_byo",
+                last_user_plain="build me a game where i can shoot things in a spaceship",
+                created_by=actor.user_id,
+                ham_actor=actor,
+            )
+        assert gen_mock.called
+        assert gen_mock.call_args.kwargs.get("ham_actor") is actor
+        assert summary is not None
+        assert summary.get("scaffolded") is True
+        snap_id = str(summary["source_snapshot_id"])
+        snap = next(
+            row
+            for row in store.list_source_snapshots(
+                workspace_id="ws_cut_test", project_id="proj_cut_test"
+            )
+            if row.id == snap_id
+        )
+        app_tsx = str((snap.manifest or {}).get("inline_files", {}).get("src/App.tsx") or "")
+        assert "Scaffold created from your chat request." not in app_tsx
+        assert "Spaceship Shooter" in app_tsx
+    finally:
+        set_builder_source_store_for_tests(None)

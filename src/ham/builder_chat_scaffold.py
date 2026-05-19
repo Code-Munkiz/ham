@@ -30,6 +30,7 @@ from typing import Any
 
 from src.ham.builder_artifact_verifier import verify_builder_scaffold_artifact
 from src.ham.builder_chat_intent import classify_builder_chat_intent
+from src.ham.clerk_auth import HamActor
 from src.persistence.builder_source_store import (
     ImportJob,
     ProjectSource,
@@ -1630,6 +1631,7 @@ def _maybe_llm_scaffold_replace(
     project_id: str,
     files: dict[str, str],
     scaffold_meta: dict[str, Any],
+    ham_actor: HamActor | None = None,
 ) -> tuple[dict[str, str], dict[str, Any]] | None:
     """Try replacing a placeholder scaffold with real LLM-generated source.
 
@@ -1650,9 +1652,9 @@ def _maybe_llm_scaffold_replace(
         generate_scaffold,
     )
     from src.ham.builder_plan import Plan, Step  # noqa: PLC0415
-    from src.llm_client import normalized_openrouter_api_key  # noqa: PLC0415
+    from src.llm_client import resolve_openrouter_api_key_for_actor  # noqa: PLC0415
 
-    if not normalized_openrouter_api_key():
+    if not resolve_openrouter_api_key_for_actor(ham_actor):
         return _MODEL_UNAVAILABLE_MARKER
 
     try:
@@ -1680,6 +1682,7 @@ def _maybe_llm_scaffold_replace(
             synthetic_plan,
             project_id=project_id,
             workspace_id=workspace_id,
+            ham_actor=ham_actor,
         )
     except LLMScaffoldError:
         return None
@@ -1724,6 +1727,7 @@ def maybe_chat_scaffold_for_turn(
     last_user_plain: str,
     created_by: str,
     operation: str = "build_or_create",
+    ham_actor: HamActor | None = None,
 ) -> dict[str, Any] | None:
     """If eligible, create ProjectSource + snapshot + import job; return summary dict."""
     ws = (workspace_id or "").strip()
@@ -1816,6 +1820,7 @@ def maybe_chat_scaffold_for_turn(
             project_id=pid,
             files=files,
             scaffold_meta=scaffold_meta,
+            ham_actor=ham_actor,
         )
         if replaced is _MODEL_UNAVAILABLE_MARKER:
             return {

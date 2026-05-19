@@ -2867,6 +2867,7 @@ async def chat_builder_snapshot_file(
         last_user_plain=f"Update {rel_path}: {user_message}",
         created_by=actor.user_id if actor is not None else "",
         operation="update_existing_project",
+        ham_actor=actor,
     )
     if scaffold_result and scaffold_result.get("model_access_required"):
         return {
