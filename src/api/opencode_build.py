@@ -220,8 +220,8 @@ def _project_managed_root(rec: Any) -> Path:
                 "error": {
                     "code": "BUILD_LANE_PROJECT_MISSING_WORKSPACE_ID",
                     "message": (
-                        "This project is configured for managed workspace builds "
-                        "but has no workspace assigned yet."
+                        "Workspace-backed builds expect a synced workspace snapshot, "
+                        "but none is assigned yet for this project."
                     ),
                 }
             },
@@ -554,7 +554,7 @@ class OpenCodeBuildLaunchBody(BaseModel):
 
 def _user_facing_summary() -> str:
     return (
-        "This action proposes an OpenCode managed workspace edit: HAM brokers "
+        "This action proposes an OpenCode sandboxed workspace build: HAM brokers "
         "every tool call against a deny-by-default policy, the working tree is "
         "scoped to the project root, and a preview snapshot is captured for you "
         "to review before anything is published."

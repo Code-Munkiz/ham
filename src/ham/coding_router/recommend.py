@@ -231,8 +231,8 @@ def _project_blockers_for(provider: ProviderKind, project: ProjectFlags) -> tupl
             elif target == "managed_workspace":
                 if not project.has_workspace_id:
                     blockers.append(
-                        "This project has no managed workspace assigned yet. "
-                        "Pick a workspace before building."
+                        "This project has no workspace assigned yet for workspace-backed builds. "
+                        "Pick or sync a workspace before building."
                     )
     if provider == "opencode_cli":
         blockers.extend(_opencode_project_blockers(project))
@@ -248,12 +248,13 @@ def _opencode_project_blockers(project: ProjectFlags) -> list[str]:
     target = (project.output_target or "managed_workspace").strip()
     if target != "managed_workspace":
         blockers.append(
-            "OpenCode requires a managed workspace project; this project "
+            "OpenCode expects workspace-backed builds; this project "
             "opens GitHub pull requests instead."
         )
     elif not project.has_workspace_id:
         blockers.append(
-            "This project has no managed workspace assigned yet. Pick a workspace before building."
+            "This project has no workspace assigned yet for workspace-backed builds. "
+            "Pick or sync a workspace before building."
         )
     if not project.build_lane_enabled:
         blockers.append(

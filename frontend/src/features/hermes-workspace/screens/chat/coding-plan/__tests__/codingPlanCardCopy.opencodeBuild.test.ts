@@ -64,7 +64,7 @@ describe("OpenCode managed build copy", () => {
     expect(OPENCODE_BUILD_LAUNCH_BUSY).toBe("Building…");
     expect(OPENCODE_BUILD_SUCCESS_HEADLINE).toBe("Saved version created");
     expect(OPENCODE_BUILD_FAILURE_HEADLINE).toBe("Build did not complete. No version was saved.");
-    expect(OPENCODE_BUILD_NO_PR_NOTE.toLowerCase()).toContain("never open a pull request");
+    expect(OPENCODE_BUILD_NO_PR_NOTE.toLowerCase()).toContain("pull request");
     expect(OPENCODE_BUILD_KEEP_BUILDING_CTA).toBe("Keep building");
     expect(OPENCODE_BUILD_TECHNICAL_DETAILS_SUMMARY).toBe("Details");
     expect(OPENCODE_BUILD_RUNNING_HEADLINE).toBe("HAM is building with OpenCode");

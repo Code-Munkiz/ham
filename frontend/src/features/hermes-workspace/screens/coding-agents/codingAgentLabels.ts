@@ -120,7 +120,7 @@ export const CODING_AGENT_LABELS = {
   builderConnectionFactorySubtitle: "Controlled builder for structured, auditable workflows.",
 
   builderConnectionOpencodeSubtitle:
-    "Open builder for managed workspace builds and bring-your-own-model workflows.",
+    "Open builder for sandboxed workspace builds and bring-your-own-model workflows.",
 
   connectionStatusChecking: "Checking…",
   connectionStatusNeedsCredentials: "Needs credentials",

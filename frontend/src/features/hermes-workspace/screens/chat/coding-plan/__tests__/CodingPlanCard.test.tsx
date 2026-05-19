@@ -279,7 +279,7 @@ describe("CodingPlanCard OpenCode preferred-provider affordance", () => {
   function opencodeAvailable() {
     return candidate({
       provider: "opencode_cli",
-      label: "OpenCode managed workspace build",
+      label: "OpenCode workspace build",
       output_kind: "pull_request",
       will_modify_code: true,
       will_open_pull_request: false,

@@ -749,7 +749,7 @@ def test_preview_managed_smoke_prompt_shows_safe_blockers_when_workspace_missing
     assert body["task_kind"] == "comments_only"
     build = next(c for c in body["candidates"] if c["provider"] == "factory_droid_build")
     assert build["available"] is False
-    assert any("managed workspace" in b.lower() for b in build["blockers"])
+    assert any("workspace-backed" in b.lower() for b in build["blockers"])
     # Blocker copy never names the env var, the workflow id, or the token.
     for b in build["blockers"]:
         assert "HAM_DROID_EXEC_TOKEN" not in b
@@ -994,7 +994,7 @@ def test_preview_opencode_blocked_when_output_target_github_pr(
     assert oc["blockers"], (
         "opencode_cli must carry a blocker when output_target != managed_workspace"
     )
-    assert any("managed workspace" in b.lower() for b in oc["blockers"])
+    assert any("workspace-backed" in b.lower() for b in oc["blockers"])
     # Never chosen when blocked.
     assert body["chosen"] is None or body["chosen"]["provider"] != "opencode_cli"
     _assert_no_secret_leakage(res.text)

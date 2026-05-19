@@ -152,7 +152,7 @@ def _provider_candidate(out: Iterable[Candidate], kind: ProviderKind) -> Candida
         ("documentation/comment update", "comments_only"),
         ("comment / docs polish", "comments_only"),
         ("Create a managed snapshot for the staging workspace.", "comments_only"),
-        ("managed workspace build for a tiny docs tweak", "comments_only"),
+        ("workspace build for a tiny docs-only polish", "comments_only"),
         ("Hello", "unknown"),
         ("", "unknown"),
         ("    ", "unknown"),
@@ -492,7 +492,7 @@ def test_recommend_opencode_blocked_when_output_target_is_github_pr(
     oc = _provider_candidate(out, "opencode_cli")
     assert oc is not None, "opencode_cli must appear as a blocked candidate, not be absent"
     assert oc.blockers, "opencode_cli must have a blocker when output_target != managed_workspace"
-    assert any("managed workspace" in b.lower() for b in oc.blockers)
+    assert any("workspace-backed" in b.lower() for b in oc.blockers)
     assert oc.confidence < 1.0
     # Must rank below any approve-able candidate.
     approveable_idx = next((i for i, c in enumerate(out) if not c.blockers), None)

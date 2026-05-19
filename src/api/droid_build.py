@@ -226,7 +226,7 @@ def _require_build_approver(
             detail={
                 "error": {
                     "code": "CLERK_SESSION_REQUIRED",
-                    "message": "Sign in to approve a managed workspace build.",
+                    "message": "Sign in before approving this workspace build.",
                 }
             },
         )
@@ -238,8 +238,8 @@ def _require_build_approver(
                 "error": {
                     "code": "BUILD_LANE_PROJECT_MISSING_WORKSPACE_ID",
                     "message": (
-                        "This project is configured for managed workspace builds "
-                        "but has no workspace assigned yet."
+                        "Workspace-backed builds expect a synced workspace snapshot, "
+                        "but none is assigned yet for this project."
                     ),
                 }
             },
@@ -466,7 +466,7 @@ def _user_facing_summary(output_target: str) -> str:
     target = (output_target or "").strip()
     if target == "managed_workspace":
         return (
-            "This action proposes a low-risk managed workspace snapshot: "
+            "This action proposes a low-risk workspace build snapshot: "
             "documentation, comments, and non-behavioral edits only. "
             "HAM will capture a preview snapshot for you to review before "
             "anything is published. No CI configuration or business logic "

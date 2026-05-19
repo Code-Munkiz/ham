@@ -177,8 +177,8 @@ def _project_managed_root(rec: Any) -> Path:
                 "error": {
                     "code": "BUILD_LANE_PROJECT_MISSING_WORKSPACE_ID",
                     "message": (
-                        "This project is configured for managed workspace builds "
-                        "but has no workspace assigned yet."
+                        "Workspace-backed builds expect a synced workspace snapshot, "
+                        "but none is assigned yet for this project."
                     ),
                 }
             },
@@ -452,7 +452,7 @@ class ClaudeAgentBuildLaunchBody(BaseModel):
 
 def _user_facing_summary() -> str:
     return (
-        "This action proposes a Claude Agent managed workspace edit: "
+        "This action proposes a Claude Agent workspace-backed edit: "
         "scoped read and write tools only, no shell, no network. "
         "HAM will capture a preview snapshot for you to review before "
         "anything is published."

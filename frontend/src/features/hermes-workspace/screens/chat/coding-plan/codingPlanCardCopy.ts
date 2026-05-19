@@ -22,13 +22,13 @@ export const CODING_PLAN_NO_LAUNCH_FOOTER =
 
 export const CODING_PLAN_LAUNCH_DISABLED_TITLE = "Launch approval is coming in a later step.";
 
-export const MANAGED_BUILD_APPROVAL_HEADLINE = "Approve a managed workspace build";
+export const MANAGED_BUILD_APPROVAL_HEADLINE = "Approve this workspace build plan";
 
 export const MANAGED_BUILD_APPROVAL_BODY =
-  "HAM will run a low-risk edit pass and capture a managed workspace snapshot you can review before anything is shared.";
+  "HAM will apply a cautious edit sweep and stash a labeled workspace version you can review before sharing anything externally.";
 
 export const MANAGED_BUILD_APPROVAL_CHECKBOX =
-  "I approve HAM to create a managed workspace snapshot.";
+  "I approve HAM to save a gated workspace snapshot for this Builder run.";
 
 export const MANAGED_BUILD_PREVIEW_CTA = "Prepare build";
 export const MANAGED_BUILD_PREVIEW_BUSY = "Preparing build…";
@@ -52,15 +52,15 @@ export const MANAGED_BUILD_TECHNICAL_DETAILS_SUMMARY = "Technical details";
 export const MANAGED_BUILD_KEEP_BUILDING_CTA = "Keep building";
 
 export const MANAGED_BUILD_NO_PR_NOTE =
-  "Managed workspace builds never open a pull request and never push to GitHub.";
+  "HAM workspace snapshots never publish to GitHub and never raise pull requests.";
 
 export const OPENCODE_BUILD_APPROVAL_HEADLINE = "Review OpenCode build";
 
 export const OPENCODE_BUILD_APPROVAL_BODY =
-  "HAM will run OpenCode in a managed workspace and save the change as a snapshot you can preview.";
+  "HAM will run OpenCode against your synced workspace sources and tuck the result behind a gated snapshot you preview first.";
 
 export const OPENCODE_BUILD_APPROVAL_CHECKBOX =
-  "I approve HAM to create a managed workspace snapshot with OpenCode.";
+  "I approve letting OpenCode synthesize changes into a gated workspace snapshot.";
 
 export const OPENCODE_BUILD_PREVIEW_CTA = "Prepare build";
 export const OPENCODE_BUILD_PREVIEW_BUSY = "Preparing build…";
@@ -70,7 +70,8 @@ export const OPENCODE_BUILD_LAUNCH_BUSY = "Building…";
 export const OPENCODE_BUILD_SUCCESS_HEADLINE = "Saved version created";
 export const OPENCODE_BUILD_FAILURE_HEADLINE = "Build did not complete. No version was saved.";
 
-export const OPENCODE_BUILD_NO_PR_NOTE = "Managed workspace builds never open a pull request.";
+export const OPENCODE_BUILD_NO_PR_NOTE =
+  "OpenCode-backed workspace builds stay sandboxed and won't open a GitHub pull request.";
 export const OPENCODE_BUILD_PREVIEW_LINK = "Open app preview";
 export const OPENCODE_BUILD_VIEW_CHANGES_LINK = "View changes";
 export const OPENCODE_BUILD_TECHNICAL_DETAILS_SUMMARY = "Details";
@@ -106,7 +107,7 @@ export function opencodeBuildChangedPathsLine(count: number): string {
 
 export const OPENCODE_PREFERRED_CTA = "Try with OpenCode";
 export const OPENCODE_PREFERRED_HINT =
-  "Build it in a managed workspace instead of opening a pull request.";
+  "Use a sandboxed workspace build instead of opening a GitHub pull request.";
 export const OPENCODE_PREFERRED_LOADING = "Switching to OpenCode…";
 
 export function shouldShowOpenCodeAffordance(payload: CodingConductorPreviewPayload): boolean {
@@ -203,10 +204,9 @@ export function providerLabelForCard(p: CodingConductorProviderKind): string {
 }
 
 /**
- * Label for a specific candidate. ``factory_droid_build`` carries two
- * flavors: the github_pr variant (opens a PR) keeps the "Low-risk pull
- * request" label; the managed_workspace variant uses
- * ``Managed workspace build`` because the output is a snapshot, not a PR.
+ * Label for a specific candidate. ``factory_droid_build`` carries two flavors:
+ * the GitHub-oriented lane keeps PR labels, while gated snapshot lanes surface
+ * ``FACTORY_DROID_BUILD_MANAGED_LABEL`` because outputs stay inside HAM.
  * Derivation is purely from ``provider`` + ``will_open_pull_request`` to
  * mirror the server-side mapping in ``src/api/coding_conductor.py`` and
  * keep the frontend deterministic regardless of any stale ``label`` field

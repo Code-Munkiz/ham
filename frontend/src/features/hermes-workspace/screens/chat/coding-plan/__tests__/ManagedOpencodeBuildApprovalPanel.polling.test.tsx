@@ -142,7 +142,7 @@ function buildTestConfig(
   return {
     providerKey: "opencode_managed_build",
     testIdPrefix: "opencode-build",
-    ariaLabel: "OpenCode managed workspace build approval",
+    ariaLabel: "OpenCode workspace build approval",
     copy: {
       headline: "Review OpenCode build",
       body: "HAM will run OpenCode in a managed workspace.",

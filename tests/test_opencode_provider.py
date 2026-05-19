@@ -534,7 +534,7 @@ def test_recommender_blocks_opencode_when_output_target_is_github_pr(
                 assert c.blockers, (
                     f"opencode_cli must be blocked when output_target=github_pr ({prompt})"
                 )
-                assert any("managed workspace" in b.lower() for b in c.blockers), (
+                assert any("workspace-backed" in b.lower() for b in c.blockers), (
                     prompt,
                     c.blockers,
                 )

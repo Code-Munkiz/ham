@@ -423,7 +423,7 @@ describe("WorkspaceChatScreen OpenCode preferred-provider affordance", () => {
 
   const opencodeAvailable = {
     provider: "opencode_cli" as const,
-    label: "OpenCode managed workspace build",
+    label: "OpenCode workspace build",
     available: true,
     reason: "Build inside a managed workspace snapshot.",
     blockers: [],

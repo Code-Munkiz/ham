@@ -97,12 +97,13 @@ class TestSystemPromptBoundary:
     def test_default_prompt_still_has_coding_plan_for_repo_mutation(self) -> None:
         assert "Plan with coding agents" in _DEFAULT_CHAT_SYSTEM_PROMPT
         assert "Coding Plan card" in _DEFAULT_CHAT_SYSTEM_PROMPT
-        assert "Managed workspace build approval panel" in _DEFAULT_CHAT_SYSTEM_PROMPT
+        assert "workspace build approval panel" in _DEFAULT_CHAT_SYSTEM_PROMPT
 
     def test_default_prompt_pins_builder_without_managed_mission_phrasing(self) -> None:
         assert "Do NOT imply" in _BUILDER_TURN_SYSTEM_INJECTION
         assert "never autosubmit" in _BUILDER_TURN_SYSTEM_INJECTION.lower()
         assert "managed mission" not in _BUILDER_TURN_SYSTEM_INJECTION.lower()
+        assert "managed workspace build" not in _BUILDER_TURN_SYSTEM_INJECTION.lower()
 
 
 # ---------------------------------------------------------------------------

@@ -45,7 +45,7 @@ function buildOpencodeConfig(
   return {
     providerKey: "opencode_managed_build",
     testIdPrefix: "opencode-build",
-    ariaLabel: "OpenCode managed workspace build approval",
+    ariaLabel: "OpenCode workspace build approval",
     copy: {
       headline: OPENCODE_BUILD_APPROVAL_HEADLINE,
       body: OPENCODE_BUILD_APPROVAL_BODY,

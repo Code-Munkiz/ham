@@ -4,6 +4,12 @@ import {
   CODING_PLAN_NO_LAUNCH_FOOTER,
   FACTORY_DROID_BUILD_MANAGED_LABEL,
   FORBIDDEN_CARD_TOKENS,
+  MANAGED_BUILD_APPROVAL_BODY,
+  MANAGED_BUILD_APPROVAL_HEADLINE,
+  MANAGED_BUILD_NO_PR_NOTE,
+  OPENCODE_BUILD_APPROVAL_BODY,
+  OPENCODE_BUILD_APPROVAL_CHECKBOX,
+  OPENCODE_BUILD_NO_PR_NOTE,
   OPENCODE_PREFERRED_CTA,
   OPENCODE_PREFERRED_HINT,
   OPENCODE_PREFERRED_LOADING,
@@ -158,6 +164,24 @@ describe("codingPlanCardCopy", () => {
   });
 });
 
+describe("Beta chat copy hygiene", () => {
+  it("avoids phased operator-registry wording in surfaced approval bundles", () => {
+    const bundle = [
+      MANAGED_BUILD_APPROVAL_HEADLINE,
+      MANAGED_BUILD_APPROVAL_BODY,
+      MANAGED_BUILD_NO_PR_NOTE,
+      OPENCODE_BUILD_APPROVAL_BODY,
+      OPENCODE_BUILD_APPROVAL_CHECKBOX,
+      OPENCODE_BUILD_NO_PR_NOTE,
+      OPENCODE_PREFERRED_HINT,
+    ]
+      .join(" ")
+      .toLowerCase();
+    expect(bundle).not.toContain("managed workspace build");
+    expect(bundle).not.toContain("managed mission");
+  });
+});
+
 const PREFERRED_USER_FACING_BANNED = [
   "opencode_cli",
   "factory_droid",
@@ -192,7 +216,7 @@ describe("OpenCode preferred-provider affordance copy", () => {
   it("locks exact string values", () => {
     expect(OPENCODE_PREFERRED_CTA).toBe("Try with OpenCode");
     expect(OPENCODE_PREFERRED_HINT).toBe(
-      "Build it in a managed workspace instead of opening a pull request.",
+      "Use a sandboxed workspace build instead of opening a GitHub pull request.",
     );
     expect(OPENCODE_PREFERRED_LOADING).toBe("Switching to OpenCode…");
   });
@@ -233,7 +257,7 @@ describe("shouldShowOpenCodeAffordance", () => {
     const chosen = makeCandidate({ provider: "factory_droid_build" });
     const opencode = makeCandidate({
       provider: "opencode_cli",
-      label: "OpenCode managed workspace build",
+      label: "OpenCode workspace build",
       output_kind: "pull_request",
       will_open_pull_request: false,
     });

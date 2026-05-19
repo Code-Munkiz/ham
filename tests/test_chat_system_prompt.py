@@ -41,10 +41,8 @@ def test_chat_system_prompt_includes_no_fabricated_execution_guard() -> None:
     """
     base = _DEFAULT_CHAT_SYSTEM_PROMPT
     # Capabilities lock: every banned tool surface is explicitly negated.
-    # Managed-workspace snapshots are intentionally NOT in the banned list:
-    # they are created when the user approves the Managed workspace build
-    # approval panel (a real API call), so denying them in the system
-    # prompt while the panel is rendered would contradict the actual flow.
+    # Snapshots issued through workspace build approvals still correspond to real
+    # API-backed outcomes; the guard avoids blanket denying that path.
     assert "No fabricated execution" in base
     for negated in (
         "NO shell",
@@ -63,7 +61,7 @@ def test_chat_system_prompt_includes_no_fabricated_execution_guard() -> None:
     # Routing lock: coding intents must point to the real flow.
     assert "Plan with coding agents" in base
     assert "Coding Plan card" in base
-    assert "Managed workspace build approval panel" in base
+    assert "workspace build approval panel" in base
     # Completion-claim lock: outcomes require server-issued ids.
     assert "Completion-claim rule" in base
     for token in ("ham_run_id", "snapshot_id", "pr_url", "control_plane_run_id"):
@@ -88,8 +86,8 @@ def test_chat_system_prompt_forbids_delegate_task_for_coding_execution() -> None
     Live chat fabricated a ``delegate_task`` suggestion for a managed-workspace
     smoke prompt. The Coding Plan card is the canonical surface for coding
     execution; the prompt must explicitly forbid suggesting ``delegate_task`` /
-    Hermes skills / other vendored catalog adapters for that flow, and must
-    prefer the managed-workspace build approval copy.
+    Hermes skills / other vendored catalog adapters for that flow, and must steer
+    users toward conversational workspace/build-plan approval language instead.
     """
     base = _DEFAULT_CHAT_SYSTEM_PROMPT
     # Anti-delegate-task lock.
@@ -99,6 +97,8 @@ def test_chat_system_prompt_forbids_delegate_task_for_coding_execution() -> None
     assert "Do NOT suggest `delegate_task`" in base or "Do NOT suggest" in base
     # Preferred approval copy for workspace-scoped planner/build flows (neutral wording — no jargon).
     assert "approve before Builder work starts" in base
+
+
 F_PROVIDER_IDS = (
     "opencode_cli",
     "claude_code",
@@ -132,11 +132,11 @@ F_OPERATOR_VOCAB = (
 def test_val_prompt_001_length_cap() -> None:
     """VAL-PROMPT-001 + VAL-BRAND-006: default prompt stays under the concise cap.
 
-    Cap bumped from 1800 → 2900 → ~3300 to fit canon + Builder Studio grounding + stronger
-    fabrication/outcome wording while `_MAX_SYSTEM_PROMPT_CHARS`` (12_000) still bounds full
-    assembly with huge skill/subagent catalogs.
+    Cap bumped from 1800 → 2900 → ~3350 → **3550** to fit fuller Builder Studio
+    onboarding plus tightened routing vocabulary caps while `_MAX_SYSTEM_PROMPT_CHARS``
+    still bounds full assembly with huge catalogs.
     """
-    assert len(_DEFAULT_CHAT_SYSTEM_PROMPT) <= 3350
+    assert len(_DEFAULT_CHAT_SYSTEM_PROMPT) <= 3550
 
 
 def test_val_prompt_002_ham_identity() -> None:
@@ -168,7 +168,7 @@ def test_val_prompt_004_completion_claim_guardrail() -> None:
 def test_val_prompt_005_approval_before_mutation_guardrail() -> None:
     """VAL-PROMPT-005: approval-before-mutation surfaces the approval card flow."""
     base = _DEFAULT_CHAT_SYSTEM_PROMPT
-    assert "Managed workspace build approval panel" in base
+    assert "workspace build approval panel" in base
     assert "approve before Builder work starts" in base
 
 
@@ -221,13 +221,20 @@ def test_default_prompt_grounds_builder_studio_plainly() -> None:
     base = _DEFAULT_CHAT_SYSTEM_PROMPT
     assert "**Builder Studio.**" in base
     low = base.lower()
-    assert "builder studio configures" in low or "inside builder studio" in low
+    assert "configure" in low and "builders ham can use" in low
+    assert "starts in chat" in low
+    assert (
+        ("plan" in low or "plans" in low)
+        and "approve" in low
+        and "builder" in low
+    )
 
 
 def test_default_prompt_avoids_managed_mission_operator_jargon() -> None:
     """VAL-JARGON-MM — planner-style chat avoids operator mission-registry language."""
     assert "managed mission" not in _DEFAULT_CHAT_SYSTEM_PROMPT.lower()
     assert "managed mission" not in _BUILDER_TURN_SYSTEM_INJECTION.lower()
+    assert "managed workspace build" not in _DEFAULT_CHAT_SYSTEM_PROMPT.lower()
 
 
 def test_default_prompt_contains_ham_brand_canon() -> None:
