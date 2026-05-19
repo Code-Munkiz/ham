@@ -253,7 +253,7 @@ def verify_builder_scaffold_artifact(
     # rubber-stamped as a successful scaffold. The chat-stream uses this
     # result to suppress the "I've generated the project files" message and
     # surface an honest "I can't generate that yet" response to the user.
-    if bool(scaffold_meta.get("placeholder_fallback")):
+    if bool(scaffold_meta.get("placeholder_fallback")) and operation == "build_or_create":
         return {
             "verified": False,
             "skipped": False,

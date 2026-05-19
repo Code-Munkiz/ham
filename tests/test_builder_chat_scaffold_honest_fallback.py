@@ -96,6 +96,20 @@ def test_verifier_fails_on_placeholder_fallback() -> None:
     assert "OpenRouter API key" in result["reason"] or "calculator" in result["reason"]
 
 
+def test_verifier_skips_placeholder_gate_for_update_existing_project() -> None:
+    """File-chat edits use update_existing_project; placeholder_fallback must not
+    block that operation (only initial build_or_create scaffolds)."""
+    files, meta = _build_react_scaffold_files(SPACESHIP_PROMPT)
+    result = verify_builder_scaffold_artifact(
+        SPACESHIP_PROMPT,
+        meta,
+        files,
+        operation="update_existing_project",
+    )
+    assert result["verified"] is True
+    assert result["skipped"] is True
+
+
 def test_verifier_still_skips_for_non_calculator_non_placeholder_templates() -> None:
     """Tetris template doesn't have specific verifier checks; should skip (not fail)."""
     files, meta = _build_react_scaffold_files("build me a tetris game")

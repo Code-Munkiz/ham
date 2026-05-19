@@ -130,7 +130,7 @@ def test_maybe_chat_scaffold_sets_artifact_uri(tmp_path: Path, monkeypatch) -> N
         workspace_id="ws_a",
         project_id="pr_a",
         session_id="sess_1",
-        last_user_plain="build me a landing page for a roofing company",
+        last_user_plain="build me a game like Tetris",
         created_by="user_1",
     )
     assert out and out.get("scaffolded")
@@ -1401,7 +1401,7 @@ def test_chat_scaffold_enqueue_idempotent(tmp_path: Path, monkeypatch) -> None:
         workspace_id="ws_a",
         project_id="pr_a",
         session_id="sess_dedupe",
-        last_user_plain="build me a todo app with dark mode",
+        last_user_plain="build me a game like Tetris",
         created_by="user_1",
     )
     assert out and out.get("scaffolded")
