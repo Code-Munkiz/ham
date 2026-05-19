@@ -244,9 +244,11 @@ class BuilderWorker:
 
         PR 7 (ADR-0011): Scaffold routing added.  When ``plan.metadata`` carries
         a ``template_kind`` and this is the initial scaffold step (``step_index
-        == 0``), the Worker routes to either the deterministic scaffold path
-        (calculator / tetris stay on ``builder_chat_scaffold``) or the new LLM
-        scaffold path (``builder_llm_scaffold``).
+        == 0``), the Worker routes to either the legacy deterministic scaffold
+        path (calculator / tetris stay on ``builder_chat_scaffold``) or the
+        canonical LLM scaffold path (``builder_llm_scaffold``). New template
+        kinds always route to the LLM path; the legacy set is frozen — see
+        ``src/ham/builder_template_kinds.legacy_deterministic_kinds``.
 
         The cancel_check callable may be polled by long-running executors to
         honour ADR-0004's 5-second acknowledgement target.
@@ -263,8 +265,10 @@ class BuilderWorker:
                 path = select_scaffold_path(template_kind)
                 if path == "llm":
                     return self._execute_llm_scaffold_step(step)
-                # "deterministic" path: builder_chat_scaffold full wiring lands in a later PR;
-                # fall through to the PR1 stub for now.
+                # "legacy_deterministic" path (calculator / tetris): builder_chat_scaffold
+                # full wiring lands in a later PR; fall through to the PR1 stub for now.
+                # New template kinds must NOT be added to the legacy registry — they
+                # default to the LLM scaffold path above.
 
         # PR1 stub: log the step title and return success.
         # Real CLI executor dispatch (droid_executor / Hermes adapter) lands in

@@ -256,13 +256,13 @@ Phase 0 Contract 4 and ADR-0002 define `GET /api/jobs/<job_id>/stream`, but the 
   - Public API: `generate_scaffold(plan: Plan, project_id: str, workspace_id: str) -> ScaffoldResult`
   - Internally: one LLM call (via `complete_chat_messages_openrouter`, BYO key) with the Plan + Step list as input; produces a set of file changes (path → content); applies via the existing `BuilderSourceStore` pattern
   - Output gated by `builder_verifier` (Phase 1 #19) at end-of-Plan: scaffold failures surface as `step.step_verification_failed`
-- **No deterministic-path deprecation in Phase 2:** the existing `~1400 LoC` of templates stay untouched. Tier 2 follow-up work A/B tests LLM vs deterministic on calculator/tetris and deprecates incrementally.
-- **Template registry:** introduce `src/ham/builder_template_kinds.py` (or extend an existing module) that lists the known kinds plus their routing target (`deterministic` vs `llm`). Adding a new kind = appending to that registry.
+- **No deterministic-path deprecation in Phase 2:** the existing `~1400 LoC` of templates stay untouched. Tier 2 follow-up work A/B tests LLM vs legacy-deterministic on calculator/tetris and deprecates incrementally.
+- **Template registry:** introduce `src/ham/builder_template_kinds.py` (or extend an existing module) that lists the known kinds plus their routing target (`legacy_deterministic` vs `llm`). The `legacy_deterministic` set is frozen at `{calculator, tetris}` — new kinds default to `llm` and route to `builder_llm_scaffold.py`. The explicit legacy facade lives in `src/ham/builder_legacy_templates.py`.
 
 #### Component contract
 
 - Module: `src/ham/builder_llm_scaffold.py`.
-- Routing helper: `select_scaffold_path(template_kind: str) -> Literal["deterministic", "llm"]`.
+- Routing helper: `select_scaffold_path(template_kind: str) -> Literal["legacy_deterministic", "llm"]`. Input is normalized (`strip().lower()`); unknown kinds always return `"llm"`.
 - Worker integration: in Subsystem 3's Step execution loop, when a Step's intent is "scaffold a new project from template kind X", the Worker calls `select_scaffold_path(X)` and dispatches to the right path.
 
 ---
