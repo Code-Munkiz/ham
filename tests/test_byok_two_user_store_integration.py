@@ -243,8 +243,8 @@ class TestHttpOpenRouterRouteActorBound:
             model_id="tier:auto",
         )
         with patch("src.api.chat.resolve_model_id_for_chat", return_value="openrouter/resolved-mm"):
-            oa, hinted_a, _bypass_a = _resolve_chat_openrouter_route(body=body, ham_actor=ua)
-            ob, hinted_b, _bypass_b = _resolve_chat_openrouter_route(body=body, ham_actor=ub)
+            oa, hinted_a, _bypass_a, _http_a = _resolve_chat_openrouter_route(body=body, ham_actor=ua)
+            ob, hinted_b, _bypass_b, _http_b = _resolve_chat_openrouter_route(body=body, ham_actor=ub)
 
         assert oa == ob == "openrouter/resolved-mm"
         assert hinted_a.strip() != hinted_b.strip()
