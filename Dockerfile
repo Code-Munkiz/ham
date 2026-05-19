@@ -75,6 +75,15 @@ RUN git config --global init.defaultBranch main \
     && git config user.name "HAM API" \
     && git commit --allow-empty --quiet -m "ham-api:synthetic"
 
+# Build metadata — optional. Populated by `gcloud builds submit --substitutions=_HAM_BUILD_SHA=$(git rev-parse HEAD)` etc.
+# All values default to empty so dev/local images still work. Read by src.api.server._build_info().
+ARG HAM_BUILD_SHA=""
+ARG HAM_BUILD_TIME=""
+ARG HAM_SERVICE_VERSION=""
+ENV HAM_BUILD_SHA=${HAM_BUILD_SHA} \
+    HAM_BUILD_TIME=${HAM_BUILD_TIME} \
+    HAM_SERVICE_VERSION=${HAM_SERVICE_VERSION}
+
 EXPOSE 8080
 
 ENTRYPOINT ["/usr/bin/tini", "--"]

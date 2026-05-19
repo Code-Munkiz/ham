@@ -240,6 +240,55 @@ async def root() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+_BUILD_INFO_MAX_LEN = 120
+_BUILD_INFO_ALLOWED_CHARS = frozenset(
+    "abcdefghijklmnopqrstuvwxyz"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "0123456789"
+    ".-_:+/@"
+)
+_BUILD_INFO_SECRET_TOKENS = ("TOKEN", "KEY", "SECRET", "PASSWORD", "AUTH", "JWT", "CREDENTIAL")
+
+
+def _build_info_sanitize(raw: Any) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    value = raw.strip()
+    if not value:
+        return None
+    if len(value) > _BUILD_INFO_MAX_LEN:
+        return None
+    if any(ch not in _BUILD_INFO_ALLOWED_CHARS for ch in value):
+        return None
+    return value
+
+
+def _build_info_read(name: str) -> str | None:
+    upper = name.upper()
+    if any(token in upper for token in _BUILD_INFO_SECRET_TOKENS):
+        return None
+    return _build_info_sanitize(os.environ.get(name))
+
+
+def _build_info() -> dict[str, str | None]:
+    """Whitelist-only env read; never exposes secrets or auth state.
+
+    Frontend smoke preflight depends on the existing `/api/status` shape — `build`
+    is additive. Reads are restricted to a hard whitelist of env names; values are
+    sanitized for length and ASCII allow-list to prevent log injection.
+    """
+    git_sha = _build_info_read("HAM_BUILD_SHA") or _build_info_read("GIT_SHA")
+    build_time = _build_info_read("HAM_BUILD_TIME") or _build_info_read("BUILD_TIME")
+    service_version = _build_info_read("HAM_SERVICE_VERSION") or "0.1.0"
+    deployed_revision = _build_info_read("K_REVISION") or _build_info_read("HAM_DEPLOYED_REVISION")
+    return {
+        "git_sha": git_sha,
+        "build_time": build_time,
+        "service_version": service_version,
+        "deployed_revision": deployed_revision,
+    }
+
+
 @app.get("/api/status")
 async def get_status() -> dict:
     return {
@@ -248,7 +297,13 @@ async def get_status() -> dict:
         "capabilities": {
             "project_agent_profiles_read": True,
         },
+        "build": _build_info(),
     }
+
+
+@app.get("/api/build-info")
+async def get_build_info() -> dict[str, str | None]:
+    return _build_info()
 
 
 @app.get("/api/clerk-access-probe")
