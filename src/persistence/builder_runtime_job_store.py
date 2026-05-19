@@ -48,6 +48,9 @@ class CloudRuntimeJob(BaseModel):
     last_error: ErrorEnvelope | None = None
     cancel_requested_at: str | None = None
     cancel_reason: str | None = None
+    # Phase 1 #3 (ADR-0004): job-level TTL. Old records load with defaults.
+    ttl_seconds: int = 3600
+    ttl_deadline: str | None = None
     logs_summary: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 

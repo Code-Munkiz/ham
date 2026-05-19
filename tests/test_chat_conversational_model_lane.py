@@ -227,10 +227,52 @@ def test_chat_model_precedence_ordering_explicit_model_id_top(
     assert seen and seen[0].get("model") == "openrouter/minimax/minimax-m2.5:free"
 
 
-def test_http_hermes_branch_ignores_conversational_env(
+class _FakeStreamResp:
+    def __init__(self, status: int = 200, lines: list[str] | None = None) -> None:
+        self.status_code = status
+        self._lines = lines or []
+
+    def __enter__(self) -> "_FakeStreamResp":
+        return self
+
+    def __exit__(self, *_a: object) -> None:
+        return None
+
+    def iter_lines(self) -> list[str]:
+        return self._lines
+
+
+class _FakeHttpClient:
+    def __init__(self, captured_models: list[str], captured_payloads: list[dict[str, Any]] | None = None) -> None:
+        self._captured_models = captured_models
+        self._captured_payloads = captured_payloads
+
+    def __enter__(self) -> "_FakeHttpClient":
+        return self
+
+    def __exit__(self, *_a: object) -> None:
+        return None
+
+    def stream(
+        self,
+        _method: str,
+        _url: str,
+        *,
+        headers: dict[str, str] | None = None,
+        json: dict[str, Any] | None = None,
+    ) -> _FakeStreamResp:
+        assert json is not None
+        self._captured_models.append(str(json["model"]))
+        if self._captured_payloads is not None:
+            self._captured_payloads.append(dict(json))
+        payload = __import__("json").dumps({"choices": [{"delta": {"content": "ok"}}]})
+        return _FakeStreamResp(200, [f"data: {payload}", "data: [DONE]"])
+
+
+def test_http_hermes_branch_uses_conversational_env_when_no_model_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """VAL-ROUTE-009 — HTTP-Hermes payload `model` stays HERMES_GATEWAY_MODEL when env is set."""
+    """VAL-HTTP-001 — HTTP-Hermes primary payload `model` is the conversational slug when env set + no model_id."""
     monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
     monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://10.0.0.99:8642")
     monkeypatch.setenv("HERMES_GATEWAY_MODEL", "hermes-agent")
@@ -239,42 +281,57 @@ def test_http_hermes_branch_ignores_conversational_env(
 
     captured_models: list[str] = []
 
-    class _FakeStreamResp:
-        def __init__(self) -> None:
-            self.status_code = 200
+    with patch(
+        "src.integrations.nous_gateway_client.httpx.Client",
+        return_value=_FakeHttpClient(captured_models),
+    ):
+        res = client.post(
+            "/api/chat",
+            json={"messages": [{"role": "user", "content": "hi"}]},
+        )
+    assert res.status_code == 200, res.text
+    assert captured_models == [CONV_SLUG]
+    assert "hermes-agent" not in captured_models
 
-        def __enter__(self) -> "_FakeStreamResp":
-            return self
 
-        def __exit__(self, *_a: object) -> None:
-            return None
+def test_post_chat_stream_http_uses_conversational_env_when_no_model_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-HTTP-002 — streaming HTTP chat sends conversational slug as primary payload."""
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://10.0.0.99:8642")
+    monkeypatch.setenv("HERMES_GATEWAY_MODEL", "hermes-agent")
+    monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", CONV_SLUG)
+    monkeypatch.delenv("HAM_CHAT_FALLBACK_MODEL", raising=False)
 
-        def iter_lines(self) -> list[str]:
-            payload = json.dumps({"choices": [{"delta": {"content": "ok"}}]})
-            return [f"data: {payload}", "data: [DONE]"]
-
-    class _FakeClient:
-        def __enter__(self) -> "_FakeClient":
-            return self
-
-        def __exit__(self, *_a: object) -> None:
-            return None
-
-        def stream(
-            self,
-            _method: str,
-            _url: str,
-            *,
-            headers: dict[str, str] | None = None,
-            json: dict[str, Any] | None = None,
-        ) -> _FakeStreamResp:
-            assert json is not None
-            captured_models.append(str(json["model"]))
-            return _FakeStreamResp()
+    captured_models: list[str] = []
 
     with patch(
         "src.integrations.nous_gateway_client.httpx.Client",
-        return_value=_FakeClient(),
+        return_value=_FakeHttpClient(captured_models),
+    ):
+        res = client.post(
+            "/api/chat/stream",
+            json={"messages": [{"role": "user", "content": "hi"}]},
+        )
+    assert res.status_code == 200, res.text
+    assert captured_models == [CONV_SLUG]
+
+
+def test_http_conversational_env_unset_keeps_gateway_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-HTTP-003 — unset env preserves HERMES_GATEWAY_MODEL primary selection."""
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://10.0.0.99:8642")
+    monkeypatch.setenv("HERMES_GATEWAY_MODEL", "hermes-agent")
+    monkeypatch.delenv("HAM_CHAT_CONVERSATIONAL_MODEL", raising=False)
+    monkeypatch.delenv("HAM_CHAT_FALLBACK_MODEL", raising=False)
+
+    captured_models: list[str] = []
+    with patch(
+        "src.integrations.nous_gateway_client.httpx.Client",
+        return_value=_FakeHttpClient(captured_models),
     ):
         res = client.post(
             "/api/chat",
@@ -282,7 +339,165 @@ def test_http_hermes_branch_ignores_conversational_env(
         )
     assert res.status_code == 200, res.text
     assert captured_models == ["hermes-agent"]
-    assert CONV_SLUG not in captured_models
+
+
+def test_http_conversational_env_unset_keeps_default_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-HTTP-003 — unset env + no HERMES_GATEWAY_MODEL preserves DEFAULT_MODEL selection."""
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://10.0.0.99:8642")
+    monkeypatch.delenv("HERMES_GATEWAY_MODEL", raising=False)
+    monkeypatch.delenv("HAM_CHAT_CONVERSATIONAL_MODEL", raising=False)
+    monkeypatch.delenv("HAM_CHAT_FALLBACK_MODEL", raising=False)
+
+    captured_models: list[str] = []
+    with patch(
+        "src.integrations.nous_gateway_client.httpx.Client",
+        return_value=_FakeHttpClient(captured_models),
+    ):
+        res = client.post(
+            "/api/chat",
+            json={"messages": [{"role": "user", "content": "hi"}]},
+        )
+    assert res.status_code == 200, res.text
+    from src.integrations.nous_gateway_client import DEFAULT_MODEL
+    assert captured_models == [DEFAULT_MODEL]
+
+
+def test_http_explicit_model_id_without_byok_still_rejected_under_conversational_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-HTTP-008 — explicit model_id without BYOK still hits the existing rejection."""
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://10.0.0.99:8642")
+    monkeypatch.setenv("HERMES_GATEWAY_MODEL", "hermes-agent")
+    monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", CONV_SLUG)
+
+    captured_models: list[str] = []
+
+    def _never(*_a: object, **_k: object) -> None:
+        raise AssertionError("Hermes HTTP primary must not be issued for rejected explicit model_id path")
+
+    class _GuardClient:
+        def __enter__(self):  # type: ignore[no-untyped-def]
+            return self
+
+        def __exit__(self, *a: object) -> None:
+            return None
+
+        def stream(self, *a: object, **k: object):  # type: ignore[no-untyped-def]
+            _never()
+
+    with patch(
+        "src.integrations.nous_gateway_client.httpx.Client",
+        return_value=_GuardClient(),
+    ):
+        res = client.post(
+            "/api/chat",
+            json={
+                "messages": [{"role": "user", "content": "hi"}],
+                "model_id": "openrouter:default",
+            },
+        )
+    # Without a signed-in Clerk actor + BYOK setup, the route enforces the existing rejection.
+    assert res.status_code == 403, res.text
+    body = res.json()
+    assert body["detail"]["error"]["code"] == "CONNECT_OPENROUTER_REQUIRED"
+    assert captured_models == []
+
+
+def test_http_conversational_override_does_not_mutate_global_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-HTTP-007 — the per-request override must not write os.environ globals."""
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://10.0.0.99:8642")
+    monkeypatch.setenv("HERMES_GATEWAY_MODEL", "hermes-agent")
+    monkeypatch.setenv("HAM_CHAT_FALLBACK_MODEL", "hermes-fallback")
+    monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", CONV_SLUG)
+    monkeypatch.setenv("DEFAULT_MODEL", "default-stable")
+
+    import os as _os
+    before = {
+        "HERMES_GATEWAY_MODE": _os.environ.get("HERMES_GATEWAY_MODE"),
+        "HERMES_GATEWAY_MODEL": _os.environ.get("HERMES_GATEWAY_MODEL"),
+        "HAM_CHAT_FALLBACK_MODEL": _os.environ.get("HAM_CHAT_FALLBACK_MODEL"),
+        "HAM_CHAT_CONVERSATIONAL_MODEL": _os.environ.get("HAM_CHAT_CONVERSATIONAL_MODEL"),
+        "DEFAULT_MODEL": _os.environ.get("DEFAULT_MODEL"),
+    }
+    captured: list[str] = []
+    with patch(
+        "src.integrations.nous_gateway_client.httpx.Client",
+        return_value=_FakeHttpClient(captured),
+    ):
+        for path in ("/api/chat", "/api/chat/stream"):
+            res = client.post(path, json={"messages": [{"role": "user", "content": "hi"}]})
+            assert res.status_code == 200, res.text
+    after = {
+        "HERMES_GATEWAY_MODE": _os.environ.get("HERMES_GATEWAY_MODE"),
+        "HERMES_GATEWAY_MODEL": _os.environ.get("HERMES_GATEWAY_MODEL"),
+        "HAM_CHAT_FALLBACK_MODEL": _os.environ.get("HAM_CHAT_FALLBACK_MODEL"),
+        "HAM_CHAT_CONVERSATIONAL_MODEL": _os.environ.get("HAM_CHAT_CONVERSATIONAL_MODEL"),
+        "DEFAULT_MODEL": _os.environ.get("DEFAULT_MODEL"),
+    }
+    assert before == after
+    assert captured == [CONV_SLUG, CONV_SLUG]
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("openrouter/anthropic/claude-3.5-haiku", "openrouter/anthropic/claude-3.5-haiku"),
+        ("anthropic/claude-3.5-haiku", "openrouter/anthropic/claude-3.5-haiku"),
+        ("  anthropic/claude-3.5-haiku  ", "openrouter/anthropic/claude-3.5-haiku"),
+    ],
+)
+def test_http_conversational_override_uses_existing_helper_normalization(
+    monkeypatch: pytest.MonkeyPatch, raw: str, expected: str,
+) -> None:
+    """VAL-HTTP-009 — HTTP-mode override reuses _chat_conversational_model_default normalization."""
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://10.0.0.99:8642")
+    monkeypatch.setenv("HERMES_GATEWAY_MODEL", "hermes-agent")
+    monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", raw)
+    monkeypatch.delenv("HAM_CHAT_FALLBACK_MODEL", raising=False)
+
+    captured: list[str] = []
+    with patch(
+        "src.integrations.nous_gateway_client.httpx.Client",
+        return_value=_FakeHttpClient(captured),
+    ):
+        res = client.post(
+            "/api/chat",
+            json={"messages": [{"role": "user", "content": "hi"}]},
+        )
+    assert res.status_code == 200, res.text
+    assert captured == [expected]
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\t", "abc\ndef", "abc\rdef"])
+def test_http_conversational_override_blank_values_are_absent(
+    monkeypatch: pytest.MonkeyPatch, blank: str,
+) -> None:
+    """VAL-HTTP-009 — blank / CRLF env values are treated as absent and keep gateway primary."""
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://10.0.0.99:8642")
+    monkeypatch.setenv("HERMES_GATEWAY_MODEL", "hermes-agent")
+    monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", blank)
+    monkeypatch.delenv("HAM_CHAT_FALLBACK_MODEL", raising=False)
+
+    captured: list[str] = []
+    with patch(
+        "src.integrations.nous_gateway_client.httpx.Client",
+        return_value=_FakeHttpClient(captured),
+    ):
+        res = client.post(
+            "/api/chat",
+            json={"messages": [{"role": "user", "content": "hi"}]},
+        )
+    assert res.status_code == 200, res.text
+    assert captured == ["hermes-agent"]
 
 
 def test_mock_mode_explicit_model_id_still_returns_422_unchanged(
