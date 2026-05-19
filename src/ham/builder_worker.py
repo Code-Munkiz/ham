@@ -242,10 +242,29 @@ class BuilderWorker:
         in subsequent PRs when the Planner is wired into chat and Step kinds are
         defined.
 
+        PR 7 (ADR-0011): Scaffold routing added.  When ``plan.metadata`` carries
+        a ``template_kind`` and this is the initial scaffold step (``step_index
+        == 0``), the Worker routes to either the deterministic scaffold path
+        (calculator / tetris stay on ``builder_chat_scaffold``) or the new LLM
+        scaffold path (``builder_llm_scaffold``).
+
         The cancel_check callable may be polled by long-running executors to
         honour ADR-0004's 5-second acknowledgement target.
         """
         _LOG.info("Executing step[%d] %s: %s", step_index, step.step_id, step.title)
+
+        # Scaffold routing (Phase 2 PR 7 — ADR-0011 staged migration).
+        # template_kind lives in plan.metadata, set by the Planner (Phase 2 PR 2).
+        # Route the initial scaffold step to the correct path when present.
+        if step_index == 0 and self._plan is not None:
+            template_kind = (self._plan.metadata or {}).get("template_kind", "")
+            if template_kind:
+                from src.ham.builder_template_kinds import select_scaffold_path  # local import
+                path = select_scaffold_path(template_kind)
+                if path == "llm":
+                    return self._execute_llm_scaffold_step(step)
+                # "deterministic" path: builder_chat_scaffold full wiring lands in a later PR;
+                # fall through to the PR1 stub for now.
 
         # PR1 stub: log the step title and return success.
         # Real CLI executor dispatch (droid_executor / Hermes adapter) lands in
@@ -254,6 +273,61 @@ class BuilderWorker:
         log_text = f"[ham-worker] executing step: {step.title}"
         _LOG.info("%s", log_text)
         return StepResult(success=True, log_text=log_text)
+
+    def _execute_llm_scaffold_step(self, step: Step) -> StepResult:
+        """Delegate to builder_llm_scaffold.generate_scaffold (ADR-0011 llm path).
+
+        Called by ``_execute_step`` when ``select_scaffold_path`` returns
+        ``"llm"`` for the plan's template kind.
+        """
+        if self._plan is None:
+            err = make_error(
+                INTERNAL_ERROR,
+                "Plan not loaded — cannot run LLM scaffold step",
+                fatal=True,
+            )
+            return StepResult(success=False, error_envelope=err)
+
+        # Local import: avoids adding a top-level dependency on builder_llm_scaffold
+        # from builder_worker (keeps coupling minimal; both are PR-7 files).
+        try:
+            from src.ham.builder_llm_scaffold import (  # noqa: PLC0415
+                LLMScaffoldError,
+                generate_scaffold,
+            )
+        except ImportError as exc:
+            _LOG.error("Failed to import builder_llm_scaffold: %s", exc)
+            err = make_error(
+                INTERNAL_ERROR,
+                f"LLM scaffold module unavailable: {exc}",
+                fatal=True,
+            )
+            return StepResult(success=False, error_envelope=err)
+
+        try:
+            scaffold_result = generate_scaffold(
+                self._plan,
+                project_id=self._plan.project_id,
+                workspace_id=self._plan.workspace_id,
+            )
+            log_text = (
+                f"[ham-worker] llm scaffold: {len(scaffold_result.file_changes)} file(s), "
+                f"{len(scaffold_result.assertions)} assertion(s) — step: {step.title}"
+            )
+            _LOG.info("%s", log_text)
+            return StepResult(success=True, log_text=log_text)
+        except LLMScaffoldError as exc:
+            _LOG.warning("LLM scaffold failed (code=%s): %s", exc.error_code, exc)
+            err = make_error(exc.error_code, str(exc), fatal=True)
+            return StepResult(success=False, error_envelope=err)
+        except Exception as exc:  # noqa: BLE001
+            _LOG.warning("LLM scaffold step raised unexpected error: %s", exc)
+            err = make_error(
+                STEP_FAILED,
+                f"LLM scaffold raised {type(exc).__name__}: {exc}",
+                fatal=True,
+            )
+            return StepResult(success=False, error_envelope=err)
 
     def _check_cancel(self) -> bool:
         """Check whether the job has been signalled for cancellation.
