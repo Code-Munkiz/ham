@@ -743,8 +743,7 @@ export function WorkspaceConductorScreen() {
                 </div>
               </div>
               <p className="text-sm text-[var(--theme-muted-2)]">
-                Supervise active Cloud Agent missions, then coordinate local agents for follow-up
-                work.
+                Supervise active Cursor missions, then coordinate local agents for follow-up work.
               </p>
             </div>
 
@@ -754,7 +753,7 @@ export function WorkspaceConductorScreen() {
               </p>
               <div className="mt-2 grid gap-2 text-sm text-[var(--theme-muted-2)] sm:grid-cols-2">
                 <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2">
-                  <p className="font-medium text-[var(--theme-text)]">Cloud Agent missions</p>
+                  <p className="font-medium text-[var(--theme-text)]">Cursor missions</p>
                   <p className="mt-1 text-xs">
                     Live mission status, checkpoints, outputs, and controls.
                   </p>
@@ -877,7 +876,7 @@ export function WorkspaceConductorScreen() {
                   <p className="font-medium text-[var(--theme-text)]">No active mission</p>
                   <p className="mt-2 text-[var(--theme-muted)]">
                     {activityFilter === "all"
-                      ? "No active Cloud Agent missions. Launch a mission from Chat or start one here."
+                      ? "No active Cursor missions. Launch a mission from Chat or start one here."
                       : `No ${activityFilter} missions. Try another filter or create a mission.`}
                   </p>
                 </div>

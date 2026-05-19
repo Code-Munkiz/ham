@@ -179,7 +179,7 @@ export function ApiKeysPanel({ variant = "default" }: { variant?: SettingsPanelV
                       : "text-[13px] font-semibold text-white",
                   )}
                 >
-                  Cursor Cloud Agent
+                  Cursor
                 </h3>
               </div>
               <p
@@ -191,8 +191,8 @@ export function ApiKeysPanel({ variant = "default" }: { variant?: SettingsPanelV
                 {loadingPlaceholder
                   ? "Loading provider status…"
                   : connected
-                    ? "Connected. Used for Cursor Cloud Agent missions launched from this workspace."
-                    : "Not connected yet. Cursor Cloud Agent missions are unavailable until your workspace operator connects this provider."}
+                    ? "Connected. Used for Cursor missions launched from this workspace."
+                    : "Not connected yet. Cursor missions are unavailable until your workspace operator connects this provider."}
               </p>
             </div>
           </div>
@@ -1749,8 +1749,8 @@ export function ContextAndMemoryPanel({
                 <span className="font-mono">memory_heist</span> is broken.
               </li>
               <li>
-                Open the Hermes workspace chat once to link a project id; the Context &amp; Memory
-                panel then prefers the project-scoped route when the API can read that root.
+                Open workspace chat once to link a project id; the Context &amp; Memory panel then
+                prefers the project-scoped route when the API can read that root.
               </li>
             </>
           )}

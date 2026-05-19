@@ -2650,10 +2650,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             setFailedChatModelIds((prev) => (prev.includes(mid) ? prev : [...prev, mid]));
           }
           toast.error(
-            "OpenRouter rejected the selected model. Switch back to Hermes Agent / Default or choose a recommended model.",
+            "OpenRouter rejected the selected model. Switch back to the default model or choose a recommended model.",
             {
               action: {
-                label: "Use Hermes default",
+                label: "Use default model",
                 onClick: () => {
                   cancelComposerPrefSaveTimer();
                   setModelId(null);
@@ -3446,7 +3446,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                   : "border border-white/[0.08] bg-white/[0.06] text-white/55",
               )}
             >
-              {missionContext.provider === "cursor" ? "Cursor" : "Cloud Agent"}
+              {missionContext.provider === "cursor" ? "Cursor" : "Cursor mission"}
             </span>
             <p className="min-w-0 flex-1 text-[12px] leading-snug text-white/[0.88]">
               {formatMissionStatusTitleForDisplay(missionTitle)}
@@ -3471,7 +3471,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                 href={cursorCloudAgentWebHref(String(missionContext.cursor_agent_id).trim())}
                 target="_blank"
                 rel="noopener noreferrer"
-                title="Open this Cloud Agent in Cursor"
+                title="Open this Cursor mission in Cursor"
                 className="ml-2 inline-flex items-center gap-1 text-[10px] font-medium text-[#ffb27a]/90 underline-offset-2 hover:underline"
               >
                 Open in Cursor
@@ -3629,8 +3629,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                   </div>
                   <p className="mt-4 text-[11px] leading-relaxed text-white/35">
                     The sidebar stays available — pick another session or start fresh. If this link
-                    is old, the API may have been redeployed; chat history on Cloud Run defaults to
-                    ephemeral storage unless configured otherwise.
+                    is old, the API may have been redeployed; chat history on the hosted API
+                    defaults to ephemeral storage unless configured otherwise.
                   </p>
                 </div>
               </div>

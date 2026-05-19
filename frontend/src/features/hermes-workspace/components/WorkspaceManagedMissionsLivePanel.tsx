@@ -53,16 +53,16 @@ function shortId(id: string | null | undefined) {
   return `${s.slice(0, 8)}…${s.slice(-6)}`;
 }
 
-function missionTitle(m: ManagedMissionSnapshot) {
-  return m.title?.trim() || m.task_summary?.trim() || "Cloud Agent mission";
+export function missionTitle(m: ManagedMissionSnapshot) {
+  return m.title?.trim() || m.task_summary?.trim() || "Cursor mission";
 }
 
 function missionCheckpointLabel(m: ManagedMissionSnapshot) {
   return m.latest_checkpoint || m.cursor_status_last_observed || "Waiting for agent updates";
 }
 
-function providerLabel(m: ManagedMissionSnapshot) {
-  return m.provider === "cursor" ? "Cursor" : "Cloud Agent";
+export function providerLabel(m: ManagedMissionSnapshot) {
+  return m.provider === "cursor" ? "Cursor" : "Cursor mission";
 }
 
 const MANAGED_MISSION_WRITE_TOKEN_KEY = "ham_managed_mission_write_token";
@@ -532,7 +532,7 @@ export function WorkspaceManagedMissionsLivePanel({
     await refetchSelectedFeed();
   };
 
-  const title = "Live Cloud Agent missions";
+  const title = "Live Cursor missions";
 
   const d = detailMission;
 
@@ -570,7 +570,7 @@ export function WorkspaceManagedMissionsLivePanel({
         <div className="mt-4">
           <WorkspaceSurfaceStateCard
             title="Could not load managed missions"
-            description="The HAM API returned an error for GET /api/cursor/managed/missions. Cursor Cloud Agent history is unavailable until this succeeds."
+            description="The HAM API returned an error for GET /api/cursor/managed/missions. Cursor mission history is unavailable until this succeeds."
             tone="amber"
             technicalDetail={httpStatus != null ? `[${httpStatus}] ${error}` : error}
             primaryAction={
@@ -594,7 +594,7 @@ export function WorkspaceManagedMissionsLivePanel({
 
       {!error && !loading && missions.length === 0 ? (
         <div className="mt-4 rounded-2xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-6 text-center text-sm text-[var(--theme-muted)]">
-          <p className="font-medium text-[var(--theme-text)]">No Cloud Agent missions yet</p>
+          <p className="font-medium text-[var(--theme-text)]">No Cursor missions yet</p>
           <p className="mt-2">
             Launch a mission from Chat or Conductor and it will appear here with live progress.
           </p>
@@ -714,7 +714,7 @@ export function WorkspaceManagedMissionsLivePanel({
                               href={cursorCloudAgentWebHref(String(m.cursor_agent_id).trim())}
                               target="_blank"
                               rel="noopener noreferrer"
-                              title="Open this Cloud Agent in Cursor"
+                              title="Open this Cursor mission in Cursor"
                               onClick={(ev) => ev.stopPropagation()}
                             >
                               <ExternalLink className="h-3 w-3" />
@@ -1222,7 +1222,7 @@ export function WorkspaceManagedMissionsLivePanel({
                       href={cursorCloudAgentWebHref(String(d.cursor_agent_id).trim())}
                       target="_blank"
                       rel="noopener noreferrer"
-                      title="Open this Cloud Agent in Cursor"
+                      title="Open this Cursor mission in Cursor"
                     >
                       <ExternalLink className="mr-1 h-3.5 w-3.5" />
                       Open in Cursor

@@ -24,7 +24,7 @@ function selectedLabel(
     return base;
   }
   if ((catalog.gateway_mode || "").toLowerCase() === "http") {
-    return "Hermes Agent / Default";
+    return "Default model";
   }
   const first = candidates.find((c) => c.supports_chat);
   return first ? first.label || first.id : "Model";
@@ -198,10 +198,10 @@ export function WorkspaceOpenRouterModelPicker({
             {gatewayMode === "http" ? (
               <>
                 <div className="px-2 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-white/40">
-                  Hermes default
+                  Default model
                 </div>
                 <div className="px-2 pb-1 text-[11px] leading-snug text-white/45">
-                  Gateway-controlled model. Choose an OpenRouter row below only when Connected Tools
+                  Workspace default model. Choose an OpenRouter row below only when Connected Tools
                   OpenRouter (BYOK) is active.
                 </div>
                 <DropdownMenu.Item
@@ -211,7 +211,7 @@ export function WorkspaceOpenRouterModelPicker({
                   )}
                   onSelect={() => onModelIdChange(null)}
                 >
-                  <span className="min-w-0 flex-1 truncate">Hermes Agent / Default</span>
+                  <span className="min-w-0 flex-1 truncate">Default model</span>
                   {modelId === null ? (
                     <span className="shrink-0 pl-2 text-[10px] text-emerald-300/90">✓</span>
                   ) : null}

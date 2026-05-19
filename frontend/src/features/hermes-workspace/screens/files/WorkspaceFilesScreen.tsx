@@ -522,7 +522,7 @@ function ready() {
                   Connect to browse local files
                 </p>
                 <p className="mt-1 px-1 text-[11px] leading-relaxed text-white/45">
-                  Files and Terminal use the HAM process on this computer, not Cloud Run.
+                  Files and Terminal use the HAM process on this computer, not the hosted API.
                 </p>
                 <div className="mt-2">
                   <LocalMachineConnectCta

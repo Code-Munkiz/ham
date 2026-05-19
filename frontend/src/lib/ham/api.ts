@@ -1847,7 +1847,7 @@ export async function postCursorAgentSync(agentId: string): Promise<ManagedMissi
   });
   if (res.status === 404) {
     throw new Error(
-      "No managed mission for this Cloud Agent. Try after a managed launch is recorded.",
+      "No managed mission for this Cursor agent. Try after a managed launch is recorded.",
     );
   }
   if (!res.ok) {

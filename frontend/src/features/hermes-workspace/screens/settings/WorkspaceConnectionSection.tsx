@@ -67,8 +67,8 @@ export function WorkspaceConnectionSection() {
           Chat, jobs, and most APIs use the normal cloud or configured API.{" "}
           <span className="text-white/55">Files</span> and{" "}
           <span className="text-white/55">Terminal</span> use a <em>separate</em> connection: the
-          Ham process on this computer, not Cloud Run, so the browser can reach your local disk and
-          shell.
+          Ham process on this computer, not the hosted API, so the browser can reach your local disk
+          and shell.
         </p>
         <p className="mt-3 text-[13px] leading-relaxed text-white/40">
           Keys and providers:{" "}

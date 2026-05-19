@@ -33,7 +33,7 @@ const candidates = [
 ];
 
 describe("WorkspaceOpenRouterModelPicker", () => {
-  it("shows Hermes default label when gateway mode is http and no model selected", () => {
+  it("shows Default model label when gateway mode is http and no model selected", () => {
     render(
       <MemoryRouter>
         <WorkspaceOpenRouterModelPicker
@@ -44,9 +44,9 @@ describe("WorkspaceOpenRouterModelPicker", () => {
         />
       </MemoryRouter>,
     );
-    expect(screen.getByRole("button", { name: "Model" })).toHaveTextContent(
-      "Hermes Agent / Default",
-    );
+    const trigger = screen.getByRole("button", { name: "Model" });
+    expect(trigger).toHaveTextContent("Default model");
+    expect(trigger).not.toHaveTextContent(/Hermes/i);
   });
 
   it("shows first candidate label when gateway mode is openrouter and no model selected", () => {

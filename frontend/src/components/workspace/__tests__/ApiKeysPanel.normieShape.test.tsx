@@ -132,7 +132,10 @@ describe("ApiKeysPanel normie shape", () => {
     fetchCursorCredentialsStatusMock.mockResolvedValue(normieResponse(true));
     render(<ApiKeysPanel variant="workspace" />);
 
-    await waitFor(() => expect(screen.getByText("Cursor Cloud Agent")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Cursor" })).toBeInTheDocument(),
+    );
+    expect(document.body.innerHTML).not.toMatch(/Cursor Cloud Agent|Cloud Agent/);
     expect(
       screen.getByText(/Connected \(managed by your workspace operator\)/i),
     ).toBeInTheDocument();
@@ -162,7 +165,9 @@ describe("ApiKeysPanel normie shape", () => {
     fetchCursorCredentialsStatusMock.mockResolvedValue(normieResponse(true));
     render(<ApiKeysPanel variant="workspace" />);
 
-    await waitFor(() => expect(screen.getByText("Cursor Cloud Agent")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Cursor" })).toBeInTheDocument(),
+    );
     expect(screen.queryByRole("button", { name: /save/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /remove saved key/i })).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/crsr_/i)).not.toBeInTheDocument();
@@ -184,7 +189,9 @@ describe("ApiKeysPanel normie shape", () => {
     fetchCursorCredentialsStatusMock.mockResolvedValue(normieResponse(true));
     render(<ApiKeysPanel variant="workspace" />);
 
-    await waitFor(() => expect(screen.getByText("Cursor Cloud Agent")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Cursor" })).toBeInTheDocument(),
+    );
     expect(screen.queryByText(/Advanced diagnostics \(operator\)/i)).not.toBeInTheDocument();
   });
 });
