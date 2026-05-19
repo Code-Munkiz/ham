@@ -2,7 +2,15 @@
   "kit_id": "dashboard",
   "app_archetype": "data-explorer",
   "supported_template_kinds": ["dashboard"],
-  "stack_recipe": ["react", "typescript", "tailwind", "vite"],
+  "stack_recipe": [
+    "vite-react",
+    "typescript",
+    "tailwind",
+    "recharts",
+    "tanstack-table",
+    "tanstack-query",
+    "lucide-icons"
+  ],
   "expected_files": [
     "src/App.tsx",
     "src/main.tsx",
@@ -11,23 +19,39 @@
   ],
   "expected_routes": ["/"],
   "design_recipe": [
-    "12-column-grid",
     "sidebar-left",
-    "stat-card-row"
+    "stat-card-row",
+    "chart-panel-grid",
+    "data-table-section",
+    "clean-command-center-tone"
   ],
   "allowed_capabilities": ["local-state", "client-routing", "no-network"],
   "validation_checklist": [
-    "App renders without errors",
-    "Header renders at the top of the page",
-    "At least three stat card components render in the overview",
-    "Navigation between sections works via tabs or sidebar links",
-    "Empty state renders inside each stat card when no data is supplied",
-    "Loading state renders inside each stat card while data is pending"
+    "Build passes the project's typecheck and lint",
+    "At least three KPI or stat cards render in the overview",
+    "At least one chart renders with seed data",
+    "Data table renders an empty state when no rows are supplied",
+    "Null or malformed chart data does not crash the app",
+    "Responsive layout stacks columns on mobile at 360px width"
   ],
   "safety_constraints": [
+    "no-real-customer-data",
+    "no-required-api-keys-for-defaults",
+    "bounded-render-datapoints",
+    "graceful-mock-fetch-failure",
     "no-network-egress",
     "no-eval",
     "no-localstorage-secrets"
+  ],
+  "recommended_resources": [
+    "shadcn-ui",
+    "shadcn-charts",
+    "recharts",
+    "tanstack-table",
+    "tanstack-query",
+    "lucide-icons",
+    "dummyjson",
+    "jsonplaceholder"
   ],
   "examples": [],
   "legacy_parity_only": false,

@@ -63,6 +63,7 @@ class BuilderKit:
     allowed_capabilities: tuple[str, ...]
     validation_checklist: tuple[str, ...]
     safety_constraints: tuple[str, ...]
+    recommended_resources: tuple[str, ...] = field(default_factory=tuple)
     examples: tuple[str, ...] = field(default_factory=tuple)
     legacy_parity_only: bool = False
     migration_note: str | None = None
@@ -159,6 +160,14 @@ def _build_kit_from_payload(payload: dict[str, Any], *, source: str) -> BuilderK
     examples_raw = payload.get("examples", [])
     examples = _coerce_str_tuple("examples", examples_raw, source=source)
 
+    recommended_resources_raw = payload.get("recommended_resources", [])
+    recommended_resources = tuple(
+        _normalize_kit_id(s)
+        for s in _coerce_str_tuple(
+            "recommended_resources", recommended_resources_raw, source=source
+        )
+    )
+
     return BuilderKit(
         kit_id=kit_id,
         app_archetype=payload["app_archetype"],
@@ -191,6 +200,7 @@ def _build_kit_from_payload(payload: dict[str, Any], *, source: str) -> BuilderK
         safety_constraints=_coerce_str_tuple(
             "safety_constraints", payload["safety_constraints"], source=source
         ),
+        recommended_resources=recommended_resources,
         examples=examples,
         legacy_parity_only=legacy_parity_only_raw,
         migration_note=migration_note_raw,
@@ -297,15 +307,361 @@ def render_kit_context(kit: BuilderKit) -> str:
     ]
     for item in kit.validation_checklist:
         lines.append(f"  - {item}")
+    if kit.recommended_resources:
+        lines.append("Recommended resources:")
+        for resource_id in kit.recommended_resources:
+            lines.append(f"  - {resource_id}")
     return "\n".join(lines)
 
 
 __all__ = [
     "BuilderKit",
     "BuilderKitConfigError",
+    "BuilderResource",
+    "BuilderResourceConfigError",
     "get_kit",
     "get_kit_for_template_kind",
+    "get_resource",
     "iter_kits",
+    "iter_resources",
     "list_kit_ids",
+    "list_resource_ids",
+    "list_resources_for_kit",
     "render_kit_context",
+    "resources_allowed_for_generation",
+    "validate_kit_resource_ids",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Resource catalog
+# ---------------------------------------------------------------------------
+
+
+class BuilderResourceConfigError(Exception):
+    """Raised when a Builder Resource catalog entry is malformed or duplicate."""
+
+
+@dataclass(frozen=True)
+class BuilderResource:
+    resource_id: str
+    name: str
+    type: str
+    url: str
+    license: str
+    license_status: str
+    free_status: str
+    api_key_required: bool
+    offline_friendly: bool
+    agent_friendliness: int
+    recommended_for: tuple[str, ...]
+    usage_policy: str
+    notes: str = ""
+    risks: str = ""
+
+
+_RESOURCE_DATA_FILE: Path = (
+    Path(__file__).resolve().parent / "data" / "builder_resources" / "resources.json"
+)
+
+
+_RESOURCE_TYPES: frozenset[str] = frozenset(
+    {
+        "component-library",
+        "ui-blocks",
+        "ui-library",
+        "charting",
+        "table",
+        "form",
+        "validation",
+        "accessibility-validation",
+        "data-fetching",
+        "mock-api",
+        "icons",
+        "animation",
+        "reference-only",
+    }
+)
+_RESOURCE_LICENSE_STATUSES: frozenset[str] = frozenset(
+    {"safe-direct", "safe-reference", "restricted", "unknown"}
+)
+_RESOURCE_FREE_STATUSES: frozenset[str] = frozenset(
+    {"free", "freemium", "paid", "mixed"}
+)
+_RESOURCE_USAGE_POLICIES: frozenset[str] = frozenset(
+    {"use_directly", "reference_only", "avoid"}
+)
+
+
+_RESOURCE_REQUIRED_STR_FIELDS: tuple[str, ...] = (
+    "resource_id",
+    "name",
+    "type",
+    "url",
+    "license",
+    "license_status",
+    "free_status",
+    "usage_policy",
+)
+
+
+def _coerce_resource_str_tuple(
+    field_name: str, raw: Any, *, source: str
+) -> tuple[str, ...]:
+    if not isinstance(raw, list):
+        raise BuilderResourceConfigError(
+            f"{source}: field {field_name!r} must be a JSON array, got "
+            f"{type(raw).__name__}"
+        )
+    out: list[str] = []
+    for i, item in enumerate(raw):
+        if not isinstance(item, str):
+            raise BuilderResourceConfigError(
+                f"{source}: field {field_name!r}[{i}] must be a string, got "
+                f"{type(item).__name__}"
+            )
+        if item != item.strip():
+            raise BuilderResourceConfigError(
+                f"{source}: field {field_name!r}[{i}] must not have leading or "
+                "trailing whitespace"
+            )
+        out.append(item)
+    return tuple(out)
+
+
+def _build_resource_from_payload(
+    payload: dict[str, Any], *, source: str
+) -> BuilderResource:
+    if not isinstance(payload, dict):
+        raise BuilderResourceConfigError(
+            f"{source}: resource entry must be a JSON object, got "
+            f"{type(payload).__name__}"
+        )
+
+    for name in _RESOURCE_REQUIRED_STR_FIELDS:
+        if name not in payload:
+            raise BuilderResourceConfigError(
+                f"{source}: missing required field {name!r}"
+            )
+        value = payload[name]
+        if not isinstance(value, str) or not value.strip():
+            raise BuilderResourceConfigError(
+                f"{source}: field {name!r} must be a non-empty string"
+            )
+        if value != value.strip():
+            raise BuilderResourceConfigError(
+                f"{source}: field {name!r} must not have leading or trailing "
+                "whitespace"
+            )
+
+    resource_type = payload["type"]
+    if resource_type not in _RESOURCE_TYPES:
+        raise BuilderResourceConfigError(
+            f"{source}: field 'type' must be one of {sorted(_RESOURCE_TYPES)!r}, "
+            f"got {resource_type!r}"
+        )
+
+    license_status = payload["license_status"]
+    if license_status not in _RESOURCE_LICENSE_STATUSES:
+        raise BuilderResourceConfigError(
+            f"{source}: field 'license_status' must be one of "
+            f"{sorted(_RESOURCE_LICENSE_STATUSES)!r}, got {license_status!r}"
+        )
+
+    free_status = payload["free_status"]
+    if free_status not in _RESOURCE_FREE_STATUSES:
+        raise BuilderResourceConfigError(
+            f"{source}: field 'free_status' must be one of "
+            f"{sorted(_RESOURCE_FREE_STATUSES)!r}, got {free_status!r}"
+        )
+
+    usage_policy = payload["usage_policy"]
+    if usage_policy not in _RESOURCE_USAGE_POLICIES:
+        raise BuilderResourceConfigError(
+            f"{source}: field 'usage_policy' must be one of "
+            f"{sorted(_RESOURCE_USAGE_POLICIES)!r}, got {usage_policy!r}"
+        )
+
+    for bool_field in ("api_key_required", "offline_friendly"):
+        if bool_field not in payload:
+            raise BuilderResourceConfigError(
+                f"{source}: missing required field {bool_field!r}"
+            )
+        if not isinstance(payload[bool_field], bool):
+            raise BuilderResourceConfigError(
+                f"{source}: field {bool_field!r} must be a boolean"
+            )
+
+    if "agent_friendliness" not in payload:
+        raise BuilderResourceConfigError(
+            f"{source}: missing required field 'agent_friendliness'"
+        )
+    agent_friendliness = payload["agent_friendliness"]
+    if isinstance(agent_friendliness, bool) or not isinstance(
+        agent_friendliness, int
+    ):
+        raise BuilderResourceConfigError(
+            f"{source}: field 'agent_friendliness' must be an integer"
+        )
+    if not 1 <= agent_friendliness <= 5:
+        raise BuilderResourceConfigError(
+            f"{source}: field 'agent_friendliness' must be in [1, 5], got "
+            f"{agent_friendliness}"
+        )
+
+    if "recommended_for" not in payload:
+        raise BuilderResourceConfigError(
+            f"{source}: missing required field 'recommended_for'"
+        )
+    recommended_for = _coerce_resource_str_tuple(
+        "recommended_for", payload["recommended_for"], source=source
+    )
+
+    for optional_str in ("notes", "risks"):
+        raw_optional = payload.get(optional_str, "")
+        if not isinstance(raw_optional, str):
+            raise BuilderResourceConfigError(
+                f"{source}: field {optional_str!r} must be a string"
+            )
+
+    return BuilderResource(
+        resource_id=_normalize_kit_id(payload["resource_id"]),
+        name=payload["name"],
+        type=resource_type,
+        url=payload["url"],
+        license=payload["license"],
+        license_status=license_status,
+        free_status=free_status,
+        api_key_required=payload["api_key_required"],
+        offline_friendly=payload["offline_friendly"],
+        agent_friendliness=agent_friendliness,
+        recommended_for=recommended_for,
+        usage_policy=usage_policy,
+        notes=payload.get("notes", ""),
+        risks=payload.get("risks", ""),
+    )
+
+
+def _load_resources_from_disk(
+    data_file: Path | None = None,
+) -> dict[str, BuilderResource]:
+    """Load the resource catalog from ``resources.json``.
+
+    Raises:
+        BuilderResourceConfigError: on malformed JSON, missing required
+            fields, invalid enum values, out-of-range numeric values, or
+            duplicate ``resource_id``.
+    """
+    target = data_file if data_file is not None else _RESOURCE_DATA_FILE
+    out: dict[str, BuilderResource] = {}
+    if not target.is_file():
+        return out
+    try:
+        document = json.loads(target.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise BuilderResourceConfigError(
+            f"{target.name}: invalid JSON ({exc})"
+        ) from exc
+    if not isinstance(document, dict) or "resources" not in document:
+        raise BuilderResourceConfigError(
+            f"{target.name}: top-level JSON must be an object with a "
+            "'resources' array"
+        )
+    entries = document["resources"]
+    if not isinstance(entries, list):
+        raise BuilderResourceConfigError(
+            f"{target.name}: 'resources' must be a JSON array, got "
+            f"{type(entries).__name__}"
+        )
+    for index, entry in enumerate(entries):
+        source = f"{target.name}#resources[{index}]"
+        resource = _build_resource_from_payload(entry, source=source)
+        if not resource.resource_id:
+            raise BuilderResourceConfigError(
+                f"{source}: resource_id is empty after normalization"
+            )
+        if resource.resource_id in out:
+            raise BuilderResourceConfigError(
+                f"duplicate resource_id {resource.resource_id!r} "
+                f"(second definition at {source})"
+            )
+        out[resource.resource_id] = resource
+    return out
+
+
+_RESOURCES: dict[str, BuilderResource] = _load_resources_from_disk()
+
+
+def get_resource(resource_id: str) -> BuilderResource | None:
+    """Look up a resource by id (whitespace / case tolerant)."""
+    key = _normalize_kit_id(resource_id)
+    if not key:
+        return None
+    return _RESOURCES.get(key)
+
+
+def list_resource_ids() -> tuple[str, ...]:
+    """Sorted tuple of registered resource ids."""
+    return tuple(sorted(_RESOURCES.keys()))
+
+
+def iter_resources() -> Iterable[BuilderResource]:
+    """Yield every resource in deterministic sorted order."""
+    for resource_id in sorted(_RESOURCES.keys()):
+        yield _RESOURCES[resource_id]
+
+
+def list_resources_for_kit(kit_id: str) -> tuple[BuilderResource, ...]:
+    """Resources whose ``recommended_for`` includes ``kit_id``."""
+    key = _normalize_kit_id(kit_id)
+    if not key:
+        return ()
+    matched = [
+        resource
+        for resource in _RESOURCES.values()
+        if key in resource.recommended_for
+    ]
+    return tuple(sorted(matched, key=lambda r: r.resource_id))
+
+
+def resources_allowed_for_generation(kit_id: str) -> tuple[BuilderResource, ...]:
+    """Resources a kit may freely mention in generated output.
+
+    Filters :func:`list_resources_for_kit` to ``usage_policy == "use_directly"``
+    AND ``license_status in {"safe-direct", "safe-reference"}``.
+    """
+    allowed_statuses = {"safe-direct", "safe-reference"}
+    return tuple(
+        resource
+        for resource in list_resources_for_kit(kit_id)
+        if resource.usage_policy == "use_directly"
+        and resource.license_status in allowed_statuses
+    )
+
+
+def validate_kit_resource_ids() -> None:
+    """Validate every kit's ``recommended_resources`` against the catalog.
+
+    Raises:
+        BuilderResourceConfigError: when an id does not resolve or when a
+            resolved resource is not freely usable
+            (``usage_policy != "use_directly"``).
+    """
+    for kit in _KITS.values():
+        for resource_id in kit.recommended_resources:
+            resource = _RESOURCES.get(resource_id)
+            if resource is None:
+                raise BuilderResourceConfigError(
+                    f"kit {kit.kit_id!r} recommends unknown resource "
+                    f"{resource_id!r}"
+                )
+            if resource.usage_policy != "use_directly":
+                raise BuilderResourceConfigError(
+                    f"kit {kit.kit_id!r} recommends resource "
+                    f"{resource_id!r} with usage_policy "
+                    f"{resource.usage_policy!r}; only 'use_directly' "
+                    "resources may be recommended"
+                )
+
+
+validate_kit_resource_ids()

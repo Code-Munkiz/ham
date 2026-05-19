@@ -2,7 +2,13 @@
   "kit_id": "landing-page",
   "app_archetype": "marketing-site",
   "supported_template_kinds": ["landing-page", "landing", "marketing"],
-  "stack_recipe": ["react", "typescript", "tailwind", "vite"],
+  "stack_recipe": [
+    "vite-react",
+    "typescript",
+    "tailwind",
+    "lucide-icons",
+    "framer-motion-optional"
+  ],
   "expected_files": [
     "src/App.tsx",
     "src/main.tsx",
@@ -12,21 +18,38 @@
   "expected_routes": ["/"],
   "design_recipe": [
     "hero-above-fold",
-    "12-column-grid",
-    "centered-cta-button"
+    "stacked-sections",
+    "bento-layout-optional",
+    "primary-cta-centered",
+    "feature-grid-three-up",
+    "footer-bottom",
+    "modern-launch-tone"
   ],
   "allowed_capabilities": ["local-state", "no-network"],
   "validation_checklist": [
-    "App renders without errors",
-    "Hero section is the first visible block on the page",
-    "Primary call-to-action button renders inside the hero section",
-    "Feature grid renders below the hero with multiple feature cells",
-    "Footer renders at the bottom of the page"
+    "Build passes the project's typecheck and lint",
+    "Hero section presents a clear value proposition",
+    "Primary call-to-action is visible above the fold",
+    "At least three feature or value sections render",
+    "No placeholder lorem ipsum text remains in the output",
+    "Mobile layout has no horizontal overflow at 360px width",
+    "Text and background colors meet basic accessibility contrast expectations"
   ],
   "safety_constraints": [
+    "no-external-analytics-scripts",
+    "no-real-payment-or-checkout",
+    "no-hidden-tracking",
+    "no-third-party-secrets",
     "no-network-egress",
     "no-eval",
     "no-localstorage-secrets"
+  ],
+  "recommended_resources": [
+    "shadcn-ui",
+    "page-ui",
+    "launch-ui-free",
+    "lucide-icons",
+    "framer-motion"
   ],
   "examples": [],
   "legacy_parity_only": false,

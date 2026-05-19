@@ -16,11 +16,21 @@ import src.ham.builder_kits as builder_kits
 from src.ham.builder_kits import (
     BuilderKit,
     BuilderKitConfigError,
+    BuilderResource,
+    BuilderResourceConfigError,
     _load_kits_from_disk,
+    _load_resources_from_disk,
+    get_kit,
     get_kit_for_template_kind,
+    get_resource,
     iter_kits,
+    iter_resources,
     list_kit_ids,
+    list_resource_ids,
+    list_resources_for_kit,
     render_kit_context,
+    resources_allowed_for_generation,
+    validate_kit_resource_ids,
 )
 from src.ham.builder_llm_scaffold import generate_scaffold
 from src.ham.builder_plan import Plan, Step
@@ -352,3 +362,308 @@ class TestKitJsonWellFormedness:
         (tmp_path / "broken.json").write_text(json.dumps(payload), encoding="utf-8")
         with pytest.raises(BuilderKitConfigError, match="missing required field"):
             _load_kits_from_disk(tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# 11. Resource catalog basics
+# ---------------------------------------------------------------------------
+
+
+_EXPECTED_RESOURCE_IDS: frozenset[str] = frozenset(
+    {
+        "shadcn-ui",
+        "page-ui",
+        "launch-ui-free",
+        "lucide-icons",
+        "framer-motion",
+        "shadcn-charts",
+        "recharts",
+        "tanstack-table",
+        "react-hook-form",
+        "zod",
+        "tanstack-query",
+        "dummyjson",
+        "jsonplaceholder",
+        "playwright",
+        "axe-core",
+        "preline-ui",
+    }
+)
+
+_ALLOWED_RESOURCE_TYPES: frozenset[str] = frozenset(
+    {
+        "component-library",
+        "ui-blocks",
+        "ui-library",
+        "charting",
+        "table",
+        "form",
+        "validation",
+        "accessibility-validation",
+        "data-fetching",
+        "mock-api",
+        "icons",
+        "animation",
+        "reference-only",
+    }
+)
+_ALLOWED_LICENSE_STATUSES: frozenset[str] = frozenset(
+    {"safe-direct", "safe-reference", "restricted", "unknown"}
+)
+_ALLOWED_FREE_STATUSES: frozenset[str] = frozenset(
+    {"free", "freemium", "paid", "mixed"}
+)
+_ALLOWED_USAGE_POLICIES: frozenset[str] = frozenset(
+    {"use_directly", "reference_only", "avoid"}
+)
+
+
+class TestResourceCatalog:
+    def test_resources_catalog_loads(self):
+        resources = _load_resources_from_disk()
+        assert resources, "resource catalog must be non-empty"
+        assert set(resources.keys()) == _EXPECTED_RESOURCE_IDS
+
+    def test_every_resource_has_required_fields(self):
+        for resource in iter_resources():
+            assert isinstance(resource, BuilderResource)
+            assert isinstance(resource.resource_id, str) and resource.resource_id
+            assert isinstance(resource.name, str) and resource.name
+            assert resource.type in _ALLOWED_RESOURCE_TYPES
+            assert isinstance(resource.url, str) and resource.url
+            assert isinstance(resource.license, str) and resource.license
+            assert resource.license_status in _ALLOWED_LICENSE_STATUSES
+            assert resource.free_status in _ALLOWED_FREE_STATUSES
+            assert isinstance(resource.api_key_required, bool)
+            assert isinstance(resource.offline_friendly, bool)
+            assert isinstance(resource.agent_friendliness, int)
+            assert 1 <= resource.agent_friendliness <= 5
+            assert isinstance(resource.recommended_for, tuple)
+            assert resource.recommended_for
+            assert resource.usage_policy in _ALLOWED_USAGE_POLICIES
+            assert isinstance(resource.notes, str)
+            assert isinstance(resource.risks, str)
+
+    def test_resource_urls_are_https(self):
+        for resource in iter_resources():
+            assert resource.url.startswith("https://"), resource.resource_id
+
+
+# ---------------------------------------------------------------------------
+# 12. Beta-kit <-> resource wiring
+# ---------------------------------------------------------------------------
+
+
+class TestBetaKitResourceWiring:
+    def test_landing_page_kit_includes_required_resources(self):
+        kit = get_kit("landing-page")
+        assert kit is not None
+        ids = set(kit.recommended_resources)
+        assert {
+            "shadcn-ui",
+            "page-ui",
+            "launch-ui-free",
+            "lucide-icons",
+            "framer-motion",
+        }.issubset(ids)
+
+    def test_dashboard_kit_includes_required_resources(self):
+        kit = get_kit("dashboard")
+        assert kit is not None
+        ids = set(kit.recommended_resources)
+        assert {
+            "shadcn-ui",
+            "shadcn-charts",
+            "recharts",
+            "tanstack-table",
+            "lucide-icons",
+        }.issubset(ids)
+        mock_apis = {
+            resource_id
+            for resource_id in ids
+            if (resource := get_resource(resource_id)) is not None
+            and resource.type == "mock-api"
+        }
+        assert mock_apis, "dashboard must recommend at least one mock-api resource"
+
+    def test_todo_kit_includes_required_resources(self):
+        kit = get_kit("todo")
+        assert kit is not None
+        ids = set(kit.recommended_resources)
+        assert {
+            "shadcn-ui",
+            "react-hook-form",
+            "zod",
+            "lucide-icons",
+        }.issubset(ids)
+        mock_apis = {
+            resource_id
+            for resource_id in ids
+            if (resource := get_resource(resource_id)) is not None
+            and resource.type == "mock-api"
+        }
+        assert mock_apis, "todo must recommend at least one mock-api resource"
+
+    def test_every_recommended_resource_id_resolves(self):
+        for kit in iter_kits():
+            for resource_id in kit.recommended_resources:
+                assert get_resource(resource_id) is not None, (
+                    f"kit {kit.kit_id!r} recommends unknown resource "
+                    f"{resource_id!r}"
+                )
+
+    @pytest.mark.parametrize("kit_id", ["landing-page", "dashboard", "todo"])
+    def test_beta_kits_have_non_empty_recommended_resources(self, kit_id: str):
+        kit = get_kit(kit_id)
+        assert kit is not None
+        assert kit.recommended_resources, kit_id
+
+
+# ---------------------------------------------------------------------------
+# 13. License / policy enforcement
+# ---------------------------------------------------------------------------
+
+
+class TestResourcePolicyEnforcement:
+    def test_validate_kit_resource_ids_passes_at_import(self):
+        validate_kit_resource_ids()
+
+    def test_no_kit_recommends_a_reference_only_or_avoid_resource(self):
+        for kit in iter_kits():
+            for resource_id in kit.recommended_resources:
+                resource = get_resource(resource_id)
+                assert resource is not None
+                assert resource.usage_policy == "use_directly", (
+                    f"kit {kit.kit_id!r} recommends {resource_id!r} with "
+                    f"usage_policy={resource.usage_policy!r}"
+                )
+
+    def test_preline_is_restricted_and_reference_only(self):
+        resource = get_resource("preline-ui")
+        assert resource is not None
+        assert resource.license_status == "restricted"
+        assert resource.usage_policy == "reference_only"
+        assert resource.recommended_for == ("none",)
+
+    def test_no_kit_recommends_preline(self):
+        for kit in iter_kits():
+            assert "preline-ui" not in kit.recommended_resources, kit.kit_id
+
+    def test_resources_allowed_for_generation_excludes_restricted(self):
+        for kit_id in ("landing-page", "dashboard", "todo"):
+            allowed = resources_allowed_for_generation(kit_id)
+            for resource in allowed:
+                assert resource.usage_policy == "use_directly"
+                assert resource.license_status in {"safe-direct", "safe-reference"}
+                assert resource.resource_id != "preline-ui"
+
+    def test_validate_kit_resource_ids_raises_on_unknown_id(self, monkeypatch):
+        original = dict(builder_kits._KITS)
+        try:
+            synthetic = BuilderKit(
+                kit_id="synthetic-unknown",
+                app_archetype="single-page-utility",
+                supported_template_kinds=("synthetic-unknown",),
+                stack_recipe=("vite-react",),
+                expected_files=("src/App.tsx",),
+                expected_routes=(),
+                design_recipe=("single-card-centered",),
+                allowed_capabilities=("local-state",),
+                validation_checklist=("App renders without errors",),
+                safety_constraints=("no-network-egress",),
+                recommended_resources=("nonexistent-resource",),
+            )
+            builder_kits._KITS["synthetic-unknown"] = synthetic
+            with pytest.raises(
+                BuilderResourceConfigError, match="unknown resource"
+            ):
+                validate_kit_resource_ids()
+        finally:
+            builder_kits._KITS.clear()
+            builder_kits._KITS.update(original)
+
+    def test_validate_kit_resource_ids_raises_on_restricted_id(self, monkeypatch):
+        original = dict(builder_kits._KITS)
+        try:
+            synthetic = BuilderKit(
+                kit_id="synthetic-restricted",
+                app_archetype="marketing-site",
+                supported_template_kinds=("synthetic-restricted",),
+                stack_recipe=("vite-react",),
+                expected_files=("src/App.tsx",),
+                expected_routes=(),
+                design_recipe=("hero-above-fold",),
+                allowed_capabilities=("local-state",),
+                validation_checklist=("App renders without errors",),
+                safety_constraints=("no-network-egress",),
+                recommended_resources=("preline-ui",),
+            )
+            builder_kits._KITS["synthetic-restricted"] = synthetic
+            with pytest.raises(
+                BuilderResourceConfigError, match="usage_policy"
+            ):
+                validate_kit_resource_ids()
+        finally:
+            builder_kits._KITS.clear()
+            builder_kits._KITS.update(original)
+
+
+# ---------------------------------------------------------------------------
+# 14. render_kit_context resource block
+# ---------------------------------------------------------------------------
+
+
+class TestRenderKitContextResources:
+    def test_render_kit_context_includes_recommended_resources_when_present(self):
+        kit = get_kit("landing-page")
+        assert kit is not None
+        rendered = render_kit_context(kit)
+        assert "Recommended resources:" in rendered
+        for resource_id in kit.recommended_resources:
+            assert resource_id in rendered, resource_id
+
+    def test_render_kit_context_omits_block_when_empty(self):
+        kit = get_kit("generic")
+        assert kit is not None
+        assert kit.recommended_resources == ()
+        rendered = render_kit_context(kit)
+        assert "Recommended resources:" not in rendered
+
+
+# ---------------------------------------------------------------------------
+# 15. Schema preservation
+# ---------------------------------------------------------------------------
+
+
+class TestRecommendedResourcesDefault:
+    @pytest.mark.parametrize("kit_id", ["calculator", "tetris", "generic"])
+    def test_recommended_resources_field_defaults_to_empty_tuple(self, kit_id: str):
+        kit = get_kit(kit_id)
+        assert kit is not None
+        assert kit.recommended_resources == ()
+
+
+# ---------------------------------------------------------------------------
+# 16. list_resources_for_kit / list_resource_ids basics
+# ---------------------------------------------------------------------------
+
+
+class TestResourceListing:
+    def test_list_resource_ids_is_sorted_tuple(self):
+        ids = list_resource_ids()
+        assert isinstance(ids, tuple)
+        assert list(ids) == sorted(ids)
+        assert set(ids) == _EXPECTED_RESOURCE_IDS
+
+    def test_list_resources_for_kit_landing_page(self):
+        resources = list_resources_for_kit("landing-page")
+        ids = {resource.resource_id for resource in resources}
+        assert "page-ui" in ids
+        assert "shadcn-ui" in ids
+        # Preline is recommended_for=["none"], so it must NOT appear here.
+        assert "preline-ui" not in ids
+
+    def test_get_resource_is_whitespace_and_case_tolerant(self):
+        assert get_resource("  Shadcn-UI  ") is not None
+        assert get_resource("") is None
+        assert get_resource("totally-unknown-resource") is None
