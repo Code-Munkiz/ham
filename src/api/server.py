@@ -62,6 +62,8 @@ from src.api.workspace_tools import router as workspace_tools_router
 from src.api.workspace_voice_settings import router as workspace_voice_settings_router
 from src.api.workspaces import router as workspaces_router
 from src.api.builder_sources import router as builder_sources_router
+from src.api.internal_dispatcher import router as internal_dispatcher_router
+from src.api.jobs import router as jobs_router
 from src.api.request_id_middleware import request_id_middleware
 from src.ham import sentry_wiring
 from src.ham.agent_profiles import agents_config_from_merged
@@ -169,6 +171,8 @@ app.include_router(workspace_profiles_router)
 app.include_router(workspace_operations_router)
 app.include_router(workspace_voice_settings_router)
 app.include_router(builder_sources_router)
+app.include_router(internal_dispatcher_router)
+app.include_router(jobs_router)
 app.include_router(tts_router)
 
 # Phase 1b: multi-user workspace primitive routers, mounted behind a
