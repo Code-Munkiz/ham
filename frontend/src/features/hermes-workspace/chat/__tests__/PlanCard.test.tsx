@@ -37,9 +37,7 @@ function samplePlan(overrides: Partial<Plan> = {}): Plan {
 
 describe("PlanCard", () => {
   it("renders step list and destructive badge when expanded", () => {
-    render(
-      <PlanCard plan={samplePlan()} approvalState="proposed" phase="proposed" />,
-    );
+    render(<PlanCard plan={samplePlan()} approvalState="proposed" phase="proposed" />);
     fireEvent.click(screen.getByRole("button", { name: "Expand steps" }));
     expect(screen.getByTestId("plan-card-steps")).toBeInTheDocument();
     expect(screen.getAllByTestId("plan-card-destructive-badge")).toHaveLength(1);
@@ -60,17 +58,13 @@ describe("PlanCard", () => {
   });
 
   it("shows STALE banner and disables Approve in stale phase", () => {
-    render(
-      <PlanCard plan={samplePlan()} approvalState="stale" phase="stale" />,
-    );
+    render(<PlanCard plan={samplePlan()} approvalState="stale" phase="stale" />);
     expect(screen.getByTestId("plan-card-stale-banner")).toBeInTheDocument();
     expect(screen.getByTestId("plan-card-approve")).toBeDisabled();
   });
 
   it("renders superseded one-line summary", () => {
-    render(
-      <PlanCard plan={samplePlan()} approvalState="proposed" phase="superseded" />,
-    );
+    render(<PlanCard plan={samplePlan()} approvalState="proposed" phase="superseded" />);
     expect(screen.getByTestId("plan-card-superseded")).toHaveTextContent(/Superseded plan/i);
   });
 

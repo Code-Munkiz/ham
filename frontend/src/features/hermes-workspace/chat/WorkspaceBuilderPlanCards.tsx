@@ -1,7 +1,11 @@
 import * as React from "react";
 
 import type { Plan, PlanApprovalRecord } from "@/lib/ham/builderPlan";
-import { BuilderPlanApiError, approveBuilderPlan, fetchBuilderPlan } from "@/lib/ham/builderPlanApi";
+import {
+  BuilderPlanApiError,
+  approveBuilderPlan,
+  fetchBuilderPlan,
+} from "@/lib/ham/builderPlanApi";
 
 import { PlanCard, type PlanCardPhase } from "./PlanCard";
 
@@ -68,13 +72,14 @@ export function WorkspaceBuilderPlanCards({
   if (!entries.length) return null;
 
   const patchEntry = (planId: string, patch: Partial<BuilderPlanCardEntry>) => {
-    onEntriesChange(
-      entries.map((e) => (e.planId === planId ? { ...e, ...patch } : e)),
-    );
+    onEntriesChange(entries.map((e) => (e.planId === planId ? { ...e, ...patch } : e)));
   };
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-3 py-3" data-testid="workspace-builder-plan-cards">
+    <div
+      className="mx-auto w-full max-w-3xl space-y-3 py-3"
+      data-testid="workspace-builder-plan-cards"
+    >
       {entries.map((entry) => {
         if (entry.loadError) {
           return (
@@ -120,8 +125,7 @@ export function WorkspaceBuilderPlanCards({
               } catch (err) {
                 if (err instanceof BuilderPlanApiError && err.code === "project_busy") {
                   patchEntry(entry.planId, {
-                    busyBanner:
-                      "Another build is running for this project; cancel it first",
+                    busyBanner: "Another build is running for this project; cancel it first",
                   });
                   return;
                 }

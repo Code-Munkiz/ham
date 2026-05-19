@@ -78,7 +78,9 @@ export function PlanCard({
             {approvedWaiting ? "Approved — waiting for worker…" : planSummaryLine(plan)}
           </p>
           {!approvedWaiting ? (
-            <p className="mt-0.5 text-[11px] text-white/50">Review steps, then approve or re-plan.</p>
+            <p className="mt-0.5 text-[11px] text-white/50">
+              Review steps, then approve or re-plan.
+            </p>
           ) : null}
         </div>
         {!approvedWaiting ? (
@@ -161,7 +163,10 @@ export function PlanCard({
       ) : null}
 
       {replanOpen && !approvedWaiting ? (
-        <div className="mt-3 space-y-2 border-t border-white/10 pt-3" data-testid="plan-card-replan-prompt">
+        <div
+          className="mt-3 space-y-2 border-t border-white/10 pt-3"
+          data-testid="plan-card-replan-prompt"
+        >
           <label className="text-[11px] text-white/60" htmlFor={`replan-${plan.plan_id}`}>
             What should I change?
           </label>
