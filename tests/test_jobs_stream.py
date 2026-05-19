@@ -304,6 +304,29 @@ class TestJobsStreamEvents:
         # Should succeed (file-backed store has _load_raw accessible)
         assert res.status_code == 200
 
+    def test_stream_closes_on_terminal_sse_when_job_store_scope_unusable(self):
+        """If workspace_id is empty, _stream_events cannot poll the job store for status.
+
+        The stream must still close when the event log carries a terminal payload;
+        otherwise the handler would spin forever (heartbeats only).
+        """
+        job = _make_job(
+            "crjb_noscope",
+            workspace_id="",
+            project_id="proj_x",
+            status="running",
+        )
+        self._job_store.upsert_cloud_runtime_job(job)
+        self._seed_events(
+            "crjb_noscope",
+            [{"type": "job_started"}, {"type": "job_completed"}],
+        )
+        app = _build_app(_make_actor())
+        client = TestClient(app)
+        res = client.get("/api/jobs/crjb_noscope/stream")
+        assert res.status_code == 200
+        assert "job_completed" in res.text
+
     def test_stream_404_without_params_for_missing_job(self):
         """Without params, a missing job should still return 404."""
         app = _build_app(_make_actor())
