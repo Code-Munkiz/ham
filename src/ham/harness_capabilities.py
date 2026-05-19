@@ -17,7 +17,7 @@ See ``docs/CODING_AGENTS_CONTROL_PLANE.md`` for the cockpit-level vocabulary.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Final, Literal, Mapping, TypeAlias
 
@@ -59,8 +59,8 @@ class HarnessCapabilityRow:
     # Optional forward-compat fields. Default-empty mappings keep existing rows
     # constructible without per-row updates; new rows (e.g. opencode_cli) populate
     # these to advertise capability plans and per-integration-mode posture.
-    capabilities: Mapping[str, object] = MappingProxyType({})
-    integration_modes: Mapping[str, str] = MappingProxyType({})
+    capabilities: Mapping[str, object] = field(default_factory=lambda: MappingProxyType({}))
+    integration_modes: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
 
 
 def _rows() -> dict[str, HarnessCapabilityRow]:
