@@ -4,13 +4,7 @@ export type StepRunStatus = "pending" | "running" | "completed" | "failed";
 
 export type PlanCardInflightPhase = "approved_waiting" | "in_flight" | "frozen";
 
-export type CancelUiState =
-  | "hidden"
-  | "idle"
-  | "clicking"
-  | "cancelling"
-  | "acknowledged"
-  | "done";
+export type CancelUiState = "hidden" | "idle" | "clicking" | "cancelling" | "acknowledged" | "done";
 
 const TERMINAL_JOB_EVENTS = new Set(["job_completed", "job_failed", "job_cancelled"]);
 
@@ -71,15 +65,14 @@ export function stepStatusGlyph(status: StepRunStatus): string {
   }
 }
 
-export function deriveCancelUiState(
-  events: SSEEvent[],
-  cancelClicked: boolean,
-): CancelUiState {
+export function deriveCancelUiState(events: SSEEvent[], cancelClicked: boolean): CancelUiState {
   if (events.some((e) => e.event.type === "job_cancelled")) return "done";
   if (events.some((e) => e.event.type === "cancel_acknowledged")) return "acknowledged";
   if (cancelClicked) return "cancelling";
   const terminal = events.some((e) => TERMINAL_JOB_EVENTS.has(e.event.type));
-  const started = events.some((e) => e.event.type === "job_started" || e.event.type === "step_started");
+  const started = events.some(
+    (e) => e.event.type === "job_started" || e.event.type === "step_started",
+  );
   if (terminal || !started) return "hidden";
   return "idle";
 }
@@ -110,8 +103,7 @@ export function frozenSummaryLine(plan: Plan, events: SSEEvent[]): string | null
     if (completedCount <= 0) {
       return `Cancelled before Step 1 of ${n}. No step changes were applied.`;
     }
-    const range =
-      completedCount === 1 ? "Step 1" : `Steps 1–${completedCount}`;
+    const range = completedCount === 1 ? "Step 1" : `Steps 1–${completedCount}`;
     return `Cancelled after Step ${Math.min(completedCount + 1, n)} of ${n}. ${range}'s changes were applied.`;
   }
 

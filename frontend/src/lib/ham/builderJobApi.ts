@@ -11,7 +11,10 @@ export class BuilderJobApiError extends Error {
   }
 }
 
-export async function cancelBuilderJob(jobId: string, reason?: string | null): Promise<CancelResponse> {
+export async function cancelBuilderJob(
+  jobId: string,
+  reason?: string | null,
+): Promise<CancelResponse> {
   const res = await hamApiFetch(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

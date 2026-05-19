@@ -152,7 +152,10 @@ export function WorkspaceBuilderPlanCards({
                     try {
                       await cancelBuilderJob(entry.jobId!);
                     } catch (err) {
-                      if (err instanceof BuilderJobApiError && err.code === "job_already_terminal") {
+                      if (
+                        err instanceof BuilderJobApiError &&
+                        err.code === "job_already_terminal"
+                      ) {
                         return;
                       }
                       patchEntry(entry.planId, {

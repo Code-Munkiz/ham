@@ -70,12 +70,16 @@ describe("planCardInflight", () => {
   it("cancel UI moves through cancelling and acknowledged", () => {
     expect(deriveCancelUiState([ev("job_started")], false)).toBe("idle");
     expect(deriveCancelUiState([ev("job_started")], true)).toBe("cancelling");
-    expect(
-      deriveCancelUiState([ev("job_started"), ev("cancel_acknowledged")], true),
-    ).toBe("acknowledged");
+    expect(deriveCancelUiState([ev("job_started"), ev("cancel_acknowledged")], true)).toBe(
+      "acknowledged",
+    );
     expect(
       deriveCancelUiState(
-        [ev("job_started"), ev("cancel_acknowledged"), ev("job_cancelled", { cancelled_at_step_id: "stp_2" })],
+        [
+          ev("job_started"),
+          ev("cancel_acknowledged"),
+          ev("job_cancelled", { cancelled_at_step_id: "stp_2" }),
+        ],
         true,
       ),
     ).toBe("done");
@@ -95,7 +99,11 @@ describe("planCardInflight", () => {
     expect(shouldShowStalledCancelWarning(now - 31_000, [ev("job_started")], now)).toBe(true);
     expect(shouldShowStalledCancelWarning(now - 5_000, [ev("job_started")], now)).toBe(false);
     expect(
-      shouldShowStalledCancelWarning(now - 60_000, [ev("job_cancelled", { cancelled_at_step_id: null })], now),
+      shouldShowStalledCancelWarning(
+        now - 60_000,
+        [ev("job_cancelled", { cancelled_at_step_id: null })],
+        now,
+      ),
     ).toBe(false);
   });
 });
