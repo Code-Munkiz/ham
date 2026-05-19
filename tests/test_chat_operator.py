@@ -663,3 +663,82 @@ def test_cancel_returns_stable_cancel_not_supported_with_mission(tmp_path: Path)
     assert op.intent == "cursor_agent_cancel"
     assert (op.data or {}).get("reason_code") == "cancel_not_supported"
     assert (op.data or {}).get("mission_registry_id") == row.mission_registry_id
+
+
+def test_cancel_runtime_path_visible_copy_is_cursor_branded(tmp_path: Path) -> None:
+    """Real process_operator_turn cursor_agent_cancel path must not leak
+    'Cloud Agent' wording into the operator-handled assistant transcript or
+    the cancel_message default emitted by the dispatcher.
+    """
+    store = ProjectStore(store_path=tmp_path / "projects.json")
+    rec = store.make_record(name="ham", root=str(tmp_path), description="", metadata={})
+    store.register(rec)
+    missions = ManagedMissionStore(base_dir=tmp_path / "missions")
+    set_managed_mission_store_for_tests(missions)
+    try:
+        now = utc_now_iso()
+        row = ManagedMission(
+            mission_registry_id=new_mission_registry_id(),
+            cursor_agent_id="bc_cancel_visible_1",
+            mission_handling="managed",
+            mission_lifecycle="open",
+            created_at=now,
+            updated_at=now,
+            last_server_observed_at=now,
+        )
+        missions.save(row)
+        op = process_operator_turn(
+            user_text="cancel this mission",
+            project_store=store,
+            default_project_id=rec.id,
+            operator_payload=None,
+            ham_operator_authorization=None,
+        )
+    finally:
+        set_managed_mission_store_for_tests(None)
+    assert op is not None and op.handled and op.ok
+    assert op.intent == "cursor_agent_cancel"
+
+    data = op.data or {}
+    cancel_msg = str(data.get("cancel_message") or "")
+    assert "Cloud Agent" not in cancel_msg
+    assert "Cursor Cloud Agent" not in cancel_msg
+    assert "Cursor mission" in cancel_msg
+
+    assert data.get("reason_code") == "cancel_not_supported"
+    assert data.get("cancel_supported") is False
+    assert data.get("mission_registry_id") == row.mission_registry_id
+
+    visible = format_operator_assistant_message(op)
+    assert "Cloud Agent" not in visible
+    assert "Cursor Cloud Agent" not in visible
+    assert "Cursor mission cancel" in visible
+    assert "cancel_not_supported" in visible
+
+
+def test_cancel_runtime_path_sanitizes_injected_cloud_agent_phrase() -> None:
+    """If a cancel_message in data still contains the legacy 'Cloud Agent'
+    token, the transcript formatter must sanitize it via _friendly_blocking_reason
+    so user-visible copy is Cursor-branded while metadata stays intact.
+    """
+    from src.ham.chat_operator import OperatorTurnResult
+
+    legacy = OperatorTurnResult(
+        handled=True,
+        intent="cursor_agent_cancel",
+        ok=True,
+        data={
+            "provider": "cursor_cloud_agent",
+            "mission_registry_id": "mission-legacy",
+            "agent_id": "bc_legacy",
+            "reason_code": "cancel_not_supported",
+            "cancel_supported": False,
+            "cancel_message": "Cloud Agent cancel is not available in this chat flow yet.",
+        },
+    )
+    visible = format_operator_assistant_message(legacy)
+    assert "Cloud Agent" not in visible
+    assert "Cursor Cloud Agent" not in visible
+    assert "Cursor mission" in visible
+    assert legacy.data["cancel_message"].startswith("Cloud Agent")
+    assert legacy.data["reason_code"] == "cancel_not_supported"

@@ -2231,7 +2231,7 @@ def _dispatch_intent(
                 **_managed_mission_payload(mission),
                 "reason_code": "cancel_not_supported",
                 "cancel_supported": False,
-                "cancel_message": "Cloud Agent cancel is not available in this chat flow yet.",
+                "cancel_message": "Cursor mission cancel is not available in this chat flow yet.",
             },
         )
 
@@ -2473,10 +2473,13 @@ def format_operator_assistant_message(op: OperatorTurnResult) -> str:
         )
     if intent == "cursor_agent_cancel":
         data = op.data or {}
+        cancel_msg = _friendly_blocking_reason(
+            str(data.get("cancel_message") or "Cancel is not currently available.")
+        )
         return (
             f"**Cursor mission cancel**\n\n"
             f"- **result:** `{data.get('reason_code')}`\n"
-            f"- **message:** {data.get('cancel_message') or 'Cancel is not currently available.'}\n\n"
+            f"- **message:** {cancel_msg}\n\n"
             "Mission status remains available via `status` and `show logs`."
         )
     if op.data.get("message"):
