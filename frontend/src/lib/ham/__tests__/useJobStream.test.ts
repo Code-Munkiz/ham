@@ -350,10 +350,9 @@ describe("useJobStream", () => {
   });
 
   it("jobId transitions to null ΓåÆ EventSource closed, events cleared", () => {
-    const { result, rerender } = renderHook(
-      ({ id }: { id: string | null }) => useJobStream(id),
-      { initialProps: { id: "job-abc" as string | null } },
-    );
+    const { result, rerender } = renderHook(({ id }: { id: string | null }) => useJobStream(id), {
+      initialProps: { id: "job-abc" as string | null },
+    });
     const es = FakeEventSource.instances[0]!;
 
     act(() => {

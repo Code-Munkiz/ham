@@ -28,11 +28,7 @@ import type { SSEEvent } from "@/lib/ham/builderPlan";
 // ---------------------------------------------------------------------------
 
 /** Job status event types that terminate the stream. */
-const TERMINAL_EVENT_TYPES = new Set<string>([
-  "job_completed",
-  "job_failed",
-  "job_cancelled",
-]);
+const TERMINAL_EVENT_TYPES = new Set<string>(["job_completed", "job_failed", "job_cancelled"]);
 
 /**
  * All 11 event payload types from Phase 0 Contract 4.
@@ -78,8 +74,7 @@ export function useJobStream(jobId: string | null): {
   lastSeq: number;
 } {
   const [events, setEvents] = React.useState<SSEEvent[]>([]);
-  const [connectionState, setConnectionState] =
-    React.useState<JobStreamConnectionState>("closed");
+  const [connectionState, setConnectionState] = React.useState<JobStreamConnectionState>("closed");
   const [lastSeq, setLastSeq] = React.useState(0);
 
   React.useEffect(() => {
