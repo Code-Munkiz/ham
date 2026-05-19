@@ -19,13 +19,10 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from src.ham import builder_test_generator
-from src.ham.builder_error_codes import STEP_TOOL_CALL_FAILED, make_error
+from src.ham.builder_error_codes import STEP_VERIFICATION_FAILED, make_error
 from src.ham.builder_plan import ErrorEnvelope, Plan
 
-# Error code for verification failure (Phase 0 catalog: step.step_verification_failed
-# maps to STEP_TOOL_CALL_FAILED in the current catalog — closest match; raised as
-# step_failed outcome with descriptive message).
-_VERIFICATION_FAILED_CODE = STEP_TOOL_CALL_FAILED
+_VERIFICATION_FAILED_CODE = STEP_VERIFICATION_FAILED
 
 _DEFAULT_HARNESS_TIMEOUT = 60  # seconds
 _STDOUT_SNIPPET_MAX = 2048

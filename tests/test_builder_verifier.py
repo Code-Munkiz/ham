@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.ham.builder_error_codes import STEP_TOOL_CALL_FAILED
+from src.ham.builder_error_codes import STEP_VERIFICATION_FAILED
 from src.ham.builder_plan import Plan, Step
 from src.ham.builder_verifier import (
     HarnessRunnerProtocol,
@@ -78,7 +78,7 @@ class TestVerifierFailPath:
     def test_fail_error_code_is_verification_failed(self):
         result = verify(_simple_plan(), _PREVIEW_URL, runner=_FailRunner())
         assert result.error_envelope is not None
-        assert result.error_envelope.error_code == STEP_TOOL_CALL_FAILED
+        assert result.error_envelope.error_code == STEP_VERIFICATION_FAILED
 
     def test_fail_error_details_include_playwright_snippet(self):
         stdout = "1 failed: expect(locator).toBeVisible()"
