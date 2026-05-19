@@ -1425,3 +1425,215 @@ def test_rest_operator_handled_assistant_text_quarantines_internal_tokens(
     ):
         assert tok not in assistant_text, f"operator visible text leaked: {tok!r}"
     assert "Cursor mission launched" in assistant_text
+
+
+# ---------------------------------------------------------------------------
+# VAL-OPERATOR-014 / VAL-OPERATOR-015 — recursive visible-payload scans for
+# REST operator-handled responses, error envelopes, and persisted history.
+# ---------------------------------------------------------------------------
+
+
+def test_rest_operator_handled_full_response_has_no_visible_leaks(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-OPERATOR-014 — every user-visible string in the REST envelope is sanitized.
+
+    The recursive scan walks ``messages``, ``actions``, displayable
+    ``operator_result`` strings (``data.summary``, ``data.message``,
+    pending preview summaries, ``blocking_reason``), and any other text the
+    UI may render. Machine-metadata keys (``provider``, ``proposal_digest``,
+    ``base_revision``, persistence paths, raw identifiers) are exempted so
+    that internal transport fields stay available where required.
+    """
+    from src.ham.chat_operator import OperatorTurnResult
+
+    from tests._helpers.visible_text import (
+        assert_no_visible_leaks,
+        iter_visible_strings,
+    )
+
+    op_result = OperatorTurnResult(
+        handled=True,
+        intent="cursor_agent_launch",
+        ok=True,
+        data={
+            "provider": "cursor_cloud_agent",
+            "mission_registry_id": "mission-1",
+            "agent_id": "bc_test",
+            "external_id": "bc_test",
+            "repository": "Code-Munkiz/ham",
+            "ref": "main",
+            "status": "running",
+            "mission_checkpoint": "launched",
+            "reason_code": "mission_launched",
+            "summary": "Cursor mission kicked off; awaiting first checkpoint.",
+        },
+    )
+    monkeypatch.setattr("src.api.chat.process_operator_turn", lambda **_kw: op_result)
+    res = client.post(
+        "/api/chat",
+        json={
+            "messages": [{"role": "user", "content": "have Cursor launch the agent"}],
+            "enable_operator": True,
+        },
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+
+    assert_no_visible_leaks(body, label="POST /api/chat envelope")
+
+    visible_strings = [v for _, v in iter_visible_strings(body)]
+    assert any(s for s in visible_strings), "scan must find at least one visible string"
+    assert any("Cursor mission launched" in s for s in visible_strings)
+
+    op_payload = body.get("operator_result") or {}
+    data = op_payload.get("data") or {}
+    assert data.get("provider") == "cursor_cloud_agent"
+    assert data.get("mission_registry_id") == "mission-1"
+    assert data.get("agent_id") == "bc_test"
+
+    full_text = json.dumps(body)
+    for tok in ("HERMES_GATEWAY", "HAM_RUN_LAUNCH_TOKEN"):
+        assert tok not in full_text, f"unexpected env token in full envelope: {tok!r}"
+    assert "cursor_cloud_agent" in full_text
+
+
+def test_rest_operator_handled_blocking_reason_payload_scan(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-OPERATOR-014 — blocking-reason path: visible card-facing strings stay
+    friendly while metadata retains the diagnostic ``blocking_reason``.
+    """
+    from src.ham.chat_operator import OperatorTurnResult
+
+    from tests._helpers.visible_text import assert_no_visible_leaks
+
+    raw_reason = (
+        "HAM_RUN_LAUNCH_TOKEN missing on this API host; check HERMES_GATEWAY_MODE and "
+        "provide proposal_digest plus base_revision; see .ham/runs and operator.phase."
+    )
+    op_result = OperatorTurnResult(
+        handled=True,
+        intent="launch_run",
+        ok=False,
+        blocking_reason=raw_reason,
+        data={
+            "summary": "Launch is gated until approval and configuration are in place.",
+        },
+    )
+    monkeypatch.setattr("src.api.chat.process_operator_turn", lambda **_kw: op_result)
+    res = client.post(
+        "/api/chat",
+        json={
+            "messages": [{"role": "user", "content": "launch the run"}],
+            "enable_operator": True,
+        },
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+
+    blocking_metadata_keys = frozenset({"blocking_reason"})
+    assert_no_visible_leaks(
+        body,
+        extra_metadata_keys=blocking_metadata_keys,
+        label="POST /api/chat blocked envelope",
+    )
+
+    op_payload = body.get("operator_result") or {}
+    assert op_payload.get("blocking_reason") == raw_reason
+
+
+def test_rest_model_selection_error_detail_payload_scan(
+    mock_mode: None,
+) -> None:
+    """VAL-OPERATOR-014 — ``detail.error.message`` and adjacent visible strings
+    in error envelopes are sanitized; the machine ``error.code`` may keep its
+    raw form because it is not rendered as product copy.
+    """
+    from tests._helpers.visible_text import assert_no_visible_leaks
+
+    res = client.post(
+        "/api/chat",
+        json={
+            "messages": [{"role": "user", "content": "hi"}],
+            "model_id": "openrouter:default",
+        },
+    )
+    assert res.status_code == 422, res.text
+    body = res.json()
+    assert_no_visible_leaks(body, label="POST /api/chat 422 envelope")
+    err = body.get("detail", {}).get("error", {}) or {}
+    assert err.get("code") == "MODEL_SELECTION_REQUIRES_OPENROUTER"
+
+
+def test_rest_operator_handled_session_history_replay_is_sanitized(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-OPERATOR-015 — sanitized operator transcript stays sanitized after
+    persistence and replay via ``GET /api/chat/sessions/{sid}`` and the
+    sessions listing.
+    """
+    from src.ham.chat_operator import OperatorTurnResult
+
+    from tests._helpers.visible_text import (
+        FORBIDDEN_VISIBLE_TOKENS,
+        assert_no_visible_leaks,
+    )
+
+    op_result = OperatorTurnResult(
+        handled=True,
+        intent="cursor_agent_launch",
+        ok=True,
+        data={
+            "provider": "cursor_cloud_agent",
+            "mission_registry_id": "mission-1",
+            "agent_id": "bc_test",
+            "external_id": "bc_test",
+            "repository": "Code-Munkiz/ham",
+            "ref": "main",
+            "status": "running",
+            "mission_checkpoint": "launched",
+            "reason_code": "mission_launched",
+        },
+    )
+    monkeypatch.setattr("src.api.chat.process_operator_turn", lambda **_kw: op_result)
+    res = client.post(
+        "/api/chat",
+        json={
+            "messages": [{"role": "user", "content": "have Cursor launch the agent"}],
+            "enable_operator": True,
+        },
+    )
+    assert res.status_code == 200, res.text
+    sid = res.json()["session_id"]
+
+    history = client.get(f"/api/chat/sessions/{sid}")
+    assert history.status_code == 200, history.text
+    persisted = history.json()
+    messages = persisted.get("messages") or []
+    assert messages, "session history must include the operator-handled turn"
+    assistant_persisted = messages[-1]
+    assert assistant_persisted["role"] == "assistant"
+    assert "Cursor mission launched" in assistant_persisted["content"]
+    for tok in FORBIDDEN_VISIBLE_TOKENS:
+        assert tok not in assistant_persisted["content"], (
+            f"persisted operator transcript leaked {tok!r}"
+        )
+    assert_no_visible_leaks(persisted, label="GET /api/chat/sessions/{sid} replay")
+
+    listing = client.get("/api/chat/sessions")
+    assert listing.status_code == 200, listing.text
+    listing_body = listing.json()
+    own_entries = [
+        entry
+        for entry in (listing_body.get("sessions") or [])
+        if entry.get("session_id") == sid
+    ]
+    assert own_entries, "session listing must surface the operator-handled session"
+    # The listing aggregates other in-process tests' user-typed prompts; only
+    # scan the operator-handled session's own row, whose preview comes from the
+    # newly typed user prompt and whose summary should not regress.
+    assert_no_visible_leaks(
+        {"sessions": own_entries},
+        label="GET /api/chat/sessions listing (own session row)",
+    )

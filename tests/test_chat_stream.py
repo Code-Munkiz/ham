@@ -1466,3 +1466,155 @@ def test_chat_stream_operator_handled_assistant_text_quarantines_internal_tokens
     op_payload = final.get("operator_result") or {}
     # Metadata still carries the raw provider id for routing/compatibility.
     assert (op_payload.get("data") or {}).get("provider") == "cursor_cloud_agent"
+
+
+# ---------------------------------------------------------------------------
+# VAL-OPERATOR-014 — recursive visible-payload scans across every stream event
+# (deltas, final ``done`` envelope, error events) for operator-handled and
+# gateway-error paths.
+# ---------------------------------------------------------------------------
+
+
+def test_chat_stream_operator_handled_full_event_stream_has_no_visible_leaks(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-OPERATOR-014 — every event emitted by the operator-handled stream
+    lane is scanned recursively. Visible strings (deltas, ``done.messages``,
+    operator displayable strings) stay sanitized while machine-metadata fields
+    (``provider``, ``mission_registry_id``, ``agent_id``, ``reason_code``)
+    remain available for routing/diagnostics.
+    """
+    from src.ham.chat_operator import OperatorTurnResult
+
+    from tests._helpers.visible_text import (
+        assert_no_visible_leaks,
+        iter_visible_strings,
+    )
+
+    op_result = OperatorTurnResult(
+        handled=True,
+        intent="cursor_agent_launch",
+        ok=True,
+        data={
+            "provider": "cursor_cloud_agent",
+            "mission_registry_id": "mission-1",
+            "agent_id": "bc_test",
+            "external_id": "bc_test",
+            "repository": "Code-Munkiz/ham",
+            "ref": "main",
+            "status": "running",
+            "mission_checkpoint": "launched",
+            "reason_code": "mission_launched",
+            "summary": "Cursor mission kicked off; awaiting first checkpoint.",
+        },
+    )
+    monkeypatch.setattr("src.api.chat.process_operator_turn", lambda **_kw: op_result)
+    res = client.post(
+        "/api/chat/stream",
+        json={
+            "messages": [{"role": "user", "content": "have Cursor launch the agent"}],
+            "enable_operator": True,
+        },
+    )
+    assert res.status_code == 200, res.text
+    events = _parse_ndjson(res.text)
+    assert events, "stream produced no events"
+
+    for ev in events:
+        assert_no_visible_leaks(ev, label=f"stream event type={ev.get('type')!r}")
+
+    done = [e for e in events if e.get("type") == "done"]
+    assert done, "stream missing done event"
+    final = done[-1]
+    assert "Cursor mission launched" in final["messages"][-1]["content"]
+    op_payload = final.get("operator_result") or {}
+    assert (op_payload.get("data") or {}).get("provider") == "cursor_cloud_agent"
+
+    visible_strings = [v for _, v in iter_visible_strings(final)]
+    assert any("Cursor mission launched" in s for s in visible_strings)
+
+
+def test_chat_stream_gateway_error_event_payload_scan(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-OPERATOR-014 — stream error and final payloads scan ``error.message``
+    and adjacent visible strings recursively. ``error.code`` is treated as
+    machine metadata and may remain raw.
+    """
+    from tests._helpers.visible_text import assert_no_visible_leaks
+
+    def _boom(*_a: object, **_k: object):
+        raise GatewayCallError(
+            "UPSTREAM_REJECTED",
+            (
+                "raw upstream detail referencing HERMES_GATEWAY_MODE and "
+                "proposal_digest plus base_revision should not surface here"
+            ),
+        )
+
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", _boom)
+    res = client.post(
+        "/api/chat/stream",
+        json={"messages": [{"role": "user", "content": "hello"}]},
+    )
+    assert res.status_code == 200, res.text
+    events = _parse_ndjson(res.text)
+    assert events, "stream produced no events"
+
+    for ev in events:
+        assert_no_visible_leaks(ev, label=f"stream event type={ev.get('type')!r}")
+
+
+def test_chat_stream_operator_handled_session_history_replay_is_sanitized(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-OPERATOR-015 — stream operator-handled turns persist sanitized copy
+    and remain sanitized when replayed via ``GET /api/chat/sessions/{sid}``.
+    """
+    from src.ham.chat_operator import OperatorTurnResult
+
+    from tests._helpers.visible_text import (
+        FORBIDDEN_VISIBLE_TOKENS,
+        assert_no_visible_leaks,
+    )
+
+    op_result = OperatorTurnResult(
+        handled=True,
+        intent="cursor_agent_launch",
+        ok=True,
+        data={
+            "provider": "cursor_cloud_agent",
+            "mission_registry_id": "mission-1",
+            "agent_id": "bc_test",
+            "external_id": "bc_test",
+            "repository": "Code-Munkiz/ham",
+            "ref": "main",
+            "status": "running",
+            "mission_checkpoint": "launched",
+            "reason_code": "mission_launched",
+        },
+    )
+    monkeypatch.setattr("src.api.chat.process_operator_turn", lambda **_kw: op_result)
+    res = client.post(
+        "/api/chat/stream",
+        json={
+            "messages": [{"role": "user", "content": "have Cursor launch the agent"}],
+            "enable_operator": True,
+        },
+    )
+    assert res.status_code == 200, res.text
+    done = [e for e in _parse_ndjson(res.text) if e.get("type") == "done"]
+    assert done, "stream missing done event"
+    sid = str(done[-1]["session_id"])
+
+    history = client.get(f"/api/chat/sessions/{sid}")
+    assert history.status_code == 200, history.text
+    persisted = history.json()
+    assistant_persisted = (persisted.get("messages") or [])[-1]
+    assert assistant_persisted["role"] == "assistant"
+    assert "Cursor mission launched" in assistant_persisted["content"]
+    for tok in FORBIDDEN_VISIBLE_TOKENS:
+        assert tok not in assistant_persisted["content"], (
+            f"persisted stream operator transcript leaked {tok!r}"
+        )
+    assert_no_visible_leaks(persisted, label="GET /api/chat/sessions/{sid} stream replay")

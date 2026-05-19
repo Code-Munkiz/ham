@@ -286,6 +286,59 @@ def test_render_chat_pdf_coerces_non_string_turn() -> None:
     assert "/view" not in extracted.lower()
 
 
+def test_export_pdf_operator_handled_transcript_replay_is_sanitized(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-OPERATOR-015 — sanitized operator-handled transcript remains
+    sanitized when persisted and exported as PDF.
+
+    The chat turn is driven via ``/api/chat`` (which sanitizes the visible
+    assistant message), persisted into the session store, then exported via
+    ``GET /api/chat/sessions/{sid}/export.pdf``. The extracted PDF text must
+    not contain operator/protocol/runtime tokens.
+    """
+    from src.ham.chat_operator import OperatorTurnResult
+
+    from tests._helpers.visible_text import FORBIDDEN_VISIBLE_TOKENS
+
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "mock")
+    op_result = OperatorTurnResult(
+        handled=True,
+        intent="cursor_agent_launch",
+        ok=True,
+        data={
+            "provider": "cursor_cloud_agent",
+            "mission_registry_id": "mission-1",
+            "agent_id": "bc_test",
+            "external_id": "bc_test",
+            "repository": "Code-Munkiz/ham",
+            "ref": "main",
+            "status": "running",
+            "mission_checkpoint": "launched",
+            "reason_code": "mission_launched",
+        },
+    )
+    monkeypatch.setattr("src.api.chat.process_operator_turn", lambda **_kw: op_result)
+
+    chat = client.post(
+        "/api/chat",
+        json={
+            "messages": [{"role": "user", "content": "have Cursor launch the agent"}],
+            "enable_operator": True,
+        },
+    )
+    assert chat.status_code == 200, chat.text
+    sid = chat.json()["session_id"]
+
+    ex = client.get(f"/api/chat/sessions/{sid}/export.pdf")
+    assert ex.status_code == 200, ex.text
+    assert ex.content.startswith(b"%PDF")
+    extracted = _extract_pdf_page_text(ex.content)
+    assert "Cursor mission launched" in extracted
+    for tok in FORBIDDEN_VISIBLE_TOKENS:
+        assert tok not in extracted, f"PDF export leaked forbidden token {tok!r}"
+
+
 def test_render_chat_pdf_fallback_on_build_failure() -> None:
     from unittest.mock import patch
 
