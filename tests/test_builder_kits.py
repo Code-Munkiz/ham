@@ -207,8 +207,8 @@ class TestLegacyRoutingInvariant:
 class TestScaffoldReceivesKitContext:
     def _run_capture(self, monkeypatch, template_kind: str) -> str:
         monkeypatch.setattr(
-            "src.ham.builder_llm_scaffold.normalized_openrouter_api_key",
-            lambda: "sk-or-test",
+            "src.ham.builder_llm_scaffold.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test",
         )
         captured: list[list[dict]] = []
 
