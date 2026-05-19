@@ -3461,6 +3461,7 @@ export async function postChat(body: HamChatRequest): Promise<HamChatResponse> {
 export type HamChatStreamEvent =
   | { type: "session"; session_id: string }
   | { type: "delta"; text: string }
+  | { type: "plan_proposed"; plan_id: string }
   | {
       type: "done";
       session_id: string;
@@ -3472,6 +3473,7 @@ export type HamChatStreamEvent =
       /** Structured signal when the assistant turn ended in a gateway failure (safe copy in `messages`). */
       gateway_error?: { code: string; upstream_http_status?: number };
       builder?: Record<string, unknown> | null;
+      plan_id?: string;
     }
   | { type: "error"; code: string; message: string };
 
@@ -3514,6 +3516,7 @@ export async function postChatStream(
   callbacks: {
     onSession?: (sessionId: string) => void;
     onDelta?: (text: string) => void;
+    onPlanProposed?: (planId: string) => void;
   } = {},
   authorization?: HamChatStreamAuth,
 ): Promise<HamChatResponse> {
@@ -3624,6 +3627,10 @@ export async function postChatStream(
     }
     if (ev.type === "delta") {
       callbacks.onDelta?.(ev.text);
+      return;
+    }
+    if (ev.type === "plan_proposed") {
+      callbacks.onPlanProposed?.(ev.plan_id);
       return;
     }
     if (ev.type === "done") {

@@ -16,6 +16,7 @@ import { getRegisteredClerkSessionToken } from "@/lib/ham/clerkSession";
 export type WorkspaceStreamCallbacks = {
   onSession?: (sessionId: string) => void;
   onDelta?: (text: string) => void;
+  onPlanProposed?: (planId: string) => void;
 };
 
 function clerkPublishableKeyPresent(): boolean {
@@ -39,7 +40,15 @@ export async function runWorkspaceChatStream(
   callbacks: WorkspaceStreamCallbacks = {},
   authorization?: HamChatStreamAuth,
 ): Promise<HamChatResponse> {
-  return postChatStream(body, callbacks, authorization);
+  return postChatStream(
+    body,
+    {
+      onSession: callbacks.onSession,
+      onDelta: callbacks.onDelta,
+      onPlanProposed: callbacks.onPlanProposed,
+    },
+    authorization,
+  );
 }
 
 /**
