@@ -22,6 +22,7 @@ from src.ham.builder_error_codes import (
     STEP_MODEL_UNAVAILABLE,
     STEP_TIMEOUT,
     STEP_TOOL_CALL_FAILED,
+    STEP_VERIFICATION_FAILED,
     WORKER_DISPATCH_FAILED,
     WORKER_OOM,
     WORKER_TIMEOUT,
@@ -63,6 +64,9 @@ class TestCatalogConstants:
     def test_step_tool_call_failed(self):
         assert STEP_TOOL_CALL_FAILED == "step.tool_call_failed"
 
+    def test_step_verification_failed(self):
+        assert STEP_VERIFICATION_FAILED == "step.step_verification_failed"
+
     def test_step_model_unavailable(self):
         assert STEP_MODEL_UNAVAILABLE == "step.model_unavailable"
 
@@ -89,13 +93,14 @@ class TestCatalogConstants:
 
 class TestAllCodes:
     def test_catalog_size(self):
-        assert len(ALL_CODES) == 15
+        assert len(ALL_CODES) == 16
 
     def test_every_constant_in_all_codes(self):
         expected = {
             GATE_PLAN_STALE, GATE_PROJECT_BUSY, GATE_ENQUEUE_FAILED,
             WORKER_DISPATCH_FAILED, WORKER_TIMEOUT, WORKER_OOM,
-            STEP_FAILED, STEP_TIMEOUT, STEP_TOOL_CALL_FAILED, STEP_MODEL_UNAVAILABLE,
+            STEP_FAILED, STEP_TIMEOUT, STEP_TOOL_CALL_FAILED, STEP_VERIFICATION_FAILED,
+            STEP_MODEL_UNAVAILABLE,
             PREVIEW_POD_CRASHED, PREVIEW_POD_UNSCHEDULABLE,
             PREVIEW_NETWORK_EGRESS_DENIED, PREVIEW_PACKAGE_INSTALL_DENIED,
             INTERNAL_ERROR,
