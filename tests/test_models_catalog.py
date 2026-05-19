@@ -77,7 +77,11 @@ def test_build_catalog_openrouter_not_ready_when_key_poisoned(monkeypatch) -> No
     assert payload["openrouter_chat_ready"] is False
     row = next(x for x in payload["items"] if x["id"] == "openrouter:default")
     assert row["supports_chat"] is False
-    assert row["disabled_reason"] and "OPENROUTER_API_KEY" in row["disabled_reason"]
+    assert row["disabled_reason"]
+    # User-facing disabled copy uses friendly setup language without env var names.
+    assert "OPENROUTER_API_KEY" not in row["disabled_reason"]
+    assert "HERMES_GATEWAY" not in row["disabled_reason"]
+    assert "OpenRouter" in row["disabled_reason"]
     oc = payload.get("openrouter_catalog") or {}
     assert oc.get("remote_models_fetched") is False
 
@@ -94,8 +98,11 @@ def test_build_catalog_http_mode_openrouter_tiers_inactive(monkeypatch) -> None:
     assert payload.get("dashboard_chat_ready") is True
     row = next(x for x in payload["items"] if x["id"] == "openrouter:default")
     assert row["supports_chat"] is False
-    assert row["disabled_reason"] and "HERMES_GATEWAY_MODE=http" in row["disabled_reason"]
-    assert "OPENROUTER_API_KEY" not in (row["disabled_reason"] or "")
+    assert row["disabled_reason"]
+    # User-facing disabled copy avoids env var names.
+    assert "HERMES_GATEWAY" not in row["disabled_reason"]
+    assert "OPENROUTER_API_KEY" not in row["disabled_reason"]
+    assert "OpenRouter" in row["disabled_reason"]
 
 
 def test_build_catalog_http_mode_missing_base_url_not_ready(monkeypatch) -> None:

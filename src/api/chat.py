@@ -814,8 +814,8 @@ def _resolve_chat_openrouter_route(
             detail={
                 "error": {
                     "code": "MODEL_SELECTION_REQUIRES_OPENROUTER",
-                    "message": "Per-request model selection requires gateway mode http "
-                    "(BYOK route) or HERMES_GATEWAY_MODE=openrouter on the API host.",
+                    "message": "Per-request model selection is not available on this server. "
+                    "Connect OpenRouter under Workspace → Connected Tools to choose a model for chat.",
                 },
             },
         )

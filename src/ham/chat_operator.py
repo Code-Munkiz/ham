@@ -174,8 +174,8 @@ def _droid_preview_turn(
     token_note = ""
     if wf and wf.requires_launch_token and not _droid_exec_token():
         token_note = (
-            "\n\n_Note: `HAM_DROID_EXEC_TOKEN` is not set on this API host — "
-            "mutating launches will be rejected until it is configured._"
+            "\n\n_Note: launch approval is not configured on this server — "
+            "mutating launches will be rejected until an administrator enables it._"
         )
     pending = {
         "project_id": project_id.strip(),
@@ -276,36 +276,27 @@ def _summarize_run(rec: RunRecord, *, max_lines: int = 24, max_chars: int = 6000
     lines: list[str] = []
     status = str(br.get("status", ""))
     summary = str(br.get("summary", "") or "")
-    lines.append(f"run_id: {rec.run_id}")
     lines.append(f"created_at: {rec.created_at}")
-    lines.append(f"profile_id: {rec.profile_id}")
-    lines.append(f"bridge.status: {status}")
+    lines.append(f"status: {status}")
     if summary:
-        lines.append(f"bridge.summary: {summary[:2000]}")
+        lines.append(f"summary: {summary[:2000]}")
+    visible_commands = 0
     for c in cmds[:8]:
         if not isinstance(c, dict):
             continue
-        argv = c.get("argv")
         st = c.get("status", "")
-        lines.append(f"command: {argv} -> {st}")
-        out = c.get("stdout")
-        err = c.get("stderr")
-        if isinstance(out, str) and out.strip():
-            lines.append("stdout:")
-            lines.extend(out.strip().splitlines()[:max_lines])
-        if isinstance(err, str) and err.strip():
-            lines.append("stderr:")
-            lines.extend(err.strip().splitlines()[:max_lines])
+        visible_commands += 1
+        lines.append(f"step {visible_commands}: {st}")
     hr = rec.hermes_review if isinstance(rec.hermes_review, dict) else {}
     if hr:
         ok = hr.get("ok")
         notes = hr.get("notes")
-        lines.append(f"hermes_review.ok: {ok}")
+        lines.append(f"review.ok: {ok}")
         if isinstance(notes, list) and notes:
-            lines.append("hermes_review.notes: " + "; ".join(str(n) for n in notes[:12]))
+            lines.append("review.notes: " + "; ".join(str(n) for n in notes[:12]))
     text = "\n".join(lines)
     if len(text) > max_chars:
-        text = text[:max_chars] + "\n… [truncated; full record in .ham/runs/]"
+        text = text[:max_chars] + "\n… [truncated; full record available in run history.]"
     return {
         "run_id": rec.run_id,
         "status": status,
@@ -1179,7 +1170,8 @@ def _execute_explicit_phase(
         tok_note = ""
         if not _cursor_agent_launch_token():
             tok_note = (
-                "\n\n_Note: `HAM_CURSOR_AGENT_LAUNCH_TOKEN` is not set — launches will be rejected until it is configured._"
+                "\n\n_Note: launch approval is not configured on this server — "
+                "launches will be rejected until an administrator enables it._"
             )
         mh = op.cursor_mission_handling or "direct"
         pending = {
@@ -2257,6 +2249,41 @@ def _dispatch_intent(
     return OperatorTurnResult(handled=False, ok=True, data={})
 
 
+_BLOCKING_REASON_FRIENDLY_SUBSTITUTIONS = (
+    ("HAM_RUN_LAUNCH_TOKEN", "Launch approval is not configured on this server"),
+    ("HAM_DROID_EXEC_TOKEN", "Launch approval is not configured on this server"),
+    ("HAM_CURSOR_AGENT_LAUNCH_TOKEN", "Launch approval is not configured on this server"),
+    ("HAM_SETTINGS_WRITE_TOKEN", "Settings approval is not configured on this server"),
+    ("HAM_SKILLS_WRITE_TOKEN", "Skills approval is not configured on this server"),
+    ("HAM_CLAUDE_AGENT_SMOKE_TOKEN", "Approval is not configured on this server"),
+    ("HERMES_GATEWAY_API_KEY", "Chat gateway is not configured"),
+    ("HERMES_GATEWAY_BASE_URL", "Chat gateway endpoint is not configured"),
+    ("HERMES_GATEWAY_MODEL", "Chat model is not configured"),
+    ("HERMES_GATEWAY_MODE", "Chat gateway mode is not configured"),
+    ("OPENROUTER_API_KEY", "OpenRouter is not configured"),
+    ("proposal_digest", "preview token"),
+    ("base_revision", "preview baseline"),
+    ("operator.phase", "approval step"),
+    (".ham/runs", "run history"),
+    ("ControlPlaneRun", "run history"),
+    ("Cloud Agent", "Cursor mission"),
+    ("cursor_cloud_agent", "Cursor mission"),
+)
+
+
+def _friendly_blocking_reason(reason: str) -> str:
+    """Rewrite operator blocking reasons into product-friendly visible copy.
+
+    Structured metadata (`OperatorTurnResult.blocking_reason`, `pending_*`,
+    `data.reason_code`) keeps the raw value for diagnostics; only the visible
+    assistant transcript is rewritten here.
+    """
+    out = str(reason or "")
+    for raw, friendly in _BLOCKING_REASON_FRIENDLY_SUBSTITUTIONS:
+        out = out.replace(raw, friendly)
+    return out
+
+
 def format_operator_assistant_message(op: OperatorTurnResult) -> str:
     """Ham voice: operational summary for the transcript."""
     if not op.handled:
@@ -2265,7 +2292,7 @@ def format_operator_assistant_message(op: OperatorTurnResult) -> str:
     if op.blocking_reason:
         return (
             f"**Operator — {intent}**\n\n"
-            f"Blocked: {op.blocking_reason}\n\n"
+            f"Blocked: {_friendly_blocking_reason(op.blocking_reason)}\n\n"
             f"_No changes were made._"
         )
     if op.pending_apply:
@@ -2276,53 +2303,43 @@ def format_operator_assistant_message(op: OperatorTurnResult) -> str:
         return (
             f"**Operator — preview ready ({intent})**\n\n"
             f"Project `{d.get('project_id')}` — **{diff_n}** diff row(s).{warn_txt}\n\n"
-            f"Confirm with the **Apply pending change** control (settings token), or send a structured operator apply from the client.\n\n"
-            f"_Digest: `{d.get('proposal_digest', '')[:16]}…`_"
+            f"Review and approve the pending change in the card below."
         )
     if op.pending_launch:
         d = op.pending_launch
         return (
             f"**Operator — launch pending ({intent})**\n\n"
-            f"Project `{d.get('project_id')}` — ready to run bridge + review + persist under `.ham/runs/`.\n\n"
-            f"Confirm with **Confirm launch** (requires `HAM_RUN_LAUNCH_TOKEN` on the API host)."
+            f"Project `{d.get('project_id')}` — ready to run. "
+            f"Run details will be saved to run history once approved.\n\n"
+            f"Review and approve the launch in the card below."
         )
     if op.pending_register:
         d = op.pending_register
         return (
             f"**Operator — register pending ({intent})**\n\n"
             f"**{d.get('name')}** → `{d.get('root')}`\n\n"
-            f"Confirm with **Confirm register** (requires `HAM_SETTINGS_WRITE_TOKEN` on the API host)."
+            f"Review and approve the registration in the card below."
         )
     if op.pending_droid:
         d = op.pending_droid or {}
-        mut = d.get("mutates")
-        tok = (
-            "\n\n**Mutating workflow** — launch requires `confirmed=true` plus "
-            "`Authorization: Bearer` matching `HAM_DROID_EXEC_TOKEN` on the API host."
-            if mut
-            else "\n\n**Read-only workflow** — launch requires `confirmed=true` (no droid exec token)."
-        )
-        prev = d.get("summary_preview") or ""
+        prev = _friendly_blocking_reason(d.get("summary_preview") or "")
         body = (
-            f"**Operator — droid preview ready**\n\n"
-            f"Project `{d.get('project_id')}` — workflow `{d.get('workflow_id')}`.\n\n"
-            f"{prev}{tok}\n\n"
-            "Send `operator.phase=droid_launch` with the same `droid_user_prompt`, "
-            "`droid_proposal_digest`, and `droid_base_revision` from `operator_result.pending_droid`."
+            f"**Operator — preview ready**\n\n"
+            f"Project `{d.get('project_id')}`.\n\n"
+            f"{prev}\n\n"
+            "Review and approve the launch in the card below."
         )
         if op.harness_advisory:
             body += format_harness_advisory_for_operator_message(op.harness_advisory)
         return body
     if op.pending_cursor_agent:
         d = op.pending_cursor_agent or {}
-        prev = d.get("summary_preview") or ""
+        prev = _friendly_blocking_reason(d.get("summary_preview") or "")
         body = (
-            f"**Operator — Cursor Cloud Agent preview**\n\n"
+            f"**Operator — Cursor mission preview**\n\n"
             f"Project `{d.get('project_id')}` → `{d.get('repository')}`\n\n"
             f"{prev}\n\n"
-            "Launch with `operator.phase=cursor_agent_launch`, `confirmed=true`, matching "
-            "`cursor_proposal_digest` / `cursor_base_revision`, and "
-            "`Authorization: Bearer` = `HAM_CURSOR_AGENT_LAUNCH_TOKEN`."
+            "Review and approve the Cursor mission launch in the card below."
         )
         if op.harness_advisory:
             body += format_harness_advisory_for_operator_message(op.harness_advisory)
@@ -2375,7 +2392,10 @@ def format_operator_assistant_message(op: OperatorTurnResult) -> str:
         scope = op.data.get("scope")
         if not runs:
             return f"**Operator — list_runs** ({scope})\n\nNo runs found."
-        lines = [f"- `{r.get('run_id')}` — {r.get('created_at')} — profile `{r.get('profile_id')}`" for r in runs[:25]]
+        lines = [
+            f"- {r.get('created_at')} — status `{(r.get('bridge_status') or r.get('status') or '—')}`"
+            for r in runs[:25]
+        ]
         return f"**Operator — runs** ({scope})\n\n" + "\n".join(lines)
     if intent == "inspect_run":
         ex = op.data.get("log_excerpt") or ""
@@ -2395,37 +2415,21 @@ def format_operator_assistant_message(op: OperatorTurnResult) -> str:
     if intent == "launch_run":
         return (
             "**Operator — launch_run**\n\n"
-            f"Run **`{op.data.get('run_id')}`** completed (bridge status: `{op.data.get('bridge_status')}`). "
-            f"Persisted: `{op.data.get('persist_path')}`."
+            f"Run completed (status: `{op.data.get('bridge_status')}`). "
+            f"Details are available in run history."
         )
     if intent == "droid_launch":
         data = op.data or {}
-        extra = ""
-        if data.get("stderr") and not op.ok:
-            err = str(data.get("stderr") or "")[:2000]
-            extra = f"\n\n```text\n{err}\n```"
-        elif data.get("stdout") and not data.get("parsed_json"):
-            out = str(data.get("stdout") or "")[:2000]
-            extra = f"\n\n```text\n{out}\n```"
         return (
-            f"**Operator — droid_launch** ({'ok' if op.ok else 'failed'})\n\n"
-            f"- **workflow:** `{data.get('workflow_id')}`\n"
-            f"- **audit_id:** `{data.get('audit_id')}`\n"
-            f"- **runner:** `{data.get('runner_id')}`\n"
-            f"- **cwd:** `{data.get('cwd')}`\n"
-            f"- **exit_code:** `{data.get('exit_code')}`\n"
-            f"- **duration_ms:** `{data.get('duration_ms')}`\n"
-            f"- **session_id:** `{data.get('session_id')}`\n\n"
-            f"**Summary:** {data.get('summary') or '(none)'}"
-            f"{extra}"
+            f"**Operator — launch** ({'ok' if op.ok else 'failed'})\n\n"
+            f"**Summary:** {data.get('summary') or '(none)'}\n\n"
+            "Details are available in run history."
         )
     if intent == "cursor_agent_launch":
         data = op.data or {}
         return (
-            f"**Cloud Agent mission launched**\n\n"
+            f"**Cursor mission launched**\n\n"
             f"- **provider:** `Cursor`\n"
-            f"- **managed_mission_id:** `{data.get('mission_registry_id') or '(pending sync)'}`\n"
-            f"- **cursor_agent_id:** `{data.get('agent_id') or data.get('external_id')}`\n"
             f"- **repo/ref:** `{data.get('repository')}` @ `{data.get('ref') or '(default)'}`\n"
             f"- **status:** `{data.get('status')}`\n"
             f"- **checkpoint:** `{data.get('mission_checkpoint') or '(pending sync)'}`\n"
@@ -2441,10 +2445,8 @@ def format_operator_assistant_message(op: OperatorTurnResult) -> str:
             else ""
         )
         return (
-            f"**Cloud Agent mission status**\n\n"
+            f"**Cursor mission status**\n\n"
             f"- **provider:** `Cursor`\n"
-            f"- **managed_mission_id:** `{data.get('mission_registry_id')}`\n"
-            f"- **agent_id:** `{data.get('agent_id') or data.get('cursor_agent_id')}`\n"
             f"- **lifecycle/checkpoint:** `{data.get('mission_lifecycle')}` / `{data.get('mission_checkpoint')}`\n"
             f"- **status:** `{data.get('status')}`\n"
             f"- **repo/ref:** `{data.get('repository')}` @ `{data.get('ref')}`\n"
@@ -2465,22 +2467,18 @@ def format_operator_assistant_message(op: OperatorTurnResult) -> str:
         if not lines:
             lines = ["- No checkpoint events recorded yet."]
         return (
-            f"**Cloud Agent mission checkpoints**\n\n"
-            f"- **managed_mission_id:** `{data.get('mission_registry_id')}`\n"
-            f"- **agent_id:** `{data.get('agent_id') or data.get('cursor_agent_id')}`\n"
+            f"**Cursor mission checkpoints**\n\n"
             f"- **latest:** `{data.get('mission_checkpoint')}` ({data.get('last_server_observed_at')})\n\n"
             + "\n".join(lines)
         )
     if intent == "cursor_agent_cancel":
         data = op.data or {}
         return (
-            f"**Cloud Agent cancel**\n\n"
+            f"**Cursor mission cancel**\n\n"
             f"- **result:** `{data.get('reason_code')}`\n"
-            f"- **managed_mission_id:** `{data.get('mission_registry_id')}`\n"
-            f"- **agent_id:** `{data.get('agent_id') or data.get('cursor_agent_id')}`\n"
             f"- **message:** {data.get('cancel_message') or 'Cancel is not currently available.'}\n\n"
             "Mission status remains available via `status` and `show logs`."
         )
     if op.data.get("message"):
-        return f"**Operator — {intent}**\n\n{op.data['message']}"
+        return f"**Operator — {intent}**\n\n{_friendly_blocking_reason(str(op.data['message']))}"
     return f"**Operator — {intent}**\n\n{op.data!r}"

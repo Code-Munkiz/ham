@@ -1405,3 +1405,64 @@ def test_chat_stream_gateway_error_omits_internal_tokens(
         "operator.phase",
     ):
         assert tok not in raw, f"stream gateway-error leaked token: {tok!r}"
+
+
+def test_chat_stream_operator_handled_assistant_text_quarantines_internal_tokens(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-OPERATOR-008 — streamed operator-handled assistant text scrubs internal tokens.
+
+    Mirrors REST coverage in `test_chat_proxy.py`; metadata may keep raw fields,
+    but the emitted visible message/final must avoid env/protocol/raw IDs.
+    """
+    from src.ham.chat_operator import OperatorTurnResult
+
+    op_result = OperatorTurnResult(
+        handled=True,
+        intent="cursor_agent_launch",
+        ok=True,
+        data={
+            "provider": "cursor_cloud_agent",
+            "mission_registry_id": "mission-1",
+            "agent_id": "bc_test",
+            "external_id": "bc_test",
+            "repository": "Code-Munkiz/ham",
+            "ref": "main",
+            "status": "running",
+            "mission_checkpoint": "launched",
+            "reason_code": "mission_launched",
+        },
+    )
+    monkeypatch.setattr("src.api.chat.process_operator_turn", lambda **_kw: op_result)
+    res = client.post(
+        "/api/chat/stream",
+        json={
+            "messages": [{"role": "user", "content": "have Cursor launch the agent"}],
+            "enable_operator": True,
+        },
+    )
+    assert res.status_code == 200, res.text
+    events = _parse_ndjson(res.text)
+    done = [e for e in events if e.get("type") == "done"]
+    assert done, "stream missing done event"
+    final = done[-1]
+    assistant_text = final["messages"][-1]["content"]
+    for tok in (
+        "HERMES_GATEWAY",
+        "HAM_RUN_LAUNCH_TOKEN",
+        "HAM_DROID_EXEC_TOKEN",
+        "HAM_CURSOR_AGENT_LAUNCH_TOKEN",
+        "HAM_SETTINGS_WRITE_TOKEN",
+        "proposal_digest",
+        "base_revision",
+        ".ham/runs",
+        "operator.phase",
+        "cursor_cloud_agent",
+        "Cloud Agent",
+        "Cursor Cloud Agent",
+    ):
+        assert tok not in assistant_text, f"stream operator visible text leaked: {tok!r}"
+    assert "Cursor mission launched" in assistant_text
+    op_payload = final.get("operator_result") or {}
+    # Metadata still carries the raw provider id for routing/compatibility.
+    assert (op_payload.get("data") or {}).get("provider") == "cursor_cloud_agent"

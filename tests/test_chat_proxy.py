@@ -1340,3 +1340,88 @@ def test_non_conversational_lanes_ignore_conversational_env_operator_handled(
     assistant_text = body["messages"][-1]["content"]
     assert "HAM_CHAT_CONVERSATIONAL_MODEL" not in assistant_text
     assert _CONV_SENTINEL not in assistant_text
+
+
+def test_rest_model_selection_error_uses_friendly_copy(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-OPERATOR-006 — model_id in wrong gateway mode returns friendly error copy without env names."""
+    res = client.post(
+        "/api/chat",
+        json={
+            "messages": [{"role": "user", "content": "hi"}],
+            "model_id": "openrouter:default",
+        },
+    )
+    assert res.status_code == 422, res.text
+    body = res.json()
+    err = body.get("detail", {}).get("error", {}) or {}
+    assert err.get("code") == "MODEL_SELECTION_REQUIRES_OPENROUTER"
+    msg = err.get("message") or ""
+    assert msg
+    for tok in (
+        "HERMES_GATEWAY_MODE",
+        "HERMES_GATEWAY_BASE_URL",
+        "HERMES_GATEWAY_MODEL",
+        "HERMES_GATEWAY_API_KEY",
+        "OPENROUTER_API_KEY",
+    ):
+        assert tok not in msg, f"user-visible error leaked env name: {tok!r}"
+
+
+def test_rest_operator_handled_assistant_text_quarantines_internal_tokens(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-OPERATOR-007 — REST operator-handled assistant content avoids env/protocol/raw IDs.
+
+    The full payload may keep `operator_result` metadata with raw structured fields;
+    only the visible assistant message is sanitized.
+    """
+    from src.ham.chat_operator import OperatorTurnResult
+
+    op_result = OperatorTurnResult(
+        handled=True,
+        intent="cursor_agent_launch",
+        ok=True,
+        data={
+            "provider": "cursor_cloud_agent",
+            "mission_registry_id": "mission-1",
+            "agent_id": "bc_test",
+            "external_id": "bc_test",
+            "repository": "Code-Munkiz/ham",
+            "ref": "main",
+            "status": "running",
+            "mission_checkpoint": "launched",
+            "reason_code": "mission_launched",
+        },
+    )
+    monkeypatch.setattr("src.api.chat.process_operator_turn", lambda **_kw: op_result)
+    res = client.post(
+        "/api/chat",
+        json={
+            "messages": [{"role": "user", "content": "have Cursor launch the agent"}],
+            "enable_operator": True,
+        },
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    op_payload = body.get("operator_result") or {}
+    # Metadata still carries the raw provider id for routing/compatibility.
+    assert (op_payload.get("data") or {}).get("provider") == "cursor_cloud_agent"
+    assistant_text = body["messages"][-1]["content"]
+    for tok in (
+        "HERMES_GATEWAY",
+        "HAM_RUN_LAUNCH_TOKEN",
+        "HAM_DROID_EXEC_TOKEN",
+        "HAM_CURSOR_AGENT_LAUNCH_TOKEN",
+        "HAM_SETTINGS_WRITE_TOKEN",
+        "proposal_digest",
+        "base_revision",
+        ".ham/runs",
+        "operator.phase",
+        "cursor_cloud_agent",
+        "Cloud Agent",
+        "Cursor Cloud Agent",
+    ):
+        assert tok not in assistant_text, f"operator visible text leaked: {tok!r}"
+    assert "Cursor mission launched" in assistant_text

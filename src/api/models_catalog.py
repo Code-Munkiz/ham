@@ -117,29 +117,29 @@ def _gateway_mode() -> str:
 
 
 # OpenRouter-labeled composer rows are inactive in non-openrouter modes (precise copy per mode).
+# Visible copy avoids env var names; the catalog still reports `gateway_mode` for diagnostics.
 _HTTP_MODE_OPENROUTER_TIERS_DISABLED = (
-    "Inactive while HERMES_GATEWAY_MODE=http: dashboard chat uses the HTTP/SSE gateway "
-    "(HERMES_GATEWAY_BASE_URL; typically Hermes Agent API). The upstream model is configured "
-    "on the API host (e.g. HERMES_GATEWAY_MODEL), not these OpenRouter composer tiers."
+    "Inactive: dashboard chat is using the server-configured chat model. "
+    "These OpenRouter tiers apply when chat is set to OpenRouter mode."
 )
 _MOCK_MODE_OPENROUTER_TIERS_DISABLED = (
-    "Inactive while the gateway is mock: chat uses the built-in mock assistant. "
-    "These OpenRouter tiers apply when HERMES_GATEWAY_MODE=openrouter with a valid OPENROUTER_API_KEY."
+    "Inactive: chat is using the built-in test assistant. "
+    "These OpenRouter tiers apply when chat is set to OpenRouter mode and a connected key is available."
 )
 _FALLBACK_OPENROUTER_TIERS_DISABLED = (
-    "These OpenRouter composer tiers are active only when HERMES_GATEWAY_MODE=openrouter."
+    "These OpenRouter tiers are active only when chat is set to OpenRouter mode."
 )
 
 
 def _openrouter_path_disabled_reason() -> str | None:
-    """When ``HERMES_GATEWAY_MODE=openrouter``: None if key is usable; else a short reason."""
+    """When OpenRouter mode is selected: None if key is usable; else a short, friendly reason."""
     key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
     if not key:
-        return "OPENROUTER_API_KEY is not set."
+        return "OpenRouter is not connected on this server yet."
     if not openrouter_api_key_is_plausible(key):
         return (
-            "OPENROUTER_API_KEY is not a single raw token (often pasted shell text in Secret Manager). "
-            "Store only the key, one line, redeploy; see docs/DEPLOY_CLOUD_RUN.md § OpenRouter key."
+            "OpenRouter connection looks misconfigured. "
+            "Reconnect OpenRouter under Workspace → Connected Tools."
         )
     return None
 
@@ -600,7 +600,7 @@ def build_catalog_payload(ham_actor: HamActor | None = None) -> dict[str, Any]:
             "tag": "EFFICIENCY",
             "tier": "auto",
             "provider": "openrouter",
-            "description": "Efficiency-oriented default (DEFAULT_MODEL / gateway default).",
+            "description": "Efficiency-oriented default chat model.",
             "supports_chat": tier_chat,
             "disabled_reason": tier_reason,
             "openrouter_model": _normalize_openrouter_litellm_model(
@@ -613,7 +613,7 @@ def build_catalog_payload(ham_actor: HamActor | None = None) -> dict[str, Any]:
             "tag": "INTELLIGENCE",
             "tier": "premium",
             "provider": "openrouter",
-            "description": "Higher-capability default (HAM_CHAT_PREMIUM_MODEL or HERMES_GATEWAY_MODEL).",
+            "description": "Higher-capability default chat model.",
             "supports_chat": tier_chat,
             "disabled_reason": tier_reason,
             "openrouter_model": _catalog_openrouter_premium_model(gw),
