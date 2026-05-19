@@ -1889,7 +1889,7 @@ def _dispatch_intent(
             return _reasoned_block(
                 intent,
                 "missing_task_prompt",
-                "I need one task sentence to build a Cloud Agent preview.",
+                "I need one task sentence to build a Cursor mission preview.",
             )
         pid_raw = params.get("project_id")
         repo_hint = params.get("cursor_repository")
@@ -1963,7 +1963,7 @@ def _dispatch_intent(
                 return _reasoned_block(intent, "missing_repo_context", prev.blocking_reason or "Missing repository.")
             if "api key" in reason:
                 return _reasoned_block(intent, "missing_cursor_api_key", prev.blocking_reason or "Missing Cursor API key.")
-            return _reasoned_block(intent, "config_gap", prev.blocking_reason or "Cannot build Cloud Agent preview.")
+            return _reasoned_block(intent, "config_gap", prev.blocking_reason or "Cannot build Cursor mission preview.")
         pending = {
             "project_id": prec.id,
             "proposal_digest": prev.proposal_digest,
@@ -2004,7 +2004,7 @@ def _dispatch_intent(
             return _reasoned_block(
                 intent,
                 "missing_task_prompt",
-                "I need one task sentence before launching a Cloud Agent mission.",
+                "I need one task sentence before launching a Cursor mission.",
             )
         pid_raw = params.get("project_id")
         repo_hint = params.get("cursor_repository")
@@ -2069,7 +2069,7 @@ def _dispatch_intent(
                 return _reasoned_block(intent, "missing_repo_context", prev.blocking_reason or "Missing repository.")
             if "api key" in reason:
                 return _reasoned_block(intent, "missing_cursor_api_key", prev.blocking_reason or "Missing Cursor API key.")
-            return _reasoned_block(intent, "config_gap", prev.blocking_reason or "Cannot launch Cloud Agent.")
+            return _reasoned_block(intent, "config_gap", prev.blocking_reason or "Cannot launch Cursor mission.")
         api_key = get_effective_cursor_api_key()
         if not api_key:
             return _reasoned_block(

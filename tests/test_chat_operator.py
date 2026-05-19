@@ -742,3 +742,137 @@ def test_cancel_runtime_path_sanitizes_injected_cloud_agent_phrase() -> None:
     assert "Cursor mission" in visible
     assert legacy.data["cancel_message"].startswith("Cloud Agent")
     assert legacy.data["reason_code"] == "cancel_not_supported"
+
+
+def _assert_no_cloud_agent_in_visible_and_metadata(op) -> None:
+    visible = format_operator_assistant_message(op)
+    assert "Cloud Agent" not in visible
+    assert "Cursor Cloud Agent" not in visible
+    raw_reason = op.blocking_reason or ""
+    assert "Cloud Agent" not in raw_reason
+    assert "Cursor Cloud Agent" not in raw_reason
+    data = op.data or {}
+    for value in data.values():
+        if isinstance(value, str):
+            assert "Cloud Agent" not in value
+            assert "Cursor Cloud Agent" not in value
+
+
+def test_cursor_agent_preview_missing_task_prompt_is_cursor_branded(tmp_path: Path) -> None:
+    store = ProjectStore(store_path=tmp_path / "projects.json")
+    rec = store.make_record(name="ham", root=str(tmp_path), description="", metadata={})
+    store.register(rec)
+    op = process_operator_turn(
+        user_text="create a cloud agent preview",
+        project_store=store,
+        default_project_id=rec.id,
+        operator_payload=None,
+        ham_operator_authorization=None,
+    )
+    assert op is not None and op.handled and not op.ok
+    assert op.intent == "cursor_agent_preview"
+    assert (op.data or {}).get("reason_code") == "missing_task_prompt"
+    assert (op.blocking_reason or "").startswith("missing_task_prompt:")
+    assert "Cursor mission preview" in (op.blocking_reason or "")
+    _assert_no_cloud_agent_in_visible_and_metadata(op)
+
+
+def test_cursor_agent_launch_missing_task_prompt_is_cursor_branded(tmp_path: Path) -> None:
+    store = ProjectStore(store_path=tmp_path / "projects.json")
+    rec = store.make_record(name="ham", root=str(tmp_path), description="", metadata={})
+    store.register(rec)
+    op = process_operator_turn(
+        user_text="fire up a cloud agent",
+        project_store=store,
+        default_project_id=rec.id,
+        operator_payload=None,
+        ham_operator_authorization=None,
+    )
+    assert op is not None and op.handled and not op.ok
+    assert op.intent == "cursor_agent_launch"
+    assert (op.data or {}).get("reason_code") == "missing_task_prompt"
+    assert (op.blocking_reason or "").startswith("missing_task_prompt:")
+    assert "Cursor mission" in (op.blocking_reason or "")
+    _assert_no_cloud_agent_in_visible_and_metadata(op)
+
+
+def test_cursor_agent_preview_config_gap_fallback_is_cursor_branded(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CURSOR_API_KEY", "k")
+    store = ProjectStore(store_path=tmp_path / "projects.json")
+    rec = store.make_record(
+        name="ham",
+        root=str(tmp_path),
+        description="",
+        metadata={"cursor_cloud_repository": "https://github.com/Code-Munkiz/ham"},
+    )
+    store.register(rec)
+    with patch("src.ham.chat_operator.build_cursor_agent_preview") as mock_preview:
+        from src.ham.cursor_agent_workflow import CursorAgentPreviewResult
+
+        mock_preview.return_value = CursorAgentPreviewResult(
+            ok=False,
+            blocking_reason=None,
+            proposal_digest=None,
+            base_revision=None,
+            repository="Code-Munkiz/ham",
+            mutates=False,
+            summary_preview=None,
+            project_id=rec.id,
+        )
+        op = process_operator_turn(
+            user_text="create a cloud agent preview to update the sdk adapter",
+            project_store=store,
+            default_project_id=rec.id,
+            operator_payload=None,
+            ham_operator_authorization=None,
+        )
+    assert op is not None and op.handled and not op.ok
+    assert op.intent == "cursor_agent_preview"
+    assert (op.data or {}).get("reason_code") == "config_gap"
+    assert (op.blocking_reason or "").startswith("config_gap:")
+    assert "Cursor mission preview" in (op.blocking_reason or "")
+    _assert_no_cloud_agent_in_visible_and_metadata(op)
+
+
+def test_cursor_agent_launch_config_gap_fallback_is_cursor_branded(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CURSOR_API_KEY", "k")
+    store = ProjectStore(store_path=tmp_path / "projects.json")
+    rec = store.make_record(
+        name="ham",
+        root=str(tmp_path),
+        description="",
+        metadata={"cursor_cloud_repository": "https://github.com/Code-Munkiz/ham"},
+    )
+    store.register(rec)
+    with patch("src.ham.chat_operator.build_cursor_agent_preview") as mock_preview:
+        from src.ham.cursor_agent_workflow import CursorAgentPreviewResult
+
+        mock_preview.return_value = CursorAgentPreviewResult(
+            ok=False,
+            blocking_reason=None,
+            proposal_digest=None,
+            base_revision=None,
+            repository="Code-Munkiz/ham",
+            mutates=False,
+            summary_preview=None,
+            project_id=rec.id,
+        )
+        op = process_operator_turn(
+            user_text="fire up a cloud agent to update the sdk adapter",
+            project_store=store,
+            default_project_id=rec.id,
+            operator_payload=None,
+            ham_operator_authorization=None,
+        )
+    assert op is not None and op.handled and not op.ok
+    assert op.intent == "cursor_agent_launch"
+    assert (op.data or {}).get("reason_code") == "config_gap"
+    assert (op.blocking_reason or "").startswith("config_gap:")
+    assert "Cursor mission" in (op.blocking_reason or "")
+    _assert_no_cloud_agent_in_visible_and_metadata(op)
