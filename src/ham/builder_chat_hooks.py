@@ -419,6 +419,12 @@ def run_builder_happy_path_hook(
         return None, meta
     meta.update(summary)
     sid = str(summary.get("source_snapshot_id") or "").strip()
+    if summary.get("model_access_required"):
+        return (
+            f"{directive_prefix}I cannot build this without model access. "
+            "Please configure model access and try again.\n\n",
+            meta,
+        )
     if summary.get("artifact_verification_failed"):
         ver = summary.get("artifact_verification") or {}
         detail = str(ver.get("reason") or "").strip()

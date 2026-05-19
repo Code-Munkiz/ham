@@ -195,8 +195,8 @@ class TestLegacyRoutingInvariant:
                     f"{overlap!r}"
                 )
 
-    def test_legacy_deterministic_kinds_still_frozen(self):
-        assert legacy_deterministic_kinds() == frozenset({"calculator", "tetris"})
+    def test_legacy_deterministic_kinds_is_empty_after_retirement(self):
+        assert legacy_deterministic_kinds() == frozenset()
 
 
 # ---------------------------------------------------------------------------
@@ -256,12 +256,10 @@ class TestMigrationMarkers:
         assert "frozen" in text
         assert "parity" in text
 
-    def test_legacy_templates_retirement_gate(self):
-        from src.ham.builder_legacy_templates import LEGACY_RETIREMENT_GATE
+    def test_template_kinds_migration_policy_is_past_tense(self):
+        from src.ham.builder_template_kinds import MIGRATION_POLICY
 
-        assert isinstance(LEGACY_RETIREMENT_GATE, str)
-        assert LEGACY_RETIREMENT_GATE.strip()
-        assert "parity" in LEGACY_RETIREMENT_GATE.lower()
+        assert "retired" in MIGRATION_POLICY.lower()
 
 
 # ---------------------------------------------------------------------------

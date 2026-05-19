@@ -1,4 +1,20 @@
-"""Deterministic chat-triggered builder scaffold (no LLM codegen)."""
+"""Chat-triggered builder scaffold entry point.
+
+The deterministic calculator / Tetris generators in this module are
+**RETIRED at runtime**. The remaining utility helpers (zip
+materialization, snapshot reading, fingerprint) are kept temporarily and
+are still imported by other production modules; full removal will land
+in a follow-up.
+
+New runtime code must NOT call :func:`maybe_chat_scaffold_for_turn` from
+new call sites. The existing two production callers
+(``src/ham/builder_chat_hooks.py`` and ``src/api/builder_sources.py``)
+now route every prompt through the LLM scaffold replace path and emit a
+typed ``model_access_required`` signal when OpenRouter access is
+unavailable.
+
+Retirement commit: refactor(builder): retire legacy deterministic scaffolds
+"""
 
 from __future__ import annotations
 
@@ -26,6 +42,13 @@ _CHAT_SCAFFOLD_FINGERPRINT_VERSION = "v5"
 _MAX_TOTAL_TEXT = 200_000
 _MAX_FILE_BYTES = 60_000
 _MAX_FILES = 24
+
+
+# Sentinel returned by ``_maybe_llm_scaffold_replace`` when no model
+# credential is available. Lets ``maybe_chat_scaffold_for_turn``
+# distinguish "model unavailable" (typed signal) from "LLM call attempted
+# and failed" (honest verifier failure).
+_MODEL_UNAVAILABLE_MARKER: tuple = ("model_access_required", None)
 
 
 def _strip_dashboard_attachment_tail(user_plain: str) -> str:
@@ -1062,7 +1085,9 @@ def _build_react_scaffold_files(
 ) -> tuple[dict[str, str], dict[str, Any]]:
     title = _sanitize_title(user_plain)
     safe_pkg = re.sub(r"[^a-z0-9-]", "-", title.lower())[:40].strip("-") or "ham-builder-app"
-    use_tetris_template = _is_tetris_prompt(user_plain) or str(previous_template or "").strip().lower() == "tetris"
+    # Legacy deterministic templates retired at runtime — always fall through
+    # to the LLM scaffold replace path. See module docstring.
+    use_tetris_template = False
     if use_tetris_template:
         style_profile = _derive_tetris_style_profile(
             user_plain,
@@ -1078,7 +1103,9 @@ def _build_react_scaffold_files(
                 "reference_requested": bool(style_profile.get("reference_requested")),
             },
         )
-    use_calculator_template = _is_calculator_prompt(user_plain) or str(previous_template or "").strip().lower() == "calculator"
+    # Legacy deterministic templates retired at runtime — always fall through
+    # to the LLM scaffold replace path. See module docstring.
+    use_calculator_template = False
     if use_calculator_template:
         pcm = dict(previous_calculator_meta or {})
         lowered = _strip_dashboard_attachment_tail(user_plain).lower()
@@ -1626,7 +1653,7 @@ def _maybe_llm_scaffold_replace(
     from src.llm_client import normalized_openrouter_api_key  # noqa: PLC0415
 
     if not normalized_openrouter_api_key():
-        return None
+        return _MODEL_UNAVAILABLE_MARKER
 
     try:
         synthetic_plan = Plan(
@@ -1777,12 +1804,12 @@ def maybe_chat_scaffold_for_turn(
         previous_calculator_meta=previous_calculator_meta,
     )
 
-    # When the deterministic scaffold path falls through to the generic
-    # placeholder (no calculator / tetris match), try the LLM-scaffold path
-    # before honestly failing. ADR-0011 routes non-deterministic kinds here;
-    # we synthesise a minimal Plan so generate_scaffold() can reuse the same
-    # contract the Worker pod path uses for the "mutate" branch.
-    if bool(scaffold_meta.get("placeholder_fallback")) and operation == "build_or_create":
+    # Legacy deterministic templates are retired at runtime; every prompt
+    # is routed through the LLM scaffold replace path (both build_or_create
+    # and update_existing_project). When OpenRouter access is unavailable,
+    # return a typed model_access_required signal instead of silently
+    # producing legacy deterministic content.
+    if bool(scaffold_meta.get("placeholder_fallback")):
         replaced = _maybe_llm_scaffold_replace(
             user_message=last_user_plain,
             workspace_id=ws,
@@ -1790,6 +1817,13 @@ def maybe_chat_scaffold_for_turn(
             files=files,
             scaffold_meta=scaffold_meta,
         )
+        if replaced is _MODEL_UNAVAILABLE_MARKER:
+            return {
+                "builder_intent": "build_or_create",
+                "builder_operation": operation,
+                "scaffolded": False,
+                "model_access_required": True,
+            }
         if replaced is not None:
             files, scaffold_meta = replaced
 

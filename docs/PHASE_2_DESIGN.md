@@ -248,22 +248,21 @@ Phase 0 Contract 4 and ADR-0002 define `GET /api/jobs/<job_id>/stream`, but the 
 
 #### Decisions
 
-- **Strategy:** staged by template kind (per ADR-0011). Phase 2 ships the LLM-scaffold path alongside the existing deterministic path; routing per template kind decides which path executes.
-- **Routing:**
-  - Template kind in `{"calculator", "tetris"}` → existing `src/ham/builder_chat_scaffold.py` path (unchanged)
-  - All other kinds (new in Phase 2: `todo`, `dashboard`, `landing-page`, ...) → new `src/ham/builder_llm_scaffold.py` path
+- **Strategy:** the legacy deterministic scaffold runtime path was **retired** in `refactor(builder): retire legacy deterministic scaffolds`. Every template kind — including `calculator` and `tetris` — now routes through the LLM scaffold with its matching Builder Kit. ADR-0011 is superseded by this retirement commit.
+- **Routing:** every template kind (calculator, tetris, todo, dashboard, landing-page, anything new) → `src/ham/builder_llm_scaffold.py`. `select_scaffold_path` always returns `"llm"`.
 - **`builder_llm_scaffold` contract:**
   - Public API: `generate_scaffold(plan: Plan, project_id: str, workspace_id: str) -> ScaffoldResult`
   - Internally: one LLM call (via `complete_chat_messages_openrouter`, BYO key) with the Plan + Step list as input; produces a set of file changes (path → content); applies via the existing `BuilderSourceStore` pattern
   - Output gated by `builder_verifier` (Phase 1 #19) at end-of-Plan: scaffold failures surface as `step.step_verification_failed`
-- **No deterministic-path deprecation in Phase 2:** the existing `~1400 LoC` of templates stay untouched. Tier 2 follow-up work A/B tests LLM vs legacy-deterministic on calculator/tetris and deprecates incrementally.
-- **Template registry:** introduce `src/ham/builder_template_kinds.py` (or extend an existing module) that lists the known kinds plus their routing target (`legacy_deterministic` vs `llm`). The `legacy_deterministic` set is frozen at `{calculator, tetris}` — new kinds default to `llm` and route to `builder_llm_scaffold.py`. The explicit legacy facade lives in `src/ham/builder_legacy_templates.py`.
+- **Honest failure on missing model access:** when no OpenRouter key is available, `maybe_chat_scaffold_for_turn` returns a typed `model_access_required` signal and the chat/file-edit surfaces emit a product-friendly "configure model access and try again" message. The runtime never silently falls back to legacy deterministic content.
+- **`builder_chat_scaffold.py` disposition:** the deterministic calculator / Tetris generators are no longer reachable at runtime (the `_bounded_files` seam forces `use_calculator_template = False` / `use_tetris_template = False`). The module retains zip/utility helpers (`materialize_inline_files_as_zip_artifact`, `read_inline_snapshot_file`, `read_zip_snapshot_file_bytes`, `load_zip_bytes_for_snapshot`, `_fingerprint`) that other production modules still import; full removal of the dead deterministic helpers is a follow-up.
+- **Template registry:** `src/ham/builder_template_kinds.py` exposes an **empty** `_REGISTRY` and `legacy_deterministic_kinds() == frozenset()`. The `LEGACY_DETERMINISTIC` constant is kept as a historical marker; new kinds default to `"llm"`.
 
 #### Component contract
 
 - Module: `src/ham/builder_llm_scaffold.py`.
-- Routing helper: `select_scaffold_path(template_kind: str) -> Literal["legacy_deterministic", "llm"]`. Input is normalized (`strip().lower()`); unknown kinds always return `"llm"`.
-- Worker integration: in Subsystem 3's Step execution loop, when a Step's intent is "scaffold a new project from template kind X", the Worker calls `select_scaffold_path(X)` and dispatches to the right path.
+- Routing helper: `select_scaffold_path(template_kind: str) -> Literal["legacy_deterministic", "llm"]`. Input is normalized (`strip().lower()`); always returns `"llm"` post-retirement.
+- Worker integration: in Subsystem 3's Step execution loop, when a Step's intent is "scaffold a new project from template kind X", the Worker calls `select_scaffold_path(X)` (always `"llm"`) and dispatches to the LLM scaffold path.
 
 ---
 
@@ -286,7 +285,7 @@ Each PR is independently reviewable; subsequent PRs depend on prior ones merging
 
 - **Tier 2 items entirely:** snapshot + rewind, real publish target, BYO key UI consolidation, project export, lint/typecheck verifier gate, GitHub OAuth, content-addressed snapshot diff, user-writable skills.
 - **Tier 3 items entirely.**
-- **A/B testing or deprecation of `builder_chat_scaffold.py`:** Phase 2 keeps it; Tier 2 evaluates and deprecates incrementally.
+- **A/B testing of the retired deterministic path:** the legacy deterministic runtime was retired in `refactor(builder): retire legacy deterministic scaffolds`; no A/B remains. Full removal of the dead generator helpers in `builder_chat_scaffold.py` is a follow-up.
 - **Per-Step verification:** verifier runs once at end of Plan; per-Step is a future possibility, NOT shipped now.
 - **Per-Step git commits / per-Step rewind:** matches Tier 2 #11 (deferred).
 - **Top-bar cancel button or `/cancel` slash command:** per-card cancel only.

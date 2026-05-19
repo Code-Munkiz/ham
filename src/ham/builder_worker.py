@@ -242,33 +242,26 @@ class BuilderWorker:
         in subsequent PRs when the Planner is wired into chat and Step kinds are
         defined.
 
-        PR 7 (ADR-0011): Scaffold routing added.  When ``plan.metadata`` carries
-        a ``template_kind`` and this is the initial scaffold step (``step_index
-        == 0``), the Worker routes to either the legacy deterministic scaffold
-        path (calculator / tetris stay on ``builder_chat_scaffold``) or the
-        canonical LLM scaffold path (``builder_llm_scaffold``). New template
-        kinds always route to the LLM path; the legacy set is frozen — see
-        ``src/ham/builder_template_kinds.legacy_deterministic_kinds``.
+        Scaffold routing: when ``plan.metadata`` carries a ``template_kind``
+        and this is the initial scaffold step (``step_index == 0``), the
+        Worker routes to the canonical LLM scaffold path
+        (``builder_llm_scaffold``). The legacy deterministic runtime path
+        was retired — ``select_scaffold_path`` always returns ``"llm"``.
 
         The cancel_check callable may be polled by long-running executors to
         honour ADR-0004's 5-second acknowledgement target.
         """
         _LOG.info("Executing step[%d] %s: %s", step_index, step.step_id, step.title)
 
-        # Scaffold routing (Phase 2 PR 7 — ADR-0011 staged migration).
-        # template_kind lives in plan.metadata, set by the Planner (Phase 2 PR 2).
-        # Route the initial scaffold step to the correct path when present.
+        # Scaffold routing. template_kind lives in plan.metadata, set by the
+        # Planner (Phase 2 PR 2). The legacy deterministic runtime path was
+        # retired; select_scaffold_path always returns "llm".
         if step_index == 0 and self._plan is not None:
             template_kind = (self._plan.metadata or {}).get("template_kind", "")
             if template_kind:
                 from src.ham.builder_template_kinds import select_scaffold_path  # local import
-                path = select_scaffold_path(template_kind)
-                if path == "llm":
+                if select_scaffold_path(template_kind) == "llm":
                     return self._execute_llm_scaffold_step(step)
-                # "legacy_deterministic" path (calculator / tetris): builder_chat_scaffold
-                # full wiring lands in a later PR; fall through to the PR1 stub for now.
-                # New template kinds must NOT be added to the legacy registry — they
-                # default to the LLM scaffold path above.
 
         # PR1 stub: log the step title and return success.
         # Real CLI executor dispatch (droid_executor / Hermes adapter) lands in

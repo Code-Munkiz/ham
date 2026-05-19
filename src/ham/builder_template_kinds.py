@@ -1,27 +1,17 @@
-"""Template kind registry — Phase 2 Subsystem 9 (ADR-0011).
+"""Template kind registry — Phase 2 Subsystem 9.
 
-Routes each template kind to either the **legacy deterministic** scaffold
-path (existing ``builder_chat_scaffold.py``) or the new LLM-scaffold path
-(``builder_llm_scaffold.py``).
+The legacy ``legacy_deterministic`` scaffold runtime path was **retired**.
+Every template kind — including ``calculator`` and ``tetris`` — now routes
+to the LLM scaffold path (``src/ham/builder_llm_scaffold.py``) with the
+matching Builder Kit context.
 
-Strangler-pattern intent:
-
-- ``legacy_deterministic`` is **temporary compatibility only**. The set is
-  frozen at ``{calculator, tetris}`` (see :data:`_LEGACY_DETERMINISTIC_KINDS`
-  and the lock test in ``tests/test_builder_template_kinds.py``). New
-  template kinds **must not** be added here — they default to ``"llm"``
-  and route to ``src/ham/builder_llm_scaffold.py``.
-- The detection helpers backing the legacy path live in
-  ``src/ham/builder_legacy_templates.py`` (a thin facade over the
-  pre-existing detection in ``builder_chat_scaffold``); future contributors
-  signalling "this is legacy" should import from that module.
-- Once the verifier (Phase 1 #19) demonstrates parity for the LLM path on
-  ``calculator`` / ``tetris``, the corresponding entry can be removed from
-  :data:`_REGISTRY` (one kind at a time) and the registry will route to
-  ``"llm"`` for everything.
+The :data:`LEGACY_DETERMINISTIC` and :data:`LLM` constants remain as
+historical markers so old callers that imported them keep importing
+cleanly. They are no longer active routing values; :func:`select_scaffold_path`
+always returns ``"llm"``.
 
 Spec: docs/PHASE_2_DESIGN.md § Subsystem 9
-ADR: docs/adr/0011-llm-scaffold-staged-by-template-kind.md
+Retirement commit: refactor(builder): retire legacy deterministic scaffolds
 """
 
 from __future__ import annotations
@@ -38,22 +28,15 @@ LLM: ScaffoldPath = "llm"
 # Registry: template kind → scaffold path
 # ---------------------------------------------------------------------------
 
-# Legacy-deterministic entries: existing ~1400 LoC templates in
-# builder_chat_scaffold.py (calculator, tetris). DO NOT add new kinds here —
-# they are legacy compatibility shims only. All other kinds (todo, dashboard,
-# landing-page, anything new) default to "llm" via select_scaffold_path().
-_REGISTRY: dict[str, ScaffoldPath] = {
-    "calculator": LEGACY_DETERMINISTIC,
-    "tetris": LEGACY_DETERMINISTIC,
-}
+# Empty: the legacy_deterministic runtime path was retired. Every kind
+# (calculator, tetris, todo, dashboard, anything new) now routes through
+# the LLM scaffold path with its matching Builder Kit.
+_REGISTRY: dict[str, ScaffoldPath] = {}
 
 
-# Canonical, frozen set of legacy kinds. Tests assert this set is exactly
-# {calculator, tetris}; any future-proofing of legacy must add an explicit
-# row here AND update the lock test deliberately.
-_LEGACY_DETERMINISTIC_KINDS: frozenset[str] = frozenset(
-    {kind for kind, path in _REGISTRY.items() if path == LEGACY_DETERMINISTIC}
-)
+# Empty frozenset: no kind routes to the legacy deterministic path at
+# runtime. The constant is retained so older imports keep resolving.
+_LEGACY_DETERMINISTIC_KINDS: frozenset[str] = frozenset()
 
 
 # ---------------------------------------------------------------------------
@@ -62,13 +45,7 @@ _LEGACY_DETERMINISTIC_KINDS: frozenset[str] = frozenset(
 
 
 def _normalize_template_kind(template_kind: str) -> str:
-    """Lower-case + strip the template kind. Empty / non-str → ``""``.
-
-    Both the Planner and the chat-side scaffold derive kind strings from
-    user prompts, so accepting case / whitespace variants ("Calculator",
-    "  tetris  ") and routing them to the legacy path until the LLM path
-    achieves parity is the safer migration default.
-    """
+    """Lower-case + strip the template kind. Empty / non-str → ``""``."""
     if not isinstance(template_kind, str):
         return ""
     return template_kind.strip().lower()
@@ -77,37 +54,28 @@ def _normalize_template_kind(template_kind: str) -> str:
 def select_scaffold_path(template_kind: str) -> ScaffoldPath:
     """Return the scaffold path for a given template kind.
 
-    Args:
-        template_kind: The kind string set by the Planner (e.g. ``"calculator"``,
-            ``"todo"``, ``"dashboard"``). Normalized via
-            :func:`_normalize_template_kind` (strip + lower) before lookup.
-
-    Returns:
-        ``"legacy_deterministic"`` — route to ``builder_chat_scaffold.py``
-            (existing calculator / tetris templates, unchanged per ADR-0011).
-            Legacy compatibility only; the set is frozen.
-        ``"llm"`` — route to ``builder_llm_scaffold.py`` (new kinds or any
-            kind not explicitly listed in the registry). This is the
-            **default** for anything not in the legacy set.
+    Always returns ``"llm"`` — the legacy deterministic runtime path was
+    retired. Calculator and Tetris now route through the LLM scaffold
+    with their Builder Kits.
     """
     key = _normalize_template_kind(template_kind)
     return _REGISTRY.get(key, LLM)
 
 
 def is_legacy_deterministic_kind(template_kind: str) -> bool:
-    """True iff ``template_kind`` resolves to the legacy deterministic path."""
+    """Deprecated: legacy deterministic routing was retired; always ``False``."""
     return select_scaffold_path(template_kind) == LEGACY_DETERMINISTIC
 
 
 def legacy_deterministic_kinds() -> frozenset[str]:
-    """Return the frozen set of kinds currently routed to the legacy path."""
+    """Deprecated: legacy deterministic routing was retired; returns an empty set."""
     return _LEGACY_DETERMINISTIC_KINDS
 
 
 MIGRATION_POLICY: str = (
-    "The legacy_deterministic scaffold path is a temporary compatibility shim.\n"
-    "The legacy set is frozen at {calculator, tetris}; no new legacy entries\n"
-    "are permitted. Retirement of a legacy kind requires verifier-graded LLM\n"
-    "parity against the matching Builder Kit's validation_checklist and an\n"
-    "explicit ADR-0011 update before the entry can be removed from _REGISTRY."
+    "The legacy_deterministic scaffold runtime path was retired. The registry\n"
+    "is empty (frozen at the empty set); calculator and tetris now route to\n"
+    "the LLM scaffold path with their matching Builder Kits. The LEGACY_DETERMINISTIC\n"
+    "constant is kept as a historical marker only; new kinds default to the\n"
+    "LLM scaffold path, matching the verifier-graded parity contract.\n"
 )

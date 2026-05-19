@@ -1,14 +1,9 @@
 """Tests for src/ham/builder_template_kinds.py — Phase 2 Subsystem 9.
 
-Locks the strangler-pattern contract:
-
-- ``calculator`` / ``tetris`` route to ``legacy_deterministic`` (temporary
-  compatibility only).
-- Everything else — including unknown kinds, whitespace variants, and
-  future kinds — routes to ``llm``.
-- The legacy set is **frozen** at exactly ``{calculator, tetris}``. Any
-  attempt to add a new legacy kind must update the lock test
-  deliberately (which acts as a review checkpoint).
+The legacy_deterministic runtime path was retired. Every kind — including
+``calculator`` and ``tetris`` — now routes to the LLM scaffold path. The
+registry is empty and ``legacy_deterministic_kinds()`` returns the empty
+set. Normalization (strip + lower) still works.
 """
 
 from __future__ import annotations
@@ -27,36 +22,17 @@ from src.ham.builder_template_kinds import (
 
 
 # ---------------------------------------------------------------------------
-# select_scaffold_path — legacy deterministic kinds
+# select_scaffold_path — every kind routes to LLM
 # ---------------------------------------------------------------------------
 
 
-class TestLegacyDeterministicKinds:
-    def test_calculator_returns_legacy_deterministic(self):
-        assert select_scaffold_path("calculator") == "legacy_deterministic"
+class TestAllKindsRouteToLLM:
+    def test_calculator_returns_llm(self):
+        assert select_scaffold_path("calculator") == "llm"
 
-    def test_tetris_returns_legacy_deterministic(self):
-        assert select_scaffold_path("tetris") == "legacy_deterministic"
+    def test_tetris_returns_llm(self):
+        assert select_scaffold_path("tetris") == "llm"
 
-    def test_registry_contains_calculator(self):
-        assert "calculator" in _REGISTRY
-        assert _REGISTRY["calculator"] == "legacy_deterministic"
-
-    def test_registry_contains_tetris(self):
-        assert "tetris" in _REGISTRY
-        assert _REGISTRY["tetris"] == "legacy_deterministic"
-
-    def test_legacy_constant_matches_literal(self):
-        assert LEGACY_DETERMINISTIC == "legacy_deterministic"
-        assert LLM == "llm"
-
-
-# ---------------------------------------------------------------------------
-# select_scaffold_path — LLM kinds (default)
-# ---------------------------------------------------------------------------
-
-
-class TestLLMKinds:
     def test_unknown_kind_returns_llm(self):
         assert select_scaffold_path("unknown_kind") == "llm"
 
@@ -76,14 +52,15 @@ class TestLLMKinds:
         assert select_scaffold_path("  ") == "llm"
 
     def test_novel_kind_returns_llm(self):
-        # Any future kind not yet in the registry defaults to llm.
         assert select_scaffold_path("ai-chat-assistant") == "llm"
 
-    def test_legacy_lookalike_does_not_match(self):
-        # "deterministic" must never be a magic legacy key; the legacy set
-        # is exactly {calculator, tetris}.
+    def test_legacy_lookalike_routes_to_llm(self):
         assert select_scaffold_path("deterministic") == "llm"
         assert select_scaffold_path("legacy_deterministic") == "llm"
+
+    def test_legacy_constants_match_literals(self):
+        assert LEGACY_DETERMINISTIC == "legacy_deterministic"
+        assert LLM == "llm"
 
 
 # ---------------------------------------------------------------------------
@@ -102,8 +79,8 @@ class TestNormalization:
             "calculator",
         ],
     )
-    def test_calculator_normalizes_to_legacy(self, raw: str):
-        assert select_scaffold_path(raw) == "legacy_deterministic"
+    def test_calculator_variants_normalize_to_llm(self, raw: str):
+        assert select_scaffold_path(raw) == "llm"
 
     @pytest.mark.parametrize(
         "raw",
@@ -114,8 +91,8 @@ class TestNormalization:
             "tetris\t",
         ],
     )
-    def test_tetris_normalizes_to_legacy(self, raw: str):
-        assert select_scaffold_path(raw) == "legacy_deterministic"
+    def test_tetris_variants_normalize_to_llm(self, raw: str):
+        assert select_scaffold_path(raw) == "llm"
 
     def test_non_string_input_returns_llm(self):
         assert select_scaffold_path(None) == "llm"  # type: ignore[arg-type]
@@ -123,59 +100,43 @@ class TestNormalization:
 
 
 # ---------------------------------------------------------------------------
-# is_legacy_deterministic_kind helper
+# is_legacy_deterministic_kind helper — always False after retirement
 # ---------------------------------------------------------------------------
 
 
 class TestIsLegacyHelper:
-    def test_helper_true_for_legacy_kinds(self):
-        assert is_legacy_deterministic_kind("calculator") is True
-        assert is_legacy_deterministic_kind("tetris") is True
-        # Normalization still applies.
-        assert is_legacy_deterministic_kind("  Tetris  ") is True
+    def test_helper_false_for_calculator(self):
+        assert is_legacy_deterministic_kind("calculator") is False
 
-    def test_helper_false_for_llm_kinds(self):
+    def test_helper_false_for_tetris(self):
+        assert is_legacy_deterministic_kind("tetris") is False
+
+    def test_helper_false_for_other_kinds(self):
         assert is_legacy_deterministic_kind("todo") is False
         assert is_legacy_deterministic_kind("") is False
         assert is_legacy_deterministic_kind("unknown") is False
 
 
 # ---------------------------------------------------------------------------
-# Frozen legacy set — lock test (REVIEW CHECKPOINT)
+# Empty registry — retirement lock
 # ---------------------------------------------------------------------------
 
 
-class TestLegacySetLock:
-    """If this test fails, you are trying to add a new legacy template kind.
+class TestRegistryEmpty:
+    def test_registry_is_empty(self):
+        assert _REGISTRY == {}
 
-    Per ADR-0011 the legacy set is **frozen** at ``{calculator, tetris}`` —
-    new template kinds must route through the LLM scaffold path. If you
-    truly need to extend the legacy set, update both the assertion and the
-    accompanying ADR explaining why the LLM path cannot serve the new kind.
-    """
+    def test_legacy_deterministic_kinds_is_empty(self):
+        assert _LEGACY_DETERMINISTIC_KINDS == frozenset()
 
-    def test_legacy_kinds_set_is_exactly_calculator_and_tetris(self):
-        assert _LEGACY_DETERMINISTIC_KINDS == frozenset({"calculator", "tetris"})
-
-    def test_legacy_deterministic_kinds_public_helper_returns_same_frozen_set(self):
+    def test_legacy_deterministic_kinds_helper_returns_empty(self):
         out = legacy_deterministic_kinds()
-        assert out == frozenset({"calculator", "tetris"})
+        assert out == frozenset()
         assert isinstance(out, frozenset)
 
-    def test_no_unexpected_registry_entries(self):
-        # The registry currently equals the legacy set; if a new kind is
-        # added to _REGISTRY (with any value), this assertion will fail.
-        assert set(_REGISTRY.keys()) == {"calculator", "tetris"}
-
-    def test_every_registry_value_is_a_known_path(self):
-        for kind, path in _REGISTRY.items():
-            assert path in {"legacy_deterministic", "llm"}, (
-                f"unexpected scaffold-path value for {kind!r}: {path!r}"
-            )
-
 
 # ---------------------------------------------------------------------------
-# Return type invariant
+# Return type invariant — always "llm"
 # ---------------------------------------------------------------------------
 
 
@@ -192,6 +153,5 @@ class TestReturnType:
             "anything",
         ],
     )
-    def test_return_value_is_valid_literal(self, kind: str):
-        result = select_scaffold_path(kind)
-        assert result in {"legacy_deterministic", "llm"}
+    def test_return_value_is_always_llm(self, kind: str):
+        assert select_scaffold_path(kind) == "llm"

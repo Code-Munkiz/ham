@@ -1,29 +1,27 @@
-"""Strangler-pattern routing boundary tests (ADR-0011).
+"""Scaffold routing boundary tests.
 
+The legacy_deterministic runtime path was retired; every kind (including
+``calculator`` and ``tetris``) now routes through the LLM scaffold path.
 These tests pin the contract between
-``src/ham/builder_template_kinds.py`` (the registry) and
-``src/ham/builder_llm_scaffold.py`` (the canonical LLM scaffold path):
+``src/ham/builder_template_kinds.py`` and
+``src/ham/builder_llm_scaffold.py``:
 
-- The LLM scaffold path is the default for everything except the frozen
-  legacy set ``{calculator, tetris}``.
+- :func:`select_scaffold_path` always returns ``"llm"``.
+- ``legacy_deterministic_kinds()`` returns the empty set.
 - ``builder_llm_scaffold.generate_scaffold`` keeps an invariant signature
   (``plan, project_id, workspace_id``) so callers can rely on the boundary.
 - The LLM scaffold refuses to run without an OpenRouter API key — it
   surfaces a typed ``LLMScaffoldError`` rather than calling out to a live
   endpoint. These tests never make a network call.
-- The chat-side scaffold module (``builder_chat_scaffold``) does not
-  silently grow new template kinds beyond ``{calculator, tetris}``.
 """
 
 from __future__ import annotations
 
 import inspect
-import re
 from typing import get_type_hints
 
 import pytest
 
-from src.ham import builder_chat_scaffold
 from src.ham.builder_error_codes import STEP_MODEL_UNAVAILABLE
 from src.ham.builder_llm_scaffold import (
     LLMScaffoldError,
@@ -38,6 +36,8 @@ from src.ham.builder_template_kinds import (
 
 
 _LLM_DEFAULT_KINDS: tuple[str, ...] = (
+    "calculator",
+    "tetris",
     "todo",
     "dashboard",
     "landing-page",
@@ -62,13 +62,13 @@ def test_non_legacy_kinds_route_to_llm(kind: str) -> None:
     assert select_scaffold_path(kind) == "llm"
 
 
-def test_legacy_set_is_a_subset_of_supported_paths_only() -> None:
-    # The legacy set is exactly the registry's legacy entries; nothing
-    # else may be routed to the legacy deterministic path.
+def test_legacy_set_is_empty_after_retirement() -> None:
+    """Legacy runtime path was retired; the registry exposes no kinds."""
     legacy = legacy_deterministic_kinds()
-    assert legacy == frozenset({"calculator", "tetris"})
+    assert legacy == frozenset()
     for kind in _LLM_DEFAULT_KINDS:
         assert kind not in legacy
+        assert select_scaffold_path(kind) != "legacy_deterministic"
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +93,6 @@ def test_generate_scaffold_without_api_key_raises_typed_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """No OpenRouter key → typed LLMScaffoldError; no network access attempted."""
-    # Wipe any keys the test process may have inherited so the gate fires.
     for name in (
         "OPENROUTER_API_KEY",
         "HAM_OPENROUTER_API_KEY",
@@ -114,32 +113,3 @@ def test_generate_scaffold_without_api_key_raises_typed_error(
     with pytest.raises(LLMScaffoldError) as excinfo:
         generate_scaffold(plan, project_id="proj_test", workspace_id="ws_test")
     assert excinfo.value.error_code == STEP_MODEL_UNAVAILABLE
-
-
-# ---------------------------------------------------------------------------
-# Chat-side scaffold does not silently grow new legacy template kinds
-# ---------------------------------------------------------------------------
-
-
-def test_builder_chat_scaffold_only_carries_known_legacy_detectors() -> None:
-    """If a new ``_is_<kind>_prompt`` detector lands without an ADR / registry
-    entry, this assertion fails and forces a deliberate review.
-
-    The registry is the single source of truth for legacy kinds; adding a
-    new module-private detector in ``builder_chat_scaffold`` without
-    updating the registry would silently bypass it.
-    """
-    detector_names = {
-        name
-        for name in dir(builder_chat_scaffold)
-        if re.fullmatch(r"_is_[a-z_]+_prompt", name)
-    }
-    assert detector_names == {
-        "_is_calculator_prompt",
-        "_is_tetris_prompt",
-    }, (
-        "builder_chat_scaffold gained or lost a legacy template detector. "
-        "If you intend to add a new legacy kind, also update "
-        "src/ham/builder_template_kinds._REGISTRY and the lock test in "
-        "tests/test_builder_template_kinds.py."
-    )

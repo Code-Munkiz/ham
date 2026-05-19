@@ -2868,6 +2868,19 @@ async def chat_builder_snapshot_file(
         created_by=actor.user_id if actor is not None else "",
         operation="update_existing_project",
     )
+    if scaffold_result and scaffold_result.get("model_access_required"):
+        return {
+            "project_id": project_id,
+            "previous_snapshot_id": snap.id,
+            "new_snapshot_id": None,
+            "changed_files": [],
+            "preview_refresh_requested": False,
+            "assistant_message": (
+                "I cannot apply that edit without model access. "
+                "Please configure model access and try again."
+            ),
+            "model_access_required": True,
+        }
     if scaffold_result and scaffold_result.get("artifact_verification_failed"):
         ver = scaffold_result.get("artifact_verification") or {}
         detail = str(ver.get("reason") or "").strip()

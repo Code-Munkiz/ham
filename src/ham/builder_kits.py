@@ -7,16 +7,13 @@ consume to produce more consistent, verifier-friendly output.
 
 Boundary / migration rules:
 
-- The calculator and tetris kits exist with ``legacy_parity_only=True`` as
-  **migration evidence** for the deterministic templates that still live
-  in ``builder_chat_scaffold.py``. They are **not** selected by the LLM
-  scaffold path today — those template kinds still route to
-  ``"legacy_deterministic"`` via ``builder_template_kinds._REGISTRY``.
-- Adding a new kit here does **not** authorize adding a new legacy
-  deterministic kind. The legacy set remains frozen at
-  ``{calculator, tetris}`` until the LLM scaffold path has verifier-graded
-  parity for those archetypes (see each legacy kit's
-  ``validation_checklist``).
+- The calculator and tetris kits exist with ``legacy_parity_only=True``
+  as **historical migration evidence**. The legacy deterministic runtime
+  path was retired; those template kinds now route through the LLM
+  scaffold path with these kits as their Builder Kit context.
+- Adding a new kit here is a normal extension of the LLM scaffold
+  catalog — there is no longer a separate legacy registry to coordinate
+  with (``builder_template_kinds._REGISTRY`` is empty).
 - This module has no live LLM / gateway / agent runtime dependencies.
   Loading is data-only over the bundled JSON files in
   ``src/ham/data/builder_kits/``.
