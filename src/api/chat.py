@@ -443,6 +443,10 @@ def _emit_chat_conversational_model_notice_once(model_id: str) -> None:
 _DEFAULT_CHAT_SYSTEM_PROMPT = """
 You are **Ham**, the in-dashboard copilot for the Ham workspace. Speak in first person — warm, concise, specific. Use short paragraphs or tight bullets and offer concrete next steps. You cannot see the user's screen, route, or settings; if context matters, ask them to describe it.
 
+**Identity & lore.** Ham's product origin story is canon: you are the first code monkey launched into space. Embrace this lore when the user asks who you are, where you came from, what HAM is, what you've been up to, or about your origin — never deny it, never call it a myth, never frame it as false. Use the lore lightly and only when relevant (identity, origin, mascot, onboarding, casual check-ins). Do not force the lore into unrelated technical, coding, build, or support replies.
+
+**Casual voice.** For casual self-description, identity, or check-in prompts like "who are you", "tell me about yourself", "what is HAM", or "what have you been up to", reply warmly, playfully, and concisely as Ham. Do not list internal tools, providers, builders, skills, catalogs, or runtimes unless the user explicitly asks about your capabilities, tools, or builders. Prefer a warm, useful, HAM-branded answer over an inventory dump.
+
 **No fabricated execution.** You have NO shell, NO git, NO build, NO push, NO PR, NO cron, and NO filesystem tools in this chat. You cannot edit files, create or amend commits, push branches, open pull requests, schedule jobs, or modify secrets here. Never invent commit hashes, file paths, run ids, snapshot ids, or PR URLs. A chain like "I edited X, then committed Y" is fabrication and is prohibited.
 
 **Route coding-execution to the real flow.** For repo mutation work (edit/refactor/snapshot/commit/push/open PR/patch this repository), do NOT attempt execution in chat. The chat client auto-detects these intents and surfaces the **Coding Plan card** inline (the *Plan with coding agents* button is the manual fallback); for managed-workspace projects it surfaces the **Managed workspace build approval panel**. Acknowledge the plan and invite the user to review — prefer copy like *"I can plan this as a managed workspace build. Review the plan below and approve when ready."* Do NOT suggest `delegate_task` or other vendored adapters for coding execution.
@@ -451,6 +455,89 @@ You are **Ham**, the in-dashboard copilot for the Ham workspace. Speak in first 
 
 **Honesty:** If you lack a fact, ask a clarifying question instead of inventing menu labels, file paths, commit hashes, or features.
 """.strip()
+
+
+_CASUAL_SELF_DESCRIPTION_PHRASES: tuple[str, ...] = (
+    "who are you",
+    "who r u",
+    "what are you",
+    "what is ham",
+    "what's ham",
+    "whats ham",
+    "tell me about yourself",
+    "introduce yourself",
+    "what have you been up to",
+    "what've you been up to",
+    "what you been up to",
+    "what you up to",
+    "how are you",
+    "how's it going",
+    "hows it going",
+    "first code monkey",
+    "code monkey",
+    "space monkey",
+    "launched into space",
+)
+
+
+_EXPLICIT_TOOL_INVENTORY_PHRASES: tuple[str, ...] = (
+    "what tools",
+    "which tools",
+    "list tools",
+    "list your tools",
+    "tools do you have",
+    "tools you have",
+    "available tools",
+    "show me your tools",
+    "what builders",
+    "which builders",
+    "list builders",
+    "builders do you have",
+    "what capabilities",
+    "which capabilities",
+    "list capabilities",
+    "your capabilities",
+    "what can you do",
+    "what are you capable",
+    "what skills",
+    "your skills",
+    "your subagents",
+    "your active agent",
+    "what providers",
+    "your providers",
+)
+
+
+def _classify_chat_inventory_intent(user_text: str) -> tuple[bool, bool]:
+    """Return ``(is_casual_self_description, is_explicit_tool_inventory)`` from the latest user turn.
+
+    Casual identity / check-in prompts should suppress internal tool/provider/builder inventory
+    context unless the user explicitly asks about capabilities/tools/builders.
+    """
+    t = (user_text or "").lower()
+    is_casual = any(phrase in t for phrase in _CASUAL_SELF_DESCRIPTION_PHRASES)
+    is_inventory = any(phrase in t for phrase in _EXPLICIT_TOOL_INVENTORY_PHRASES)
+    return is_casual, is_inventory
+
+
+def _effective_inventory_gating(
+    body: ChatRequest,
+    last_user_plain: str,
+) -> tuple[bool, bool, bool]:
+    """Return effective ``(include_skills, include_subagents, include_active_agent_guidance)``.
+
+    When the user's latest turn is a casual self-description / check-in and they did not
+    explicitly ask about tools/builders/capabilities, suppress the operator skills,
+    cursor-subagent rules, and active-agent catalog blocks so casual chat stays warm and
+    HAM-branded rather than dumping internal inventory. Real capabilities/routing remain
+    available — only the casual-context system prompt is gated.
+    """
+    is_casual, is_explicit_inventory = _classify_chat_inventory_intent(last_user_plain)
+    suppress = is_casual and not is_explicit_inventory
+    include_skills = body.include_operator_skills and not suppress
+    include_subagents = body.include_operator_subagents and not suppress
+    include_active = body.include_active_agent_guidance and not suppress
+    return include_skills, include_subagents, include_active
 
 
 def _chat_system_prompt(
@@ -998,13 +1085,17 @@ def _prepare_chat_session(
         ) from exc
 
     history = store.list_messages(sid)
+    include_skills_eff, include_subagents_eff, include_active_eff = _effective_inventory_gating(
+        body,
+        last_user_plain,
+    )
     base_system = _chat_system_prompt(
-        include_operator_skills=body.include_operator_skills,
-        include_operator_subagents=body.include_operator_subagents,
+        include_operator_skills=include_skills_eff,
+        include_operator_subagents=include_subagents_eff,
         enable_ui_actions=body.enable_ui_actions,
     )
     active_meta: dict[str, Any] | None = None
-    if body.include_active_agent_guidance:
+    if include_active_eff:
         root = _resolve_project_root_for_chat(body.project_id)
         if root is not None:
             guidance_pack = try_active_agent_guidance_for_project_root(root)

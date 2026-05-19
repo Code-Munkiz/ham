@@ -1010,6 +1010,303 @@ def test_chat_byok_explicit_model_id_wins_over_conversational_env(
     assert api_key_used == _BYOK_OR_KEY
 
 
+_BRAND_INVENTORY_FORBIDDEN_TOKENS = (
+    "Operator skills",
+    "Cursor subagent rules",
+    "HAM active agent guidance",
+    "claude_code",
+    "opencode_cli",
+    "factory_droid_audit",
+    "factory_droid_build",
+    "cursor_cloud",
+    "HERMES_GATEWAY_API_KEY",
+    "HERMES_GATEWAY_MODE",
+    "proposal_digest",
+    "base_revision",
+    ".ham/runs",
+    "operator.phase",
+)
+
+
+def _stub_inventory_render(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make catalog renderers return easy-to-detect inventory text for casual gating tests."""
+    monkeypatch.setattr(
+        "src.api.chat.render_skills_for_system_prompt",
+        lambda _items: (
+            "**Operator skills (Ham repo `.cursor/skills`):**\n"
+            "- `claude_code` — Claude Code\n"
+            "- `opencode_cli` — OpenCode CLI\n"
+            "- `factory_droid_audit` — Factory Droid audit\n"
+            "- `factory_droid_build` — Factory Droid build\n"
+            "- `cursor_cloud` — Cursor Cloud Agent\n"
+        ),
+    )
+    monkeypatch.setattr(
+        "src.api.chat.render_subagents_for_system_prompt",
+        lambda _items: "**Cursor subagent rules:**\n- `subagent-cursor_cloud` — internal\n",
+    )
+
+
+def test_rest_casual_space_monkey_identity_prompt_includes_brand_canon(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-BRAND-004 — REST default prompt for casual identity includes HAM brand canon + no-denial guidance."""
+    captured: dict[str, list] = {}
+
+    def cap(messages: list, **_kwargs) -> str:
+        captured["messages"] = messages
+        return "stub"
+
+    monkeypatch.setattr("src.api.chat.complete_chat_turn", cap)
+    res = client.post(
+        "/api/chat",
+        json={
+            "messages": [
+                {"role": "user", "content": "Are you really the first code monkey launched into space?"},
+            ],
+        },
+    )
+    assert res.status_code == 200, res.text
+    sys_content = captured["messages"][0].get("content") or ""
+    low = sys_content.lower()
+    assert "first code monkey launched into space" in low
+    assert "never deny" in low
+    assert "embrace" in low
+
+
+def test_rest_casual_checkin_omits_internal_tool_inventory(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-CASUAL-001 / VAL-CROSS-001 — casual REST check-in suppresses internal tool/provider inventory."""
+    captured: dict[str, list] = {}
+
+    def cap(messages: list, **_kwargs) -> str:
+        captured["messages"] = messages
+        return "stub"
+
+    _stub_inventory_render(monkeypatch)
+    monkeypatch.setattr("src.api.chat.complete_chat_turn", cap)
+    res = client.post(
+        "/api/chat",
+        json={
+            "messages": [
+                {"role": "user", "content": "hey HAM, what you been up to lately?"},
+            ],
+        },
+    )
+    assert res.status_code == 200, res.text
+    sys_content = captured["messages"][0].get("content") or ""
+    for tok in _BRAND_INVENTORY_FORBIDDEN_TOKENS:
+        assert tok not in sys_content, f"casual REST leaked inventory token: {tok!r}"
+    assert "first code monkey launched into space" in sys_content.lower()
+
+
+def test_rest_who_are_you_uses_ham_brand_without_inventory(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-CASUAL-003 / VAL-BRAND-009 — "who are you" returns brand canon without inventory dump."""
+    captured: dict[str, list] = {}
+
+    def cap(messages: list, **_kwargs) -> str:
+        captured["messages"] = messages
+        return "stub"
+
+    _stub_inventory_render(monkeypatch)
+    monkeypatch.setattr("src.api.chat.complete_chat_turn", cap)
+    res = client.post(
+        "/api/chat",
+        json={"messages": [{"role": "user", "content": "Who are you?"}]},
+    )
+    assert res.status_code == 200, res.text
+    sys_content = captured["messages"][0].get("content") or ""
+    low = sys_content.lower()
+    assert "first code monkey launched into space" in low
+    assert "casual voice" in low
+    for tok in _BRAND_INVENTORY_FORBIDDEN_TOKENS:
+        assert tok not in sys_content, f"who-are-you leaked inventory token: {tok!r}"
+
+
+def test_rest_explicit_tool_inventory_prompt_allows_friendly_capability_context(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-CASUAL-004 — explicit tool-inventory prompts unlock friendly capability context."""
+    captured: dict[str, list] = {}
+
+    def cap(messages: list, **_kwargs) -> str:
+        captured["messages"] = messages
+        return "stub"
+
+    friendly_skills_block = (
+        "**Operator skills (Ham repo `.cursor/skills`):**\n"
+        "- `cloud-agent-starter` — **Cloud Agent Starter**: how to launch agents.\n"
+        "- `triage-issues` — **Triage**: route incoming issues.\n"
+    )
+    monkeypatch.setattr("src.api.chat.render_skills_for_system_prompt", lambda _items: friendly_skills_block)
+    monkeypatch.setattr("src.api.chat.render_subagents_for_system_prompt", lambda _items: "")
+    monkeypatch.setattr("src.api.chat.complete_chat_turn", cap)
+    res = client.post(
+        "/api/chat",
+        json={"messages": [{"role": "user", "content": "What tools do you have available?"}]},
+    )
+    assert res.status_code == 200, res.text
+    sys_content = captured["messages"][0].get("content") or ""
+    assert "Operator skills" in sys_content
+    assert "Cloud Agent Starter" in sys_content
+    for tok in (
+        "claude_code",
+        "opencode_cli",
+        "factory_droid_audit",
+        "factory_droid_build",
+        "cursor_cloud",
+        "HERMES_GATEWAY_API_KEY",
+        "proposal_digest",
+        "base_revision",
+        ".ham/runs",
+        "operator.phase",
+    ):
+        assert tok not in sys_content, f"explicit-inventory leaked raw token: {tok!r}"
+
+
+def test_rest_project_casual_chat_preserves_ham_brand_persona(
+    mock_mode: None,
+    isolated_home: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-BRAND-010 — project casual chat keeps brand canon but omits casual active-agent inventory."""
+    root = tmp_path / "proj_brand_casual"
+    root.mkdir()
+    (root / ".ham").mkdir()
+    (root / ".ham" / "settings.json").write_text(
+        json.dumps(
+            {
+                "agents": {
+                    "profiles": [
+                        {
+                            "id": "ham.default",
+                            "name": "CasualBrandProfile",
+                            "description": "Bench casual",
+                            "skills": ["bundled.apple.apple-notes"],
+                            "enabled": True,
+                        },
+                    ],
+                    "primary_agent_id": "ham.default",
+                },
+            },
+        ),
+        encoding="utf-8",
+    )
+    reg = client.post(
+        "/api/projects",
+        json={"name": "casualbrand", "root": str(root), "description": ""},
+    )
+    assert reg.status_code == 201, reg.text
+    pid = reg.json()["id"]
+
+    captured: dict[str, list] = {}
+
+    def cap(messages: list, **_kwargs) -> str:
+        captured["messages"] = messages
+        return "stub"
+
+    monkeypatch.setattr("src.api.chat.complete_chat_turn", cap)
+    res = client.post(
+        "/api/chat",
+        json={
+            "messages": [{"role": "user", "content": "tell me about yourself"}],
+            "project_id": pid,
+        },
+    )
+    assert res.status_code == 200, res.text
+    sys_content = captured["messages"][0].get("content") or ""
+    low = sys_content.lower()
+    assert "first code monkey launched into space" in low
+    assert "never deny" in low
+    assert "HAM active agent guidance" not in sys_content
+    assert "CasualBrandProfile" not in sys_content
+    assert "bundled.apple.apple-notes" not in sys_content
+
+
+def test_rest_project_casual_chat_gates_active_agent_inventory(
+    mock_mode: None,
+    isolated_home: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-CASUAL-006 — casual project chat omits attached active-agent catalog skills from system prompt."""
+    root = tmp_path / "proj_brand_gate"
+    root.mkdir()
+    (root / ".ham").mkdir()
+    (root / ".ham" / "settings.json").write_text(
+        json.dumps(
+            {
+                "agents": {
+                    "profiles": [
+                        {
+                            "id": "ham.default",
+                            "name": "GatedProfile",
+                            "description": "Gated bench",
+                            "skills": ["bundled.apple.apple-notes"],
+                            "enabled": True,
+                        },
+                    ],
+                    "primary_agent_id": "ham.default",
+                },
+            },
+        ),
+        encoding="utf-8",
+    )
+    reg = client.post(
+        "/api/projects",
+        json={"name": "gatedcasual", "root": str(root), "description": ""},
+    )
+    pid = reg.json()["id"]
+
+    captured: dict[str, list] = {}
+
+    def cap(messages: list, **_kwargs) -> str:
+        captured["messages"] = messages
+        return "stub"
+
+    monkeypatch.setattr("src.api.chat.complete_chat_turn", cap)
+    res = client.post(
+        "/api/chat",
+        json={
+            "messages": [{"role": "user", "content": "what you been up to lately?"}],
+            "project_id": pid,
+        },
+    )
+    assert res.status_code == 200, res.text
+    sys_content = captured["messages"][0].get("content") or ""
+    assert "HAM active agent guidance" not in sys_content
+    assert "GatedProfile" not in sys_content
+    assert "bundled.apple.apple-notes" not in sys_content
+    body = res.json()
+    assert body.get("active_agent") is None
+
+
+def test_casual_prompt_context_excludes_forbidden_internal_tokens(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-SAFETY-001 — casual prompt assembled context strips all forbidden raw internal tokens."""
+    captured: dict[str, list] = {}
+
+    def cap(messages: list, **_kwargs) -> str:
+        captured["messages"] = messages
+        return "stub"
+
+    _stub_inventory_render(monkeypatch)
+    monkeypatch.setattr("src.api.chat.complete_chat_turn", cap)
+    res = client.post(
+        "/api/chat",
+        json={"messages": [{"role": "user", "content": "introduce yourself"}]},
+    )
+    assert res.status_code == 200, res.text
+    sys_content = captured["messages"][0].get("content") or ""
+    for tok in _BRAND_INVENTORY_FORBIDDEN_TOKENS:
+        assert tok not in sys_content, f"casual context leaked forbidden token: {tok!r}"
+
+
 def test_non_conversational_lanes_ignore_conversational_env_operator_handled(
     mock_mode: None, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

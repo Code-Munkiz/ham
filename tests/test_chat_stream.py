@@ -1243,3 +1243,165 @@ def test_chat_stream_operator_handled_skips_llm_under_conversational_env(
     assert "HAM_CHAT_CONVERSATIONAL_MODEL" not in assistant_text
     if conv_env is not None:
         assert conv_env not in assistant_text
+
+
+_STREAM_BRAND_INVENTORY_FORBIDDEN_TOKENS = (
+    "Operator skills",
+    "Cursor subagent rules",
+    "HAM active agent guidance",
+    "claude_code",
+    "opencode_cli",
+    "factory_droid_audit",
+    "factory_droid_build",
+    "cursor_cloud",
+    "HERMES_GATEWAY_API_KEY",
+    "HERMES_GATEWAY_MODE",
+    "proposal_digest",
+    "base_revision",
+    ".ham/runs",
+    "operator.phase",
+)
+
+
+def _stub_stream_inventory_render(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "src.api.chat.render_skills_for_system_prompt",
+        lambda _items: (
+            "**Operator skills (Ham repo `.cursor/skills`):**\n"
+            "- `claude_code` — Claude Code\n"
+            "- `opencode_cli` — OpenCode CLI\n"
+            "- `factory_droid_audit` — Factory Droid audit\n"
+            "- `factory_droid_build` — Factory Droid build\n"
+            "- `cursor_cloud` — Cursor Cloud Agent\n"
+        ),
+    )
+    monkeypatch.setattr(
+        "src.api.chat.render_subagents_for_system_prompt",
+        lambda _items: "**Cursor subagent rules:**\n- `subagent-cursor_cloud` — internal\n",
+    )
+
+
+def _capture_stream(monkeypatch: pytest.MonkeyPatch, captured: dict) -> None:
+    def gen(messages: list, **_kwargs):
+        captured["messages"] = messages
+        yield "stub-stream"
+
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", gen)
+
+
+def test_stream_casual_space_monkey_identity_prompt_includes_brand_canon(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-BRAND-005 — stream casual identity prompt includes HAM brand canon + no-denial guidance."""
+    captured: dict = {}
+    _capture_stream(monkeypatch, captured)
+    res = client.post(
+        "/api/chat/stream",
+        json={
+            "messages": [
+                {"role": "user", "content": "Are you really the first code monkey launched into space?"},
+            ],
+        },
+    )
+    assert res.status_code == 200, res.text
+    sys_content = (captured["messages"][0].get("content") or "")
+    low = sys_content.lower()
+    assert "first code monkey launched into space" in low
+    assert "never deny" in low
+    assert "embrace" in low
+
+
+def test_stream_casual_checkin_omits_internal_tool_inventory(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-CASUAL-002 / VAL-CROSS-001 — stream casual check-in suppresses inventory context."""
+    captured: dict = {}
+    _stub_stream_inventory_render(monkeypatch)
+    _capture_stream(monkeypatch, captured)
+    res = client.post(
+        "/api/chat/stream",
+        json={
+            "messages": [{"role": "user", "content": "hey HAM, what you been up to lately?"}],
+        },
+    )
+    assert res.status_code == 200, res.text
+    events = _parse_ndjson(res.text)
+    assert events[0]["type"] == "session"
+    assert any(e.get("type") == "done" for e in events)
+    sys_content = captured["messages"][0].get("content") or ""
+    for tok in _STREAM_BRAND_INVENTORY_FORBIDDEN_TOKENS:
+        assert tok not in sys_content, f"stream casual leaked inventory token: {tok!r}"
+    assert "first code monkey launched into space" in sys_content.lower()
+
+
+def test_stream_explicit_tool_inventory_prompt_allows_friendly_capability_context(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-CASUAL-005 — stream explicit tool-inventory prompts unlock friendly capability context."""
+    captured: dict = {}
+    friendly = (
+        "**Operator skills (Ham repo `.cursor/skills`):**\n"
+        "- `cloud-agent-starter` — **Cloud Agent Starter**: how to launch agents.\n"
+        "- `triage-issues` — **Triage**: route incoming issues.\n"
+    )
+    monkeypatch.setattr("src.api.chat.render_skills_for_system_prompt", lambda _items: friendly)
+    monkeypatch.setattr("src.api.chat.render_subagents_for_system_prompt", lambda _items: "")
+    _capture_stream(monkeypatch, captured)
+    res = client.post(
+        "/api/chat/stream",
+        json={"messages": [{"role": "user", "content": "What tools do you have available?"}]},
+    )
+    assert res.status_code == 200, res.text
+    events = _parse_ndjson(res.text)
+    assert any(e.get("type") == "done" for e in events)
+    sys_content = captured["messages"][0].get("content") or ""
+    assert "Operator skills" in sys_content
+    assert "Cloud Agent Starter" in sys_content
+    for tok in (
+        "claude_code",
+        "opencode_cli",
+        "factory_droid_audit",
+        "factory_droid_build",
+        "cursor_cloud",
+        "HERMES_GATEWAY_API_KEY",
+        "proposal_digest",
+        "base_revision",
+        ".ham/runs",
+        "operator.phase",
+    ):
+        assert tok not in sys_content, f"stream explicit-inventory leaked raw token: {tok!r}"
+
+
+def test_chat_stream_gateway_error_omits_internal_tokens(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-SAFETY-002 — stream gateway error copy must not leak forbidden internal tokens."""
+    def _boom(*_a: object, **_k: object):
+        raise GatewayCallError("UPSTREAM_REJECTED", "raw upstream detail kept in logs")
+
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", _boom)
+    res = client.post(
+        "/api/chat/stream",
+        json={"messages": [{"role": "user", "content": "hello"}]},
+    )
+    assert res.status_code == 200, res.text
+    raw = res.text
+    for tok in (
+        "HERMES_GATEWAY_API_KEY",
+        "HERMES_GATEWAY_BASE_URL",
+        "HERMES_GATEWAY_MODEL",
+        "HAM_DROID_EXEC_TOKEN",
+        "HAM_CURSOR_AGENT_LAUNCH_TOKEN",
+        "HAM_SETTINGS_WRITE_TOKEN",
+        "HAM_RUN_LAUNCH_TOKEN",
+        "opencode_cli",
+        "claude_code",
+        "factory_droid_audit",
+        "factory_droid_build",
+        "cursor_cloud",
+        "proposal_digest",
+        "base_revision",
+        ".ham/runs",
+        "operator.phase",
+    ):
+        assert tok not in raw, f"stream gateway-error leaked token: {tok!r}"

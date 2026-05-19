@@ -91,3 +91,21 @@ def test_try_guidance_project_root(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
 def test_try_guidance_bad_root_returns_none(tmp_path: Path) -> None:
     assert try_active_agent_guidance_for_project_root(tmp_path / "nope") is None
+
+
+def test_explicit_active_agent_inventory_preserves_context_only_warning() -> None:
+    """VAL-CASUAL-007 — active-agent guidance keeps context-only / not-executed safety semantics."""
+    p = HamAgentProfile(
+        id="ham.default",
+        name="ExplicitInventoryProfile",
+        description="Explicit inventory bench",
+        skills=["bundled.apple.apple-notes"],
+        enabled=True,
+    )
+    r = build_active_agent_guidance(p)
+    txt = r.guidance_text
+    assert "Context only" in txt
+    assert "does not enable tools" in txt
+    assert "does not execute attached catalog entries" in txt
+    assert "does not imply they are installed on the server" in txt
+    assert "ExplicitInventoryProfile" in txt

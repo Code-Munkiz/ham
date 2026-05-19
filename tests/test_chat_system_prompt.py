@@ -132,8 +132,14 @@ F_OPERATOR_VOCAB = (
 
 
 def test_val_prompt_001_length_cap() -> None:
-    """VAL-PROMPT-001: default prompt is ≤ 1800 chars."""
-    assert len(_DEFAULT_CHAT_SYSTEM_PROMPT) <= 1800
+    """VAL-PROMPT-001 + VAL-BRAND-006: default prompt stays under the concise cap.
+
+    Cap raised from 1800 to 2900 to fit the HAM brand canon (first code monkey launched
+    into space), no-denial guidance, and casual self-description voice block while still
+    bounding prompt growth — the assembly cap ``_MAX_SYSTEM_PROMPT_CHARS`` (12_000) is
+    unchanged and large skill/subagent catalogs must not crowd out this base prompt.
+    """
+    assert len(_DEFAULT_CHAT_SYSTEM_PROMPT) <= 2900
 
 
 def test_val_prompt_002_ham_identity() -> None:
@@ -211,6 +217,99 @@ def test_chat_system_prompt_default_returns_string_starting_with_persona() -> No
     )
     assert isinstance(out, str)
     assert out.startswith("You are **Ham**")
+
+
+def test_default_prompt_contains_ham_brand_canon() -> None:
+    """VAL-BRAND-001 — default prompt embeds the HAM first-code-monkey-in-space origin canon."""
+    base = _DEFAULT_CHAT_SYSTEM_PROMPT
+    low = base.lower()
+    assert "first code monkey launched into space" in low
+    assert "ham" in low and "origin" in low
+
+
+def test_default_prompt_tells_ham_not_to_deny_space_monkey_lore() -> None:
+    """VAL-BRAND-002 — prompt instructs Ham not to deny the code-monkey/space lore."""
+    base = _DEFAULT_CHAT_SYSTEM_PROMPT
+    low = base.lower()
+    assert "never deny" in low
+    assert "never call it a myth" in low
+    assert "embrace" in low
+
+
+def test_default_prompt_uses_lore_only_when_relevant() -> None:
+    """VAL-BRAND-003 — prompt requires tasteful, relevance-bounded lore use."""
+    base = _DEFAULT_CHAT_SYSTEM_PROMPT
+    low = base.lower()
+    assert "lightly" in low
+    assert "only when relevant" in low
+    assert "do not force the lore" in low
+    for relevant_ctx in ("identity", "origin", "mascot", "onboarding", "casual check-ins"):
+        assert relevant_ctx in low, f"missing relevance hint: {relevant_ctx!r}"
+
+
+def test_default_prompt_guides_warm_concise_ham_self_description() -> None:
+    """VAL-BRAND-009 — casual self-description tone is warm, playful, concise, HAM-branded."""
+    base = _DEFAULT_CHAT_SYSTEM_PROMPT
+    low = base.lower()
+    assert "casual voice" in low
+    for hint in ("warm", "playful", "concis"):
+        assert hint in low, f"missing casual tone hint: {hint!r}"
+    for casual_q in ("who are you", "tell me about yourself", "what is ham", "what have you been up to"):
+        assert casual_q in low, f"missing casual prompt cue: {casual_q!r}"
+    assert "do not list internal tools" in low
+    assert "inventory dump" in low
+
+
+def test_default_prompt_excludes_forbidden_internal_tokens() -> None:
+    """VAL-SAFETY-001 / VAL-BRAND-007 — brand canon must not leak raw internal vocabulary."""
+    base = _DEFAULT_CHAT_SYSTEM_PROMPT
+    forbidden = (
+        "HERMES_GATEWAY",
+        "HAM_DROID_EXEC_TOKEN",
+        "HAM_CURSOR_AGENT_LAUNCH_TOKEN",
+        "opencode_cli",
+        "claude_code",
+        "factory_droid_audit",
+        "factory_droid_build",
+        "cursor_cloud",
+        "proposal_digest",
+        "base_revision",
+        ".ham/runs",
+        "operator.phase",
+    )
+    for tok in forbidden:
+        assert tok not in base, f"forbidden token leaked into default prompt: {tok!r}"
+
+
+def test_chat_system_prompt_preserves_brand_canon_when_catalog_is_huge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-BRAND-006 — oversize catalog blocks must not crowd out base brand canon under the assembly cap."""
+    monkeypatch.setattr(
+        "src.api.chat.render_skills_for_system_prompt",
+        lambda _: "x" * 25_000,
+    )
+    monkeypatch.setattr(
+        "src.api.chat.render_subagents_for_system_prompt",
+        lambda _: "y" * 25_000,
+    )
+    out = _chat_system_prompt(
+        include_operator_skills=True,
+        include_operator_subagents=True,
+        enable_ui_actions=True,
+    )
+    assert "first code monkey launched into space" in out.lower()
+    assert "Casual voice" in out
+    assert "HAM_UI_ACTIONS_JSON:" in out
+    assert len(out) <= _MAX_SYSTEM_PROMPT_CHARS
+
+
+def test_chat_system_prompt_requires_completion_claim_artifacts() -> None:
+    """VAL-BRAND-008 — completion-claim guardrail remains intact after brand canon edits."""
+    base = _DEFAULT_CHAT_SYSTEM_PROMPT
+    assert "Completion-claim rule" in base
+    for tok in ("ham_run_id", "snapshot_id", "pr_url", "control_plane_run_id"):
+        assert tok in base, f"missing completion-claim artifact token: {tok!r}"
 
 
 def test_val_prompt_008_excludes_conversational_lane_env_name() -> None:
