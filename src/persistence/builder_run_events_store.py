@@ -30,6 +30,8 @@ class BuilderRunEventsStoreProtocol(Protocol):
 
     def read_from(self, *, job_id: str, since_seq: int = 0) -> list[SSEEvent]: ...
 
+    def latest_seq(self, *, job_id: str) -> int: ...
+
 
 class BuilderRunEventsStore:
     def __init__(self, store_path: Path | None = None) -> None:
@@ -64,6 +66,16 @@ class BuilderRunEventsStore:
                 out.append(evt)
         return sorted(out, key=lambda e: e.seq)
 
+    def latest_seq(self, *, job_id: str) -> int:
+        raw = self._load_raw()
+        events_for_job = raw.get(job_id, [])
+        if not events_for_job:
+            return 0
+        try:
+            return int(events_for_job[-1].get("seq") or 0)
+        except (ValueError, TypeError):
+            return 0
+
     def _load_raw(self) -> dict[str, Any]:
         if not self._path.is_file():
             return {}
@@ -85,10 +97,30 @@ class BuilderRunEventsStore:
 
 _STORE_SINGLETON: list[BuilderRunEventsStoreProtocol | None] = [None]
 
+_BACKEND_ENV = "HAM_BUILDER_RUN_EVENTS_STORE_BACKEND"
+
+
+def build_builder_run_events_store() -> BuilderRunEventsStoreProtocol:
+    """Pick the events store backend based on env.
+
+    Defaults to the file-backed implementation so local dev keeps working
+    without any env vars. ``HAM_BUILDER_RUN_EVENTS_STORE_BACKEND=firestore``
+    selects :class:`FirestoreBuilderRunEventsStore` (lazy import so the SDK
+    is not required for local dev).
+    """
+    backend = (os.environ.get(_BACKEND_ENV) or "").strip().lower()
+    if backend == "firestore":
+        from src.persistence.firestore_builder_run_events_store import (  # noqa: PLC0415
+            FirestoreBuilderRunEventsStore,
+        )
+
+        return FirestoreBuilderRunEventsStore()
+    return BuilderRunEventsStore()
+
 
 def get_builder_run_events_store() -> BuilderRunEventsStoreProtocol:
     if _STORE_SINGLETON[0] is None:
-        _STORE_SINGLETON[0] = BuilderRunEventsStore()
+        _STORE_SINGLETON[0] = build_builder_run_events_store()
     return _STORE_SINGLETON[0]
 
 

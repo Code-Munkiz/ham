@@ -1,0 +1,18 @@
+# Phase 2.5 — Worker Kubernetes service account.
+#
+# Bound to a GCP service account via Workload Identity (annotation set
+# below). The GCP service account is provisioned out-of-band by the
+# ops runbook (docs/PHASE_2_5_OPS.md) and granted ONLY
+# roles/datastore.user on the project hosting the Firestore database.
+#
+# Replace HAM_WORKER_GSA_EMAIL with the actual GSA email before applying.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ham-worker
+  namespace: ham-worker
+  annotations:
+    iam.gke.io/gcp-service-account: HAM_WORKER_GSA_EMAIL
+  labels:
+    app.kubernetes.io/name: ham-worker
+    app.kubernetes.io/part-of: ham

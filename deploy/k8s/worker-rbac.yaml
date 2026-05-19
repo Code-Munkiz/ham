@@ -1,0 +1,40 @@
+# Phase 2.5 — Worker RBAC.
+#
+# The dispatcher (running on Cloud Run, authenticating via its own GCP
+# service account bound to a Kubernetes user identity) needs to create
+# and observe Job objects in the ham-worker namespace. NOT cluster-scoped.
+# NOT roles/container.developer. Verbs are limited to create/get/list/watch
+# — no delete, no patch beyond status (status is unused by the dispatcher).
+#
+# Replace HAM_DISPATCHER_GSA_EMAIL with the GSA email for the Cloud Run
+# service account before applying.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ham-worker-dispatcher
+  namespace: ham-worker
+  labels:
+    app.kubernetes.io/name: ham-worker
+    app.kubernetes.io/part-of: ham
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ham-worker-dispatcher
+  namespace: ham-worker
+  labels:
+    app.kubernetes.io/name: ham-worker
+    app.kubernetes.io/part-of: ham
+subjects:
+  # Workload Identity Federation maps the Cloud Run GSA to this user.
+  - kind: User
+    name: HAM_DISPATCHER_GSA_EMAIL
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: ham-worker-dispatcher
+  apiGroup: rbac.authorization.k8s.io

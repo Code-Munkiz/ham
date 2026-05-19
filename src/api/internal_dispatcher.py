@@ -51,17 +51,12 @@ def _utc_now_iso() -> str:
 
 
 # ---------------------------------------------------------------------------
-# OIDC token validation (lightweight; no external dependency)
+# OIDC token validation
 # ---------------------------------------------------------------------------
 
 
 def _decode_jwt_payload(token: str) -> dict[str, Any]:
     """Decode the JWT payload section without signature verification.
-
-    Full verification requires the Google public keys endpoint.  For
-    Cloud Tasks → Cloud Run, the token is injected by Cloud Tasks and
-    the transport is already TLS-authenticated; we trust the iss+aud+email
-    claims as the auth layer.
 
     Raises ValueError on malformed tokens.
     """
@@ -75,6 +70,51 @@ def _decode_jwt_payload(token: str) -> dict[str, Any]:
         return json.loads(payload_bytes.decode("utf-8"))
     except Exception as exc:
         raise ValueError(f"JWT payload decode failed: {exc}") from exc
+
+
+def _verify_google_oidc_token(token: str, *, expected_aud: str) -> dict[str, Any]:
+    """Verify token signature + standard claims using Google verifier."""
+    try:
+        from google.auth.transport.requests import Request  # noqa: PLC0415
+        from google.oauth2 import id_token  # noqa: PLC0415
+    except ImportError as exc:  # pragma: no cover
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": {
+                    "code": "DISPATCHER_AUTH_RUNTIME_MISSING",
+                    "message": "google-auth runtime is required for OIDC verification.",
+                }
+            },
+        ) from exc
+
+    try:
+        payload = id_token.verify_oauth2_token(token, Request(), audience=expected_aud)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "error": {
+                    "code": "DISPATCHER_TOKEN_INVALID",
+                    "message": f"OIDC token verification failed: {exc}",
+                }
+            },
+        ) from exc
+
+    # Defensive allowlist even though verify_oauth2_token checks issuer.
+    issuer = str(payload.get("iss") or "")
+    if issuer not in {"accounts.google.com", "https://accounts.google.com"}:
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "error": {
+                    "code": "DISPATCHER_TOKEN_INVALID",
+                    "message": "OIDC token issuer is not trusted.",
+                }
+            },
+        )
+
+    return payload
 
 
 def _validate_oidc_token(authorization: str | None) -> dict[str, Any]:
@@ -113,36 +153,7 @@ def _validate_oidc_token(authorization: str | None) -> dict[str, Any]:
         )
 
     token = auth_header[7:].strip()
-    try:
-        payload = _decode_jwt_payload(token)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=401,
-            detail={
-                "error": {
-                    "code": "DISPATCHER_TOKEN_INVALID",
-                    "message": f"OIDC token decode failed: {exc}",
-                }
-            },
-        ) from exc
-
-    # Validate aud claim
-    aud = payload.get("aud")
-    if isinstance(aud, list):
-        aud_match = expected_aud in aud
-    else:
-        aud_match = str(aud or "") == expected_aud
-    if not aud_match:
-        _LOG.warning("OIDC aud mismatch: got %r, expected %r", aud, expected_aud)
-        raise HTTPException(
-            status_code=401,
-            detail={
-                "error": {
-                    "code": "DISPATCHER_TOKEN_INVALID",
-                    "message": "OIDC token audience does not match dispatcher audience.",
-                }
-            },
-        )
+    payload = _verify_google_oidc_token(token, expected_aud=expected_aud)
 
     # Validate email claim (service account)
     email = str(payload.get("email") or "")
@@ -203,11 +214,29 @@ class _DisabledPodScheduler(WorkerPodSchedulerProtocol):
 
 _SCHEDULER_SINGLETON: list[WorkerPodSchedulerProtocol | None] = [None]
 
+_WORKER_POD_SCHEDULER_BACKEND_ENV = "HAM_WORKER_POD_SCHEDULER_BACKEND"
+
+
+def build_worker_pod_scheduler() -> WorkerPodSchedulerProtocol:
+    """Pick the worker pod scheduler backend based on env.
+
+    Defaults to :class:`_DisabledPodScheduler`. When
+    ``HAM_WORKER_POD_SCHEDULER_BACKEND=gke`` is set, returns the GKE
+    implementation; misconfiguration raises at construction.
+    """
+    backend = (os.environ.get(_WORKER_POD_SCHEDULER_BACKEND_ENV) or "").strip().lower()
+    if backend == "gke":
+        from src.api.internal_dispatcher_gke import (  # noqa: PLC0415
+            build_gke_worker_pod_scheduler,
+        )
+
+        return build_gke_worker_pod_scheduler()
+    return _DisabledPodScheduler()
+
 
 def get_worker_pod_scheduler() -> WorkerPodSchedulerProtocol:
     if _SCHEDULER_SINGLETON[0] is None:
-        # Default to disabled scheduler; production replaces via set_worker_pod_scheduler_for_tests
-        _SCHEDULER_SINGLETON[0] = _DisabledPodScheduler()
+        _SCHEDULER_SINGLETON[0] = build_worker_pod_scheduler()
     return _SCHEDULER_SINGLETON[0]
 
 
@@ -297,6 +326,25 @@ async def dispatch_worker(
             "skipped": True,
         }
 
+    # 3b. Phase-based idempotency: if a prior delivery already scheduled the
+    # pod, return the cached name (3e guardrail per docs/PHASE_2_5_DESIGN.md).
+    if str(existing.phase or "").strip().lower() == "scheduled":
+        cached_pod_name = ""
+        if existing.metadata:
+            cached_pod_name = str(existing.metadata.get("pod_name") or "")
+        if cached_pod_name:
+            _LOG.info(
+                "dispatch_worker: job %s already scheduled as pod %s — idempotent skip",
+                envelope.job_id,
+                cached_pod_name,
+            )
+            return {
+                "ok": True,
+                "job_id": envelope.job_id,
+                "pod_name": cached_pod_name,
+                "skipped": True,
+            }
+
     # 4. Schedule GKE Worker pod
     scheduler = get_worker_pod_scheduler()
     try:
@@ -336,6 +384,27 @@ async def dispatch_worker(
                 }
             },
         ) from exc
+
+    # 4b. Persist phase=scheduled + cached pod_name so redelivery short-circuits.
+    updated_metadata = dict(existing.metadata or {})
+    updated_metadata["pod_name"] = pod_name
+    scheduled_job = existing.model_copy(
+        update={
+            "phase": "scheduled",
+            "metadata": updated_metadata,
+            "updated_at": _utc_now_iso(),
+        }
+    )
+    try:
+        job_store.upsert_cloud_runtime_job(scheduled_job)
+    except Exception as exc:  # noqa: BLE001
+        # Don't fail the dispatch if the marker write fails — K8s Job
+        # get-before-create is the second line of defence. Just log.
+        _LOG.warning(
+            "dispatch_worker: failed to persist phase=scheduled for job %s: %s",
+            envelope.job_id,
+            exc,
+        )
 
     # 5. Return 200 immediately
     _LOG.info(

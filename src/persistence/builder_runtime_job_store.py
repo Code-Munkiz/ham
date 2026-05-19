@@ -178,10 +178,28 @@ class BuilderRuntimeJobStore:
 
 _STORE_SINGLETON: list[BuilderRuntimeJobStoreProtocol | None] = [None]
 
+_BACKEND_ENV = "HAM_BUILDER_RUNTIME_JOB_STORE_BACKEND"
+
+
+def build_builder_runtime_job_store() -> BuilderRuntimeJobStoreProtocol:
+    """Pick the runtime job store backend based on env.
+
+    Defaults to the file-backed implementation. ``HAM_BUILDER_RUNTIME_JOB_STORE_BACKEND
+    =firestore`` selects :class:`FirestoreBuilderRuntimeJobStore` (lazy import).
+    """
+    backend = (os.environ.get(_BACKEND_ENV) or "").strip().lower()
+    if backend == "firestore":
+        from src.persistence.firestore_builder_runtime_job_store import (  # noqa: PLC0415
+            FirestoreBuilderRuntimeJobStore,
+        )
+
+        return FirestoreBuilderRuntimeJobStore()
+    return BuilderRuntimeJobStore()
+
 
 def get_builder_runtime_job_store() -> BuilderRuntimeJobStoreProtocol:
     if _STORE_SINGLETON[0] is None:
-        _STORE_SINGLETON[0] = BuilderRuntimeJobStore()
+        _STORE_SINGLETON[0] = build_builder_runtime_job_store()
     return _STORE_SINGLETON[0]
 
 

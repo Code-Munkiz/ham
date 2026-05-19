@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from src.api.internal_dispatcher import (
@@ -48,6 +48,48 @@ def _make_jwt_token(payload: dict[str, Any]) -> str:
 
 _VALID_SA = "cloud-tasks@my-project.iam.gserviceaccount.com"
 _VALID_AUD = "https://ham-api.example.com/api/internal/dispatch-worker"
+
+
+@pytest.fixture(autouse=True)
+def _stub_google_oidc_verifier(monkeypatch):
+    """Keep tests offline by stubbing Google signature verification.
+
+    This validates token shape + audience using the JWT payload helper while
+    still exercising dispatcher-side claim checks.
+    """
+    import src.api.internal_dispatcher as internal_dispatcher
+
+    def _fake_verify(token: str, *, expected_aud: str) -> dict[str, Any]:
+        try:
+            payload = _decode_jwt_payload(token)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=401,
+                detail={
+                    "error": {
+                        "code": "DISPATCHER_TOKEN_INVALID",
+                        "message": f"OIDC token verification failed: {exc}",
+                    }
+                },
+            ) from exc
+        aud = payload.get("aud")
+        if isinstance(aud, list):
+            aud_match = expected_aud in aud
+        else:
+            aud_match = str(aud or "") == expected_aud
+        if not aud_match:
+            raise HTTPException(
+                status_code=401,
+                detail={
+                    "error": {
+                        "code": "DISPATCHER_TOKEN_INVALID",
+                        "message": "OIDC token verification failed: audience mismatch",
+                    }
+                },
+            )
+        return payload
+
+    monkeypatch.setattr(internal_dispatcher, "_verify_google_oidc_token", _fake_verify)
 
 
 def _valid_token() -> str:

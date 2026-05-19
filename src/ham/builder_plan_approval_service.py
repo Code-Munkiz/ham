@@ -96,10 +96,29 @@ class _NoOpWorkerEnqueue:
 
 _ENQUEUE_SINGLETON: list[WorkerEnqueueProtocol | None] = [None]
 
+_WORKER_ENQUEUE_BACKEND_ENV = "HAM_WORKER_ENQUEUE_BACKEND"
+
+
+def build_worker_enqueue() -> WorkerEnqueueProtocol:
+    """Pick the worker enqueue backend based on env.
+
+    Defaults to :class:`_NoOpWorkerEnqueue` (tests / local dev). When
+    ``HAM_WORKER_ENQUEUE_BACKEND=cloud_tasks`` is set, returns the Cloud
+    Tasks implementation; misconfiguration raises at construction.
+    """
+    backend = (os.environ.get(_WORKER_ENQUEUE_BACKEND_ENV) or "").strip().lower()
+    if backend == "cloud_tasks":
+        from src.ham.builder_worker_enqueue_cloud_tasks import (  # noqa: PLC0415
+            build_cloud_tasks_worker_enqueue,
+        )
+
+        return build_cloud_tasks_worker_enqueue()
+    return _NoOpWorkerEnqueue()
+
 
 def get_worker_enqueue() -> WorkerEnqueueProtocol:
     if _ENQUEUE_SINGLETON[0] is None:
-        _ENQUEUE_SINGLETON[0] = _NoOpWorkerEnqueue()
+        _ENQUEUE_SINGLETON[0] = build_worker_enqueue()
     return _ENQUEUE_SINGLETON[0]
 
 

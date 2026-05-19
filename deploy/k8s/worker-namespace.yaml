@@ -1,0 +1,12 @@
+# Phase 2.5 — Worker namespace.
+#
+# Separate from the preview-pod namespace so the Worker has its own
+# blast radius and so future NetworkPolicy work (Phase 3, ADR-0015) can
+# land here cleanly without touching the preview policy in ADR-0006.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ham-worker
+  labels:
+    app.kubernetes.io/name: ham-worker
+    app.kubernetes.io/part-of: ham

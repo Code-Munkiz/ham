@@ -114,10 +114,28 @@ class BuilderPlanStore:
 
 _STORE_SINGLETON: list[BuilderPlanStoreProtocol | None] = [None]
 
+_BACKEND_ENV = "HAM_BUILDER_PLAN_STORE_BACKEND"
+
+
+def build_builder_plan_store() -> BuilderPlanStoreProtocol:
+    """Pick the plan store backend based on env.
+
+    Defaults to the file-backed implementation. ``HAM_BUILDER_PLAN_STORE_BACKEND
+    =firestore`` selects :class:`FirestoreBuilderPlanStore` (lazy import).
+    """
+    backend = (os.environ.get(_BACKEND_ENV) or "").strip().lower()
+    if backend == "firestore":
+        from src.persistence.firestore_builder_plan_store import (  # noqa: PLC0415
+            FirestoreBuilderPlanStore,
+        )
+
+        return FirestoreBuilderPlanStore()
+    return BuilderPlanStore()
+
 
 def get_builder_plan_store() -> BuilderPlanStoreProtocol:
     if _STORE_SINGLETON[0] is None:
-        _STORE_SINGLETON[0] = BuilderPlanStore()
+        _STORE_SINGLETON[0] = build_builder_plan_store()
     return _STORE_SINGLETON[0]
 
 
