@@ -6,6 +6,7 @@ import {
   approveBuilderPlan,
   fetchBuilderPlan,
 } from "@/lib/ham/builderPlanApi";
+import { BuilderJobApiError, cancelBuilderJob } from "@/lib/ham/builderJobApi";
 
 import { PlanCard, type PlanCardPhase } from "./PlanCard";
 
@@ -143,7 +144,24 @@ export function WorkspaceBuilderPlanCards({
                 setApprovingPlanId(null);
               }
             }}
+            jobId={entry.jobId}
             onReplan={(text) => onReplanMessage(text)}
+            onCancelJob={
+              entry.jobId
+                ? async () => {
+                    try {
+                      await cancelBuilderJob(entry.jobId!);
+                    } catch (err) {
+                      if (err instanceof BuilderJobApiError && err.code === "job_already_terminal") {
+                        return;
+                      }
+                      patchEntry(entry.planId, {
+                        busyBanner: err instanceof Error ? err.message : "Cancel failed",
+                      });
+                    }
+                  }
+                : undefined
+            }
           />
         );
       })}

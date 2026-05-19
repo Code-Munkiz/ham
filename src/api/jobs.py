@@ -24,7 +24,8 @@ from fastapi.responses import StreamingResponse
 from typing import Annotated
 
 from src.api.clerk_gate import get_ham_clerk_actor
-from src.ham.builder_plan import SSEEvent
+from src.ham.builder_plan import CancelRequest, CancelResponse, SSEEvent
+from src.ham.builder_plan_status import validate_transition
 from src.ham.clerk_auth import HamActor
 from src.persistence.builder_run_events_store import (
     BuilderRunEventsStoreProtocol,
@@ -142,6 +143,94 @@ async def _stream_events(
             idle_ticks = 0
 
         await asyncio.sleep(_POLL_INTERVAL)
+
+
+@router.post("/api/jobs/{job_id}/cancel", status_code=202)
+async def cancel_job(
+    job_id: str,
+    request: Request,
+    body: CancelRequest,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> CancelResponse:
+    """Record a cooperative cancel signal for a running job (Contract 6 / ADR-0004)."""
+    job_store = get_builder_runtime_job_store()
+
+    ws_param = request.query_params.get("workspace_id")
+    proj_param = request.query_params.get("project_id")
+    job = None
+    if ws_param and proj_param:
+        job = job_store.get_cloud_runtime_job(
+            workspace_id=ws_param,
+            project_id=proj_param,
+            job_id=job_id,
+        )
+    else:
+        job = _find_job_by_id(job_id, job_store=job_store)
+
+    if job is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": {
+                    "code": "JOB_NOT_FOUND",
+                    "message": f"Job {job_id!r} not found.",
+                }
+            },
+        )
+
+    status = str(job.status)
+    if status in _TERMINAL_STATUSES:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": {
+                    "code": "job_already_terminal",
+                    "message": f"Job {job_id!r} is already {status}.",
+                }
+            },
+        )
+
+    if status == "cancelling":
+        cancel_at = job.cancel_requested_at or _utc_now_iso()
+        return CancelResponse(
+            job_id=job_id,
+            status="cancelling",
+            cancel_requested_at=cancel_at,
+        )
+
+    try:
+        validate_transition(status, "cancelling")  # type: ignore[arg-type]
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": {
+                    "code": "job_already_terminal",
+                    "message": str(exc),
+                }
+            },
+        ) from exc
+
+    cancel_requested_at = _utc_now_iso()
+    reason = body.reason
+    if reason is not None and len(reason) > 200:
+        reason = reason[:200]
+
+    updated = job.model_copy(
+        update={
+            "status": "cancelling",
+            "cancel_requested_at": cancel_requested_at,
+            "cancel_reason": reason,
+            "updated_at": cancel_requested_at,
+        }
+    )
+    job_store.upsert_cloud_runtime_job(updated)
+
+    return CancelResponse(
+        job_id=job_id,
+        status="cancelling",
+        cancel_requested_at=cancel_requested_at,
+    )
 
 
 @router.get("/api/jobs/{job_id}/stream")
