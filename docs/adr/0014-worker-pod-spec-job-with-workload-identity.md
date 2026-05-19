@@ -31,7 +31,8 @@ The Worker verifies `Job.workspace_id`, `Job.project_id`, and `Job.metadata['pla
 
 ## Auth: Workload Identity end-to-end
 
-- **Dispatcher (Cloud Run) → GKE API.** The Cloud Run service's GCP service account is bound to a Kubernetes `Role` (namespace-scoped) with verbs `create, get, list` on `jobs` in the worker namespace. Not `roles/container.developer`. Not `ClusterRole`. The `kubernetes` Python client uses `google-auth` to mint short-lived GKE access tokens; no JSON keys.
+- **Dispatcher (Cloud Run) → GKE API (Worker Jobs).** The Cloud Run service's GCP service account is bound to a Kubernetes `Role` (namespace-scoped) with verbs `create, get, list, watch` on `jobs` in the `ham-worker` namespace. Not `ClusterRole`. The `kubernetes` Python client uses `google-auth` to mint short-lived GKE access tokens; no JSON keys. Worker RBAC intentionally omits `delete`.
+- **Dispatcher (Cloud Run) → GKE API (legacy Builder preview).** Separate from Worker scheduling: live preview provisioning creates pods/services in `ham-builder-preview-spike` via the same `ham-dispatcher` GSA. GKE enforces **both** GCP IAM and Kubernetes RBAC. Namespace-scoped Role/RoleBinding (`ham-preview-dispatcher`) covers the K8s layer (pods/services lifecycle, pods/log read; no secrets). **Staging temporary tradeoff (2026-05):** `roles/container.developer` on `ham-dispatcher` at the GCP layer unblocks preview after Phase 2.5 SA switch; this is broader than Worker-only scheduling and is **not** equivalent security to Worker RBAC alone. Phase 3 should replace it with a custom IAM role listing only required `container.pods.*` / `container.services.*` permissions. Still no `ClusterRole`, no `container.admin`, no `roles/editor`.
 - **Worker pod → Firestore.** The pod runs as a Kubernetes service account bound to a GCP service account via Workload Identity. That GCP SA has `roles/datastore.user` (Firestore) only. No JSON keys mounted, no broad permissions.
 - **Cloud Tasks → Dispatcher.** Cloud Tasks signs HTTP push deliveries with an OIDC token whose `aud` matches `HAM_DISPATCHER_AUDIENCE`. The dispatcher already validates this (`src/api/internal_dispatcher.py:_validate_oidc_token`). The enqueue side mints the matching token with the queue-side service account.
 
@@ -45,7 +46,7 @@ The dispatcher additionally transitions `CloudRuntimeJob.phase` to `scheduled` a
 
 - One image, one CI pipeline.
 - Worker pod is ephemeral; cleanup is K8s-managed.
-- IAM/RBAC surface is bounded: dispatcher SA has create/get/list on Jobs in one namespace; Worker SA has Firestore access only.
+- IAM/RBAC surface is bounded for **Worker Jobs**: dispatcher SA has create/get/list/watch on Jobs in `ham-worker` only (no delete); Worker SA has Firestore access only. **Builder preview** adds bucket-scoped GCS upload + namespace-scoped preview RBAC; staging also grants `roles/container.developer` on the dispatcher SA as a temporary GCP-layer unblock (see auth section).
 - No JSON keys anywhere in the stack.
 - Adding new env vars to the Worker requires updating both `src/ham/worker_main.py` (read) and `src/api/internal_dispatcher_gke.py` (set). Treat this as the contract surface.
 - If the Worker image grows large (e.g., adds CUDA), the same-image trade-off should be revisited.

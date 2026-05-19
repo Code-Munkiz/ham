@@ -73,6 +73,40 @@ gcloud projects add-iam-policy-binding "${HAM_PROJECT}" \
 
 The Cloud Run service must be deployed with `--service-account ham-dispatcher@${HAM_PROJECT}.iam.gserviceaccount.com`.
 
+#### Legacy Builder preview (required when `ham-api` runtime SA is `ham-dispatcher`)
+
+Phase 2.5 switches Cloud Run to `ham-dispatcher`. That GSA must retain **legacy Builder live-preview** permissions in addition to the Worker enqueue/dispatch grants above. Without them, chat scaffold succeeds but cloud preview fails (`GCP_GKE_SOURCE_BUNDLE_UPLOAD_FAILED` / `GCP_GKE_RBAC_DENIED`).
+
+**Staging (temporary tradeoff, 2026-05):**
+
+```
+# GCS bundle upload (bucket-scoped; not project-wide storage.admin)
+gcloud storage buckets add-iam-policy-binding "gs://${HAM_PREVIEW_SOURCE_BUCKET}" \
+  --project="${HAM_PROJECT}" \
+  --member="serviceAccount:ham-dispatcher@${HAM_PROJECT}.iam.gserviceaccount.com" \
+  --role="roles/storage.objectAdmin"
+
+# GKE Kubernetes API auth (GCP IAM layer). Narrow K8s RoleBinding alone is insufficient.
+gcloud projects add-iam-policy-binding "${HAM_PROJECT}" \
+  --member="serviceAccount:ham-dispatcher@${HAM_PROJECT}.iam.gserviceaccount.com" \
+  --role="roles/container.developer"
+
+# Namespace-scoped K8s RBAC in ham-builder-preview-spike (no ClusterRole, no secrets):
+# Role ham-preview-dispatcher → pods/services lifecycle + pods/log read
+# RoleBinding subject: ham-dispatcher@${HAM_PROJECT}.iam.gserviceaccount.com
+```
+
+**Security model (staging):**
+
+| Layer | Worker Jobs (`ham-worker`) | Builder preview (`ham-builder-preview-spike`) |
+|-------|---------------------------|-----------------------------------------------|
+| GCP IAM | `datastore.user`, `container.clusterViewer`, Cloud Tasks enqueuer | **`container.developer`** (temporary), `storage.objectAdmin` on preview bucket |
+| K8s RBAC | Role: `jobs` create/get/list/watch only — **no delete** | Role: pods/services create/get/list/watch/delete + pods/log get — **preview namespace only** |
+
+Do **not** grant `roles/editor`, `roles/owner`, or `roles/container.admin` to `ham-dispatcher`.
+
+**Phase 3 follow-up:** replace `roles/container.developer` with a custom GCP IAM role listing only the `container.pods.*` / `container.services.*` permissions the preview client uses, once smoke cycles confirm the exact set. Keep namespace-scoped K8s RBAC as the second authorization layer.
+
 ### Worker GSA
 
 ```
@@ -123,7 +157,9 @@ gcloud projects add-iam-policy-binding "${HAM_PROJECT}" \
   --role="roles/container.clusterViewer"
 ```
 
-`container.clusterViewer` is intentionally narrow — read-only on cluster metadata. The RoleBinding in `worker-rbac.yaml` is what actually grants Job create/get/list rights. No `container.developer`. No `container.admin`.
+`container.clusterViewer` is intentionally narrow — read-only on cluster metadata. The RoleBinding in `worker-rbac.yaml` is what actually grants Job create/get/list rights for the **Worker** path.
+
+**Staging exception:** legacy Builder live preview also requires `roles/container.developer` on `ham-dispatcher` (see *Legacy Builder preview* under §3). That grant is **broader than Worker scheduling needs** and is documented as a temporary staging unblock — not the long-term target. Do not grant `container.admin`.
 
 ## 6. Build and push the Worker image
 
