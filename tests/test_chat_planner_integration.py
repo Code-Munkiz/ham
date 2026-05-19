@@ -67,9 +67,26 @@ def mock_mode(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def mutation_builder_meta() -> dict[str, Any]:
-    """builder_meta that indicates a builder-mutation turn."""
+    """builder_meta that indicates a builder-mutation turn on an existing snapshot."""
     return {
         "builder_intent": "build_or_create",
+        "source_snapshot_id": "snap_existing_test",
+        "builder_action_decision": {
+            "kind": "mutate",
+            "confidence": "high",
+            "destructive": False,
+            "reason": "explicit_mutation",
+        },
+    }
+
+
+@pytest.fixture
+def net_new_build_builder_meta() -> dict[str, Any]:
+    """Empty-project build turn: mutate classification but no active snapshot yet."""
+    return {
+        "builder_intent": "build_or_create",
+        "llm_scaffold_failed": True,
+        "llm_scaffold_error_code": "STEP_MODEL_UNAVAILABLE",
         "builder_action_decision": {
             "kind": "mutate",
             "confidence": "high",
@@ -580,3 +597,87 @@ class TestNonMutationTurnsUnchanged:
         assert not any(e.get("type") == "plan_proposed" for e in events)
         done = [e for e in events if e["type"] == "done"][0]
         assert done.get("operator_result") is None
+
+
+# ---------------------------------------------------------------------------
+# Test: net-new build must not enter planner mutate path
+# ---------------------------------------------------------------------------
+
+
+class TestPlannerNetNewBuildGate:
+    def test_net_new_build_does_not_call_produce_plan(
+        self,
+        mock_mode: None,
+        monkeypatch: pytest.MonkeyPatch,
+        net_new_build_builder_meta: dict[str, Any],
+    ) -> None:
+        monkeypatch.setattr("src.api.chat.resolve_openrouter_api_key_for_actor", lambda ham_actor=None: "sk-or-test")
+        fail_prefix = (
+            "I couldn't build this yet because the OpenRouter model call failed. "
+            "Check Connected Tools (OpenRouter key) and your selected chat model, then try again.\n\n"
+        )
+        monkeypatch.setattr(
+            "src.api.chat.run_builder_happy_path_hook",
+            lambda **_kw: (fail_prefix, net_new_build_builder_meta),
+        )
+
+        def _must_not_produce_plan(**kwargs: Any) -> Plan:
+            raise AssertionError("produce_plan must not run for net-new build_or_create turns")
+
+        with patch("src.ham.builder_planner.produce_plan", side_effect=_must_not_produce_plan):
+            res = client.post(
+                "/api/chat/stream",
+                json={
+                    "messages": [{"role": "user", "content": "ham build me a game like gattica"}],
+                    "workspace_id": "ws_test",
+                    "project_id": "proj_test",
+                },
+            )
+
+        assert res.status_code == 200, res.text
+        events = _parse_ndjson(res.text)
+        assert not any(e.get("type") == "plan_proposed" for e in events)
+        done = [e for e in events if e["type"] == "done"][0]
+        assert done.get("builder", {}).get("llm_scaffold_failed") is True
+        assert "apply that edit" not in done["messages"][-1]["content"].lower()
+        assert "couldn't build" in done["messages"][-1]["content"].lower()
+
+    def test_planner_bad_request_does_not_502(
+        self,
+        mock_mode: None,
+        monkeypatch: pytest.MonkeyPatch,
+        mutation_builder_meta: dict[str, Any],
+    ) -> None:
+        monkeypatch.setattr("src.api.chat.resolve_openrouter_api_key_for_actor", lambda ham_actor=None: "sk-or-test")
+        monkeypatch.setattr(
+            "src.api.chat.run_builder_happy_path_hook",
+            lambda **_kw: (None, mutation_builder_meta),
+        )
+
+        def _raise_bad_request(**kwargs: Any) -> Plan:
+            from litellm.exceptions import BadRequestError
+
+            raise BadRequestError(
+                message="hermes-agent is not a valid model ID",
+                model="openrouter/hermes-agent",
+                llm_provider="openrouter",
+            )
+
+        with patch("src.ham.builder_planner.produce_plan", side_effect=_raise_bad_request):
+            res = client.post(
+                "/api/chat/stream",
+                json={
+                    "messages": [{"role": "user", "content": "add a login form"}],
+                    "workspace_id": "ws_test",
+                    "project_id": "proj_test",
+                },
+            )
+
+        assert res.status_code == 200, res.text
+        events = _parse_ndjson(res.text)
+        errors = [e for e in events if e.get("type") == "error"]
+        assert len(errors) == 1
+        assert errors[0]["code"] == "PLANNER_FAILED"
+        done = [e for e in events if e["type"] == "done"][0]
+        assert done.get("builder", {}).get("planner_failed") is True
+        assert "interrupted before" not in done["messages"][-1]["content"].lower()

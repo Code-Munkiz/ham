@@ -438,6 +438,68 @@ class TestProducePlanModelSelection:
         assert len(captured) == 1
         assert "gpt-4o-mini" in captured[0]
 
+    def test_does_not_use_hermes_gateway_model(self, monkeypatch):
+        monkeypatch.delenv("HAM_PLANNER_MODEL", raising=False)
+        monkeypatch.setenv("HERMES_GATEWAY_MODEL", "hermes-agent")
+        monkeypatch.setenv("DEFAULT_MODEL", "minimax/minimax-m2.5:free")
+        monkeypatch.setattr(
+            "src.ham.builder_planner.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
+        )
+        captured: list[str] = []
+
+        def _capture_complete(messages, *, model_override=None, **kwargs):
+            captured.append(str(model_override or ""))
+            return _VALID_LLM_JSON
+
+        monkeypatch.setattr(
+            "src.ham.builder_planner.complete_chat_messages_openrouter",
+            _capture_complete,
+        )
+        store = _InMemoryPlanStore()
+
+        produce_plan(
+            user_message="Test model",
+            project_id="proj_m",
+            workspace_id="ws_m",
+            requested_by="dev@test.com",
+            conversation_history=[],
+            store=store,
+        )
+
+        assert len(captured) == 1
+        assert captured[0] == "openrouter/minimax/minimax-m2.5:free"
+        assert "hermes-agent" not in captured[0]
+
+    def test_threads_explicit_model_override(self, monkeypatch):
+        monkeypatch.setattr(
+            "src.ham.builder_planner.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
+        )
+        captured: list[str] = []
+
+        def _capture_complete(messages, *, model_override=None, **kwargs):
+            captured.append(str(model_override or ""))
+            return _VALID_LLM_JSON
+
+        monkeypatch.setattr(
+            "src.ham.builder_planner.complete_chat_messages_openrouter",
+            _capture_complete,
+        )
+        store = _InMemoryPlanStore()
+
+        produce_plan(
+            user_message="Test model",
+            project_id="proj_m",
+            workspace_id="ws_m",
+            requested_by="dev@test.com",
+            conversation_history=[],
+            store=store,
+            model_override="openrouter/qwen/qwen3-coder:free",
+        )
+
+        assert captured == ["openrouter/qwen/qwen3-coder:free"]
+
 
 # ---------------------------------------------------------------------------
 # Edge cases

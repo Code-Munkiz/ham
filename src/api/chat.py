@@ -1175,6 +1175,39 @@ def _builder_artifact_verification_failed(builder_meta: dict[str, Any] | None) -
     return bool((builder_meta or {}).get("artifact_verification_failed"))
 
 
+def _builder_llm_scaffold_failed(builder_meta: dict[str, Any] | None) -> bool:
+    return bool((builder_meta or {}).get("llm_scaffold_failed"))
+
+
+def _builder_model_access_required(builder_meta: dict[str, Any] | None) -> bool:
+    return bool((builder_meta or {}).get("model_access_required"))
+
+
+def _builder_has_active_source_snapshot(builder_meta: dict[str, Any] | None) -> bool:
+    meta = builder_meta or {}
+    if bool(meta.get("scaffolded") or meta.get("deduplicated")):
+        return True
+    return bool(str(meta.get("source_snapshot_id") or "").strip())
+
+
+def _builder_should_short_circuit_failure(builder_meta: dict[str, Any] | None) -> bool:
+    return (
+        _builder_llm_scaffold_failed(builder_meta)
+        or _builder_model_access_required(builder_meta)
+        or _builder_artifact_verification_failed(builder_meta)
+        or _builder_edit_worker_blocked(builder_meta)
+    )
+
+
+def _builder_skip_planner_for_net_new_build(
+    builder_intent: str,
+    builder_meta: dict[str, Any] | None,
+) -> bool:
+    return builder_intent == "build_or_create" and not _builder_has_active_source_snapshot(
+        builder_meta
+    )
+
+
 def _builder_edit_worker_blocked(builder_meta: dict[str, Any] | None) -> bool:
     return bool((builder_meta or {}).get("builder_edit_worker_blocked"))
 
@@ -1194,17 +1227,42 @@ def _builder_verification_failure_assistant_text(
     builder_prefix: str | None,
     builder_meta: dict[str, Any] | None,
 ) -> str:
-    raw = str(builder_prefix or "")
-    if raw.strip():
-        return raw
+    if builder_prefix is not None and str(builder_prefix).strip():
+        return str(builder_prefix)
+    intent = str((builder_meta or {}).get("builder_intent") or "").strip().lower()
+    if _builder_model_access_required(builder_meta):
+        if intent == "build_or_create":
+            return (
+                "I cannot build this without model access. "
+                "Connect OpenRouter in Settings (Connected Tools) and try again.\n\n"
+            )
+        return (
+            "I cannot apply that edit without model access. "
+            "Connect OpenRouter in Settings (Connected Tools) and try again.\n\n"
+        )
+    if _builder_llm_scaffold_failed(builder_meta):
+        if intent == "build_or_create":
+            return (
+                "I couldn't build this yet because the OpenRouter model call failed. "
+                "Check Connected Tools (OpenRouter key) and your selected chat model, then try again.\n\n"
+            )
+        return (
+            "I couldn't apply that edit yet because the OpenRouter model call failed. "
+            "Check Connected Tools (OpenRouter key) and your selected chat model, then try again.\n\n"
+        )
     ver = _artifact_verification_payload(builder_meta)
     if ver:
         r = str(ver.get("reason") or "").strip()
+        if intent == "build_or_create":
+            tail = f" ({r})" if r else ""
+            return f"I couldn't build that yet{tail}.\n\n"
         if r:
             return (
                 "I tried to apply that edit, but the generated files did not include "
                 f"what you asked for yet ({r}).\n\n"
             )
+    if intent == "build_or_create":
+        return "I couldn't build this yet. Try again or pick a different chat model.\n\n"
     return "I tried to apply that edit, but the generated files did not verify.\n\n"
 
 
@@ -1652,7 +1710,7 @@ async def post_chat(
                 builder=builder_meta,
                 artifact_verification=_artifact_verification_payload(builder_meta),
             )
-    if _builder_artifact_verification_failed(builder_meta) or _builder_edit_worker_blocked(builder_meta):
+    if _builder_should_short_circuit_failure(builder_meta):
         vf_msg = _builder_verification_failure_assistant_text(builder_prefix, builder_meta)
         store.append_turns(sid, [ChatTurn(role="assistant", content=vf_msg)])
         return ChatResponse(
@@ -1881,7 +1939,7 @@ def post_chat_stream(
                     },
                 )
 
-        if _builder_artifact_verification_failed(builder_meta) or _builder_edit_worker_blocked(builder_meta):
+        if _builder_should_short_circuit_failure(builder_meta):
             vf_text = _builder_verification_failure_assistant_text(builder_prefix, builder_meta)
             store.append_turns(sid, [ChatTurn(role="assistant", content=vf_text)])
             msgs = store.list_messages(sid)
@@ -1959,7 +2017,17 @@ def post_chat_stream(
         _builder_action_kind = str(
             ((builder_meta or {}).get("builder_action_decision") or {}).get("kind") or ""
         ).strip()
-        if _builder_action_kind == "mutate" and resolve_openrouter_api_key_for_actor(ham_actor):
+        _planner_model_override: str | None = None
+        if body_eff.model_id:
+            try:
+                _planner_model_override = resolve_model_id_for_chat(body_eff.model_id, ham_actor)
+            except ValueError:
+                _planner_model_override = None
+        if (
+            _builder_action_kind == "mutate"
+            and resolve_openrouter_api_key_for_actor(ham_actor)
+            and not _builder_skip_planner_for_net_new_build(builder_intent, builder_meta)
+        ):
             from src.ham.builder_planner import PlannerOutputInvalidError, produce_plan
 
             _planner_workspace_id = _normalized_workspace_id(body_eff.workspace_id) or ""
@@ -1980,6 +2048,7 @@ def post_chat_stream(
                             requested_by=_planner_requested_by,
                             conversation_history=_planner_history,
                             ham_actor=ham_actor,
+                            model_override=_planner_model_override,
                         )
                         if plan is not None:
                             yield json.dumps({"type": "plan_proposed", "plan_id": plan.plan_id}) + "\n"
@@ -2010,6 +2079,10 @@ def post_chat_stream(
                                 "workspace_id": _planner_workspace_id,
                             },
                         )
+                        _invalid_msg = (
+                            "Planner couldn't produce a valid Plan; please rephrase.\n\n"
+                        )
+                        store.upsert_assistant_turn(sid, _planner_turn_id, _invalid_msg)
                         yield json.dumps(
                             {
                                 "type": "error",
@@ -2017,6 +2090,69 @@ def post_chat_stream(
                                 "message": "Planner couldn't produce a valid Plan; please rephrase",
                             }
                         ) + "\n"
+                        _invalid_done: dict[str, Any] = {
+                            "type": "done",
+                            "session_id": sid,
+                            "messages": store.list_messages(sid),
+                            "actions": [],
+                            "operator_result": None,
+                            "execution_mode": stream_execution_mode,
+                        }
+                        if stream_active_meta:
+                            _invalid_done["active_agent"] = stream_active_meta
+                        if builder_meta is not None:
+                            _invalid_done["builder"] = {
+                                **builder_meta,
+                                "planner_failed": True,
+                                "planner_error_code": "PLANNER_INVALID_OUTPUT",
+                            }
+                        yield json.dumps(_invalid_done) + "\n"
+                    except Exception as exc:
+                        exc_type = type(exc).__name__
+                        _LOG.warning(
+                            "Planner mutation failed; emitting typed SSE error",
+                            extra={
+                                "project_id": _planner_project_id,
+                                "workspace_id": _planner_workspace_id,
+                                "exception_type": exc_type,
+                            },
+                        )
+                        _fail_msg = _builder_verification_failure_assistant_text(
+                            builder_prefix,
+                            builder_meta,
+                        )
+                        if not str(_fail_msg or "").strip():
+                            _fail_msg = (
+                                "Plan generation failed. Try again or pick a different chat model.\n\n"
+                            )
+                        store.upsert_assistant_turn(sid, _planner_turn_id, _fail_msg)
+                        yield json.dumps({"type": "delta", "text": _fail_msg}) + "\n"
+                        yield json.dumps(
+                            {
+                                "type": "error",
+                                "code": "PLANNER_FAILED",
+                                "message": (
+                                    "Plan generation failed; try again or pick a different model."
+                                ),
+                            }
+                        ) + "\n"
+                        _fail_done: dict[str, Any] = {
+                            "type": "done",
+                            "session_id": sid,
+                            "messages": store.list_messages(sid),
+                            "actions": [],
+                            "operator_result": None,
+                            "execution_mode": stream_execution_mode,
+                        }
+                        if stream_active_meta:
+                            _fail_done["active_agent"] = stream_active_meta
+                        if builder_meta is not None:
+                            _fail_done["builder"] = {
+                                **builder_meta,
+                                "planner_failed": True,
+                                "planner_error_code": exc_type,
+                            }
+                        yield json.dumps(_fail_done) + "\n"
                 finally:
                     release_stream_lock()
 

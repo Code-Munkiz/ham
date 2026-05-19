@@ -28,7 +28,7 @@ from src.ham.builder_plan import Plan, PlanApprovalRecord, Step
 from src.llm_client import (
     complete_chat_messages_openrouter,
     resolve_openrouter_api_key_for_actor,
-    resolve_openrouter_model_name_for_chat,
+    resolve_openrouter_model_name,
 )
 from src.persistence.builder_plan_store import (
     BuilderPlanStoreProtocol,
@@ -124,13 +124,24 @@ def _extract_json(text: str) -> str:
     return text[start:].strip()
 
 
-def _get_planner_model() -> str:
-    override = (os.environ.get("HAM_PLANNER_MODEL") or "").strip()
-    if not override:
-        return resolve_openrouter_model_name_for_chat()
-    if override.startswith("openrouter/"):
-        return override
-    return f"openrouter/{override}"
+def _get_planner_model(*, model_override: str | None = None) -> str:
+    """Resolve the model for planner BYO OpenRouter calls.
+
+    Resolution order: explicit ``model_override`` (from chat ``model_id``),
+    then ``HAM_PLANNER_MODEL``, then ``DEFAULT_MODEL`` via
+    :func:`resolve_openrouter_model_name` (not ``HERMES_GATEWAY_MODEL``).
+    """
+    explicit = (model_override or "").strip()
+    if explicit:
+        if explicit.startswith("openrouter/"):
+            return explicit
+        return f"openrouter/{explicit}"
+    planner = (os.environ.get("HAM_PLANNER_MODEL") or "").strip()
+    if planner:
+        if planner.startswith("openrouter/"):
+            return planner
+        return f"openrouter/{planner}"
+    return resolve_openrouter_model_name()
 
 
 def _parse_plan_from_raw(
@@ -213,6 +224,7 @@ def produce_plan(
     source_snapshot_id: str | None = None,
     store: BuilderPlanStoreProtocol | None = None,
     ham_actor: Any | None = None,
+    model_override: str | None = None,
 ) -> Plan | None:
     """Turn a user message into a Plan.
 
@@ -230,7 +242,7 @@ def produce_plan(
         return None
 
     plan_store = store or get_builder_plan_store()
-    planner_model = _get_planner_model()
+    planner_model = _get_planner_model(model_override=model_override)
 
     # --- Attempt 1 ---
     messages = _build_messages(user_message, conversation_history, system_prompt=_PLANNER_SYSTEM_PROMPT)
