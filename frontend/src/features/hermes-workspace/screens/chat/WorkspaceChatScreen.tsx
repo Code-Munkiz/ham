@@ -76,6 +76,12 @@ import { WorkspaceChatEmptyState, WORKSPACE_CHAT_SUGGESTIONS } from "./Workspace
 import { WorkspaceChatMessageList, type HwwMsgRow } from "./WorkspaceChatMessageList";
 import { WorkspaceChatComposer } from "./WorkspaceChatComposer";
 import { CodingPlanCard } from "./coding-plan/CodingPlanCard";
+import {
+  WorkspaceBuilderPlanCards,
+  createEmptyBuilderPlanEntry,
+  loadBuilderPlanEntry,
+  type BuilderPlanCardEntry,
+} from "../../chat/WorkspaceBuilderPlanCards";
 import { isLikelyCodingIntent } from "./coding-plan/codingIntent";
 import type {
   ComposerExportPdfState,
@@ -645,6 +651,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     null,
   );
   const [codingPlanRestoredBanner, setCodingPlanRestoredBanner] = React.useState(false);
+  const [builderPlanEntries, setBuilderPlanEntries] = React.useState<BuilderPlanCardEntry[]>([]);
   const codingPlanDraftRestoreKeyRef = React.useRef<string | null>(null);
   const composerTextareaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const [attachments, setAttachments] = React.useState<WorkspaceComposerAttachment[]>([]);
@@ -2002,6 +2009,24 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     }
   }, []);
 
+  const registerBuilderPlanProposed = React.useCallback(async (planId: string) => {
+    const trimmed = planId.trim();
+    if (!trimmed) return;
+    setBuilderPlanEntries((prev) => {
+      const superseded = prev.map((entry) =>
+        entry.phase !== "superseded" ? { ...entry, phase: "superseded" as const } : entry,
+      );
+      if (superseded.some((entry) => entry.planId === trimmed)) {
+        return superseded;
+      }
+      return [...superseded, createEmptyBuilderPlanEntry(trimmed)];
+    });
+    const loaded = await loadBuilderPlanEntry(trimmed);
+    setBuilderPlanEntries((prev) =>
+      prev.map((entry) => (entry.planId === trimmed ? loaded : entry)),
+    );
+  }, []);
+
   const send = React.useCallback(
     async (outboundUser: string | HamChatUserContentV1 | HamChatUserContentV2) => {
       const isV1 =
@@ -2601,6 +2626,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                 ),
               );
             },
+            onPlanProposed: (proposedPlanId) => {
+              if (!requestStillCurrent()) return;
+              void registerBuilderPlanProposed(proposedPlanId);
+            },
           },
           streamAuth,
         );
@@ -2807,6 +2836,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       runWorkspaceImageGeneration,
       refreshContextMeters,
       cancelComposerPrefSaveTimer,
+      registerBuilderPlanProposed,
     ],
   );
 
@@ -3644,6 +3674,13 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                   resolveLocalAttachmentPreview={resolveLocalAttachmentPreview}
                   onRemoveGeneratedImage={handleRemoveGeneratedImage}
                   onRemoveGeneratedVideo={handleRemoveGeneratedVideo}
+                />
+                <WorkspaceBuilderPlanCards
+                  entries={builderPlanEntries}
+                  onEntriesChange={setBuilderPlanEntries}
+                  onReplanMessage={(text) => {
+                    void send(text);
+                  }}
                 />
                 <div ref={endRef} className="h-2 shrink-0" />
               </>
