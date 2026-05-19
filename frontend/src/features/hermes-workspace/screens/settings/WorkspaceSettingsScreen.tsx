@@ -15,6 +15,7 @@ import { WorkspaceSettingsBridgePanel } from "./WorkspaceSettingsBridgePanel";
 import { WorkspaceSettingsSideNav } from "./WorkspaceSettingsSideNav";
 import { WorkspaceConnectionSection } from "./WorkspaceConnectionSection";
 import { WorkspaceConnectedToolsSection } from "./WorkspaceConnectedToolsSection";
+import WorkspaceBuildersSection from "./WorkspaceBuildersSection";
 import { WorkspaceModelProviderSection } from "./WorkspaceModelProviderSection";
 import { WorkspaceUsageBillingSection } from "./WorkspaceUsageBillingSection";
 
@@ -49,6 +50,8 @@ export function WorkspaceSettingsScreen() {
         return <WorkspaceConnectionSection />;
       case "tools":
         return <WorkspaceConnectedToolsSection />;
+      case "builders":
+        return <WorkspaceBuildersSection />;
       case "usage":
         return <WorkspaceUsageBillingSection />;
       case "hermes":

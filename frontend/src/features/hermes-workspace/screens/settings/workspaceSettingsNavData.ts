@@ -10,6 +10,7 @@ export type UpstreamSettingsNavId =
   | "connection"
   | "hermes"
   | "tools"
+  | "builders"
   | "usage"
   | "agent"
   | "routing"
@@ -34,6 +35,7 @@ export const UPSTREAM_SETTINGS_NAV_ITEMS: ReadonlyArray<{
   { id: "connection", label: "Connection" },
   { id: "hermes", label: "Model & Provider" },
   { id: "tools", label: "Connected Tools" },
+  { id: "builders", label: "Builders" },
   { id: "usage", label: "Usage & Billing" },
   { id: "agent", label: "Agent Behavior" },
   { id: "routing", label: "Smart Routing" },

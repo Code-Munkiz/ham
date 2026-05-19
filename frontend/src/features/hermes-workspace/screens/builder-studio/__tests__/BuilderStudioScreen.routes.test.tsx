@@ -95,7 +95,10 @@ beforeEach(() => {
   vi.spyOn(api, "listHamProjects").mockResolvedValue({ projects: [] });
 });
 
-describe("BuilderStudioScreen routes", () => {
+// Builder Studio is no longer a primary route; the screen file is retained
+// but unrouted pending broader cleanup. Skipping these route-level assertions
+// because /workspace/builder-studio now redirects to Settings → Builders.
+describe.skip("BuilderStudioScreen routes", () => {
   it("hides all custom-builder list failure UI on the base route when the list endpoint returns list-not-found", async () => {
     vi.spyOn(builderStudioAdapter, "list").mockResolvedValue({
       builders: [],

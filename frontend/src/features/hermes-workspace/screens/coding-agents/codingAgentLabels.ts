@@ -10,9 +10,8 @@
  */
 
 export const CODING_AGENT_LABELS = {
-  surfaceTitle: "Builder Studio",
-  surfaceSubtitle:
-    "Configure builders and defaults; start builds and handoffs from workspace chat after HAM proposes a plan.",
+  surfaceTitle: "Builders",
+  surfaceSubtitle: "Builders are configured here. Work starts in chat.",
   newTaskCta: "New task",
   previewCta: "Preview",
   approveCta: "Approve launch",

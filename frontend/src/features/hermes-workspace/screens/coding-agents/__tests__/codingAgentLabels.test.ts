@@ -9,7 +9,10 @@ import { CODING_AGENT_LABELS } from "@/features/hermes-workspace/screens/coding-
  */
 describe("CODING_AGENT_LABELS — locked adapter & readiness copy", () => {
   it("uses the agreed primary action labels", () => {
-    expect(CODING_AGENT_LABELS.surfaceTitle).toBe("Builder Studio");
+    expect(CODING_AGENT_LABELS.surfaceTitle).toBe("Builders");
+    expect(CODING_AGENT_LABELS.surfaceSubtitle).toBe(
+      "Builders are configured here. Work starts in chat.",
+    );
     expect(CODING_AGENT_LABELS.newTaskCta).toBe("New task");
     expect(CODING_AGENT_LABELS.previewCta).toBe("Preview");
     expect(CODING_AGENT_LABELS.approveCta).toBe("Approve launch");

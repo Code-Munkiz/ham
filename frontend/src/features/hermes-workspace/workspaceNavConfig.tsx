@@ -8,7 +8,6 @@ import {
   Share2,
   FolderOpen,
   Settings,
-  Sparkles,
   Waypoints,
   Terminal,
   UserCircle,
@@ -19,12 +18,11 @@ import {
 export type MainNavItem = { to: string; label: string; icon: LucideIcon; end?: boolean };
 
 /**
- * Hermes Workspace IA: persistent primary rail (Social, Builder Studio) + Library flyout.
+ * Hermes Workspace IA: persistent primary rail (Social) + Library flyout.
  * `/workspace` index redirects to `/workspace/chat`. `/workspace/projects` lives under Library (first item).
  */
 export const primaryRailItems: MainNavItem[] = [
   { to: "/workspace/social", label: "Social", icon: Share2 },
-  { to: "/workspace/builder-studio", label: "Builder Studio", icon: Sparkles },
 ];
 
 export const settingsRailItem: MainNavItem = {
@@ -90,14 +88,6 @@ const MOBILE_TITLE_RULES: { test: (p: string) => boolean; title: string }[] = [
   {
     test: (p) => p === "/workspace/operations" || p.startsWith("/workspace/operations/"),
     title: "Operations",
-  },
-  {
-    test: (p) => p === "/workspace/coding-agents" || p.startsWith("/workspace/coding-agents/"),
-    title: "Builder Studio",
-  },
-  {
-    test: (p) => p === "/workspace/builder-studio" || p.startsWith("/workspace/builder-studio/"),
-    title: "Builder Studio",
   },
   { test: (p) => p === "/workspace/social" || p.startsWith("/workspace/social/"), title: "Social" },
   { test: (p) => p === "/workspace/memory" || p.startsWith("/workspace/memory/"), title: "Memory" },

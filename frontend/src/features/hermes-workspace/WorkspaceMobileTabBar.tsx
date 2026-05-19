@@ -1,6 +1,6 @@
 import * as React from "react";
 import { NavLink, matchPath, useLocation } from "react-router-dom";
-import { Library, Settings, Share2, Sparkles } from "lucide-react";
+import { Library, Settings, Share2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { pathMatchesLibraryRoute, pathMatchesSettingsRail } from "./workspaceNavConfig";
 import { useWorkspaceLibraryFlyout } from "./workspaceLibraryFlyoutContext";
@@ -10,10 +10,7 @@ const MOBILE_PRIMARY_LINKS: {
   label: string;
   end?: boolean;
   icon: React.ElementType;
-}[] = [
-  { to: "/workspace/social", label: "Social", icon: Share2 },
-  { to: "/workspace/builder-studio", label: "Studio", icon: Sparkles },
-];
+}[] = [{ to: "/workspace/social", label: "Social", icon: Share2 }];
 
 /** SHELL-009 — pattern from upstream `mobile-tab-bar.tsx` (hidden on chat routes). */
 export function WorkspaceMobileTabBar() {

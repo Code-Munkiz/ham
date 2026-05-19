@@ -1,5 +1,9 @@
 # HAM Custom Builder Studio — Product + Technical Spec
 
+## Status: internal cookbook (demoted from primary surface)
+
+> As of this commit, Builder Studio is no longer a primary user-facing workspace destination. All building happens in workspace chat. Builder connection readiness now lives at `/workspace/settings?section=builders`. The data model, presets, conductor mapping, and `/api/workspaces/{workspace_id}/custom-builders/*` backend remain authoritative for internal use.
+
 **Status:** Product + architecture spec. **No runtime claims.** No code, env,
 deploy, or PR changes are made by this document.
 
