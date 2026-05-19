@@ -95,7 +95,7 @@ from src.integrations.nous_gateway_client import (
     format_gateway_error_user_message,
     stream_chat_turn,
 )
-from src.llm_client import openrouter_api_key_is_plausible
+from src.llm_client import normalized_openrouter_api_key, openrouter_api_key_is_plausible
 from src.memory_heist import browser_policy_from_config, discover_config
 from src.metadata_stamps import ScanMode
 from src.persistence.chat_session_store import ChatTurn, build_chat_session_store
@@ -1938,6 +1938,83 @@ def post_chat_stream(
 
             return StreamingResponse(
                 builder_handoff_only(),
+                media_type="application/x-ndjson; charset=utf-8",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                },
+            )
+
+        # Phase 2 PR 2 — Planner path for builder-mutation turns.
+        # Spec: docs/PHASE_2_DESIGN.md § Subsystem 1.  ADR-0009: BYO key / regex fallback.
+        # When builder_mutation_router classifies the turn as "mutate" AND an OpenRouter key is
+        # configured, call produce_plan() instead of streaming an LLM reply.  With no key the
+        # branch is skipped and the existing regex / LLM stream flow runs unchanged.
+        _builder_action_kind = str(
+            ((builder_meta or {}).get("builder_action_decision") or {}).get("kind") or ""
+        ).strip()
+        if _builder_action_kind == "mutate" and normalized_openrouter_api_key():
+            from src.ham.builder_planner import PlannerOutputInvalidError, produce_plan
+
+            _planner_workspace_id = _normalized_workspace_id(body_eff.workspace_id) or ""
+            _planner_project_id = (body_eff.project_id or "").strip() or ""
+            _planner_requested_by = ham_actor.user_id if ham_actor is not None else ""
+            # Exclude the current user turn from history; produce_plan appends it as user_message.
+            _planner_history = _chat_store.list_messages(sid)[:-1]
+            _planner_turn_id = str(uuid4())
+
+            def _planner_mutation_gen():
+                try:
+                    yield json.dumps({"type": "session", "session_id": sid}) + "\n"
+                    try:
+                        plan = produce_plan(
+                            user_message=last_user_plain,
+                            project_id=_planner_project_id,
+                            workspace_id=_planner_workspace_id,
+                            requested_by=_planner_requested_by,
+                            conversation_history=_planner_history,
+                        )
+                        if plan is not None:
+                            yield json.dumps({"type": "plan_proposed", "plan_id": plan.plan_id}) + "\n"
+                            _ack = (
+                                f"Plan proposed ({len(plan.steps)} step(s)). "
+                                "Review and approve below."
+                            )
+                            store.upsert_assistant_turn(sid, _planner_turn_id, _ack)
+                            _planner_done: dict[str, Any] = {
+                                "type": "done",
+                                "session_id": sid,
+                                "messages": store.list_messages(sid),
+                                "actions": [],
+                                "operator_result": None,
+                                "execution_mode": stream_execution_mode,
+                                "plan_id": plan.plan_id,
+                            }
+                            if stream_active_meta:
+                                _planner_done["active_agent"] = stream_active_meta
+                            if builder_meta is not None:
+                                _planner_done["builder"] = builder_meta
+                            yield json.dumps(_planner_done) + "\n"
+                    except PlannerOutputInvalidError:
+                        _LOG.warning(
+                            "Planner output invalid after retries; emitting error SSE",
+                            extra={
+                                "project_id": _planner_project_id,
+                                "workspace_id": _planner_workspace_id,
+                            },
+                        )
+                        yield json.dumps(
+                            {
+                                "type": "error",
+                                "code": "PLANNER_INVALID_OUTPUT",
+                                "message": "Planner couldn't produce a valid Plan; please rephrase",
+                            }
+                        ) + "\n"
+                finally:
+                    release_stream_lock()
+
+            return StreamingResponse(
+                _planner_mutation_gen(),
                 media_type="application/x-ndjson; charset=utf-8",
                 headers={
                     "Cache-Control": "no-cache",
