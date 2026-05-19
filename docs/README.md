@@ -28,7 +28,7 @@ Canonical architecture and agent context live at the repo root: [`VISION.md`](..
 
 **Not source of truth:** generated exports and tool-local settings (for example [`CURSOR_EXACT_SETUP_EXPORT.md`](../CURSOR_EXACT_SETUP_EXPORT.md), or the gitignored .cursor/settings.json file) are snapshots or editor config—defer to git-tracked canonical docs. To refresh the Cursor setup export after changing tracked rules or skills, run `python scripts/build_cursor_export.py` from the repo root (do not hand-edit the export file).
 
-**Builder Platform (aspirational):** [`BUILDER_PLATFORM_NORTH_STAR.md`](BUILDER_PLATFORM_NORTH_STAR.md) — phased roadmap (orthogonal to workspace phases in [`HAM_ROADMAP.md`](HAM_ROADMAP.md)); shipped pillars remain [`VISION.md`](../VISION.md).
+**Builder Platform (aspirational):** [`BUILDER_PLATFORM_NORTH_STAR.md`](BUILDER_PLATFORM_NORTH_STAR.md) — phased roadmap (orthogonal to workspace phases in [`HAM_ROADMAP.md`](HAM_ROADMAP.md)); shipped pillars remain [`VISION.md`](../VISION.md). **Manus-parity punch list (Tier 1 shipped 2026-05-19):** [`MANUS_PARITY_ROADMAP.md`](MANUS_PARITY_ROADMAP.md). **Builder domain glossary:** [`CONTEXT.md`](../CONTEXT.md) (Plans, Steps, Workers, SSE). **Locked Phase 0 contracts:** [`PHASE_0_CONTRACTS.md`](PHASE_0_CONTRACTS.md); decisions in [`adr/`](adr/).
 
 **Cursor / contributor setup:** rules, skills, subagents, and slash-command workflows are summarized in [`CURSOR_SETUP_HANDOFF.md`](../CURSOR_SETUP_HANDOFF.md) (canonical copies live under `.cursor/rules/` and `.cursor/skills/`).
 
@@ -66,6 +66,17 @@ SDK bridge attaches to existing `bc-*` agents; **`HAM_CURSOR_SDK_BRIDGE_ENABLED`
 | [ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md](ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md) | Shipped vs partial vs roadmap; SDK bridge vs REST fallbacks |
 | [MISSION_AWARE_FEED_CONTROLS.md](MISSION_AWARE_FEED_CONTROLS.md) | Feed + controls scoped by `mission_registry_id` |
 | [CONTROL_PLANE_RUN.md](CONTROL_PLANE_RUN.md) | `ControlPlaneRun` substrate (factual runs, not a mission graph) |
+
+## Builder Platform (chat-to-app)
+
+| Doc | Purpose |
+|-----|---------|
+| [MANUS_PARITY_ROADMAP.md](MANUS_PARITY_ROADMAP.md) | Tier 1/2/3 gap punch list vs Manus/Replit/Base44; Phase 0–2 execution notes |
+| [PHASE_0_CONTRACTS.md](PHASE_0_CONTRACTS.md) | Locked Plan / SSE / queue / cancel / error schemas (blocks parallel Tier 1 work) |
+| [BUILDER_PLATFORM_NORTH_STAR.md](BUILDER_PLATFORM_NORTH_STAR.md) | Long-term builder vision (aspirational; not shipped pillar SSOT) |
+| [CUSTOM_BUILDER_STUDIO_SPEC.md](CUSTOM_BUILDER_STUDIO_SPEC.md) | Studio product spec (broader than Tier 1 scope) |
+| [../CONTEXT.md](../CONTEXT.md) | Builder vocabulary (Plan, Step, Worker, approval gate, SSE envelope) |
+| [adr/](adr/) | Hard-to-reverse builder decisions (queue transport, BYO Planner key, egress policy, scaffold staging) |
 
 ## Chat, gateway, and capabilities
 

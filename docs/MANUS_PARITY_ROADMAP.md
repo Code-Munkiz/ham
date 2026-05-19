@@ -13,12 +13,15 @@
 
 ## TL;DR
 
-HAM has the skeleton (chat → intent → build → preview → activity stream) and a working GCP GKE preview runtime. What's missing for Manus parity is mostly the **orchestration brain** and **streaming polish**, not the plumbing. The two largest gaps are:
+HAM has the skeleton (chat → intent → build → preview → activity stream), a working GCP GKE preview runtime, and **Tier 1** Manus-parity items shipped on `main` as of **2026-05-19** (Planner + approval gate, LLM scaffolds for new template kinds, SSE job stream, cancel, runtime errors → chat, async queue, preview egress deny-default, janitor/TTL, Sentry scaffolding, allowlist, prewarmed pool — see punch list below).
 
-1. HAM's scaffolds are deterministic templates ([src/ham/builder_chat_scaffold.py](../src/ham/builder_chat_scaffold.py), ~1400 LoC) rather than LLM-generated.
-2. There is no Planner → Executor → Verifier loop, which is the de facto pattern across Manus and Replit (independently converged).
+**What Tier 1 did not finish:** full Manus parity. Remaining headline gaps for **Tier 2** are:
 
-The third critical item — **unrestricted network egress** from preview pods — is a security gap, not a UX gap, but blocks any responsible production rollout.
+1. **Verifier in the agent loop** — Playwright/artifact checks exist (`builder_verifier.py`, `scripts/ham-builder-qa/`) but are not yet the default closed loop after every Plan.
+2. **Scaffold migration** — calculator/tetris still use deterministic templates ([src/ham/builder_chat_scaffold.py](../src/ham/builder_chat_scaffold.py)); new kinds route through [src/ham/builder_llm_scaffold.py](../src/ham/builder_llm_scaffold.py) per [ADR-0011](adr/0011-llm-scaffold-staged-by-template-kind.md).
+3. **Snapshot + rewind, real publish, export, BYO-key UI** — retention and ownership features in the Tier 2 table.
+
+Domain vocabulary for Plans, Steps, Workers, and SSE: [CONTEXT.md](../CONTEXT.md) at repo root; locked contracts: [PHASE_0_CONTRACTS.md](PHASE_0_CONTRACTS.md).
 
 ## Common patterns observed across Manus, Replit, Base44
 
@@ -89,15 +92,20 @@ Billing infra · tiered rate limits · real-time collab (CRDTs/OT) · GDPR data 
 
 | Layer | File |
 |---|---|
+| Chat stream + Planner hook | [src/api/chat.py](../src/api/chat.py) (`produce_plan` on builder-mutation turns) |
+| Planner | [src/ham/builder_planner.py](../src/ham/builder_planner.py) |
+| Plan schema + approval | [src/ham/builder_plan.py](../src/ham/builder_plan.py), [src/ham/builder_plan_approval_service.py](../src/ham/builder_plan_approval_service.py) |
 | Chat → intent classification | [src/ham/agent_router.py](../src/ham/agent_router.py), [src/ham/builder_mutation_router.py](../src/ham/builder_mutation_router.py) |
-| Scaffold (template-driven, ~1400 LoC) | [src/ham/builder_chat_scaffold.py](../src/ham/builder_chat_scaffold.py) |
+| Scaffold (legacy template kinds) | [src/ham/builder_chat_scaffold.py](../src/ham/builder_chat_scaffold.py) |
+| Scaffold (LLM, new kinds) | [src/ham/builder_llm_scaffold.py](../src/ham/builder_llm_scaffold.py) |
+| Runtime Worker + SSE | [src/ham/builder_runtime_worker.py](../src/ham/builder_runtime_worker.py), [src/ham/builder_worker.py](../src/ham/builder_worker.py) |
 | Edit worker (Hermes-wired) | [src/ham/builder_edit_worker.py](../src/ham/builder_edit_worker.py) |
 | Job model (`CloudRuntimeJob`) | [src/persistence/builder_runtime_job_store.py](../src/persistence/builder_runtime_job_store.py) |
 | GCP preview pods | [src/ham/gcp_preview_runtime_client.py](../src/ham/gcp_preview_runtime_client.py), [src/ham/gcp_preview_worker_manifest.py](../src/ham/gcp_preview_worker_manifest.py) |
-| Janitor (dry-run only) | [src/ham/preview_janitor.py](../src/ham/preview_janitor.py) |
-| Frontend workbench (~113KB) | [frontend/src/features/hermes-workspace/workbench/WorkspaceWorkbench.tsx](../frontend/src/features/hermes-workspace/workbench/WorkspaceWorkbench.tsx) |
-| Capabilities API (~2400 LoC) | [src/api/builder_sources.py](../src/api/builder_sources.py) |
-| QA harness (fold into verifier) | [scripts/ham-builder-qa/](../scripts/ham-builder-qa/) — Playwright snapshot/preview alignment |
+| Janitor + TTL | [src/ham/preview_janitor.py](../src/ham/preview_janitor.py) |
+| Frontend workbench | [frontend/src/features/hermes-workspace/workbench/WorkspaceWorkbench.tsx](../frontend/src/features/hermes-workspace/workbench/WorkspaceWorkbench.tsx) |
+| Capabilities API | [src/api/builder_sources.py](../src/api/builder_sources.py) |
+| Verifier / QA harness | [src/ham/builder_verifier.py](../src/ham/builder_verifier.py), [scripts/ham-builder-qa/](../scripts/ham-builder-qa/) |
 
 ## Execution plan: parallelizing Tier 1 for Factory AI
 

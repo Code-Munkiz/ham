@@ -5,7 +5,7 @@ Each item tracks what is missing, why it matters, and what blocks it.
 
 **Cloud Agent + managed missions (what works vs stub + phased roadmap):** see [`docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`](docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md).
 
-**Builder Platform (aspirational vs shipped):** long-term last-mile builder / enterprise orchestrator vision and phased anchors (Builder Blueprint Mode → lifecycle governance) live in [`docs/BUILDER_PLATFORM_NORTH_STAR.md`](docs/BUILDER_PLATFORM_NORTH_STAR.md). [`VISION.md`](VISION.md) remains the shipped pillar SSOT.
+**Builder Platform (aspirational vs shipped):** long-term last-mile builder / enterprise orchestrator vision and phased anchors (Builder Blueprint Mode → lifecycle governance) live in [`docs/BUILDER_PLATFORM_NORTH_STAR.md`](docs/BUILDER_PLATFORM_NORTH_STAR.md). [`VISION.md`](VISION.md) remains the shipped pillar SSOT. **Manus-parity Tier 1** (Planner + approval, LLM scaffolds for new template kinds, SSE job stream, cancel, runtime errors → chat, async queue, preview security/ops baseline) shipped **2026-05-19** on `main` — status table and Tier 2 gaps: [`docs/MANUS_PARITY_ROADMAP.md`](docs/MANUS_PARITY_ROADMAP.md); vocabulary: [`CONTEXT.md`](CONTEXT.md).
 
 ## Active implementation notes (Cursor / hardening)
 
