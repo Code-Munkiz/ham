@@ -462,7 +462,12 @@ Five orthogonal dimensions plus one operational tag:
 - **`severity:critical`/high/medium/low** — impact ladder (orthogonal to
   priority; e.g. a `severity:high` regression can still be `priority:P2`
   if a workaround exists).
-- **`status:needs-triage`/blocked** — workflow state.
+- **`status:*`** — workflow state:
+  - `status:needs-triage` — new issue awaiting classification
+  - `status:blocked` — cannot proceed until an external dependency clears
+  - `status:needs-info` — waiting on reporter for more information
+  - `status:ready-for-agent` — fully specified; AFK agent (Factory/Cursor) can pick up
+  - `status:ready-for-human` — requires human implementation
 - **`area:frontend`/backend/desktop/ci/docs** — codebase surface (matches
   the labels used in `.github/dependabot.yml`).
 - **`type:bug`/feature/agent-run** — issue category. `type:agent-run`
@@ -501,7 +506,7 @@ GitHub Issues on Code-Munkiz/ham via the `gh` CLI. See [docs/agents/issue-tracke
 
 ### Triage labels
 
-Five canonical triage roles mapped onto this repo's prefixed `status:*` taxonomy (see also the broader `## Issue label taxonomy` section above). Three new labels — `status:needs-info`, `status:ready-for-agent`, `status:ready-for-human` — must be added to `scripts/sync_github_labels.sh` before the `triage` skill is used. See [docs/agents/triage-labels.md](docs/agents/triage-labels.md).
+Five canonical triage roles mapped onto this repo's prefixed `status:*` taxonomy (see also the broader `## Issue label taxonomy` section above). Three new labels (`status:needs-info`, `status:ready-for-agent`, `status:ready-for-human`) were added to `scripts/sync_github_labels.sh` during the Phase 1 setup; the triage skill can now consume them. See [docs/agents/triage-labels.md](docs/agents/triage-labels.md).
 
 ### Domain docs
 

@@ -200,6 +200,9 @@ def check_install_allowed(
                 return allowlist.deny_error(package, "npm")
         return None
 
+    # Pip-install allowlist support. No production caller as of Phase 1 (npm-only
+    # scaffolds). Activate by wrapping any future pip install paths at the runtime
+    # worker, mirroring the npm pattern in builder_runtime_worker.py.
     if command[0] == "pip" and command[1] == "install":
         if len(command) == 2:
             body = _find_source_file(source_files, "requirements.txt")

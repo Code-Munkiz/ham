@@ -1,6 +1,6 @@
 # Manus Parity Roadmap
 
-**Status:** Draft analysis — 2026-05-18
+**Status:** Phase 0 + Phase 1 shipped 2026-05-19. Phase 2 design pending (planner UI, approval gate, SSE replacing polling, cancel button, runtime errors → chat, LLM-generated scaffolds).
 **Scope:** What needs to be true for HAM to operate like Manus 1.6 / Replit Agent 3-4 / Base44 as an end-to-end chat-to-app builder, sized for a 3-5 person team.
 **Related:**
 [BUILDER_PLATFORM_NORTH_STAR.md](BUILDER_PLATFORM_NORTH_STAR.md) ·
@@ -40,32 +40,32 @@ The third critical item — **unrestricted network egress** from preview pods �
 
 ### Tier 1 — demo-blocking or critical security
 
-| # | Item | Why |
-|---|---|---|
-| 1 | Planner / todo-list step with human approval gate | Universal pattern across all three platforms; today HAM has only regex intent classification |
-| 2 | LLM-generated scaffolds | [src/ham/builder_chat_scaffold.py](../src/ham/builder_chat_scaffold.py) is deterministic templates only — works for calculator/tetris, fails for anything else |
-| 3 | SSE / WebSocket streaming (replace polling) | Activity feed is polled; Manus/Replit stream curated events |
-| 4 | Cancel button with cooperative interrupt | Runaway agent runs are unrecoverable except by killing the pod |
-| 5 | Runtime errors from preview pod → chat | Today the preview is a black box — crashes show a blank screen, not a chat message |
-| 6 | NetworkPolicy on preview pods | **Biggest security gap.** gVisor is in place ([gcp_preview_worker_manifest.py:65-82](../src/ham/gcp_preview_worker_manifest.py#L65-L82)) but pods can reach any external IP — exfiltrate, mine, hit internal services |
-| 7 | Live preview janitor + job TTL | [src/ham/preview_janitor.py](../src/ham/preview_janitor.py) is dry-run only; jobs in `running` state linger forever if worker crashes |
-| 8 | Queue (Cloud Tasks / Pub/Sub) between API and runtime worker | Currently synchronous — API restart loses in-flight builds |
-| 9 | Sentry SDK + request-ID middleware | Zero error tracking today; production failures disappear |
+| # | Item | Why | Shipped |
+|---|---|---|---|
+| 1 | Planner / todo-list step with human approval gate | Universal pattern across all three platforms; today HAM has only regex intent classification | (Phase 2 — requires planner/worker to exist) |
+| 2 | LLM-generated scaffolds | [src/ham/builder_chat_scaffold.py](../src/ham/builder_chat_scaffold.py) is deterministic templates only — works for calculator/tetris, fails for anything else | (Phase 2 — requires planner/worker to exist) |
+| 3 | SSE / WebSocket streaming (replace polling) | Activity feed is polled; Manus/Replit stream curated events | (Phase 2 — requires planner/worker to exist) |
+| 4 | Cancel button with cooperative interrupt | Runaway agent runs are unrecoverable except by killing the pod | (Phase 2 — requires planner/worker to exist) |
+| 5 | Runtime errors from preview pod → chat | Today the preview is a black box — crashes show a blank screen, not a chat message | (Phase 2 — requires planner/worker to exist) |
+| 6 | ✅ NetworkPolicy on preview pods | **Biggest security gap.** gVisor is in place ([gcp_preview_worker_manifest.py:65-82](../src/ham/gcp_preview_worker_manifest.py#L65-L82)) but pods can reach any external IP — exfiltrate, mine, hit internal services | PR #347 |
+| 7 | ✅ Live preview janitor + job TTL | Jobs in `running` state linger forever if worker crashes; live janitor + TTL fields shipped | PR #349 |
+| 8 | Queue (Cloud Tasks / Pub/Sub) between API and runtime worker | Currently synchronous — API restart loses in-flight builds | (Phase 2 — requires planner/worker to exist) |
+| 9 | ✅ Sentry SDK + request-ID middleware | Zero error tracking today; production failures disappear | PR #348 |
 
 ### Tier 2 — user retention
 
-| # | Item | Why |
-|---|---|---|
-| 10 | Verifier step with Playwright self-test | `scripts/ham-builder-qa/` already does this manually — fold into agent loop |
-| 11 | Snapshot + rewind (content-addressed storage) | Today HAM does full source rewrite per turn; Replit's Snapshot Engine is the bar |
-| 12 | Real publish target (Cloud Run or Vercel API) | Publish button is a stub; users get no shareable URL |
-| 13 | BYO key UI + consolidate credential stores | Four scattered stores: [cursor_credentials.py](../src/persistence/cursor_credentials.py), [connected_tool_credentials.py](../src/persistence/connected_tool_credentials.py), [workspace_tool_credentials.py](../src/persistence/workspace_tool_credentials.py), [firestore_connected_tool_credentials.py](../src/persistence/firestore_connected_tool_credentials.py) |
-| 14 | Project export (zip / push-to-GitHub via OAuth) | Manus has a GitHub button; HAM is OSS and users will expect to own their code |
-| 15 | npm / pip package allowlist | Supply-chain risk; today builders run unrestricted `npm install` |
-| 16 | Mobile preview iframe emulation | DESKTOP/MOBILE toggle in workbench is a stub |
-| 17 | Lint / typecheck verifier gate on generated code | Frontend CI blocks on `tsc`, generated code is not gated |
-| 18 | Prewarmed preview pod pool | Cold-starts ~10-30s today; Replit has a warm pool |
-| 19 | Test-generation alongside features in the verifier | Replit Agent 3 writes tests; HAM doesn't |
+| # | Item | Why | Shipped |
+|---|---|---|---|
+| 10 | Verifier step with Playwright self-test | `scripts/ham-builder-qa/` already does this manually — fold into agent loop | (partial — see #19) |
+| 11 | Snapshot + rewind (content-addressed storage) | Today HAM does full source rewrite per turn; Replit's Snapshot Engine is the bar | |
+| 12 | Real publish target (Cloud Run or Vercel API) | Publish button is a stub; users get no shareable URL | |
+| 13 | BYO key UI + consolidate credential stores | Four scattered stores: [cursor_credentials.py](../src/persistence/cursor_credentials.py), [connected_tool_credentials.py](../src/persistence/connected_tool_credentials.py), [workspace_tool_credentials.py](../src/persistence/workspace_tool_credentials.py), [firestore_connected_tool_credentials.py](../src/persistence/firestore_connected_tool_credentials.py) | |
+| 14 | Project export (zip / push-to-GitHub via OAuth) | Manus has a GitHub button; HAM is OSS and users will expect to own their code | |
+| 15 | ✅ npm / pip package allowlist | Supply-chain risk; today builders run unrestricted `npm install` | PR #352 (npm wrapped at runtime; pip branch forward-looking) |
+| 16 | ✅ Mobile preview iframe emulation | DESKTOP/MOBILE toggle in workbench is a stub | PR #350 |
+| 17 | Lint / typecheck verifier gate on generated code | Frontend CI blocks on `tsc`, generated code is not gated | |
+| 18 | ✅ Prewarmed preview pod pool | Cold-starts ~10-30s today; Replit has a warm pool | PR #353 |
+| 19 | ✅ Test-generation alongside features in the verifier | Replit Agent 3 writes tests; HAM doesn't | PR #351 |
 | 20 | User-writable skills | Manus `/skill-creator` equivalent; current skills are read-only from vendored Hermes catalog |
 | 21 | GitHub OAuth | Also unlocks #14 export flow |
 | 22 | Content-addressed snapshot diff | Replace full-rewrite to make rewind cheap |
@@ -131,6 +131,18 @@ Disjoint files, no integration risk between agents:
 - npm/pip package allowlist (#15)
 - Prewarmed pod pool (#18)
 
+### Phase 1 — Status (shipped 2026-05-19)
+
+- **NetworkPolicy on preview pods** — PR #347
+- **Sentry SDK + request-ID middleware** — PR #348
+- **Job TTL + live janitor** — PR #349
+- **Mobile preview iframe emulation** — PR #350
+- **Test-generation step in verifier** — PR #351
+- **npm/pip package allowlist** — PR #352 (npm wrapped at runtime; pip branch forward-looking)
+- **Prewarmed preview pod pool** — PR #353
+- Phase 0 shared contracts also shipped (PRs #334–#338).
+- Post-Phase-1 catalog patch (`STEP_VERIFICATION_FAILED`) landed on `main` as a direct commit.
+
 ### Phase 2 — serialize, review each PR
 
 These edit the hot files and need end-to-end integration testing:
@@ -152,10 +164,10 @@ Without these, cloud agents will over-build.
 
 ### Realistic timeline
 
-- **Phase 0**: 1 working session
-- **Phase 1**: 1-2 days wall-clock with 5-7 Factory agents running concurrently
-- **Phase 2**: 3-5 days with human review per PR
-- **Tier 1 complete**: 1-2 weeks. Not "spec and walk away."
+- **Phase 0**: Completed in one working session (contracts locked; PRs #334–#338 merged 2026-05-18).
+- **Phase 1**: Completed in ~1–2 days wall-clock with parallel Factory agents (PRs #347–#353 merged 2026-05-18 / 2026-05-19).
+- **Phase 2**: 3–5 days with human review per PR (planner, approval gate, SSE, cancel, runtime errors → chat, LLM scaffolds, queue).
+- **Tier 1 complete**: Remaining Tier 1 items (#1–#5, #8) depend on Phase 2; estimate 1–2 weeks after Phase 2 design.
 
 ## Skills toolkit
 
