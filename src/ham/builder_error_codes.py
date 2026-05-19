@@ -20,7 +20,7 @@ def _utc_now_iso() -> str:
 
 
 # ---------------------------------------------------------------------------
-# v1 error code catalog (15 codes)
+# v1 error code catalog (16 codes)
 # ---------------------------------------------------------------------------
 
 # gate.*
@@ -37,6 +37,7 @@ WORKER_OOM = "worker.worker_oom"
 STEP_FAILED = "step.step_failed"
 STEP_TIMEOUT = "step.step_timeout"
 STEP_TOOL_CALL_FAILED = "step.tool_call_failed"
+STEP_VERIFICATION_FAILED = "step.step_verification_failed"
 STEP_MODEL_UNAVAILABLE = "step.model_unavailable"
 
 # preview.*
@@ -59,6 +60,7 @@ ALL_CODES: frozenset[str] = frozenset(
         STEP_FAILED,
         STEP_TIMEOUT,
         STEP_TOOL_CALL_FAILED,
+        STEP_VERIFICATION_FAILED,
         STEP_MODEL_UNAVAILABLE,
         PREVIEW_POD_CRASHED,
         PREVIEW_POD_UNSCHEDULABLE,
