@@ -1,15 +1,33 @@
 /**
- * Phase 2 — Builder Plan approval card (Subsystem 5).
- * PR 4: proposed-state UI only. PR 5+ extend in-place for in-flight / errors.
+ * Phase 2 — Builder Plan approval + in-flight card (Subsystems 5–7).
+ * PR 4: proposed-state UI. PR 5: in-flight progress + cancel UX.
  */
 import * as React from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
-import type { Plan, PlanApprovalState } from "@/lib/ham/builderPlan";
+import type { Plan, PlanApprovalState, SSEEvent } from "@/lib/ham/builderPlan";
+import { useJobStream } from "@/lib/ham/useJobStream";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
-export type PlanCardPhase = "proposed" | "approved_waiting" | "stale" | "superseded";
+import {
+  buildStepStatuses,
+  cancelStatusLine,
+  deriveCancelUiState,
+  deriveInflightPhase,
+  frozenSummaryLine,
+  shouldShowStalledCancelWarning,
+  stepStatusGlyph,
+  type PlanCardInflightPhase,
+} from "./planCardInflight";
+
+export type PlanCardPhase =
+  | "proposed"
+  | "approved_waiting"
+  | "in_flight"
+  | "frozen"
+  | "stale"
+  | "superseded";
 
 export type PlanCardProps = {
   plan: Plan;
@@ -19,8 +37,12 @@ export type PlanCardProps = {
   busyBanner?: string | null;
   staleBanner?: string | null;
   approving?: boolean;
+  jobId?: string | null;
+  /** Overrides useJobStream for unit tests. */
+  testStreamEvents?: SSEEvent[];
   onApprove?: () => void | Promise<void>;
   onReplan?: (request: string) => void;
+  onCancelJob?: () => void | Promise<void>;
 };
 
 function planSummaryLine(plan: Plan): string {
@@ -38,12 +60,34 @@ export function PlanCard({
   busyBanner,
   staleBanner,
   approving = false,
+  jobId = null,
+  testStreamEvents,
   onApprove,
   onReplan,
+  onCancelJob,
 }: PlanCardProps) {
   const [expanded, setExpanded] = React.useState(false);
   const [replanOpen, setReplanOpen] = React.useState(false);
   const [replanText, setReplanText] = React.useState("");
+  const [cancelClicked, setCancelClicked] = React.useState(false);
+  const [cancelClickedAtMs, setCancelClickedAtMs] = React.useState<number | null>(null);
+  const [nowMs, setNowMs] = React.useState(() => Date.now());
+
+  const useStream =
+    Boolean(jobId) &&
+    testStreamEvents === undefined &&
+    phase !== "proposed" &&
+    phase !== "stale" &&
+    phase !== "superseded";
+
+  const hookStream = useJobStream(useStream ? jobId : null);
+  const streamEvents = testStreamEvents ?? hookStream.events;
+
+  React.useEffect(() => {
+    if (!cancelClicked || cancelClickedAtMs === null) return;
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [cancelClicked, cancelClickedAtMs]);
 
   if (phase === "superseded") {
     return (
@@ -59,8 +103,33 @@ export function PlanCard({
     );
   }
 
-  const stale = phase === "stale" || approvalState === "stale";
-  const approvedWaiting = phase === "approved_waiting" || approvalState === "approved";
+  const inflightBase: PlanCardInflightPhase =
+    phase === "in_flight" || phase === "frozen" ? phase : "approved_waiting";
+
+  const resolvedPhase =
+    phase === "proposed" || phase === "stale"
+      ? phase
+      : deriveInflightPhase(inflightBase, streamEvents);
+
+  const stale = resolvedPhase === "stale" || approvalState === "stale";
+  const approvedWaiting = resolvedPhase === "approved_waiting";
+  const inFlight = resolvedPhase === "in_flight";
+  const frozen = resolvedPhase === "frozen";
+
+  const stepStatuses = buildStepStatuses(plan, streamEvents);
+  const cancelState = deriveCancelUiState(streamEvents, cancelClicked);
+  const cancelLine = cancelStatusLine(cancelState);
+  const summaryFooter = frozen ? frozenSummaryLine(plan, streamEvents) : null;
+  const stalledWarning =
+    cancelClickedAtMs !== null &&
+    shouldShowStalledCancelWarning(cancelClickedAtMs, streamEvents, nowMs);
+
+  const showStepsExpanded = expanded || approvedWaiting || inFlight || frozen;
+  const showApproveReplan = !approvedWaiting && !inFlight && !frozen;
+  const showCancel =
+    (inFlight || cancelState === "cancelling" || cancelState === "acknowledged") &&
+    cancelState !== "hidden" &&
+    cancelState !== "done";
 
   return (
     <div
@@ -75,15 +144,19 @@ export function PlanCard({
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-[13px] font-medium text-white/95" data-testid="plan-card-summary">
-            {approvedWaiting ? "Approved — waiting for worker…" : planSummaryLine(plan)}
+            {approvedWaiting
+              ? "Approved — waiting for worker…"
+              : inFlight || frozen
+                ? `Running plan (${plan.steps.length} step${plan.steps.length === 1 ? "" : "s"})`
+                : planSummaryLine(plan)}
           </p>
-          {!approvedWaiting ? (
+          {showApproveReplan ? (
             <p className="mt-0.5 text-[11px] text-white/50">
               Review steps, then approve or re-plan.
             </p>
           ) : null}
         </div>
-        {!approvedWaiting ? (
+        {showApproveReplan ? (
           <button
             type="button"
             className="mt-0.5 text-white/60 hover:text-white/90"
@@ -114,12 +187,22 @@ export function PlanCard({
         </p>
       ) : null}
 
-      {expanded && !approvedWaiting ? (
+      {showStepsExpanded ? (
         <ol className="mt-3 space-y-2 border-t border-white/10 pt-3" data-testid="plan-card-steps">
           {plan.steps.map((step, index) => (
             <li key={step.step_id} className="text-[12px] leading-snug">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-white/45">{index + 1}.</span>
+                {inFlight || frozen ? (
+                  <span
+                    className="w-4 text-center text-white/70"
+                    data-testid={`plan-card-step-status-${index}`}
+                    aria-hidden
+                  >
+                    {stepStatusGlyph(stepStatuses[index] ?? "pending")}
+                  </span>
+                ) : (
+                  <span className="text-white/45">{index + 1}.</span>
+                )}
                 <span className="font-medium text-white/90">{step.title}</span>
                 {step.requires_approval ? (
                   <span
@@ -138,7 +221,31 @@ export function PlanCard({
         </ol>
       ) : null}
 
-      {!approvedWaiting ? (
+      {cancelLine ? (
+        <p className="mt-2 text-[11px] text-white/65" data-testid="plan-card-cancel-status">
+          {cancelLine}
+        </p>
+      ) : null}
+
+      {stalledWarning ? (
+        <p
+          className="mt-2 text-[11px] text-amber-200/90"
+          data-testid="plan-card-cancel-stalled-warning"
+        >
+          Cancellation taking longer than expected; the janitor will force-terminate
+        </p>
+      ) : null}
+
+      {summaryFooter ? (
+        <p
+          className="mt-2 border-t border-white/10 pt-2 text-[11px] text-white/70"
+          data-testid="plan-card-frozen-summary"
+        >
+          {summaryFooter}
+        </p>
+      ) : null}
+
+      {showApproveReplan ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button
             type="button"
@@ -162,7 +269,29 @@ export function PlanCard({
         </div>
       ) : null}
 
-      {replanOpen && !approvedWaiting ? (
+      {showCancel ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="border-white/20 bg-transparent text-white hover:bg-white/10"
+            data-testid="plan-card-cancel"
+            disabled={cancelState === "cancelling" || cancelState === "acknowledged"}
+            onClick={() => {
+              setCancelClicked(true);
+              setCancelClickedAtMs(Date.now());
+              void onCancelJob?.();
+            }}
+          >
+            {cancelState === "cancelling" || cancelState === "acknowledged"
+              ? "Cancelling…"
+              : "Cancel"}
+          </Button>
+        </div>
+      ) : null}
+
+      {replanOpen && showApproveReplan ? (
         <div
           className="mt-3 space-y-2 border-t border-white/10 pt-3"
           data-testid="plan-card-replan-prompt"
