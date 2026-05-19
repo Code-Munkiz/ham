@@ -247,6 +247,29 @@ def verify_builder_scaffold_artifact(
     files: dict[str, str],
     operation: str,
 ) -> dict[str, Any]:
+    # Honest-failure gate: a placeholder fallback (set by
+    # _build_react_scaffold_files when no calculator/tetris match AND the
+    # LLM-scaffold attempt also did not replace the files) must not be
+    # rubber-stamped as a successful scaffold. The chat-stream uses this
+    # result to suppress the "I've generated the project files" message and
+    # surface an honest "I can't generate that yet" response to the user.
+    if bool(scaffold_meta.get("placeholder_fallback")):
+        return {
+            "verified": False,
+            "skipped": False,
+            "status": "failed",
+            "requested_checks": ["non_placeholder_initial_scaffold"],
+            "passed_checks": [],
+            "failed_checks": ["non_placeholder_initial_scaffold"],
+            "reason": (
+                "Initial scaffold for arbitrary apps requires an OpenRouter API key "
+                "(BYO via Settings) so HAM can generate real source. Without one, the "
+                "only built-in initial templates are 'calculator' and 'tetris'. Either "
+                "configure a key, ask for one of those templates, or describe an edit "
+                "to an existing project."
+            ),
+        }
+
     template = str(scaffold_meta.get("template") or "").strip().lower()
     if template != "calculator":
         return {

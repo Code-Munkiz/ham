@@ -1503,7 +1503,18 @@ def _build_react_scaffold_files(
             "- **Preview:** HAM attaches a cloud preview when the preview environment is ready (see the Workbench Preview tab).\n"
             "- **Code:** Source files are listed under the Workbench Code tab.\n"
         ),
-    }, {"template": "react_scaffold", "style_profile_id": "default"})
+    }, {
+        "template": "react_scaffold",
+        "style_profile_id": "default",
+        # Sentinel: a prompt that didn't match a known deterministic template
+        # (calculator / tetris) fell through to the generic placeholder. The
+        # artifact verifier rejects this, and the chat-stream suppresses the
+        # "I've generated the project files" success message so we don't lie
+        # to the user about a placeholder-only result. The LLM-scaffold
+        # follow-up in maybe_chat_scaffold_for_turn tries to replace these
+        # files with real generated source before the verifier ever sees them.
+        "placeholder_fallback": True,
+    })
 
 
 def _bounded_files(
@@ -1583,6 +1594,99 @@ def _existing_fingerprint_snapshot_id(
         if str(meta.get("chat_scaffold_fingerprint") or "") == fingerprint:
             return snap.id
     return None
+
+
+def _maybe_llm_scaffold_replace(
+    *,
+    user_message: str,
+    workspace_id: str,
+    project_id: str,
+    files: dict[str, str],
+    scaffold_meta: dict[str, Any],
+) -> tuple[dict[str, str], dict[str, Any]] | None:
+    """Try replacing a placeholder scaffold with real LLM-generated source.
+
+    Returns the new ``(files, meta)`` tuple on success, or ``None`` on any
+    failure (no OpenRouter key, LLM error, validation error, etc.). The caller
+    keeps the placeholder + the ``placeholder_fallback`` flag so the artifact
+    verifier rejects it and the chat surface fails honestly.
+
+    Wires the chat-stream build_or_create path into the same generator the
+    Worker pod's LLM-scaffold Step uses (ADR-0011), without needing the full
+    Planner+Approval+Worker round trip — the LLM call is one round trip and
+    the resulting files are written into the same source snapshot the
+    deterministic templates would have produced.
+    """
+    # Local imports keep the deterministic path free of LLM client overhead.
+    from src.ham.builder_llm_scaffold import (  # noqa: PLC0415
+        LLMScaffoldError,
+        generate_scaffold,
+    )
+    from src.ham.builder_plan import Plan, Step  # noqa: PLC0415
+    from src.llm_client import normalized_openrouter_api_key  # noqa: PLC0415
+
+    if not normalized_openrouter_api_key():
+        return None
+
+    try:
+        synthetic_plan = Plan(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            user_message=user_message,
+            steps=[
+                Step(
+                    title="Generate initial app source",
+                    description=f"Build the runnable source for: {user_message[:160]}",
+                )
+            ],
+            planner_confidence="medium",
+            metadata={
+                "template_kind": "chat_initial_scaffold",
+                "originated_from": "builder_chat_scaffold",
+            },
+        )
+    except Exception:  # noqa: BLE001
+        return None
+
+    try:
+        result = generate_scaffold(
+            synthetic_plan,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+    except LLMScaffoldError:
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+    if not result.file_changes:
+        return None
+
+    new_files: dict[str, str] = {}
+    total_bytes = 0
+    for path, content in result.file_changes:
+        norm = str(path or "").replace("\\", "/").lstrip("/")
+        if not norm or ".." in norm.split("/"):
+            continue
+        body = content if isinstance(content, str) else str(content)
+        if len(body.encode("utf-8")) > _MAX_FILE_BYTES:
+            body = body.encode("utf-8")[:_MAX_FILE_BYTES].decode("utf-8", errors="ignore")
+        total_bytes += len(body.encode("utf-8"))
+        if total_bytes > _MAX_TOTAL_TEXT:
+            break
+        new_files[norm] = body
+
+    if not new_files:
+        return None
+
+    # Carry forward non-template metadata; mark the source so downstream
+    # consumers (verifier, snapshot metadata) know this is a real generation.
+    new_meta = dict(scaffold_meta)
+    new_meta.pop("placeholder_fallback", None)
+    new_meta["template"] = "llm_chat_scaffold"
+    new_meta["llm_scaffold_file_count"] = len(new_files)
+    new_meta["llm_scaffold_assertions"] = list(result.assertions or [])
+    return new_files, new_meta
 
 
 def maybe_chat_scaffold_for_turn(
@@ -1672,6 +1776,23 @@ def maybe_chat_scaffold_for_turn(
         previous_template=previous_template,
         previous_calculator_meta=previous_calculator_meta,
     )
+
+    # When the deterministic scaffold path falls through to the generic
+    # placeholder (no calculator / tetris match), try the LLM-scaffold path
+    # before honestly failing. ADR-0011 routes non-deterministic kinds here;
+    # we synthesise a minimal Plan so generate_scaffold() can reuse the same
+    # contract the Worker pod path uses for the "mutate" branch.
+    if bool(scaffold_meta.get("placeholder_fallback")) and operation == "build_or_create":
+        replaced = _maybe_llm_scaffold_replace(
+            user_message=last_user_plain,
+            workspace_id=ws,
+            project_id=pid,
+            files=files,
+            scaffold_meta=scaffold_meta,
+        )
+        if replaced is not None:
+            files, scaffold_meta = replaced
+
     artifact_verification = verify_builder_scaffold_artifact(
         last_user_plain,
         scaffold_meta,
