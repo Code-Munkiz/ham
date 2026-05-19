@@ -97,6 +97,151 @@ class _FakeHttpxClient:
         return _FakeStreamResp(status, lines)
 
 
+def test_http_primary_model_override_replaces_primary_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-GATEWAY-003 — http_model_override replaces only the primary HTTP payload model."""
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://10.0.0.1:8642")
+    monkeypatch.setenv("HERMES_GATEWAY_MODEL", "hermes-configured-primary")
+    monkeypatch.setenv("HAM_CHAT_FALLBACK_MODEL", "hermes-fallback")
+
+    fake = _FakeHttpxClient(
+        [
+            (200, [_sse_line("ok"), "data: [DONE]"]),
+        ],
+    )
+
+    with patch("src.integrations.nous_gateway_client.httpx.Client", return_value=fake):
+        out = complete_chat_turn(
+            [{"role": "user", "content": "hi"}],
+            http_model_override="hermes-http-override",
+        )
+
+    assert out == "ok"
+    assert fake.models_seen == ["hermes-http-override"]
+
+
+def test_http_primary_model_override_keeps_configured_fallback_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-GATEWAY-005 — fallback retry uses HAM_CHAT_FALLBACK_MODEL, not the override."""
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://10.0.0.1:8642")
+    monkeypatch.setenv("HERMES_GATEWAY_MODEL", "hermes-configured-primary")
+    monkeypatch.setenv("HAM_CHAT_FALLBACK_MODEL", "hermes-fallback")
+
+    fake = _FakeHttpxClient(
+        [
+            (429, []),
+            (200, [_sse_line("fb"), "data: [DONE]"]),
+        ],
+    )
+
+    with patch("src.integrations.nous_gateway_client.httpx.Client", return_value=fake):
+        out = complete_chat_turn(
+            [{"role": "user", "content": "hi"}],
+            http_model_override="hermes-http-override",
+        )
+
+    assert out == "fb"
+    assert fake.models_seen == ["hermes-http-override", "hermes-fallback"]
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\t", "\n  "])
+def test_http_primary_model_override_blank_falls_back_to_configured(
+    monkeypatch: pytest.MonkeyPatch, blank: str
+) -> None:
+    """VAL-GATEWAY-012 — blank override is treated as absent."""
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://10.0.0.1:8642")
+    monkeypatch.setenv("HERMES_GATEWAY_MODEL", "configured-primary")
+    monkeypatch.delenv("HAM_CHAT_FALLBACK_MODEL", raising=False)
+
+    fake = _FakeHttpxClient([(200, [_sse_line("ok"), "data: [DONE]"])])
+
+    with patch("src.integrations.nous_gateway_client.httpx.Client", return_value=fake):
+        out = complete_chat_turn(
+            [{"role": "user", "content": "hi"}],
+            http_model_override=blank,
+        )
+
+    assert out == "ok"
+    assert fake.models_seen == ["configured-primary"]
+
+
+def test_http_primary_model_override_ignored_for_openrouter_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-GATEWAY-007 — LiteLLM/OpenRouter branch ignores http_model_override."""
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-test-fake-key-deadbeef-000000000")
+
+    seen_or_kwargs: list[dict[str, Any]] = []
+    http_client_calls = {"n": 0}
+
+    def _stream_or(messages, *, model_override=None, api_key_override=None):  # type: ignore[no-untyped-def]
+        seen_or_kwargs.append({"model_override": model_override})
+        yield "ok"
+
+    class _Fail:
+        def __enter__(self):  # type: ignore[no-untyped-def]
+            http_client_calls["n"] += 1
+            return self
+
+        def __exit__(self, *a: object) -> None:
+            return None
+
+        def stream(self, *_a: object, **_k: object):  # type: ignore[no-untyped-def]
+            raise AssertionError("httpx.Client.stream must not be called on openrouter route")
+
+    with patch(
+        "src.llm_client.stream_chat_messages_openrouter",
+        side_effect=_stream_or,
+    ), patch(
+        "src.integrations.nous_gateway_client.httpx.Client",
+        return_value=_Fail(),
+    ):
+        out = complete_chat_turn(
+            [{"role": "user", "content": "hi"}],
+            openrouter_model_override="openrouter/user-pick",
+            http_model_override="hermes-http-override",
+        )
+
+    assert out == "ok"
+    assert seen_or_kwargs == [{"model_override": "openrouter/user-pick"}]
+    assert http_client_calls["n"] == 0
+
+
+def test_http_primary_model_override_ignored_for_byok_bypass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VAL-GATEWAY-007 (BYOK bypass) — force_openrouter_litellm_route ignores http_model_override."""
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://10.0.0.1:8642")
+
+    seen_or_kwargs: list[dict[str, Any]] = []
+
+    def _stream_or(messages, *, model_override=None, api_key_override=None):  # type: ignore[no-untyped-def]
+        seen_or_kwargs.append({"model_override": model_override})
+        yield "ok"
+
+    with patch(
+        "src.llm_client.stream_chat_messages_openrouter",
+        side_effect=_stream_or,
+    ):
+        out = complete_chat_turn(
+            [{"role": "user", "content": "hi"}],
+            openrouter_model_override="openrouter/byok-pick",
+            openrouter_litellm_api_key="sk-or-v1-byok-fake-key-only-for-tests-0000",
+            force_openrouter_litellm_route=True,
+            http_model_override="hermes-http-override",
+        )
+
+    assert out == "ok"
+    assert seen_or_kwargs == [{"model_override": "openrouter/byok-pick"}]
+
+
 def test_http_retries_fallback_on_429(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
     monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://10.0.0.1:8642")

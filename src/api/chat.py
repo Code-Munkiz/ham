@@ -580,12 +580,16 @@ def _resolve_chat_openrouter_route(
     body: ChatRequest,
     ham_actor: HamActor | None,
     allow_conversational_default: bool = True,
-) -> tuple[str | None, str | None, bool]:
-    """Return (liteLLM model override, user OpenRouter hint key, bypass Hermes-http for LiteLLM).
+) -> tuple[str | None, str | None, bool, str | None]:
+    """Return (liteLLM model override, user OpenRouter hint key, bypass Hermes-http for LiteLLM, http_model_override).
 
     ``allow_conversational_default`` gates the HAM_CHAT_CONVERSATIONAL_MODEL fallback. Callers
     on the builder build_or_create lane pass ``False`` so structured/builder turns preserve
     existing gateway model behavior instead of receiving the conversational sentinel.
+
+    ``http_model_override`` is non-None only for normal conversational/direct-answer HTTP
+    turns when the conversational helper returns a slug. It is forwarded to the Hermes HTTP
+    primary request only; OpenRouter/BYOK-LiteLLM routes ignore it.
     """
 
     gw = (os.environ.get("HERMES_GATEWAY_MODE") or "").strip().lower()
@@ -599,7 +603,15 @@ def _resolve_chat_openrouter_route(
 
     if gw == "http":
         if not mid_stripped:
-            return None, hinted_key if user_key_ready else None, False
+            http_override = (
+                _chat_conversational_model_default() if allow_conversational_default else None
+            )
+            return (
+                None,
+                hinted_key if user_key_ready else None,
+                False,
+                http_override,
+            )
         if ham_actor is None:
             raise HTTPException(
                 status_code=403,
@@ -660,7 +672,7 @@ def _resolve_chat_openrouter_route(
                     },
                 },
             ) from exc
-        return model_override, hinted_key, True
+        return model_override, hinted_key, True, None
 
     if gw == "openrouter":
         if not mid_stripped:
@@ -671,6 +683,7 @@ def _resolve_chat_openrouter_route(
                 conversational_default,
                 hinted_key if user_key_ready else None,
                 False,
+                None,
             )
         try:
             model_override = resolve_model_id_for_chat(mid_stripped, ham_actor)
@@ -706,7 +719,7 @@ def _resolve_chat_openrouter_route(
                 },
             ) from exc
 
-        return model_override, hinted_key if user_key_ready else None, False
+        return model_override, hinted_key if user_key_ready else None, False, None
 
     if mid_stripped:
         raise HTTPException(
@@ -719,7 +732,7 @@ def _resolve_chat_openrouter_route(
                 },
             },
         )
-    return None, None, False
+    return None, None, False, None
 
 
 def _resolve_project_root_for_chat(project_id: str | None) -> Path | None:
@@ -1476,7 +1489,7 @@ async def post_chat(
         and "acknowledgement_template" not in builder_meta
     ):
         builder_meta["acknowledgement_template"] = builder_prefix
-    or_override, litellm_hint_key, litellm_http_bypass = _resolve_chat_openrouter_route(
+    or_override, litellm_hint_key, litellm_http_bypass, http_override = _resolve_chat_openrouter_route(
         body=body,
         ham_actor=ham_actor,
         allow_conversational_default=builder_intent != "build_or_create",
@@ -1566,6 +1579,7 @@ async def post_chat(
             openrouter_litellm_api_key=litellm_hint_key,
             force_openrouter_litellm_route=litellm_http_bypass,
             gateway_context_budget_diag=budget_diag_rest,
+            http_model_override=http_override,
         )
     except GatewayCallError as exc:
         raise HTTPException(
@@ -1635,7 +1649,7 @@ def post_chat_stream(
         and "acknowledgement_template" not in builder_meta
     ):
         builder_meta["acknowledgement_template"] = builder_prefix
-    or_override, litellm_hint_key, litellm_http_bypass = _resolve_chat_openrouter_route(
+    or_override, litellm_hint_key, litellm_http_bypass, http_override = _resolve_chat_openrouter_route(
         body=body,
         ham_actor=ham_actor,
         allow_conversational_default=builder_intent != "build_or_create",
@@ -1885,6 +1899,7 @@ def post_chat_stream(
                             openrouter_litellm_api_key=litellm_hint_key,
                             force_openrouter_litellm_route=litellm_http_bypass,
                             gateway_context_budget_diag=budget_diag_stream,
+                            http_model_override=http_override,
                         ):
                             pieces.append(part)
                             chars_since_checkpoint += len(part)
