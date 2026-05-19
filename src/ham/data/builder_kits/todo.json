@@ -1,0 +1,34 @@
+{
+  "kit_id": "todo",
+  "app_archetype": "crud-list",
+  "supported_template_kinds": ["todo"],
+  "stack_recipe": ["react", "typescript", "tailwind", "vite"],
+  "expected_files": [
+    "src/App.tsx",
+    "src/main.tsx",
+    "src/index.css",
+    "index.html"
+  ],
+  "expected_routes": [],
+  "design_recipe": [
+    "single-card-centered",
+    "dark-on-light",
+    "input-above-list"
+  ],
+  "allowed_capabilities": ["local-state", "no-network"],
+  "validation_checklist": [
+    "App renders without errors",
+    "User can add a new task via the input field",
+    "User can mark an existing task as complete",
+    "User can delete an existing task",
+    "Empty state message renders when there are no tasks"
+  ],
+  "safety_constraints": [
+    "no-network-egress",
+    "no-eval",
+    "no-localstorage-secrets"
+  ],
+  "examples": [],
+  "legacy_parity_only": false,
+  "migration_note": null
+}

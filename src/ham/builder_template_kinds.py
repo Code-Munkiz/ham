@@ -102,3 +102,12 @@ def is_legacy_deterministic_kind(template_kind: str) -> bool:
 def legacy_deterministic_kinds() -> frozenset[str]:
     """Return the frozen set of kinds currently routed to the legacy path."""
     return _LEGACY_DETERMINISTIC_KINDS
+
+
+MIGRATION_POLICY: str = (
+    "The legacy_deterministic scaffold path is a temporary compatibility shim.\n"
+    "The legacy set is frozen at {calculator, tetris}; no new legacy entries\n"
+    "are permitted. Retirement of a legacy kind requires verifier-graded LLM\n"
+    "parity against the matching Builder Kit's validation_checklist and an\n"
+    "explicit ADR-0011 update before the entry can be removed from _REGISTRY."
+)

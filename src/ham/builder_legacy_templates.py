@@ -48,6 +48,14 @@ from src.ham.builder_template_kinds import (
 LEGACY_TEMPLATE_KINDS: frozenset[str] = legacy_deterministic_kinds()
 
 
+LEGACY_RETIREMENT_GATE: str = (
+    "Retiring a legacy deterministic kind requires (a) LLM scaffold parity\n"
+    "against the matching Builder Kit's validation_checklist, and (b) a\n"
+    "verifier-graded sign-off before the entry is removed from\n"
+    "builder_template_kinds._REGISTRY."
+)
+
+
 def is_legacy_calculator_prompt(user_plain: str) -> bool:
     """True iff ``user_plain`` is recognized by the legacy calculator template."""
     return _legacy_is_calculator_prompt(user_plain)
@@ -73,6 +81,7 @@ def legacy_template_kind_for_prompt(user_plain: str) -> str | None:
 
 
 __all__ = [
+    "LEGACY_RETIREMENT_GATE",
     "LEGACY_TEMPLATE_KINDS",
     "is_legacy_calculator_prompt",
     "is_legacy_tetris_prompt",

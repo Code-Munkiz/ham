@@ -31,6 +31,11 @@ from src.ham.builder_error_codes import (
     STEP_MODEL_UNAVAILABLE,
     STEP_VERIFICATION_FAILED,
 )
+from src.ham.builder_kits import (
+    BuilderKit,
+    get_kit_for_template_kind,
+    render_kit_context,
+)
 from src.ham.builder_plan import Plan
 from src.llm_client import (
     complete_chat_messages_openrouter,
@@ -215,6 +220,7 @@ def _build_scaffold_messages(
     plan: Plan,
     *,
     system_prompt: str = _SCAFFOLD_SYSTEM_PROMPT,
+    kit: BuilderKit | None = None,
 ) -> list[dict[str, Any]]:
     """Assemble the LLM message list for a scaffold call."""
     template_kind = (plan.metadata or {}).get("template_kind", "unknown")
@@ -227,6 +233,10 @@ def _build_scaffold_messages(
         f"User request: {plan.user_message}\n"
         f"Steps:\n{steps_text}"
     )
+    if kit is not None:
+        user_content = (
+            f"{user_content}\n\nBuilder Kit context:\n{render_kit_context(kit)}"
+        )
     return [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_content},
@@ -273,9 +283,13 @@ def generate_scaffold(
         )
 
     model = _get_scaffold_model()
+    template_kind = (plan.metadata or {}).get("template_kind", "")
+    kit = get_kit_for_template_kind(template_kind)
 
     # --- Attempt 1 ---
-    messages = _build_scaffold_messages(plan, system_prompt=_SCAFFOLD_SYSTEM_PROMPT)
+    messages = _build_scaffold_messages(
+        plan, system_prompt=_SCAFFOLD_SYSTEM_PROMPT, kit=kit
+    )
     try:
         raw = complete_chat_messages_openrouter(
             messages,
@@ -299,7 +313,9 @@ def generate_scaffold(
         )
 
     # --- Attempt 2 (stricter prompt) ---
-    messages2 = _build_scaffold_messages(plan, system_prompt=_SCAFFOLD_SYSTEM_PROMPT_STRICT)
+    messages2 = _build_scaffold_messages(
+        plan, system_prompt=_SCAFFOLD_SYSTEM_PROMPT_STRICT, kit=kit
+    )
     try:
         raw2 = complete_chat_messages_openrouter(
             messages2,

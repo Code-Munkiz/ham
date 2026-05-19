@@ -1,0 +1,36 @@
+{
+  "kit_id": "calculator",
+  "app_archetype": "single-page-utility",
+  "supported_template_kinds": ["calculator"],
+  "stack_recipe": ["react", "typescript", "tailwind", "vite"],
+  "expected_files": [
+    "src/App.tsx",
+    "src/main.tsx",
+    "src/index.css",
+    "index.html"
+  ],
+  "expected_routes": [],
+  "design_recipe": [
+    "single-card-centered",
+    "dark-on-light",
+    "monospace-display"
+  ],
+  "allowed_capabilities": ["local-state", "no-network"],
+  "validation_checklist": [
+    "App renders without errors",
+    "Numeric keypad buttons 0-9 are visible and clickable",
+    "Addition produces the correct displayed result",
+    "Subtraction produces the correct displayed result",
+    "Multiplication produces the correct displayed result",
+    "Division produces the correct displayed result",
+    "Clear button resets the display to zero"
+  ],
+  "safety_constraints": [
+    "no-network-egress",
+    "no-eval",
+    "no-localstorage-secrets"
+  ],
+  "examples": [],
+  "legacy_parity_only": true,
+  "migration_note": "Retire only after verifier parity vs legacy deterministic calculator template."
+}

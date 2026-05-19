@@ -1,0 +1,37 @@
+{
+  "kit_id": "tetris",
+  "app_archetype": "game",
+  "supported_template_kinds": ["tetris"],
+  "stack_recipe": ["react", "typescript", "tailwind", "vite"],
+  "expected_files": [
+    "src/App.tsx",
+    "src/main.tsx",
+    "src/index.css",
+    "index.html"
+  ],
+  "expected_routes": [],
+  "design_recipe": [
+    "centered-playfield",
+    "dark-on-light",
+    "score-panel-right"
+  ],
+  "allowed_capabilities": ["local-state", "keyboard-input", "no-network"],
+  "validation_checklist": [
+    "App renders without errors",
+    "A new piece spawns at the top of the playfield",
+    "Pieces rotate on keypress",
+    "Pieces move laterally on keypress",
+    "Soft drop accelerates downward movement",
+    "Completed lines clear from the playfield",
+    "The score updates when lines clear",
+    "Game-over state is displayed when the stack reaches the top"
+  ],
+  "safety_constraints": [
+    "no-network-egress",
+    "no-eval",
+    "no-localstorage-secrets"
+  ],
+  "examples": [],
+  "legacy_parity_only": true,
+  "migration_note": "Retire only after verifier parity vs legacy deterministic tetris template."
+}
