@@ -155,26 +155,44 @@ def packages_from_requirements(text: str) -> list[str]:
     return names
 
 
-def _find_source_file(source_files: dict[str, Any], suffix: str) -> str | None:
-    for path, content in source_files.items():
+def _normalize_source_files(source_files: dict[str, Any] | list[Any] | None) -> dict[str, str]:
+    if not source_files:
+        return {}
+    if isinstance(source_files, dict):
+        return {str(k): str(v) for k, v in source_files.items()}
+    out: dict[str, str] = {}
+    for item in source_files:
+        path = getattr(item, "path", None)
+        data = getattr(item, "data", None)
+        if path is None:
+            continue
+        if isinstance(data, (bytes, bytearray)):
+            out[str(path)] = bytes(data).decode("utf-8", errors="replace")
+        elif data is not None:
+            out[str(path)] = str(data)
+    return out
+
+
+def _find_source_file(source_files: dict[str, Any] | list[Any] | None, suffix: str) -> str | None:
+    normalized = _normalize_source_files(source_files)
+    for path, content in normalized.items():
         if str(path).replace("\\", "/").endswith(suffix):
-            return str(content)
+            return content
     return None
 
 
 def check_install_allowed(
     command: list[str],
     *,
-    source_files: dict[str, Any] | None = None,
+    source_files: dict[str, Any] | list[Any] | None = None,
 ) -> ErrorEnvelope | None:
     """Return a denial envelope if ``command`` is npm/pip install and a package is blocked."""
     if len(command) < 2:
         return None
-    files = source_files or {}
     allowlist = get_package_allowlist()
 
     if command[0] == "npm" and command[1] == "install":
-        body = _find_source_file(files, "package.json")
+        body = _find_source_file(source_files, "package.json")
         if body is None:
             return None
         for package in packages_from_package_json(body):
@@ -184,7 +202,7 @@ def check_install_allowed(
 
     if command[0] == "pip" and command[1] == "install":
         if len(command) == 2:
-            body = _find_source_file(files, "requirements.txt")
+            body = _find_source_file(source_files, "requirements.txt")
             if body is None:
                 return None
             packages = packages_from_requirements(body)
