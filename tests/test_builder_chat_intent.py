@@ -42,6 +42,8 @@ from src.ham.builder_chat_intent import (
         ("just plan, don't build", "plan_only"),
         ("help me plan, but don't build yet", "plan_only"),
         ("talk through it before building", "plan_only"),
+        ("Plan a dashboard for validator performance", "plan_only"),
+        ("show me the plan before building", "plan_only"),
         ("create a dashboard", "build_or_create"),
         ("make a calculator app", "build_or_create"),
     ],

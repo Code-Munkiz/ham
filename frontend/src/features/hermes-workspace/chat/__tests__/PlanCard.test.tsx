@@ -65,7 +65,7 @@ describe("PlanCard", () => {
 
   it("renders superseded one-line summary", () => {
     render(<PlanCard plan={samplePlan()} approvalState="proposed" phase="superseded" />);
-    expect(screen.getByTestId("plan-card-superseded")).toHaveTextContent(/Superseded plan/i);
+    expect(screen.getByTestId("plan-card-superseded")).toHaveTextContent(/Earlier request/i);
   });
 
   it("submits replan text via onReplan", () => {

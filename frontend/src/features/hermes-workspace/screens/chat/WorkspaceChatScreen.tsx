@@ -83,6 +83,7 @@ import {
   type BuilderPlanCardEntry,
 } from "../../chat/WorkspaceBuilderPlanCards";
 import { isLikelyCodingIntent } from "./coding-plan/codingIntent";
+import { shouldSurfaceCodingConductorCard } from "./coding-plan/codingPlanCardCopy";
 import type {
   ComposerExportPdfState,
   ComposerGenerateImageState,
@@ -2097,11 +2098,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           : isV1
             ? String((outboundUser as HamChatUserContentV1).text ?? "").trim()
             : "";
-      // Conversational conductor: if the user's normal text looks like a
-      // repo coding task (not a new app/site/game builder prompt), fire a
-      // background preview so the CodingPlanCard
-      // appears below the thread without requiring a separate "Plan with
-      // Plan a build in chat" click. Preview only — no launch.
+      // Internal orchestration: repo coding tasks may fetch conductor preview;
+      // the approval strip only renders when execution truly needs a gate.
       if (!missionModeId && nlProbeText && isLikelyCodingIntent(nlProbeText)) {
         void triggerAutoCodingPlanPreview(nlProbeText);
       }
@@ -2894,39 +2892,6 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     });
   }, [attachments, input, runWorkspaceVideoGeneration]);
 
-  const handlePlanWithCodingAgents = React.useCallback(async () => {
-    setCodingPlanRestoredBanner(false);
-    setCodingPlanInlineError(null);
-    const draft = input.trim();
-    if (!draft) {
-      setCodingPlanPreview(null);
-      setCodingPlanInlineError("Describe what you want HAM to build or inspect first.");
-      return;
-    }
-    if (!projectId?.trim()) {
-      setCodingPlanPreview(null);
-      setCodingPlanInlineError(PROJECT_WORKSPACE_GATE_MESSAGE);
-      return;
-    }
-    setCodingPlanLoading(true);
-    setCodingPlanPreview(null);
-    setCodingPlanPreferring(null);
-    try {
-      const payload = await previewCodingConductor({
-        user_prompt: draft,
-        project_id: projectId ?? undefined,
-        workspace_id: activeWorkspaceId ?? undefined,
-      });
-      setCodingPlanPreview(payload);
-      setCodingPlanPrompt(draft);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Could not load coding plan.";
-      toast.error(shortenHamApiErrorMessage(msg));
-    } finally {
-      setCodingPlanLoading(false);
-    }
-  }, [input, projectId, activeWorkspaceId]);
-
   const handlePreferProvider = React.useCallback(
     async (provider: "opencode_cli") => {
       setCodingPlanRestoredBanner(false);
@@ -2993,8 +2958,13 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           project_id: projectId ?? undefined,
           workspace_id: activeWorkspaceId ?? undefined,
         });
-        setCodingPlanPreview(payload);
-        setCodingPlanPrompt(draft);
+        if (shouldSurfaceCodingConductorCard(payload)) {
+          setCodingPlanPreview(payload);
+          setCodingPlanPrompt(draft);
+        } else {
+          setCodingPlanPreview(null);
+          setCodingPlanPrompt("");
+        }
       } catch {
         // Silent: auto preview is best-effort. Manual button remains available
         // as the explicit fallback.
@@ -3024,6 +2994,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     const draft = readCodingPlanDraft(ws, sid);
     codingPlanDraftRestoreKeyRef.current = rk;
     if (!draft) return;
+    if (!shouldSurfaceCodingConductorCard(draft.preview)) return;
     setCodingPlanPreview(draft.preview);
     setCodingPlanPrompt(draft.prompt);
     setCodingPlanInlineError(null);
@@ -3057,10 +3028,9 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     setCodingPlanInlineError(null);
   }, [input, codingPlanInlineError]);
 
-  const onEmptyStatePlanWithCodingAgents = React.useCallback(() => {
-    composerTextareaRef.current?.focus();
-    void handlePlanWithCodingAgents();
-  }, [handlePlanWithCodingAgents]);
+  const codingPlanApprovalVisible = Boolean(
+    codingPlanPreview && shouldSurfaceCodingConductorCard(codingPlanPreview),
+  );
 
   const composerGenerateImage = React.useMemo((): ComposerGenerateImageState => {
     const uploadsPending = attachments.some((a) => a.uploadPhase === "uploading");
@@ -3665,7 +3635,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                 </div>
               </div>
             ) : showEmpty ? (
-              <WorkspaceChatEmptyState onPlanWithCodingAgents={onEmptyStatePlanWithCodingAgents} />
+              <WorkspaceChatEmptyState />
             ) : (
               <>
                 <WorkspaceChatMessageList
@@ -3687,20 +3657,19 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             )}
           </div>
           <div className="flex w-full max-w-full min-w-0 shrink-0 flex-col overflow-x-hidden">
-            {(codingPlanLoading || codingPlanInlineError || codingPlanPreview) && (
+            {(codingPlanLoading || codingPlanInlineError || codingPlanApprovalVisible) && (
               <div
                 className="w-full max-w-full shrink-0 border-t border-white/[0.06] bg-[#050b10]/95 px-3 py-2 md:px-6"
                 data-hww-coding-plan-strip
               >
-                {codingPlanRestoredBanner && codingPlanPreview && !codingPlanLoading ? (
+                {codingPlanRestoredBanner && codingPlanApprovalVisible && !codingPlanLoading ? (
                   <p
                     className="mb-2 text-[10px] leading-snug text-cyan-100/85"
                     data-hww-coding-plan-restored-hint
                     role="status"
                   >
-                    Restored your coding-plan approval card from this browser tab. If it looks
-                    stale, run{" "}
-                    <span className="font-medium text-white/85">Plan a build in chat</span> again.
+                    Restored your build approval checkpoint from this browser tab. Send a fresh
+                    message if it looks stale.
                   </p>
                 ) : null}
                 {codingPlanLoading ? (
@@ -3709,7 +3678,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                     data-hww-coding-plan-loading
                   >
                     <Loader2 className="h-4 w-4 shrink-0 animate-spin text-cyan-300/80" />
-                    Planning…
+                    Checking build options…
                   </div>
                 ) : null}
                 {codingPlanInlineError ? (
@@ -3721,13 +3690,13 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                     {codingPlanInlineError}
                   </p>
                 ) : null}
-                {codingPlanPreview && !codingPlanLoading ? (
+                {codingPlanApprovalVisible && !codingPlanLoading ? (
                   <div
                     className={codingPlanInlineError ? "mt-2" : ""}
                     data-hww-coding-plan-card-wrap
                   >
                     <CodingPlanCard
-                      payload={codingPlanPreview}
+                      payload={codingPlanPreview!}
                       userPrompt={codingPlanPrompt}
                       onPreferProvider={handlePreferProvider}
                       preferringProvider={codingPlanPreferring}
@@ -3788,8 +3757,6 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                 blockedReason: pdfExportBlockedReason,
               }}
               composerTextareaRef={composerTextareaRef}
-              onPlanWithCodingAgents={handlePlanWithCodingAgents}
-              codingPlanActionBusy={codingPlanLoading}
             />
           </div>
         </div>

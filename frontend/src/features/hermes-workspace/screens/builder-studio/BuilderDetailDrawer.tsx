@@ -39,9 +39,6 @@ export function BuilderDetailDrawer({
 }) {
   const [confirmingDisable, setConfirmingDisable] = React.useState(false);
   const [pending, setPending] = React.useState(false);
-  const [candidates, setCandidates] = React.useState<unknown[] | null>(null);
-  const [testError, setTestError] = React.useState<string | null>(null);
-
   const tags = formatIntentTagsForDisplay(builder.intent_tags ?? []);
 
   const handleDisable = async () => {
@@ -74,23 +71,6 @@ export function BuilderDetailDrawer({
       duration: 4000,
     });
     onChanged();
-  };
-
-  const handleTestPlan = async () => {
-    setPending(true);
-    setTestError(null);
-    const result = await builderStudioAdapter.testPlan(
-      workspaceId,
-      builder.builder_id,
-      "Show how this builder would respond to a typical request.",
-    );
-    setPending(false);
-    if (result.error) {
-      setTestError(adapterErrorMessage(result.error));
-      setCandidates(null);
-      return;
-    }
-    setCandidates(result.candidates);
   };
 
   return (
@@ -170,42 +150,6 @@ export function BuilderDetailDrawer({
             />
           </dl>
 
-          <section className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <h3 className="text-xs font-semibold text-[var(--theme-text)]">Test plan</h3>
-                <p className="mt-0.5 text-[11px] text-[var(--theme-muted)]">
-                  This is a preview. Nothing runs yet.
-                </p>
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                onClick={() => void handleTestPlan()}
-                disabled={pending}
-              >
-                Run a test plan
-              </Button>
-            </div>
-            {testError ? <p className="mt-2 text-[11px] text-amber-200/80">{testError}</p> : null}
-            {candidates ? (
-              <ul className="mt-3 space-y-1 text-[11px] text-[var(--theme-text)]">
-                {candidates.length === 0 ? (
-                  <li className="text-[var(--theme-muted)]">No candidates returned.</li>
-                ) : (
-                  candidates.map((c, idx) => (
-                    <li
-                      key={idx}
-                      className="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1"
-                    >
-                      Candidate {idx + 1}
-                    </li>
-                  ))
-                )}
-              </ul>
-            ) : null}
-          </section>
 
           {isOperator ? (
             <button

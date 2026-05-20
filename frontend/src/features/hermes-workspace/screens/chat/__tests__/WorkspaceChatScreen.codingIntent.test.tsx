@@ -3,8 +3,7 @@
  *
  * Locks the product contract:
  * - Coding-intent text fired through the main composer triggers
- *   previewCodingConductor automatically (no “Plan a build in chat”
- *   click required).
+ *   previewCodingConductor automatically (no manual plan control).
  * - Conceptual / conversational text does NOT trigger the preview.
  * - The CodingPlanCard renders inline below the message list.
  * - Launch CTAs stay non-actionable (no Cursor / Droid / Claude launch).
@@ -351,6 +350,50 @@ describe("WorkspaceChatScreen conversational coding conductor", () => {
     expect(container.querySelector('[data-hww-coding-plan="card"]')).toBeNull();
   });
 
+  it("does not surface approval strip for read-only conductor recommendations", async () => {
+    previewCodingConductorMock.mockResolvedValue({
+      kind: "coding_conductor_preview" as const,
+      preview_id: "p-audit",
+      task_kind: "audit",
+      task_confidence: 0.85,
+      chosen: {
+        provider: "factory_droid_audit" as const,
+        label: "Factory Droid audit",
+        available: true,
+        reason: "Read-only audit.",
+        blockers: [],
+        confidence: 0.85,
+        output_kind: "report" as const,
+        requires_operator: false,
+        requires_confirmation: true,
+        will_modify_code: false,
+        will_open_pull_request: false,
+      },
+      candidates: [],
+      blockers: [],
+      recommendation_reason: "Read-only audit.",
+      requires_approval: true,
+      approval_kind: "confirm" as const,
+      project: {
+        found: true,
+        project_id: "p1",
+        build_lane_enabled: false,
+        has_github_repo: false,
+      },
+      is_operator: false,
+    });
+    chatStreamMock.mockImplementation(async () => ({ ok: true }));
+    getStreamAuthMock.mockResolvedValue(undefined);
+    const { container } = renderChat();
+
+    await waitFor(() => expect(screen.getByTestId("hww-command-panel")).toBeInTheDocument());
+
+    await typeAndSend(container, "Refactor the persistence layer in the HAM repo");
+
+    await waitFor(() => expect(previewCodingConductorMock).toHaveBeenCalled());
+    expect(container.querySelector('[data-hww-coding-plan="card"]')).toBeNull();
+  });
+
   it("does NOT auto-fire for short greetings", async () => {
     previewCodingConductorMock.mockResolvedValue(samplePreviewPayload);
     chatStreamMock.mockImplementation(async () => ({ ok: true }));
@@ -437,30 +480,6 @@ describe("WorkspaceChatScreen conversational coding conductor", () => {
       expect(container.querySelector('[data-hww-coding-plan="card"]')).not.toBeNull(),
     );
     assertNoForbiddenTokens(container);
-  });
-
-  it("manual fallback button still works (demoted but functional)", async () => {
-    previewCodingConductorMock.mockResolvedValue(samplePreviewPayload);
-    const { container } = renderChat();
-    await waitFor(() => expect(screen.getByTestId("hww-command-panel")).toBeInTheDocument());
-
-    const planBtn = container.querySelector(
-      "[data-hww-coding-plan-action]",
-    ) as HTMLButtonElement | null;
-    expect(planBtn).toBeTruthy();
-    expect(planBtn?.getAttribute("data-hww-coding-plan-priority")).toBe("manual-fallback");
-
-    const ta = container.querySelector("#hww-chat-composer") as HTMLTextAreaElement;
-    fireEvent.change(ta, { target: { value: "Inspect the runner" } });
-    fireEvent.click(planBtn!);
-
-    await waitFor(() => {
-      expect(previewCodingConductorMock).toHaveBeenCalledWith({
-        user_prompt: "Inspect the runner",
-        project_id: CHAT_W1_PROJECT_ID,
-        workspace_id: "w1",
-      });
-    });
   });
 
   it("debounces: identical consecutive coding prompts only call preview once", async () => {

@@ -13,8 +13,11 @@ import {
   approvalCopyForCard,
   builderLabelForCandidate,
   cardLabelForCandidate,
+  CODING_PLAN_SECTION_LABEL,
   outputKindCopyForCard,
   planDescriptionForCard,
+  shouldShowManagedBuildApproval,
+  shouldShowOpencodeBuildApproval,
   shouldShowOpenCodeAffordance,
   taskKindDisplayForCard,
 } from "./codingPlanCardCopy";
@@ -29,32 +32,6 @@ export type CodingPlanCardProps = {
   preferringProvider?: "opencode_cli" | null;
   builderName?: string;
 };
-
-function shouldShowManagedBuildApproval(payload: CodingConductorPreviewPayload): boolean {
-  const chosen = payload.chosen;
-  if (!chosen || chosen.provider !== "factory_droid_build" || !chosen.available) {
-    return false;
-  }
-  const project = payload.project;
-  if (!project.found || !project.project_id) return false;
-  const target = (project.output_target || "").trim();
-  if (target !== "managed_workspace") return false;
-  if (project.has_workspace_id === false) return false;
-  return true;
-}
-
-function shouldShowOpencodeBuildApproval(payload: CodingConductorPreviewPayload): boolean {
-  const chosen = payload.chosen;
-  if (!chosen || chosen.provider !== "opencode_cli" || !chosen.available) {
-    return false;
-  }
-  const project = payload.project;
-  if (!project.found || !project.project_id) return false;
-  const target = (project.output_target || "").trim();
-  if (target !== "managed_workspace") return false;
-  if (project.has_workspace_id === false) return false;
-  return true;
-}
 
 const BADGE_CLASS =
   "rounded-full border border-white/[0.12] bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-wide text-white/70";
@@ -158,12 +135,12 @@ export function CodingPlanCard({
         className,
       )}
       role="region"
-      aria-label="HAM coding plan recommendation"
+      aria-label="HAM build approval"
       data-hww-coding-plan="card"
     >
       <header className="flex flex-wrap items-center gap-2">
         <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-white/55">
-          HAM's plan
+          {CODING_PLAN_SECTION_LABEL}
         </span>
         <span className={BADGE_CLASS}>{taskLabel}</span>
       </header>

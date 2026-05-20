@@ -18,11 +18,13 @@ import type {
 } from "@/lib/ham/api";
 
 export const CODING_PLAN_NO_LAUNCH_FOOTER =
-  "No action has been launched yet — this is a recommendation only. Launch approval is coming in a later step.";
+  "Nothing has started yet. Use the approval controls below when you're ready.";
 
-export const CODING_PLAN_LAUNCH_DISABLED_TITLE = "Launch approval is coming in a later step.";
+export const CODING_PLAN_LAUNCH_DISABLED_TITLE = "Approval is required before HAM starts this work.";
 
-export const MANAGED_BUILD_APPROVAL_HEADLINE = "Approve this workspace build plan";
+export const CODING_PLAN_SECTION_LABEL = "Next step";
+
+export const MANAGED_BUILD_APPROVAL_HEADLINE = "Approve build";
 
 export const MANAGED_BUILD_APPROVAL_BODY =
   "HAM will apply a cautious edit sweep and stash a labeled workspace version you can review before sharing anything externally.";
@@ -125,7 +127,7 @@ export function shouldShowOpenCodeAffordance(payload: CodingConductorPreviewPayl
  * Never expose raw provider ids or technical routing vocabulary here.
  */
 const USER_FACING_BUILDER_LABEL: Record<CodingConductorProviderKind, string> = {
-  no_agent: "Conversational answer",
+  no_agent: "Chat guidance",
   factory_droid_audit: "Factory Droid audit",
   factory_droid_build: "Factory Droid",
   cursor_cloud: "Cursor",
@@ -135,7 +137,7 @@ const USER_FACING_BUILDER_LABEL: Record<CodingConductorProviderKind, string> = {
 };
 
 const PROVIDER_LABEL: Record<CodingConductorProviderKind, string> = {
-  no_agent: "Conversational answer",
+  no_agent: "Chat guidance",
   factory_droid_audit: "Factory Droid audit",
   factory_droid_build: "Factory Droid build",
   cursor_cloud: "Cursor",
@@ -281,6 +283,49 @@ export function isLaunchableInThisPhase(_c: CodingConductorCandidate | null): fa
   // in the card; this helper is a single source of truth so component
   // tests can lock the invariant without re-deriving the gating logic.
   return false;
+}
+
+/** True when the conductor preview should surface managed-workspace build approval. */
+export function shouldShowManagedBuildApproval(payload: CodingConductorPreviewPayload): boolean {
+  const chosen = payload.chosen;
+  if (!chosen || chosen.provider !== "factory_droid_build" || !chosen.available) {
+    return false;
+  }
+  const project = payload.project;
+  if (!project.found || !project.project_id) return false;
+  const target = (project.output_target || "").trim();
+  if (target !== "managed_workspace") return false;
+  if (project.has_workspace_id === false) return false;
+  return true;
+}
+
+/** True when the conductor preview should surface OpenCode build approval. */
+export function shouldShowOpencodeBuildApproval(payload: CodingConductorPreviewPayload): boolean {
+  const chosen = payload.chosen;
+  if (!chosen || chosen.provider !== "opencode_cli" || !chosen.available) {
+    return false;
+  }
+  const project = payload.project;
+  if (!project.found || !project.project_id) return false;
+  const target = (project.output_target || "").trim();
+  if (target !== "managed_workspace") return false;
+  if (project.has_workspace_id === false) return false;
+  return true;
+}
+
+/**
+ * Show the chat approval strip only when execution needs an explicit user gate —
+ * not for answer-only routing or generic recommendations.
+ */
+export function shouldSurfaceCodingConductorCard(payload: CodingConductorPreviewPayload): boolean {
+  if (shouldShowManagedBuildApproval(payload)) return true;
+  if (shouldShowOpencodeBuildApproval(payload)) return true;
+  const chosen = payload.chosen;
+  if (!chosen) return false;
+  if (chosen.provider === "no_agent") return false;
+  if (!chosen.will_modify_code) return false;
+  if (!chosen.available || chosen.blockers.length > 0) return false;
+  return chosen.requires_confirmation || payload.requires_approval;
 }
 
 /**

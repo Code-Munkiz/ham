@@ -195,8 +195,8 @@ describe("CodingPlanCard", () => {
     expect(drawer).not.toBeNull();
     // Recommendation reason appears in the details section.
     expect(drawer!.textContent).toContain("Repo-wide context");
-    // Alternative provider label appears (no_agent → "Conversational answer").
-    expect(drawer!.textContent).toContain("Conversational answer");
+    // Alternative provider label appears (no_agent → "Chat guidance").
+    expect(drawer!.textContent).toContain("Chat guidance");
     assertNoForbiddenTokens(card);
   });
 
@@ -246,7 +246,7 @@ describe("CodingPlanCard", () => {
     // Footer pins the no-launch promise.
     const footer =
       card.querySelector('[data-hww-coding-plan="no-launch-footer"]')!.textContent ?? "";
-    expect(footer.toLowerCase()).toContain("no action has been launched yet");
+    expect(footer.toLowerCase()).toContain("nothing has started");
   });
 
   it("does not render any element with name suggesting an active approve/launch action", () => {

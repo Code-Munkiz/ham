@@ -101,12 +101,8 @@ type WorkspaceChatComposerProps = {
   onQuickSuggestion?: (prompt: string) => void;
   /** When this identity changes (e.g. chat session id), the dismissible starter row is shown again. */
   quickTipsResetSignal?: string | null;
-  /** Main composer textarea — for focus from parent (e.g. empty-state “Plan a build in chat”). */
+  /** Main composer textarea — optional ref for parent focus management. */
   composerTextareaRef?: React.Ref<HTMLTextAreaElement>;
-  /** Preview-only: run conductor on the current composer draft (Phase 2C). */
-  onPlanWithCodingAgents?: () => void | Promise<void>;
-  /** True while `previewCodingConductor` is in flight. */
-  codingPlanActionBusy?: boolean;
 };
 
 const COMPOSER_MENU_FOOTER_HINT =
@@ -307,8 +303,6 @@ export function WorkspaceChatComposer({
   onQuickSuggestion,
   quickTipsResetSignal = null,
   composerTextareaRef,
-  onPlanWithCodingAgents,
-  codingPlanActionBusy = false,
 }: WorkspaceChatComposerProps) {
   const [quickTipsDismissed, setQuickTipsDismissed] = React.useState(false);
   const [voiceState, setVoiceState] = React.useState<VoiceUiState>("idle");
@@ -848,37 +842,6 @@ export function WorkspaceChatComposer({
           density={composerToolbarDensity}
           layout={meterLayout}
         />
-      ) : null}
-      {onPlanWithCodingAgents ? (
-        // Demoted: conversational auto-preview is now the primary path
-        // (WorkspaceChatScreen.send() fires previewCodingConductor for
-        // coding-intent messages automatically). This button stays only as
-        // an explicit manual fallback for users who already have a draft
-        // in the composer and want to force-preview without sending.
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          title="Plan a build in chat (manual) — uses the message above"
-          aria-label="Plan a build in chat (manual)"
-          data-hww-coding-plan-action
-          data-hww-coding-plan-priority="manual-fallback"
-          disabled={
-            disabled || sending || voiceBusy || uploadsPending || Boolean(codingPlanActionBusy)
-          }
-          className={cn(
-            "h-7 w-7 shrink-0 p-0 text-white/35 hover:bg-white/[0.04] hover:text-cyan-200/80",
-            "disabled:pointer-events-none disabled:opacity-30",
-          )}
-          onClick={() => void onPlanWithCodingAgents()}
-        >
-          {codingPlanActionBusy ? (
-            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
-          ) : (
-            <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          )}
-          <span className="sr-only">Plan a build in chat (manual)</span>
-        </Button>
       ) : null}
       <div
         className={cn(

@@ -52,8 +52,8 @@ export type PlanCardProps = {
 function planSummaryLine(plan: Plan): string {
   const n = plan.steps.length;
   const stepWord = n === 1 ? "step" : "steps";
-  const touch = plan.destructive ? "touches sensitive paths" : "scoped changes";
-  return `Plan: ${n} ${stepWord}; ${touch}`;
+  const touch = plan.destructive ? "includes sensitive changes" : "scoped changes";
+  return `Here's what I'll do — ${n} ${stepWord}; ${touch}`;
 }
 
 export function PlanCard({
@@ -119,7 +119,7 @@ export function PlanCard({
         )}
         data-testid="plan-card-superseded"
       >
-        Superseded plan ({plan.steps.length} step{plan.steps.length === 1 ? "" : "s"})
+        Earlier request ({plan.steps.length} step{plan.steps.length === 1 ? "" : "s"})
       </div>
     );
   }
@@ -167,14 +167,14 @@ export function PlanCard({
         <div>
           <p className="text-[13px] font-medium text-white/95" data-testid="plan-card-summary">
             {approvedWaiting
-              ? "Approved — waiting for worker…"
+              ? "Approved — starting work…"
               : inFlight || frozen
-                ? `Running plan (${plan.steps.length} step${plan.steps.length === 1 ? "" : "s"})`
+                ? `In progress (${plan.steps.length} step${plan.steps.length === 1 ? "" : "s"})`
                 : planSummaryLine(plan)}
           </p>
           {showApproveReplan ? (
             <p className="mt-0.5 text-[11px] text-white/50">
-              Review steps, then approve or re-plan.
+              Review the steps, then approve or tell me what to change.
             </p>
           ) : null}
         </div>
@@ -205,7 +205,7 @@ export function PlanCard({
           className="mt-2 rounded-md border border-white/15 bg-white/[0.06] px-2 py-1.5 text-[11px] text-white/70"
           data-testid="plan-card-stale-banner"
         >
-          {staleBanner ?? "Project changed since this plan was created; ask me again"}
+          {staleBanner ?? "The project changed since this summary; send an updated request"}
         </p>
       ) : null}
 
@@ -305,7 +305,7 @@ export function PlanCard({
             data-testid="plan-card-approve"
             onClick={() => void onApprove?.()}
           >
-            {approving ? "Approving…" : "Approve"}
+            {approving ? "Approving…" : "Approve build"}
           </Button>
           <Button
             type="button"
@@ -315,7 +315,7 @@ export function PlanCard({
             data-testid="plan-card-replan"
             onClick={() => setReplanOpen((v) => !v)}
           >
-            Re-plan
+            Adjust request
           </Button>
         </div>
       ) : null}
@@ -370,7 +370,7 @@ export function PlanCard({
               setReplanOpen(false);
             }}
           >
-            Send re-plan message
+            Send update
           </Button>
         </div>
       ) : null}

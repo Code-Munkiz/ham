@@ -35,12 +35,9 @@ export const WORKSPACE_CHAT_SUGGESTIONS: SuggestionChip[] = [
   },
 ];
 
-export type WorkspaceChatEmptyStateProps = {
-  /** Calls through to the main chat composer: focus draft + preview-only conductor (Phase 2C). */
-  onPlanWithCodingAgents?: () => void;
-};
+export type WorkspaceChatEmptyStateProps = Record<string, never>;
 
-export function WorkspaceChatEmptyState({ onPlanWithCodingAgents }: WorkspaceChatEmptyStateProps) {
+export function WorkspaceChatEmptyState(_props: WorkspaceChatEmptyStateProps) {
   const avatarSrc = hamWorkspaceLogoUrl();
 
   return (
@@ -51,7 +48,7 @@ export function WorkspaceChatEmptyState({ onPlanWithCodingAgents }: WorkspaceCha
       className="hww-chat-empty flex min-h-0 min-w-0 max-w-full flex-1 flex-col items-center justify-center overflow-x-hidden px-4 py-8"
     >
       <div className="flex max-w-full min-w-0 flex-col items-center text-center">
-        <div className="mb-6 flex justify-center">
+        <motion.div className="mb-6 flex justify-center">
           {/*
             Same asset + same presentation as the sidebar top brand (`WorkspaceShell`):
             no bordered “card” frame — that was making the mark read like a wrong thumbnail.
@@ -63,7 +60,7 @@ export function WorkspaceChatEmptyState({ onPlanWithCodingAgents }: WorkspaceCha
             width={48}
             height={48}
           />
-        </div>
+        </motion.div>
         <p className="hww-chat-micro-label mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-white/50">
           HAM's Workspace
         </p>
@@ -75,18 +72,8 @@ export function WorkspaceChatEmptyState({ onPlanWithCodingAgents }: WorkspaceCha
         </p>
         <p className="mt-8 max-w-sm text-[12px] leading-relaxed text-white/40">
           Use the scrolling starter prompts above the composer to jump in—they send the same quick
-          actions as before.
+          actions as before. Ask in plain language; HAM plans internally before gated builds.
         </p>
-        <div className="mt-6 w-full max-w-md">
-          <button
-            type="button"
-            onClick={() => onPlanWithCodingAgents?.()}
-            className="text-[11px] font-medium text-cyan-300/85 hover:text-cyan-200"
-            data-hww-coding-plan-open
-          >
-            Plan a build in chat
-          </button>
-        </div>
       </div>
     </motion.div>
   );

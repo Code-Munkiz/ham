@@ -87,7 +87,7 @@ router = APIRouter(
 # ---------------------------------------------------------------------------
 
 _LABEL: dict[ProviderKind, str] = {
-    "no_agent": "Conversational answer",
+    "no_agent": "Chat guidance",
     "factory_droid_audit": "Factory Droid audit",
     "factory_droid_build": "Factory Droid build",
     "cursor_cloud": "Cursor",

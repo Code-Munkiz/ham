@@ -2237,8 +2237,9 @@ def post_chat_stream(
                         if plan is not None:
                             yield json.dumps({"type": "plan_proposed", "plan_id": plan.plan_id}) + "\n"
                             _ack = (
-                                f"Plan proposed ({len(plan.steps)} step(s)). "
-                                "Review and approve below."
+                                f"Here's what I'll do ({len(plan.steps)} step"
+                                f"{'' if len(plan.steps) == 1 else 's'}). "
+                                "Approve below when you're ready, or tell me what to change."
                             )
                             store.upsert_assistant_turn(sid, _planner_turn_id, _ack)
                             _planner_done: dict[str, Any] = {

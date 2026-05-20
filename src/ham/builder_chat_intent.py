@@ -64,6 +64,14 @@ _NO_BUILD_PATTERNS = (
     r"\bplan\s+only\b",
     r"\bjust\s+plan\b",
     r"\btalk\s+(?:it\s+)?through\b",
+    r"\bshow me the plan\b",
+)
+
+# Leading plan phrasing without an explicit build verb (plan-only conversation).
+_LEADING_PLAN_ONLY = (
+    r"^\s*plan\b",
+    r"\bhelp me plan\b",
+    r"\btalk (?:me )?through\b",
 )
 
 _BUILD_PATTERNS = (
@@ -227,6 +235,10 @@ def classify_builder_chat_intent(user_plain: str) -> BuilderChatIntent:
     if not low:
         return "answer_question"
     if looks_like_explicit_no_build(low):
+        return "plan_only"
+    if any(re.search(p, low) for p in _LEADING_PLAN_ONLY) and not any(
+        re.search(p, low) for p in _BUILD_PATTERNS
+    ):
         return "plan_only"
     if re.search(r"^\s*how\s+(would|could|should)\s+(you|we)\s+build\b", low):
         return "plan_only"

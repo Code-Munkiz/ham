@@ -24,6 +24,7 @@ import {
   planDescriptionForCard,
   providerLabelForCard,
   shouldShowOpenCodeAffordance,
+  shouldSurfaceCodingConductorCard,
   taskKindDisplayForCard,
 } from "../codingPlanCardCopy";
 import type {
@@ -150,17 +151,90 @@ describe("codingPlanCardCopy", () => {
 
   it("cardLabelForCandidate falls back to per-provider label for non-build providers", () => {
     expect(cardLabelForCandidate({ provider: "no_agent", will_open_pull_request: false })).toBe(
-      "Conversational answer",
+      "Chat guidance",
     );
     expect(cardLabelForCandidate({ provider: "cursor_cloud", will_open_pull_request: true })).toBe(
       "Cursor",
     );
   });
 
-  it("CODING_PLAN_NO_LAUNCH_FOOTER mentions no action launched + later step", () => {
+  it("CODING_PLAN_NO_LAUNCH_FOOTER mentions nothing started and approval controls", () => {
     const lower = CODING_PLAN_NO_LAUNCH_FOOTER.toLowerCase();
-    expect(lower).toContain("no action has been launched yet");
-    expect(lower).toContain("later step");
+    expect(lower).toContain("nothing has started");
+    expect(lower).toContain("approval");
+  });
+});
+
+describe("shouldSurfaceCodingConductorCard", () => {
+  const baseProject = {
+    found: true,
+    project_id: "p1",
+    build_lane_enabled: false,
+    has_github_repo: true,
+    output_target: "managed_workspace" as const,
+    has_workspace_id: true,
+  };
+
+  it("returns false for answer-only no_agent recommendations", () => {
+    expect(
+      shouldSurfaceCodingConductorCard({
+        kind: "coding_conductor_preview",
+        preview_id: "p",
+        task_kind: "explain",
+        task_confidence: 0.9,
+        chosen: {
+          provider: "no_agent",
+          label: "Chat guidance",
+          available: true,
+          reason: "Answer in chat.",
+          blockers: [],
+          confidence: 0.9,
+          output_kind: "answer",
+          requires_operator: false,
+          requires_confirmation: false,
+          will_modify_code: false,
+          will_open_pull_request: false,
+        },
+        candidates: [],
+        blockers: [],
+        recommendation_reason: "Answer in chat.",
+        requires_approval: false,
+        approval_kind: "none",
+        project: baseProject,
+        is_operator: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("returns true for mutating repo work that requires confirmation", () => {
+    expect(
+      shouldSurfaceCodingConductorCard({
+        kind: "coding_conductor_preview",
+        preview_id: "p",
+        task_kind: "feature",
+        task_confidence: 0.8,
+        chosen: {
+          provider: "factory_droid_build",
+          label: "Factory Droid build",
+          available: true,
+          reason: "Feature work.",
+          blockers: [],
+          confidence: 0.8,
+          output_kind: "pull_request",
+          requires_operator: false,
+          requires_confirmation: true,
+          will_modify_code: true,
+          will_open_pull_request: true,
+        },
+        candidates: [],
+        blockers: [],
+        recommendation_reason: "Feature work.",
+        requires_approval: true,
+        approval_kind: "confirm",
+        project: { ...baseProject, output_target: "github" },
+        is_operator: false,
+      }),
+    ).toBe(true);
   });
 });
 
