@@ -1760,6 +1760,11 @@ def _maybe_llm_scaffold_replace(
     new_meta["template"] = "llm_chat_scaffold"
     new_meta["llm_scaffold_file_count"] = len(new_files)
     new_meta["llm_scaffold_assertions"] = list(result.assertions or [])
+    # Surface kit routing so the chat `done` payload can confirm which Builder
+    # Kit drove the scaffold (operator logs + FE workbench can verify routing).
+    new_meta["template_kind"] = selected_kit_id
+    new_meta["scaffold_path"] = "llm"
+    new_meta["kit_id"] = selected_kit_id
     return new_files, new_meta
 
 
@@ -2060,6 +2065,9 @@ def maybe_chat_scaffold_for_turn(
         ),
     )
 
+    template_kind_value = scaffold_meta.get("template_kind")
+    scaffold_path_value = scaffold_meta.get("scaffold_path")
+    kit_id_value = scaffold_meta.get("kit_id") or template_kind_value
     return {
         "builder_intent": "build_or_create",
         "builder_operation": operation,
@@ -2071,6 +2079,9 @@ def maybe_chat_scaffold_for_turn(
         "style_requested": scaffold_meta.get("style_requested"),
         "reference_requested": scaffold_meta.get("reference_requested"),
         "artifact_verification": artifact_verification,
+        "template_kind": template_kind_value,
+        "scaffold_path": scaffold_path_value,
+        "kit_id": kit_id_value,
     }
 
 

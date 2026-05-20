@@ -1985,6 +1985,34 @@ def post_chat_stream(
                         payload["builder"] = builder_meta
                     _chat_payload_attach_artifact_verification(payload, builder_meta)
                     yield json.dumps(payload) + "\n"
+                except Exception as deferred_exc:  # noqa: BLE001
+                    _LOG.warning(
+                        "deferred_net_new_builder_gen aborted with unhandled exception; "
+                        "yielding terminal done",
+                        extra={
+                            "session_id": sid,
+                            "exception_type": type(deferred_exc).__name__,
+                        },
+                    )
+                    failed_payload: dict[str, Any] = {
+                        "type": "done",
+                        "session_id": sid,
+                        "messages": store.list_messages(sid),
+                        "actions": [],
+                        "operator_result": None,
+                        "execution_mode": stream_execution_mode,
+                        "stream_aborted": True,
+                        "error": {
+                            "code": "STREAM_FAILED",
+                            "message": "Builder scaffold stream interrupted before completion.",
+                        },
+                    }
+                    if stream_active_meta:
+                        failed_payload["active_agent"] = stream_active_meta
+                    if builder_meta is not None:
+                        failed_payload["builder"] = builder_meta
+                    _chat_payload_attach_artifact_verification(failed_payload, builder_meta)
+                    yield json.dumps(failed_payload) + "\n"
                 finally:
                     release_stream_lock()
 
@@ -2474,6 +2502,31 @@ def post_chat_stream(
                             "message": "Session disappeared during stream.",
                         },
                     ) + "\n"
+            except Exception as ndjson_exc:  # noqa: BLE001
+                _LOG.warning(
+                    "ndjson_gen aborted with unhandled exception; yielding terminal done",
+                    extra={"session_id": sid, "exception_type": type(ndjson_exc).__name__},
+                )
+                stream_completed = True
+                aborted_payload: dict[str, Any] = {
+                    "type": "done",
+                    "session_id": sid,
+                    "messages": store.list_messages(sid),
+                    "actions": [],
+                    "operator_result": None,
+                    "execution_mode": stream_execution_mode,
+                    "stream_aborted": True,
+                    "error": {
+                        "code": "STREAM_FAILED",
+                        "message": "Stream interrupted before completion.",
+                    },
+                }
+                if stream_active_meta:
+                    aborted_payload["active_agent"] = stream_active_meta
+                if builder_meta is not None:
+                    aborted_payload["builder"] = builder_meta
+                _chat_payload_attach_artifact_verification(aborted_payload, builder_meta)
+                yield json.dumps(aborted_payload) + "\n"
             finally:
                 # If stream was interrupted (generator closed), save partial content.
                 if not stream_completed:

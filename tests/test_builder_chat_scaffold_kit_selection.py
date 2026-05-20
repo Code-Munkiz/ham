@@ -53,6 +53,45 @@ def _captured(user_message: str) -> dict:
     return captured["plan"].metadata or {}
 
 
+def _captured_result_meta(user_message: str) -> dict:
+    """Returns the ``new_meta`` dict produced by ``_maybe_llm_scaffold_replace``.
+
+    Mirrors ``_captured`` but inspects the LLM replace helper's return value so
+    we can lock kit-routing metadata (``template_kind`` / ``scaffold_path`` /
+    ``kit_id``) that downstream consumers (chat ``done`` payload, FE workbench)
+    rely on to verify the request really hit the LLM-scaffold path.
+    """
+
+    def _fake_generate_scaffold(_plan, **_kw):
+        return ScaffoldResult(
+            file_changes=[("src/App.tsx", "export default function App(){return null;}")],
+            assertions=[],
+        )
+
+    with patch(
+        "src.llm_client.resolve_openrouter_api_key_for_actor",
+        return_value="sk-or-v1-test_kit_selection_000000000000",
+    ), patch(
+        "src.ham.builder_llm_scaffold._get_scaffold_model",
+        return_value="openrouter/anthropic/claude-3.5-haiku",
+    ), patch(
+        "src.ham.builder_llm_scaffold.generate_scaffold",
+        side_effect=_fake_generate_scaffold,
+    ):
+        result = _maybe_llm_scaffold_replace(
+            user_message=user_message,
+            workspace_id="ws_kit",
+            project_id="proj_kit",
+            files={"src/App.tsx": "// placeholder"},
+            scaffold_meta={},
+            ham_actor=_byo_actor(),
+        )
+    assert isinstance(result, tuple) and len(result) == 2, (
+        f"_maybe_llm_scaffold_replace returned {result!r}; expected (files, meta) tuple"
+    )
+    return result[1]
+
+
 @pytest.mark.parametrize(
     ("phrase", "expected_kit"),
     [
@@ -76,3 +115,22 @@ def test_landing_page_template_kind_resolves_to_landing_kit() -> None:
     kit = get_kit_for_template_kind(template_kind)
     assert kit is not None
     assert kit.kit_id == "landing-page"
+
+
+@pytest.mark.parametrize(
+    ("phrase", "expected_kit"),
+    [
+        ("build me a landing page for roofers", "landing-page"),
+        ("build me an analytics dashboard", "dashboard"),
+    ],
+)
+def test_llm_scaffold_replace_result_carries_kit_routing(
+    phrase: str, expected_kit: str
+) -> None:
+    """`_maybe_llm_scaffold_replace` must surface ``template_kind`` / ``scaffold_path``
+    / ``kit_id`` on its returned ``new_meta`` so the chat ``done`` event can
+    confirm kit routing (root cause #4 — kit metadata propagation)."""
+    meta = _captured_result_meta(phrase)
+    assert meta.get("template_kind") == expected_kit
+    assert meta.get("scaffold_path") == "llm"
+    assert meta.get("kit_id") == expected_kit

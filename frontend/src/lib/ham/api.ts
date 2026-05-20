@@ -3162,6 +3162,10 @@ export interface HamChatResponse {
   gateway_error?: { code: string; upstream_http_status?: number };
   /** Builder happy-path metadata (intent, scaffold summaries) when workspace chat triggers it. */
   builder?: Record<string, unknown> | null;
+  /** True when the server raised mid-stream but still managed to emit a terminal `done`. */
+  stream_aborted?: boolean;
+  /** Outer safety-net error payload when the builder hook or dispatch raised before any branch completed. */
+  error?: { code: string; message: string };
 }
 
 /**
@@ -3462,6 +3466,8 @@ export type HamChatStreamEvent =
   | { type: "session"; session_id: string }
   | { type: "delta"; text: string }
   | { type: "plan_proposed"; plan_id: string }
+  | { type: "meta"; status?: string }
+  | { type: "heartbeat" }
   | {
       type: "done";
       session_id: string;
@@ -3474,8 +3480,20 @@ export type HamChatStreamEvent =
       gateway_error?: { code: string; upstream_http_status?: number };
       builder?: Record<string, unknown> | null;
       plan_id?: string;
+      /** Server raised an unhandled exception mid-stream; terminal `done` still arrived. */
+      stream_aborted?: boolean;
+      /** Top-level safety-net signal when the outer generator caught an exception. */
+      error?: { code: string; message: string };
     }
   | { type: "error"; code: string; message: string };
+
+/**
+ * Idle timeout for `postChatStream`: if no NDJSON bytes arrive for this many
+ * milliseconds the adapter rejects with `HamChatStreamIncompleteError` instead
+ * of waiting forever on a dead pipe. Tuned for the LLM scaffold path which
+ * typically completes in 10–30s (60s leaves a comfortable cushion).
+ */
+export const CHAT_STREAM_IDLE_TIMEOUT_MS = 60_000;
 
 const streamNetworkHint =
   "Check VITE_HAM_API_BASE (redeploy after changing). If the API is up but chat still fails, the browser origin may be blocked by CORS: add it to HAM_CORS_ORIGINS or set HAM_CORS_ORIGIN_REGEX on the API (see docs/examples/ham-api-cloud-run-env.yaml).";
@@ -3519,7 +3537,12 @@ export async function postChatStream(
     onPlanProposed?: (planId: string) => void;
   } = {},
   authorization?: HamChatStreamAuth,
+  options?: {
+    /** Test-only override for the per-read idle timeout in milliseconds. */
+    idleTimeoutMs?: number;
+  },
 ): Promise<HamChatResponse> {
+  const idleTimeoutMs = options?.idleTimeoutMs ?? CHAT_STREAM_IDLE_TIMEOUT_MS;
   const url = apiUrl("/api/chat/stream");
   const payload = {
     ...body,
@@ -3625,6 +3648,12 @@ export async function postChatStream(
       callbacks.onSession?.(ev.session_id);
       return;
     }
+    if (ev.type === "meta" || ev.type === "heartbeat") {
+      // No-op: server says it's alive (e.g., preparing the workspace while
+      // the builder hook runs). The idle timer is already reset by the
+      // read() resolution that delivered this chunk.
+      return;
+    }
     if (ev.type === "delta") {
       callbacks.onDelta?.(ev.text);
       return;
@@ -3643,6 +3672,8 @@ export async function postChatStream(
         execution_mode: ev.execution_mode ?? undefined,
         builder: ev.builder ?? undefined,
         ...(ev.gateway_error ? { gateway_error: ev.gateway_error } : {}),
+        ...(ev.stream_aborted ? { stream_aborted: true as const } : {}),
+        ...(ev.error ? { error: ev.error } : {}),
       };
       return;
     }
@@ -3651,8 +3682,25 @@ export async function postChatStream(
     }
   };
 
+  // Idle-timeout guard: if reader.read() never resolves (proxy hang, browser
+  // backgrounding, upstream wedge), reject so callers can recover instead of
+  // leaving the composer disabled indefinitely.
+  const readWithIdleTimeout = async (): Promise<ReadableStreamReadResult<Uint8Array>> => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new HamChatStreamIncompleteError(streamSessionId));
+      }, idleTimeoutMs);
+    });
+    try {
+      return await Promise.race([reader.read(), timeoutPromise]);
+    } finally {
+      if (timer !== null) clearTimeout(timer);
+    }
+  };
+
   while (true) {
-    const { done, value } = await reader.read();
+    const { done, value } = await readWithIdleTimeout();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
     const lines = buffer.split("\n");

@@ -1588,3 +1588,71 @@ def test_chat_stream_operator_handled_session_history_replay_is_sanitized(
             f"persisted stream operator transcript leaked {tok!r}"
         )
     assert_no_visible_leaks(persisted, label="GET /api/chat/sessions/{sid} stream replay")
+
+
+def test_chat_stream_yields_terminal_done_on_unhandled_exception_in_ndjson_gen(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Any non-GatewayCallError exception inside ``ndjson_gen`` must still
+    produce a terminal ``done`` so the FE adapter doesn't wait forever on a
+    dead pipe. Counterpart to the planner generator's analogous guard."""
+
+    def _builder_hook(**_kwargs):  # type: ignore[no-untyped-def]
+        return None, None
+
+    def _boom(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _builder_hook)
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", _boom)
+
+    res = client.post(
+        "/api/chat/stream",
+        json={"messages": [{"role": "user", "content": "hello"}]},
+    )
+    assert res.status_code == 200, res.text
+    events = _parse_ndjson(res.text)
+    done_events = [e for e in events if e.get("type") == "done"]
+    assert done_events, "stream must always emit a terminal done event"
+    terminal = done_events[-1]
+    assert terminal.get("stream_aborted") is True
+    err = terminal.get("error") or {}
+    assert err.get("code") == "STREAM_FAILED"
+    assert terminal.get("session_id"), "terminal done must carry the session id"
+
+
+def test_chat_stream_builder_success_meta_carries_kit_metadata(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``template_kind`` / ``scaffold_path`` / ``kit_id`` must surface on the
+    terminal ``done.builder`` payload so operator logs and the FE workbench
+    can verify which kit handled the prompt."""
+
+    def _builder_hook(**_kwargs):  # type: ignore[no-untyped-def]
+        return (
+            "I'll create the initial project source and prepare the Workbench.\n\n",
+            {
+                "builder_intent": "build_or_create",
+                "scaffolded": True,
+                "source_snapshot_id": "snap_x",
+                "template_kind": "landing-page",
+                "scaffold_path": "llm",
+                "kit_id": "landing-page",
+            },
+        )
+
+    monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _builder_hook)
+
+    res = client.post(
+        "/api/chat/stream",
+        json={"messages": [{"role": "user", "content": "build me a landing page for roofers"}]},
+    )
+    assert res.status_code == 200, res.text
+    events = _parse_ndjson(res.text)
+    done = [e for e in events if e.get("type") == "done"][0]
+    builder = done.get("builder") or {}
+    assert builder.get("template_kind") == "landing-page"
+    assert builder.get("scaffold_path") == "llm"
+    assert builder.get("kit_id") == "landing-page"
+    assert builder.get("scaffolded") is True
+
