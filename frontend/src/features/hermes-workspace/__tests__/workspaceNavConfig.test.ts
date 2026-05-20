@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { libraryNavItems, primaryRailItems } from "../workspaceNavConfig";
+import {
+  knowledgeSettingsLinks,
+  libraryNavItems,
+  primaryRailItems,
+  workspacePathTitle,
+} from "../workspaceNavConfig";
 
 describe("workspaceNavConfig", () => {
   it("primary rail excludes Chat entry", () => {
@@ -24,5 +29,16 @@ describe("workspaceNavConfig", () => {
   it("library flyout lists Projects first", () => {
     expect(libraryNavItems[0]?.label).toBe("Projects");
     expect(libraryNavItems[0]?.to).toBe("/workspace/projects");
+  });
+
+  it("titles social routes as Social", () => {
+    expect(workspacePathTitle("/workspace/social")).toBe("Social");
+    expect(workspacePathTitle("/workspace/social/anything")).toBe("Social");
+  });
+
+  it("does not expose a HAMgomoon nav entry", () => {
+    const allItems = [...primaryRailItems, ...libraryNavItems, ...knowledgeSettingsLinks];
+    expect(allItems.every((item) => item.label !== "HAMgomoon")).toBe(true);
+    expect(allItems.every((item) => !item.to.startsWith("/workspace/hamgomoon"))).toBe(true);
   });
 });

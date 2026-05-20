@@ -27,6 +27,7 @@ from src.ham.ham_x.reactive_reply_executor import (
 )
 from src.ham.ham_x.redaction import redact
 from src.ham.ham_x.review_queue import _cap
+from src.ham.social_autonomy.runner_gate import autonomy_reasons_for_runner
 
 GohamReactiveLiveStatus = Literal["blocked", "executed", "failed"]
 RunReply = Callable[[ReactiveReplyRequest], ReactiveReplyResult]
@@ -83,14 +84,18 @@ def run_reactive_live_once(
     )
     audit_ids.append(start_id)
 
-    gate_reasons = _gate_reasons(cfg)
+    gate_reasons = [
+        *autonomy_reasons_for_runner(channel="x", action="reply"),
+        *_gate_reasons(cfg),
+    ]
     if phase4a_reasons or gate_reasons or inbound is None:
+        prepared_reasons = phase4a_reasons if inbound is not None else (phase4a_reasons or ["invalid_prepared_inbound"])
         return _finish(
             cfg,
             jrnl,
             status="blocked",
             audit_ids=audit_ids,
-            reasons=[*(phase4a_reasons or ["invalid_prepared_inbound"]), *gate_reasons],
+            reasons=[*prepared_reasons, *gate_reasons],
             diagnostic="Reactive live canary blocked before policy/governor evaluation.",
             inbound=inbound,
         )

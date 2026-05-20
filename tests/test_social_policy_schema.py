@@ -4,7 +4,10 @@ These tests cover *only* the Pydantic shapes in
 :mod:`src.ham.social_policy.schema`. They do not touch the file system,
 the API surface, or any provider transport.
 """
+
 from __future__ import annotations
+
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -90,6 +93,31 @@ def test_live_autonomy_armed_requires_autopilot_armed() -> None:
     # armed = True AND autopilot_mode = "armed" -> ok
     policy = _minimal_policy(live_autonomy_armed=True, autopilot_mode="armed")
     assert policy.live_autonomy_armed is True
+
+
+def test_live_autonomy_armed_field_present_default_and_round_trip() -> None:
+    policy = _minimal_policy()
+    dumped = policy.model_dump(mode="json")
+
+    assert policy.live_autonomy_armed is False
+    assert dumped["live_autonomy_armed"] is False
+    assert SocialPolicy.model_validate(dumped).live_autonomy_armed is False
+
+
+def test_live_autonomy_armed_deprecation_comment_present() -> None:
+    source = Path("src/ham/social_policy/schema.py").read_text(encoding="utf-8")
+    declaration = next(line for line in source.splitlines() if "live_autonomy_armed:" in line)
+
+    assert "# DEPRECATED: AutonomyProfile is the single source of truth" in declaration
+
+
+def test_live_autonomy_armed_has_no_apply_enforcement_reader() -> None:
+    for path in [
+        Path("src/api/social.py"),
+        Path("src/ham/social_autonomy/enforcement.py"),
+        Path("src/ham/social_telegram_autopilot.py"),
+    ]:
+        assert "live_autonomy_armed" not in path.read_text(encoding="utf-8")
 
 
 def test_channel_target_label_only_no_raw_ids() -> None:

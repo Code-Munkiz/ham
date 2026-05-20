@@ -24,6 +24,7 @@ from src.ham.ham_x.goham_governor import (
 )
 from src.ham.ham_x.goham_ops import GohamStatus, show_goham_status
 from src.ham.ham_x.redaction import redact
+from src.ham.social_autonomy.runner_gate import autonomy_reasons_for_runner
 
 GohamLiveStatus = Literal["blocked", "executed", "failed"]
 RunPost = Callable[..., GohamExecutionResult]
@@ -96,7 +97,10 @@ def run_live_controller_once(
     )
     audit_ids = [start_id]
     candidate_decisions: list[GohamLiveCandidateDecision] = []
-    reasons = _controller_gate_reasons(cfg)
+    reasons = [
+        *autonomy_reasons_for_runner(channel="x", action="broadcast"),
+        *_controller_gate_reasons(cfg),
+    ]
 
     if reasons:
         return _finish(

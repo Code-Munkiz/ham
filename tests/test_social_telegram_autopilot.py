@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
+from src.ham.social_autonomy.schema import GoHamSocialProfile
 from src.ham.social_telegram_activity_runner import TelegramActivityRunResult
-from src.ham.social_telegram_autopilot import HamgomoonAutopilotConfig, main, run_hamgomoon_autopilot_once
+from src.ham.social_telegram_autopilot import (
+    HamgomoonAutopilotConfig,
+    main,
+    run_hamgomoon_autopilot_once,
+)
 from src.ham.social_telegram_reactive_runner import TelegramReactiveRunResult
 from src.ham.social_telegram_send import TelegramSendResult
 
@@ -43,6 +49,49 @@ def _enable_lane_gates(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HAM_SOCIAL_TELEGRAM_REACTIVE_DRY_RUN", "false")
     monkeypatch.setenv("HAM_SOCIAL_TELEGRAM_ACTIVITY_AUTONOMY_ENABLED", "true")
     monkeypatch.setenv("HAM_SOCIAL_TELEGRAM_ACTIVITY_DRY_RUN", "false")
+
+
+def _autonomy_payload(**overrides: object) -> dict[str, object]:
+    stamp = datetime(2026, 5, 20, 12, 0, tzinfo=UTC).isoformat().replace("+00:00", "Z")
+    payload: dict[str, object] = {
+        "profile_id": "autopilot-profile",
+        "status": "running",
+        "goal": "Run Telegram autopilot safely.",
+        "persona_id": "ham-canonical",
+        "channels": {
+            "x": {"enabled": True, "available": True},
+            "telegram": {"enabled": True, "available": True},
+            "discord": {"enabled": False, "available": False},
+        },
+        "actions_allowed_per_channel": {
+            "x": ["reply", "broadcast"],
+            "telegram": ["reply", "activity", "message"],
+            "discord": [],
+        },
+        "daily_caps": {"x": 5, "telegram": 5, "discord": 0},
+        "cadence": "manual",
+        "quiet_hours": None,
+        "forbidden_topics": [],
+        "safety_rules": ["no spam", "no credential requests"],
+        "learning_enabled": True,
+        "emergency_stop": False,
+        "created_at": stamp,
+        "updated_at": stamp,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _write_autonomy_profile(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    **overrides: object,
+) -> Path:
+    target = tmp_path / "social_autonomy.json"
+    monkeypatch.setenv("HAM_SOCIAL_AUTONOMY_PATH", str(target))
+    profile = GoHamSocialProfile.model_validate(_autonomy_payload(**overrides))
+    target.write_text(json.dumps(profile.model_dump(mode="json"), sort_keys=True), encoding="utf-8")
+    return target
 
 
 def _write_transcript(path: Path, *, text: str = "How does Ham work?") -> None:
@@ -342,6 +391,79 @@ def test_emergency_stop_blocks_live_before_lanes(monkeypatch: pytest.MonkeyPatch
     assert result.reasons == ["emergency_stop"]
     assert result.mutation_attempted is False
     assert calls == []
+
+
+def test_autonomy_profile_not_running_blocks_live_before_lanes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _enable_global_gates(monkeypatch)
+    _write_autonomy_profile(monkeypatch, tmp_path, status="stopped")
+    calls: list[str] = []
+
+    with (
+        patch("src.ham.social_telegram_autopilot.run_telegram_reactive_once", side_effect=lambda *a, **k: calls.append("reactive")),
+        patch("src.ham.social_telegram_autopilot.run_telegram_activity_once", side_effect=lambda *a, **k: calls.append("activity")),
+    ):
+        result = run_hamgomoon_autopilot_once(HamgomoonAutopilotConfig(dry_run=False, emergency_stop=False))
+
+    assert result.status == "blocked"
+    assert result.blocking_reasons[0] == "autonomy_profile_not_running"
+    assert result.mutation_attempted is False
+    assert calls == []
+
+
+def test_telegram_channel_disabled_blocks_live_before_lanes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _enable_global_gates(monkeypatch)
+    _write_autonomy_profile(
+        monkeypatch,
+        tmp_path,
+        channels={"telegram": {"enabled": False, "available": True}},
+    )
+    calls: list[str] = []
+
+    with (
+        patch("src.ham.social_telegram_autopilot.run_telegram_reactive_once", side_effect=lambda *a, **k: calls.append("reactive")),
+        patch("src.ham.social_telegram_autopilot.run_telegram_activity_once", side_effect=lambda *a, **k: calls.append("activity")),
+    ):
+        result = run_hamgomoon_autopilot_once(HamgomoonAutopilotConfig(dry_run=False, emergency_stop=False))
+
+    assert result.status == "blocked"
+    assert result.blocking_reasons[0] == "autonomy_channel_disabled"
+    assert result.mutation_attempted is False
+    assert calls == []
+
+
+def test_emergency_stop_dual_codes_put_autonomy_first(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _enable_global_gates(monkeypatch)
+    _write_autonomy_profile(monkeypatch, tmp_path, status="running", emergency_stop=True)
+
+    result = run_hamgomoon_autopilot_once(HamgomoonAutopilotConfig(dry_run=False, emergency_stop=True))
+
+    assert result.status == "blocked"
+    assert result.blocking_reasons[0] == "autonomy_emergency_stop"
+    assert "emergency_stop" in result.blocking_reasons
+    assert result.blocking_reasons.index("autonomy_emergency_stop") < result.blocking_reasons.index("emergency_stop")
+    assert result.mutation_attempted is False
+
+
+def test_global_live_gate_reasons_permissive_profile_is_legacy_byte_equal(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from src.ham.social_telegram_autopilot import _global_live_gate_reasons
+
+    monkeypatch.delenv("HAM_SOCIAL_AUTONOMY_PATH", raising=False)
+    legacy = _global_live_gate_reasons(emergency_stop=False)
+
+    _write_autonomy_profile(monkeypatch, tmp_path)
+    assert _global_live_gate_reasons(emergency_stop=False) == legacy
 
 
 def test_cli_summary_is_bounded_and_defaults_dry_run(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:

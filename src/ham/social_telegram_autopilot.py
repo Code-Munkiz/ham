@@ -17,6 +17,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.ham.ham_x.config import load_ham_x_config
+from src.ham.social_autonomy.runner_gate import autonomy_reasons_for_runner
 from src.ham.social_telegram_activity import TelegramActivityKind
 from src.ham.social_telegram_activity_runner import (
     TelegramActivityRunConfig,
@@ -176,7 +177,7 @@ def _activity_config(
 
 
 def _global_live_gate_reasons(*, emergency_stop: bool) -> list[str]:
-    reasons: list[str] = []
+    reasons = autonomy_reasons_for_runner(channel="telegram", action=None)
     if (os.environ.get("HAMGOMOON_AUTOPILOT_ENABLED") or "").strip().lower() != "true":
         reasons.append("hamgomoon_autopilot_disabled")
     if (os.environ.get("HAMGOMOON_AUTOPILOT_DRY_RUN") or "true").strip().lower() != "false":

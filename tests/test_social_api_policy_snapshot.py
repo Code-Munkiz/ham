@@ -7,12 +7,16 @@ D.2 contract:
   ``policy_advisory_reasons: list[str]`` field. Existing ``reasons`` arrays
   on apply-gate paths remain byte-for-byte identical, regardless of the
   on-disk policy.
+* Inversion lock: SocialPolicy never gates apply; a configured AutonomyProfile
+  may prepend ``autonomy_*`` codes to apply/lane ``reasons`` while a permissive
+  profile keeps the legacy reasons byte-equal.
 * No live transports / runners / schedulers are invoked. We monkey-patch
   the hot ones to raise on call.
 * No raw tokens / bearer / chat IDs / API keys appear in the response.
 * ``HAM_SOCIAL_POLICY_SNAPSHOT_DISABLED=true`` short-circuits the snapshot
   block to ``None`` and clears advisory reasons on lane DTOs.
 """
+
 from __future__ import annotations
 
 import json
@@ -23,6 +27,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.api.server import app
+from src.ham.social_autonomy.schema import GoHamSocialProfile
 from src.ham.social_policy.advisory import (
     POLICY_DOCUMENT_MISSING,
     POLICY_POSTING_MODE_OFF,
@@ -112,6 +117,49 @@ def _write_policy(
         encoding="utf-8",
     )
     return raw
+
+
+def _write_autonomy_profile(
+    root: Path,
+    *,
+    status: str = "running",
+    x_enabled: bool = True,
+    x_actions: list[str] | None = None,
+) -> dict[str, Any]:
+    raw: dict[str, Any] = {
+        "profile_id": "snapshot-autonomy-profile",
+        "status": status,
+        "goal": "Exercise autonomy apply gates safely.",
+        "persona_id": "ham-canonical",
+        "channels": {
+            "x": {"enabled": x_enabled, "available": True},
+            "telegram": {"enabled": True, "available": True},
+            "discord": {"enabled": False, "available": False},
+        },
+        "actions_allowed_per_channel": {
+            "x": x_actions if x_actions is not None else ["reply", "broadcast"],
+            "telegram": ["message", "activity"],
+            "discord": [],
+        },
+        "daily_caps": {"x": 3, "telegram": 3, "discord": 0},
+        "cadence": "daily",
+        "quiet_hours": None,
+        "forbidden_topics": [],
+        "safety_rules": ["no spam", "no credential requests"],
+        "learning_enabled": True,
+        "emergency_stop": False,
+        "created_at": "2026-05-20T12:00:00Z",
+        "updated_at": "2026-05-20T12:00:00Z",
+    }
+    profile = GoHamSocialProfile.model_validate(raw)
+    target = root / ".ham" / "social_autonomy.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        json.dumps(profile.model_dump(mode="json"), indent=2, sort_keys=True, ensure_ascii=True)
+        + "\n",
+        encoding="utf-8",
+    )
+    return profile.model_dump(mode="json")
 
 
 def _get_snapshot() -> dict[str, Any]:
@@ -275,7 +323,53 @@ def _broadcast_preflight() -> dict[str, Any]:
     return res.json()
 
 
-def test_broadcast_preflight_apply_gate_reasons_unchanged_with_or_without_policy(
+def _broadcast_apply() -> dict[str, Any]:
+    res = client.post(
+        "/api/social/providers/x/broadcast/apply",
+        headers={"X-Ham-Operator-Authorization": "Bearer snapshot-live-token"},
+        json={
+            "proposal_digest": "0" * 64,
+            "confirmation_phrase": "SEND ONE LIVE POST",
+        },
+    )
+    assert res.status_code == 200, res.text
+    return res.json()
+
+
+def test_broadcast_apply_reasons_modified_by_autonomy_when_profile_blocks(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    root = _isolate_root(monkeypatch, tmp_path)
+    _disable_clerk(monkeypatch)
+    _set_x_creds(monkeypatch)
+    monkeypatch.setenv("HAM_SOCIAL_LIVE_APPLY_TOKEN", "snapshot-live-token")
+    _block_live_transports(monkeypatch)
+
+    # Baseline: no autonomy profile.
+    baseline = _broadcast_apply()
+
+    # With restrictive autonomy.
+    _write_autonomy_profile(root, status="paused")
+    restrictive_autonomy = _broadcast_apply()
+
+    # With permissive autonomy.
+    _write_autonomy_profile(root, status="running")
+    permissive_autonomy = _broadcast_apply()
+
+    # AutonomyProfile is the gate: blocking profiles prepend autonomy codes,
+    # while permissive profiles keep the legacy reasons byte-for-byte.
+    assert restrictive_autonomy["reasons"] != baseline["reasons"]
+    autonomy_codes = ["autonomy_profile_not_running"]
+    assert restrictive_autonomy["reasons"][: len(autonomy_codes)] == autonomy_codes
+    assert restrictive_autonomy["reasons"][len(autonomy_codes) :] == baseline["reasons"]
+    assert permissive_autonomy["reasons"] == baseline["reasons"]
+    # Advisory reasons still live in the dedicated field and change only with policy.
+    _write_policy(root, posting_mode="off", reply_mode="off")
+    restrictive_policy = _broadcast_apply()
+    assert restrictive_policy["reasons"] == permissive_autonomy["reasons"]
+
+
+def test_x_status_lane_reasons_modified_by_autonomy_when_blocking(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     root = _isolate_root(monkeypatch, tmp_path)
@@ -283,49 +377,32 @@ def test_broadcast_preflight_apply_gate_reasons_unchanged_with_or_without_policy
     _set_x_creds(monkeypatch)
     _block_live_transports(monkeypatch)
 
-    # Baseline: no policy.
-    baseline = _broadcast_preflight()
+    baseline = client.get("/api/social/providers/x/status").json()
 
-    # With restrictive policy.
-    _write_policy(root, posting_mode="off", reply_mode="off")
-    restrictive = _broadcast_preflight()
+    _write_autonomy_profile(root, status="paused")
+    blocked = client.get("/api/social/providers/x/status").json()
 
-    # With permissive policy.
-    _write_policy(root, posting_mode="autopilot", reply_mode="autopilot")
-    permissive = _broadcast_preflight()
-
-    # Apply-gate reasons must be byte-for-byte identical across all three.
-    assert restrictive["reasons"] == baseline["reasons"]
-    assert permissive["reasons"] == baseline["reasons"]
-    # Status must stay the same too -- policy never gates apply.
-    assert restrictive["status"] == baseline["status"]
-    assert permissive["status"] == baseline["status"]
-    # Advisory reasons live in the dedicated field and DO change with policy.
-    assert "policy_advisory_reasons" in baseline
-    assert baseline["policy_advisory_reasons"] != restrictive["policy_advisory_reasons"]
-
-
-def test_x_status_apply_gate_reasons_lane_unchanged_by_policy(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    root = _isolate_root(monkeypatch, tmp_path)
-    _disable_clerk(monkeypatch)
-    _set_x_creds(monkeypatch)
-    _block_live_transports(monkeypatch)
-
-    res_a = client.get("/api/social/providers/x/status").json()
+    _write_autonomy_profile(root, status="running")
+    permissive = client.get("/api/social/providers/x/status").json()
 
     _write_policy(root, posting_mode="off", reply_mode="off")
-    res_b = client.get("/api/social/providers/x/status").json()
+    with_policy = client.get("/api/social/providers/x/status").json()
 
-    # The legacy ``reasons`` arrays on the lane DTOs are gate signals; they
-    # must remain identical regardless of policy state.
-    assert res_a["broadcast_lane"]["reasons"] == res_b["broadcast_lane"]["reasons"]
-    assert res_a["reactive_lane"]["reasons"] == res_b["reactive_lane"]["reasons"]
+    # AutonomyProfile modifies gate reasons; permissive autonomy and SocialPolicy
+    # do not alter the legacy lane reasons.
+    for lane in ("broadcast_lane", "reactive_lane"):
+        blocked_reasons = blocked[lane]["reasons"]
+        baseline_reasons = baseline[lane]["reasons"]
+        autonomy_codes = ["autonomy_profile_not_running"]
+        assert blocked_reasons[: len(autonomy_codes)] == autonomy_codes
+        assert blocked_reasons[len(autonomy_codes) :] == baseline_reasons
+        assert permissive[lane]["reasons"] == baseline_reasons
+        assert with_policy[lane]["reasons"] == permissive[lane]["reasons"]
     # Advisory reasons are the only thing that changes.
-    assert res_a["broadcast_lane"]["policy_advisory_reasons"] != res_b["broadcast_lane"][
-        "policy_advisory_reasons"
-    ]
+    assert (
+        baseline["broadcast_lane"]["policy_advisory_reasons"]
+        != with_policy["broadcast_lane"]["policy_advisory_reasons"]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -341,10 +418,13 @@ def test_apply_endpoint_blocked_response_does_not_carry_advisory_in_reasons(
     _set_x_creds(monkeypatch)
     _block_live_transports(monkeypatch)
     _write_policy(root, posting_mode="off", reply_mode="off")
+    _write_autonomy_profile(root, status="paused")
+    monkeypatch.setenv("HAM_SOCIAL_LIVE_APPLY_TOKEN", "snapshot-live-token")
 
     res = client.post(
         "/api/social/providers/x/broadcast/apply",
-        json={"confirmation_phrase": "WRONG"},
+        headers={"X-Ham-Operator-Authorization": "Bearer snapshot-live-token"},
+        json={"proposal_digest": "0" * 64, "confirmation_phrase": "SEND ONE LIVE POST"},
     )
     # Apply path returns 200 with a structured blocked response (or 4xx
     # when env / live token is missing). In every case the canonical
@@ -354,6 +434,7 @@ def test_apply_endpoint_blocked_response_does_not_carry_advisory_in_reasons(
     if res.status_code == 200:
         body = res.json()
         assert all(not r.startswith("policy_") for r in body.get("reasons", []))
+        assert any(r.startswith("autonomy_") for r in body.get("reasons", []))
         assert body.get("execution_allowed") in (False, None)
     else:
         body = res.json()

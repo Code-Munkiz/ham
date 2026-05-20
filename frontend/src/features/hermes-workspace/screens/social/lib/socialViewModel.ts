@@ -59,7 +59,7 @@ export function mapCoreReadiness(
 }
 
 /** Combines catalog provider card with deep readiness for product copy. */
-export function resolveProviderReadiness(
+function resolveProviderReadiness(
   snapshot: SocialSnapshot,
   channelId: "x" | "telegram" | "discord",
 ): ProductProviderReadiness {
@@ -162,7 +162,7 @@ function channelNextHint(
   return "Discord is preview-only for now; follow setup guidance.";
 }
 
-export function deriveChannelProductTruth(
+function deriveChannelProductTruth(
   snapshot: SocialSnapshot,
   channelId: "x" | "telegram" | "discord",
 ): ChannelProductTruth {
@@ -421,7 +421,7 @@ export function discordReplyMode(_cap: DiscordCapabilities): FourMode {
   return "Off";
 }
 
-export function deriveContentStyle(persona: SocialPersona): ContentStyle {
+function deriveContentStyle(persona: SocialPersona): ContentStyle {
   const ann = persona.example_announcements?.length ?? 0;
   if (ann >= 4) return "Campaign posts";
   if (ann >= 1) return "Announcements";
@@ -475,7 +475,7 @@ export function personaSafetyHints(persona: SocialPersona): ChannelSafetyHints {
   };
 }
 
-export function xSafetyHints(x: XProviderStatus, persona: SocialPersona): ChannelSafetyHints {
+function xSafetyHints(x: XProviderStatus, persona: SocialPersona): ChannelSafetyHints {
   const base = personaSafetyHints(persona);
   return {
     ...base,
@@ -483,7 +483,7 @@ export function xSafetyHints(x: XProviderStatus, persona: SocialPersona): Channe
   };
 }
 
-export function telegramSafetyHints(
+function telegramSafetyHints(
   status: SocialMessagingProviderStatus,
   persona: SocialPersona,
 ): ChannelSafetyHints {
@@ -491,12 +491,12 @@ export function telegramSafetyHints(
   return { ...base, emergencyStop: false };
 }
 
-export function discordSafetyHints(persona: SocialPersona): ChannelSafetyHints {
+function discordSafetyHints(persona: SocialPersona): ChannelSafetyHints {
   return { ...personaSafetyHints(persona), emergencyStop: false };
 }
 
 /** Human-readable excerpt from journal-ish records; avoids default JSON in primary UI. */
-export function formatLooseRecordSummary(record: Record<string, unknown> | null): string | null {
+function formatLooseRecordSummary(record: Record<string, unknown> | null): string | null {
   if (!record) return null;
   const keys = [
     "text",
@@ -516,7 +516,7 @@ export function formatLooseRecordSummary(record: Record<string, unknown> | null)
   return null;
 }
 
-export function operatingModeSummary(snapshot: SocialSnapshot): string {
+function operatingModeSummary(snapshot: SocialSnapshot): string {
   const st = deriveHamgomoonStatus(snapshot);
   if (st === "Paused")
     return "Emergency stop is on — sending is paused until you turn it off in runtime config.";
@@ -547,7 +547,7 @@ export function deriveVoiceBoundariesOverviewLine(persona: SocialPersona): strin
 }
 
 /** Telegram: governor.allowed — no timestamps; use in primary operate UI. */
-export function telegramPacingProductPill(allowed: boolean): {
+function telegramPacingProductPill(allowed: boolean): {
   label: string;
   tone: "ok" | "warn";
 } {
@@ -556,7 +556,7 @@ export function telegramPacingProductPill(allowed: boolean): {
 }
 
 /** Telegram: stricter line when a live/approval step is in scope. */
-export function telegramApprovalWindowProductPill(allowed: boolean): {
+function telegramApprovalWindowProductPill(allowed: boolean): {
   label: string;
   tone: "ok" | "warn";
 } {
@@ -564,7 +564,7 @@ export function telegramApprovalWindowProductPill(allowed: boolean): {
   return { label: "Waiting for the next safe send window", tone: "warn" };
 }
 
-export function buildSocialProductTruth(snapshot: SocialSnapshot): SocialProductTruth {
+function buildSocialProductTruth(snapshot: SocialSnapshot): SocialProductTruth {
   return {
     hamStatus: deriveHamgomoonStatus(snapshot),
     autopilotSummary: deriveAutopilotSummary(snapshot),
@@ -578,7 +578,7 @@ export function buildSocialProductTruth(snapshot: SocialSnapshot): SocialProduct
 }
 
 /** Operator-facing line for X preview cards (no API field names). */
-export function friendlyXPreviewStatus(preview: SocialPreviewResponse): {
+function friendlyXPreviewStatus(preview: SocialPreviewResponse): {
   label: string;
   tone: "ok" | "warn" | "danger" | "muted";
 } {
@@ -589,7 +589,7 @@ export function friendlyXPreviewStatus(preview: SocialPreviewResponse): {
 }
 
 /** Telegram-style preview status for draft cards (no API field names in labels). */
-export function friendlyDraftStatus(
+function friendlyDraftStatus(
   status: "completed" | "blocked" | "failed",
   hasProposalDigest: boolean,
 ): { label: string; tone: "ok" | "warn" | "danger" | "muted" } {
@@ -599,7 +599,7 @@ export function friendlyDraftStatus(
   return { label: "Needs preview", tone: "muted" };
 }
 
-export function personaBlockedTopicsSummary(persona: SocialPersona, maxItems = 4): string {
+function personaBlockedTopicsSummary(persona: SocialPersona, maxItems = 4): string {
   const items = persona.prohibited_content.slice(0, maxItems);
   if (!items.length) return "Covered in persona rules";
   return items.join(" · ");

@@ -236,7 +236,7 @@ class SocialPolicy(BaseModel):
         default_factory=dict,
     )
     autopilot_mode: Literal["off", "manual_only", "armed"] = "off"
-    live_autonomy_armed: bool = False
+    live_autonomy_armed: bool = False  # DEPRECATED: AutonomyProfile is the single source of truth.
 
     @field_validator("providers")
     @classmethod

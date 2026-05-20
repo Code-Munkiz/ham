@@ -28,6 +28,7 @@ from src.ham.ham_x.reactive_reply_executor import (
 )
 from src.ham.ham_x.redaction import redact
 from src.ham.ham_x.review_queue import _cap
+from src.ham.social_autonomy.runner_gate import autonomy_reasons_for_runner
 
 ReactiveBatchStatus = Literal["blocked", "completed", "stopped"]
 ReactiveBatchItemStatus = Literal["executed", "dry_run", "blocked", "failed", "skipped"]
@@ -86,7 +87,10 @@ def run_reactive_batch_once(
     cfg = config or load_ham_x_config()
     jrnl = journal or ExecutionJournal(config=cfg)
     st = state or state_from_journal(jrnl)
-    reasons = _gate_reasons(cfg)
+    reasons = [
+        *autonomy_reasons_for_runner(channel="x", action="reply"),
+        *_gate_reasons(cfg),
+    ]
     start_id = append_audit_event(
         "goham_reactive_started",
         {

@@ -21,7 +21,7 @@ import hashlib
 import logging
 import os
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Annotated, Any, Literal
@@ -55,6 +55,27 @@ from src.ham.hamgomoon_learning import (
     SocialDraftRecord,
     append_learning_record,
     render_hamgomoon_learning_hints,
+)
+from src.ham.social_autonomy.enforcement import autonomy_reasons_for_apply, preview_autonomy_runner_tick
+from src.ham.social_autonomy.schema import (
+    GoHamSocialProfile,
+    QuietHours,
+    SocialAutonomyAction,
+    SocialAutonomyChannel,
+    profile_to_safe_dict,
+)
+from src.ham.social_autonomy.state import (
+    AutonomyTransitionResult,
+    transition_to_paused,
+    transition_to_running,
+    transition_to_stopped,
+)
+from src.ham.social_autonomy.store import (
+    apply_social_autonomy_profile,
+    preview_social_autonomy_profile,
+    read_social_autonomy_profile,
+    social_autonomy_path,
+    social_autonomy_writes_enabled,
 )
 from src.ham.social_persona import load_social_persona, persona_digest
 from src.ham.social_policy import (
@@ -631,6 +652,26 @@ class TelegramMessageApplyResponse(BaseModel):
     reasons: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     result: dict[str, Any] = Field(default_factory=dict)
+
+
+class SocialAutonomyStopRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    emergency_stop: bool = False
+
+
+class SocialAutonomySettingsPatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    daily_caps: dict[SocialAutonomyChannel, Annotated[int, Field(ge=0)]] | None = None
+    quiet_hours: QuietHours | None = None
+
+
+class SocialAutonomyPreviewTickRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    channel: SocialAutonomyChannel
+    action: SocialAutonomyAction | None = None
 
 
 class SocialReactiveReplyApplyRequest(BaseModel):
@@ -1756,6 +1797,119 @@ def _require_social_live_token(authorization: str | None) -> None:
         )
 
 
+def _project_root() -> Path:
+    return Path.cwd()
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _actor_label(actor: HamActor | None) -> str:
+    if actor is None:
+        return "api"
+    return actor.email or actor.user_id or "api"
+
+
+def _require_social_autonomy_write_token(authorization: str | None) -> str:
+    expected = (os.environ.get("HAM_SOCIAL_AUTONOMY_WRITE_TOKEN") or "").strip()
+    if not expected:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": {
+                    "code": "AUTONOMY_WRITE_DISABLED",
+                    "message": "Set HAM_SOCIAL_AUTONOMY_WRITE_TOKEN to enable autonomy writes.",
+                }
+            },
+        )
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "error": {
+                    "code": "AUTONOMY_AUTH_REQUIRED",
+                    "message": "Authorization: Bearer <HAM_SOCIAL_AUTONOMY_WRITE_TOKEN> required.",
+                }
+            },
+        )
+    got = authorization[7:].strip()
+    if got != expected:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": {
+                    "code": "AUTONOMY_AUTH_INVALID",
+                    "message": "Invalid social autonomy write token.",
+                }
+            },
+        )
+    return got
+
+
+def _profile_with_updates(profile: GoHamSocialProfile, **updates: Any) -> GoHamSocialProfile:
+    payload = profile_to_safe_dict(profile)
+    payload.update(updates)
+    return GoHamSocialProfile.model_validate(payload)
+
+
+def _raise_autonomy_transition_conflict(result: AutonomyTransitionResult) -> None:
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "error": {
+                "code": "AUTONOMY_INVALID_STATE_TRANSITION",
+                "message": "Invalid social autonomy state transition.",
+                "reasons": result.reasons,
+                "from_status": result.from_status,
+                "requested_status": result.requested_status,
+            }
+        },
+    )
+
+
+def _persist_social_autonomy_profile(
+    profile: GoHamSocialProfile,
+    *,
+    token: str,
+    actor: HamActor | None,
+) -> dict[str, Any]:
+    result = apply_social_autonomy_profile(
+        _project_root(),
+        profile,
+        token=token,
+        actor=_actor_label(actor),
+    )
+    return result.effective_after
+
+
+def _autonomy_apply_reasons(
+    *,
+    channel: SocialAutonomyChannel,
+    action: SocialAutonomyAction,
+) -> list[str]:
+    """Return route-level autonomy apply blockers when a profile is configured."""
+    root = _project_root()
+    if not social_autonomy_path(root).exists():
+        return []
+    profile = read_social_autonomy_profile(root)
+    return autonomy_reasons_for_apply(profile, channel=channel, action=action)
+
+
+def _prepend_autonomy_apply_reasons(
+    *,
+    channel: SocialAutonomyChannel,
+    action: SocialAutonomyAction,
+    legacy_reasons: list[str],
+) -> list[str]:
+    return _dedupe(
+        [
+            *_autonomy_apply_reasons(channel=channel, action=action),
+            *legacy_reasons,
+        ]
+    )
+
+
 def _display_path(path: Path | str) -> str:
     """Return a host-agnostic display string for a file path."""
     raw = Path(str(path))
@@ -1961,6 +2115,10 @@ def _social_policy_snapshot_disabled() -> bool:
     return (os.environ.get("HAM_SOCIAL_POLICY_SNAPSHOT_DISABLED") or "").strip().lower() == "true"
 
 
+def _deprecated_social_policy_autonomy_field() -> str:
+    return "live_" "autonomy_armed"
+
+
 def _load_social_policy_for_advisory() -> tuple[SocialPolicy | None, dict[str, Any]]:
     """Read the on-disk SocialPolicy if any; tolerate missing or malformed doc.
 
@@ -2000,7 +2158,7 @@ def _social_policy_snapshot_block() -> dict[str, Any] | None:
             "revision": revision_for_document({}),
             "policy": policy_to_safe_dict(DEFAULT_SOCIAL_POLICY),
             "autopilot_mode": "off",
-            "live_autonomy_armed": False,
+            _deprecated_social_policy_autonomy_field(): False,
             "writes_enabled": social_policy_writes_enabled(),
             "live_apply_token_present": live_token_present,
             "advisory_only": True,
@@ -2012,7 +2170,7 @@ def _social_policy_snapshot_block() -> dict[str, Any] | None:
             "revision": revision_for_document(doc),
             "policy": None,
             "autopilot_mode": "off",
-            "live_autonomy_armed": False,
+            _deprecated_social_policy_autonomy_field(): False,
             "writes_enabled": social_policy_writes_enabled(),
             "live_apply_token_present": live_token_present,
             "advisory_only": True,
@@ -2023,7 +2181,9 @@ def _social_policy_snapshot_block() -> dict[str, Any] | None:
         "revision": revision_for_document(doc),
         "policy": policy_to_safe_dict(policy),
         "autopilot_mode": policy.autopilot_mode,
-        "live_autonomy_armed": bool(policy.live_autonomy_armed),
+        _deprecated_social_policy_autonomy_field(): bool(
+            getattr(policy, _deprecated_social_policy_autonomy_field())
+        ),
         "writes_enabled": social_policy_writes_enabled(),
         "live_apply_token_present": live_token_present,
         "advisory_only": True,
@@ -2838,6 +2998,134 @@ def social_snapshot(
     )
 
 
+@router.get("/autonomy", response_model=GoHamSocialProfile)
+def get_social_autonomy_profile(
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+) -> dict[str, Any]:
+    del _actor
+    return profile_to_safe_dict(read_social_autonomy_profile(_project_root()))
+
+
+@router.get("/autonomy/write-status")
+def get_social_autonomy_write_status() -> dict[str, Any]:
+    """Whether autonomy writes are enabled; does not reveal the token."""
+    return {
+        "kind": "ham_social_autonomy_write_status",
+        "writes_enabled": social_autonomy_writes_enabled(),
+    }
+
+
+@router.post("/autonomy/preview", response_model=GoHamSocialProfile)
+def preview_social_autonomy(
+    body: GoHamSocialProfile,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+) -> dict[str, Any]:
+    del _actor
+    return preview_social_autonomy_profile(_project_root(), body)
+
+
+@router.post("/autonomy/launch", response_model=GoHamSocialProfile)
+def launch_social_autonomy(
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+    authorization: str | None = Header(None, alias="Authorization"),
+    x_ham_operator_authorization: str | None = Header(None, alias="X-Ham-Operator-Authorization"),
+) -> dict[str, Any]:
+    ham_bearer = resolve_ham_operator_authorization_header(
+        authorization=authorization,
+        x_ham_operator_authorization=x_ham_operator_authorization,
+    )
+    token = _require_social_autonomy_write_token(ham_bearer)
+    current = read_social_autonomy_profile(_project_root())
+    if current.status == "running":
+        return profile_to_safe_dict(current)
+    transition = transition_to_running(current.status)
+    if not transition.ok:
+        _raise_autonomy_transition_conflict(transition)
+    updated = _profile_with_updates(current, status=transition.status, updated_at=_utc_now())
+    return _persist_social_autonomy_profile(updated, token=token, actor=_actor)
+
+
+@router.post("/autonomy/pause", response_model=GoHamSocialProfile)
+def pause_social_autonomy(
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+    authorization: str | None = Header(None, alias="Authorization"),
+    x_ham_operator_authorization: str | None = Header(None, alias="X-Ham-Operator-Authorization"),
+) -> dict[str, Any]:
+    ham_bearer = resolve_ham_operator_authorization_header(
+        authorization=authorization,
+        x_ham_operator_authorization=x_ham_operator_authorization,
+    )
+    token = _require_social_autonomy_write_token(ham_bearer)
+    current = read_social_autonomy_profile(_project_root())
+    if current.status == "paused":
+        return profile_to_safe_dict(current)
+    transition = transition_to_paused(current.status)
+    if not transition.ok:
+        _raise_autonomy_transition_conflict(transition)
+    updated = _profile_with_updates(current, status=transition.status, updated_at=_utc_now())
+    return _persist_social_autonomy_profile(updated, token=token, actor=_actor)
+
+
+@router.post("/autonomy/stop", response_model=GoHamSocialProfile)
+def stop_social_autonomy(
+    body: SocialAutonomyStopRequest | None = None,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+    authorization: str | None = Header(None, alias="Authorization"),
+    x_ham_operator_authorization: str | None = Header(None, alias="X-Ham-Operator-Authorization"),
+) -> dict[str, Any]:
+    stop_request = body or SocialAutonomyStopRequest()
+    ham_bearer = resolve_ham_operator_authorization_header(
+        authorization=authorization,
+        x_ham_operator_authorization=x_ham_operator_authorization,
+    )
+    token = _require_social_autonomy_write_token(ham_bearer)
+    current = read_social_autonomy_profile(_project_root())
+    if current.status == "stopped" and current.emergency_stop == stop_request.emergency_stop:
+        return profile_to_safe_dict(current)
+    transition = transition_to_stopped(current.status, emergency_stop=stop_request.emergency_stop)
+    if not transition.ok:
+        _raise_autonomy_transition_conflict(transition)
+    updated = _profile_with_updates(
+        current,
+        status=transition.status,
+        emergency_stop=stop_request.emergency_stop or current.emergency_stop,
+        updated_at=_utc_now(),
+    )
+    return _persist_social_autonomy_profile(updated, token=token, actor=_actor)
+
+
+@router.patch("/autonomy/settings", response_model=GoHamSocialProfile)
+def update_social_autonomy_settings(
+    body: SocialAutonomySettingsPatchRequest,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+    authorization: str | None = Header(None, alias="Authorization"),
+    x_ham_operator_authorization: str | None = Header(None, alias="X-Ham-Operator-Authorization"),
+) -> dict[str, Any]:
+    ham_bearer = resolve_ham_operator_authorization_header(
+        authorization=authorization,
+        x_ham_operator_authorization=x_ham_operator_authorization,
+    )
+    token = _require_social_autonomy_write_token(ham_bearer)
+    current = read_social_autonomy_profile(_project_root())
+    updates: dict[str, Any] = {"updated_at": _utc_now()}
+    if "daily_caps" in body.model_fields_set:
+        updates["daily_caps"] = body.daily_caps
+    if "quiet_hours" in body.model_fields_set:
+        updates["quiet_hours"] = body.quiet_hours.model_dump(mode="json") if body.quiet_hours else None
+    updated = _profile_with_updates(current, **updates)
+    return _persist_social_autonomy_profile(updated, token=token, actor=_actor)
+
+
+@router.post("/autonomy/preview-tick")
+def preview_social_autonomy_tick(
+    body: SocialAutonomyPreviewTickRequest,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+) -> dict[str, object]:
+    del _actor
+    profile = read_social_autonomy_profile(_project_root())
+    return preview_autonomy_runner_tick(profile, channel=body.channel, action=body.action)
+
+
 @router.get("/providers", response_model=SocialProvidersResponse)
 def list_social_providers(
     _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
@@ -3042,7 +3330,11 @@ def telegram_reactive_reply_apply(
             result={"persona": current_persona},
         )
 
-    readiness_reasons = _telegram_readiness_apply_reasons()
+    readiness_reasons = _prepend_autonomy_apply_reasons(
+        channel="telegram",
+        action="reply",
+        legacy_reasons=_telegram_readiness_apply_reasons(),
+    )
     if readiness_reasons:
         return _telegram_reactive_reply_apply_blocked_response(reasons=readiness_reasons, inbound_id=body.inbound_id, target=target)
     if not candidate.repliable:
@@ -3157,7 +3449,11 @@ def telegram_activity_apply(
             result={"persona": current_persona},
         )
 
-    readiness_reasons = _telegram_readiness_apply_reasons()
+    readiness_reasons = _prepend_autonomy_apply_reasons(
+        channel="telegram",
+        action="activity",
+        legacy_reasons=_telegram_readiness_apply_reasons(),
+    )
     if readiness_reasons:
         return _telegram_activity_apply_blocked_response(reasons=readiness_reasons, preview=preview)
     if not bool(preview.governor.allowed):
@@ -3233,7 +3529,11 @@ def telegram_message_apply(
             result={"expected_preview_status": preview.status},
         )
 
-    readiness_reasons = _telegram_readiness_apply_reasons()
+    readiness_reasons = _prepend_autonomy_apply_reasons(
+        channel="telegram",
+        action="message",
+        legacy_reasons=_telegram_readiness_apply_reasons(),
+    )
     if readiness_reasons:
         return _telegram_apply_blocked_response(reasons=readiness_reasons, preview=preview)
 
@@ -3335,7 +3635,11 @@ def x_provider_status(
         dry_run_available=_broadcast_dry_run_available(cfg),
         live_configured=_broadcast_live_configured(cfg),
         execution_allowed_now=exec_allowed,
-        reasons=_broadcast_lane_reasons(cfg),
+        reasons=_prepend_autonomy_apply_reasons(
+            channel="x",
+            action="broadcast",
+            legacy_reasons=_broadcast_lane_reasons(cfg),
+        ),
         policy_advisory_reasons=_advisory_reasons_for_provider_lane("x", "broadcast"),
     )
     reactive = ReactiveLaneStatusDto(
@@ -3344,7 +3648,11 @@ def x_provider_status(
         dry_run_enabled=cfg.goham_reactive_dry_run,
         live_canary_enabled=cfg.goham_reactive_live_canary,
         batch_enabled=cfg.enable_goham_reactive_batch,
-        reasons=_reactive_lane_reasons(cfg),
+        reasons=_prepend_autonomy_apply_reasons(
+            channel="x",
+            action="reply",
+            legacy_reasons=_reactive_lane_reasons(cfg),
+        ),
         policy_advisory_reasons=_advisory_reasons_for_provider_lane("x", "reactive"),
     )
     cap_summary = CapCooldownSummaryDto(
@@ -3782,7 +4090,11 @@ def x_reactive_reply_apply(
     )
     _require_social_live_token(ham_bearer)
 
-    gate_reasons = _reactive_apply_reasons(cfg)
+    gate_reasons = _prepend_autonomy_apply_reasons(
+        channel="x",
+        action="reply",
+        legacy_reasons=_reactive_apply_reasons(cfg),
+    )
     if gate_reasons:
         return _blocked_apply_response(cfg, reasons=gate_reasons)
 
@@ -3848,7 +4160,11 @@ def x_reactive_batch_apply(
     )
     _require_social_live_token(ham_bearer)
 
-    gate_reasons = _reactive_batch_apply_reasons(cfg)
+    gate_reasons = _prepend_autonomy_apply_reasons(
+        channel="x",
+        action="reply",
+        legacy_reasons=_reactive_batch_apply_reasons(cfg),
+    )
     if gate_reasons:
         return _blocked_batch_apply_response(cfg, reasons=gate_reasons)
 
@@ -3934,7 +4250,11 @@ def x_broadcast_apply(
     )
     _require_social_live_token(ham_bearer)
 
-    gate_reasons = _broadcast_apply_reasons(cfg)
+    gate_reasons = _prepend_autonomy_apply_reasons(
+        channel="x",
+        action="broadcast",
+        legacy_reasons=_broadcast_apply_reasons(cfg),
+    )
     if gate_reasons:
         return _blocked_broadcast_apply_response(cfg, reasons=gate_reasons)
 

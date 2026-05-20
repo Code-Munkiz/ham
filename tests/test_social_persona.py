@@ -85,14 +85,15 @@ def test_persona_source_file_is_bounded() -> None:
     assert path.stat().st_size < 32_000
 
 
-def test_social_ui_contains_read_only_persona_panel_without_edit_controls() -> None:
+def test_social_ui_contains_simple_autonomy_surface_without_persona_edit_controls() -> None:
     text = Path("frontend/src/features/hermes-workspace/screens/social/WorkspaceSocialScreen.tsx").read_text(
         encoding="utf-8"
     )
-    assert "function PersonaPanel" in text
-    assert "Canonical HAM persona" in text
-    assert "Digest protection" in text
-    assert "What Ham will not say" in text
+    assert 'title="Social"' in text
+    assert "Goal" in text
+    assert "Safety boundaries" in text
+    assert "What HAM learned" in text
+    assert "persona_id" in text
     forbidden = (
         "Edit persona",
         "Create persona",

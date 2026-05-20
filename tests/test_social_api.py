@@ -16,7 +16,7 @@ from __future__ import annotations
 import ast
 import json
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -130,7 +130,7 @@ def _make_actor(email: str | None) -> HamActor:
 
 
 def _now_iso(offset_seconds: int = 0) -> str:
-    base = datetime.now(timezone.utc) - timedelta(seconds=offset_seconds)
+    base = datetime.now(UTC) - timedelta(seconds=offset_seconds)
     return base.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
@@ -2485,53 +2485,58 @@ def test_preview_routes_are_post_only(
         assert client.get(route).status_code == 405
 
 
-def test_social_ui_contains_telegram_run_once_dry_run_preview_without_live_controls() -> None:
+def test_social_ui_contains_simple_autonomy_launch_surface_without_telegram_run_once_controls() -> None:
     screen = Path("frontend/src/features/hermes-workspace/screens/social/WorkspaceSocialScreen.tsx").read_text(
         encoding="utf-8"
     )
     adapter = Path("frontend/src/features/hermes-workspace/adapters/socialAdapter.ts").read_text(encoding="utf-8")
-    assert "Check once" in screen
-    assert "no scheduler is started" in screen
-    assert "TelegramActivityRunOncePreviewCard" in screen
-    assert "previewTelegramActivityRunOnce" in screen
-    assert "/providers/telegram/activity/run-once/preview" in adapter
+    assert 'title="Social"' in screen
+    assert "Launch state" in screen
+    assert "Goal" in screen
+    assert "Channels" in screen
+    assert "Limits" in screen
+    assert "Safety boundaries" in screen
+    assert "previewTelegramActivityRunOnce" in adapter
     assert "/providers/telegram/activity/run-once/apply" not in adapter
+    assert "TelegramActivityRunOncePreviewCard" not in screen
     assert "RunOnceApply" not in screen
     assert "autonomy toggle" not in screen.lower()
 
 
-def test_social_ui_contains_telegram_inbound_preview_without_reply_controls() -> None:
+def test_social_ui_contains_learning_card_without_telegram_inbound_reply_controls() -> None:
     screen = _collapse_ws(
         Path("frontend/src/features/hermes-workspace/screens/social/WorkspaceSocialScreen.tsx").read_text(
             encoding="utf-8"
         )
     )
     adapter = Path("frontend/src/features/hermes-workspace/adapters/socialAdapter.ts").read_text(encoding="utf-8")
-    assert "Check Telegram inbox" in screen
-    assert "No Telegram API call. No reply will be sent." in screen
-    assert "TelegramInboundPreviewCard" in screen
-    assert "previewTelegramInbound" in screen
-    assert "/providers/telegram/inbound/preview" in adapter
+    assert "What HAM learned" in screen
+    assert "Recent activity" in screen
+    assert "getLearningHints" in screen
+    assert "previewTelegramInbound" in adapter
     assert "/providers/telegram/inbound/reply/apply" not in adapter
     assert "/providers/telegram/inbound/apply" not in adapter
+    assert "TelegramInboundPreviewCard" not in screen
 
 
-def test_social_ui_contains_telegram_reactive_confirmed_reply_controls_without_raw_payloads() -> None:
+def test_social_ui_removes_telegram_reactive_confirmed_reply_controls_without_raw_payloads() -> None:
     screen = _collapse_ws(
         Path("frontend/src/features/hermes-workspace/screens/social/WorkspaceSocialScreen.tsx").read_text(
             encoding="utf-8"
         )
     )
     adapter = Path("frontend/src/features/hermes-workspace/adapters/socialAdapter.ts").read_text(encoding="utf-8")
-    assert "Find reply opportunities" in screen
-    assert "No Telegram message will be sent by this check." in screen
-    assert "TelegramReactiveRepliesPreviewCard" in screen
-    assert "previewTelegramReactiveReplies" in screen
+    assert "Launch" in screen
+    assert "Pause" in screen
+    assert "Resume" in screen
+    assert "Stop" in screen
+    assert "previewTelegramReactiveReplies" not in screen
     assert "/providers/telegram/reactive/replies/preview" in adapter
-    assert "/providers/telegram/reactive/replies/apply" in adapter
-    assert "Approved Telegram reply" in screen
-    assert "SEND ONE TELEGRAM REPLY" in screen
-    assert "Send one Telegram reply" in screen
+    assert "/providers/telegram/reactive/replies/apply" not in adapter
+    assert "TelegramReactiveRepliesPreviewCard" not in screen
+    assert "Approved Telegram reply" not in screen
+    assert "SEND ONE TELEGRAM REPLY" not in screen
+    assert "Send one Telegram reply" not in screen
     assert "Apply Telegram reply" not in screen
     assert "message_text" not in adapter
     assert "target_id" not in adapter

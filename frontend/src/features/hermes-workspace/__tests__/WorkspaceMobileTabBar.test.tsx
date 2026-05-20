@@ -25,5 +25,6 @@ describe("WorkspaceMobileTabBar", () => {
       "href",
       "/workspace/social",
     );
+    expect(screen.queryByRole("link", { name: /HAMgomoon/i })).not.toBeInTheDocument();
   });
 });

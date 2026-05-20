@@ -15,8 +15,6 @@ import { WorkspaceOperationsScreen } from "./screens/operations/WorkspaceOperati
 import { WorkspaceProfilesScreen } from "./screens/profiles/WorkspaceProfilesScreen";
 import { WorkspaceSkillsScreen } from "./screens/skills/WorkspaceSkillsScreen";
 import { WorkspaceSocialScreen } from "./screens/social/WorkspaceSocialScreen";
-import { WorkspaceHamgomoonScreen } from "./screens/social/WorkspaceHamgomoonScreen";
-import { WorkspaceSocialPolicyScreen } from "./screens/social/policy/WorkspaceSocialPolicyScreen";
 import "./hermesWorkspace.css";
 import { VoiceWorkspaceSettingsProvider } from "./voice/VoiceWorkspaceSettingsContext";
 import { WorkspaceHamProjectProvider } from "./WorkspaceHamProjectContext";
@@ -25,6 +23,43 @@ import { WorkspaceGate } from "@/components/workspace/WorkspaceGate";
 function WorkspaceChatFirstIndex() {
   const { search } = useLocation();
   return <Navigate to={`/workspace/chat${search}`} replace />;
+}
+
+export function WorkspaceRoutes() {
+  return (
+    <Routes>
+      <Route index element={<WorkspaceChatFirstIndex />} />
+      <Route path="projects" element={<WorkspaceHome />} />
+      <Route path="chat" element={<WorkspaceChatScreen />} />
+      <Route path="files" element={<WorkspaceFilesScreen />} />
+      <Route path="terminal" element={<WorkspaceTerminalScreen />} />
+      <Route path="settings/mcp" element={<WorkspaceMcpSettingsScreen />} />
+      <Route
+        path="settings/providers"
+        element={<Navigate to="/workspace/settings?section=hermes" replace />}
+      />
+      <Route path="settings" element={<WorkspaceSettingsScreen />} />
+      <Route path="jobs" element={<WorkspaceJobsScreen />} />
+      <Route path="tasks" element={<WorkspaceTasksScreen />} />
+      <Route path="conductor" element={<WorkspaceConductorScreen />} />
+      <Route path="operations" element={<WorkspaceOperationsScreen />} />
+      <Route path="coding-agents" element={<Navigate to="/workspace/builder-studio" replace />} />
+      <Route
+        path="builder-studio"
+        element={<Navigate to="/workspace/settings?section=builders" replace />}
+      />
+      <Route
+        path="builder-studio/:builderId"
+        element={<Navigate to="/workspace/settings?section=builders" replace />}
+      />
+      <Route path="social/policy" element={<Navigate to="/workspace/social" replace />} />
+      <Route path="social" element={<WorkspaceSocialScreen />} />
+      <Route path="hamgomoon" element={<Navigate to="/workspace/social" replace />} />
+      <Route path="memory" element={<WorkspaceMemoryScreen />} />
+      <Route path="skills" element={<WorkspaceSkillsScreen />} />
+      <Route path="profiles" element={<WorkspaceProfilesScreen />} />
+    </Routes>
+  );
 }
 
 /**
@@ -39,41 +74,7 @@ export function WorkspaceApp() {
         <div className="hww-outer h-full min-h-0 w-full min-w-0">
           <WorkspaceShell>
             <WorkspaceGate>
-              <Routes>
-                <Route index element={<WorkspaceChatFirstIndex />} />
-                <Route path="projects" element={<WorkspaceHome />} />
-                <Route path="chat" element={<WorkspaceChatScreen />} />
-                <Route path="files" element={<WorkspaceFilesScreen />} />
-                <Route path="terminal" element={<WorkspaceTerminalScreen />} />
-                <Route path="settings/mcp" element={<WorkspaceMcpSettingsScreen />} />
-                <Route
-                  path="settings/providers"
-                  element={<Navigate to="/workspace/settings?section=hermes" replace />}
-                />
-                <Route path="settings" element={<WorkspaceSettingsScreen />} />
-                <Route path="jobs" element={<WorkspaceJobsScreen />} />
-                <Route path="tasks" element={<WorkspaceTasksScreen />} />
-                <Route path="conductor" element={<WorkspaceConductorScreen />} />
-                <Route path="operations" element={<WorkspaceOperationsScreen />} />
-                <Route
-                  path="coding-agents"
-                  element={<Navigate to="/workspace/builder-studio" replace />}
-                />
-                <Route
-                  path="builder-studio"
-                  element={<Navigate to="/workspace/settings?section=builders" replace />}
-                />
-                <Route
-                  path="builder-studio/:builderId"
-                  element={<Navigate to="/workspace/settings?section=builders" replace />}
-                />
-                <Route path="social/policy" element={<WorkspaceSocialPolicyScreen />} />
-                <Route path="social" element={<WorkspaceSocialScreen />} />
-                <Route path="hamgomoon" element={<WorkspaceHamgomoonScreen />} />
-                <Route path="memory" element={<WorkspaceMemoryScreen />} />
-                <Route path="skills" element={<WorkspaceSkillsScreen />} />
-                <Route path="profiles" element={<WorkspaceProfilesScreen />} />
-              </Routes>
+              <WorkspaceRoutes />
             </WorkspaceGate>
           </WorkspaceShell>
         </div>

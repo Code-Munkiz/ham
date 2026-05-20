@@ -2,7 +2,7 @@
  * HAM /api/social — read-only social provider status facade.
  */
 
-import { hamApiFetch } from "@/lib/ham/api";
+import { apiUrl, applyHamOperatorSecretHeaders, hamApiFetch } from "@/lib/ham/api";
 
 import { workspaceApiPending } from "../lib/workspaceHamApiState";
 
@@ -612,6 +612,59 @@ export type SocialPolicySnapshotBlockOnSocial = {
   policy: Record<string, unknown> | null;
 };
 
+export type SocialAutonomyStatus = "draft" | "running" | "paused" | "stopped";
+export type SocialAutonomyChannel = "x" | "telegram" | "discord";
+export type SocialAutonomyAction = "reply" | "broadcast" | "activity" | "message";
+
+export type SocialAutonomyChannelConfig = {
+  enabled: boolean;
+  available: boolean;
+};
+
+export type SocialAutonomyQuietHours = {
+  start_hour: number;
+  end_hour: number;
+  timezone: string;
+};
+
+export type GoHamSocialProfile = {
+  profile_id: string;
+  workspace_id: string | null;
+  project_id: string | null;
+  status: SocialAutonomyStatus;
+  goal: string;
+  persona_id: string;
+  channels: Record<SocialAutonomyChannel, SocialAutonomyChannelConfig>;
+  actions_allowed_per_channel: Record<SocialAutonomyChannel, SocialAutonomyAction[]>;
+  daily_caps: Record<SocialAutonomyChannel, number>;
+  cadence: string;
+  quiet_hours: SocialAutonomyQuietHours | null;
+  forbidden_topics: string[];
+  safety_rules: string[];
+  learning_enabled: boolean;
+  emergency_stop: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SocialAutonomySettingsPatch = {
+  daily_caps?: Partial<Record<SocialAutonomyChannel, number>>;
+  quiet_hours?: SocialAutonomyQuietHours | null;
+};
+
+export type SocialAutonomyTickPreview = {
+  channel: SocialAutonomyChannel;
+  action: SocialAutonomyAction | null;
+  would_run: boolean;
+  reasons: string[];
+  next_run_summary: string;
+};
+
+export type SocialAutonomyWriteStatus = {
+  kind: "ham_social_autonomy_write_status";
+  writes_enabled: boolean;
+};
+
 export type SocialSnapshot = {
   providers: SocialProvider[];
   xStatus: XProviderStatus;
@@ -652,8 +705,231 @@ async function postPreview<T>(path: string, body: Record<string, unknown> = {}):
   return (await res.json()) as T;
 }
 
+async function requestJson<T>(
+  path: string,
+  init: { method?: "GET" | "POST" | "PATCH"; body?: unknown; writeToken?: string } = {},
+): Promise<T> {
+  const method = init.method ?? "GET";
+  const headers = new Headers(
+    init.body === undefined ? undefined : { "Content-Type": "application/json" },
+  );
+  if (init.writeToken !== undefined) {
+    // Preserves Clerk Authorization and routes HAM secrets through X-Ham-Operator-Authorization.
+    await applyHamOperatorSecretHeaders(headers, init.writeToken);
+  }
+  const requestInit: RequestInit = {
+    method,
+    headers,
+    credentials: "include",
+    body: init.body === undefined ? undefined : JSON.stringify(init.body),
+  };
+  const res =
+    init.writeToken === undefined
+      ? await hamApiFetch(path, requestInit)
+      : await fetch(apiUrl(path), requestInit);
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const body = (await res.json()) as {
+        detail?: { error?: { message?: string } } | { message?: string } | string;
+      };
+      if (typeof body.detail === "string") detail = body.detail;
+      else if (body.detail && "error" in body.detail && body.detail.error?.message) {
+        detail = body.detail.error.message;
+      } else if (body.detail && "message" in body.detail && body.detail.message) {
+        detail = body.detail.message;
+      }
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+  return (await res.json()) as T;
+}
+
 export const socialAdapter = {
   description: "HAM /api/social — read-only social provider status",
+
+  async getAutonomyProfile(): Promise<{
+    profile: GoHamSocialProfile | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
+    try {
+      return {
+        profile: await requestJson<GoHamSocialProfile>(`${BASE}/autonomy`),
+        bridge: { status: "ready" },
+      };
+    } catch (e) {
+      return {
+        profile: null,
+        bridge: workspaceApiPending("social", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
+
+  async previewAutonomyProfile(profile: GoHamSocialProfile): Promise<{
+    profile: GoHamSocialProfile | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
+    try {
+      return {
+        profile: await requestJson<GoHamSocialProfile>(`${BASE}/autonomy/preview`, {
+          method: "POST",
+          body: profile,
+        }),
+        bridge: { status: "ready" },
+      };
+    } catch (e) {
+      return {
+        profile: null,
+        bridge: workspaceApiPending("social", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
+
+  async getAutonomyWriteStatus(): Promise<{
+    status: SocialAutonomyWriteStatus | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
+    try {
+      return {
+        status: await requestJson<SocialAutonomyWriteStatus>(`${BASE}/autonomy/write-status`),
+        bridge: { status: "ready" },
+      };
+    } catch (e) {
+      return {
+        status: null,
+        bridge: workspaceApiPending("social", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
+
+  async launchAutonomy(writeToken = ""): Promise<{
+    profile: GoHamSocialProfile | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
+    try {
+      return {
+        profile: await requestJson<GoHamSocialProfile>(`${BASE}/autonomy/launch`, {
+          method: "POST",
+          writeToken,
+        }),
+        bridge: { status: "ready" },
+      };
+    } catch (e) {
+      return {
+        profile: null,
+        bridge: workspaceApiPending("social", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
+
+  async pauseAutonomy(writeToken = ""): Promise<{
+    profile: GoHamSocialProfile | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
+    try {
+      return {
+        profile: await requestJson<GoHamSocialProfile>(`${BASE}/autonomy/pause`, {
+          method: "POST",
+          writeToken,
+        }),
+        bridge: { status: "ready" },
+      };
+    } catch (e) {
+      return {
+        profile: null,
+        bridge: workspaceApiPending("social", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
+
+  async stopAutonomy(
+    input?: { emergency_stop?: boolean },
+    writeToken = "",
+  ): Promise<{
+    profile: GoHamSocialProfile | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
+    try {
+      return {
+        profile: await requestJson<GoHamSocialProfile>(`${BASE}/autonomy/stop`, {
+          method: "POST",
+          body: input ?? {},
+          writeToken,
+        }),
+        bridge: { status: "ready" },
+      };
+    } catch (e) {
+      return {
+        profile: null,
+        bridge: workspaceApiPending("social", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
+
+  async updateAutonomyLimits(
+    input: SocialAutonomySettingsPatch,
+    writeToken = "",
+  ): Promise<{
+    profile: GoHamSocialProfile | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
+    try {
+      return {
+        profile: await requestJson<GoHamSocialProfile>(`${BASE}/autonomy/settings`, {
+          method: "PATCH",
+          body: input,
+          writeToken,
+        }),
+        bridge: { status: "ready" },
+      };
+    } catch (e) {
+      return {
+        profile: null,
+        bridge: workspaceApiPending("social", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
+
+  async previewAutonomyTick(input: {
+    channel: SocialAutonomyChannel;
+    action?: SocialAutonomyAction;
+  }): Promise<{
+    tick: SocialAutonomyTickPreview | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
+    try {
+      return {
+        tick: await requestJson<SocialAutonomyTickPreview>(`${BASE}/autonomy/preview-tick`, {
+          method: "POST",
+          body: input,
+        }),
+        bridge: { status: "ready" },
+      };
+    } catch (e) {
+      return {
+        tick: null,
+        bridge: workspaceApiPending("social", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
 
   async loadSnapshot(): Promise<{
     snapshot: SocialSnapshot | null;
@@ -902,300 +1178,6 @@ export const socialAdapter = {
     } catch (e) {
       return {
         preview: null,
-        bridge: workspaceApiPending("social", null, e),
-        error: e instanceof Error ? e.message : String(e),
-      };
-    }
-  },
-
-  async sendOneTelegramReactiveReply(input: {
-    proposalDigest: string;
-    confirmationPhrase: string;
-    inboundId: string;
-    operatorToken: string;
-    clientRequestId?: string;
-  }): Promise<{
-    apply: TelegramReactiveReplyApplyResponse | null;
-    bridge: SocialBridge;
-    error?: string;
-  }> {
-    try {
-      const res = await hamApiFetch(`${BASE}/providers/telegram/reactive/replies/apply`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Ham-Operator-Authorization": `Bearer ${input.operatorToken}`,
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          proposal_digest: input.proposalDigest,
-          confirmation_phrase: input.confirmationPhrase,
-          inbound_id: input.inboundId,
-          client_request_id: input.clientRequestId,
-        }),
-      });
-      if (!res.ok) {
-        let detail = `HTTP ${res.status}`;
-        try {
-          const body = (await res.json()) as { detail?: { error?: { message?: string } } | string };
-          if (typeof body.detail === "string") detail = body.detail;
-          else if (body.detail?.error?.message) detail = body.detail.error.message;
-        } catch {
-          /* ignore */
-        }
-        return { apply: null, bridge: { status: "pending", detail }, error: detail };
-      }
-      return {
-        apply: (await res.json()) as TelegramReactiveReplyApplyResponse,
-        bridge: { status: "ready" },
-      };
-    } catch (e) {
-      return {
-        apply: null,
-        bridge: workspaceApiPending("social", null, e),
-        error: e instanceof Error ? e.message : String(e),
-      };
-    }
-  },
-
-  async sendOneTelegramActivity(input: {
-    proposalDigest: string;
-    confirmationPhrase: string;
-    operatorToken: string;
-    activityKind?: "status_update" | "test_activity";
-    clientRequestId?: string;
-  }): Promise<{
-    apply: TelegramActivityApplyResponse | null;
-    bridge: SocialBridge;
-    error?: string;
-  }> {
-    try {
-      const res = await hamApiFetch(`${BASE}/providers/telegram/activity/apply`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Ham-Operator-Authorization": `Bearer ${input.operatorToken}`,
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          proposal_digest: input.proposalDigest,
-          confirmation_phrase: input.confirmationPhrase,
-          activity_kind: input.activityKind ?? "test_activity",
-          client_request_id: input.clientRequestId,
-        }),
-      });
-      if (!res.ok) {
-        let detail = `HTTP ${res.status}`;
-        try {
-          const body = (await res.json()) as { detail?: { error?: { message?: string } } | string };
-          if (typeof body.detail === "string") detail = body.detail;
-          else if (body.detail?.error?.message) detail = body.detail.error.message;
-        } catch {
-          /* ignore */
-        }
-        return { apply: null, bridge: { status: "pending", detail }, error: detail };
-      }
-      return {
-        apply: (await res.json()) as TelegramActivityApplyResponse,
-        bridge: { status: "ready" },
-      };
-    } catch (e) {
-      return {
-        apply: null,
-        bridge: workspaceApiPending("social", null, e),
-        error: e instanceof Error ? e.message : String(e),
-      };
-    }
-  },
-
-  async sendOneTelegramMessage(input: {
-    proposalDigest: string;
-    confirmationPhrase: string;
-    operatorToken: string;
-    messageIntent?: "greeting" | "announcement" | "test_message";
-    clientRequestId?: string;
-  }): Promise<{
-    apply: TelegramMessageApplyResponse | null;
-    bridge: SocialBridge;
-    error?: string;
-  }> {
-    try {
-      const res = await hamApiFetch(`${BASE}/providers/telegram/messages/apply`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Ham-Operator-Authorization": `Bearer ${input.operatorToken}`,
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          proposal_digest: input.proposalDigest,
-          confirmation_phrase: input.confirmationPhrase,
-          message_intent: input.messageIntent ?? "test_message",
-          client_request_id: input.clientRequestId,
-        }),
-      });
-      if (!res.ok) {
-        let detail = `HTTP ${res.status}`;
-        try {
-          const body = (await res.json()) as { detail?: { error?: { message?: string } } | string };
-          if (typeof body.detail === "string") detail = body.detail;
-          else if (body.detail?.error?.message) detail = body.detail.error.message;
-        } catch {
-          /* ignore */
-        }
-        return { apply: null, bridge: { status: "pending", detail }, error: detail };
-      }
-      return {
-        apply: (await res.json()) as TelegramMessageApplyResponse,
-        bridge: { status: "ready" },
-      };
-    } catch (e) {
-      return {
-        apply: null,
-        bridge: workspaceApiPending("social", null, e),
-        error: e instanceof Error ? e.message : String(e),
-      };
-    }
-  },
-
-  async sendOneLiveReply(input: {
-    proposalDigest: string;
-    confirmationPhrase: string;
-    operatorToken: string;
-    clientRequestId?: string;
-  }): Promise<{
-    apply: SocialReactiveReplyApplyResponse | null;
-    bridge: SocialBridge;
-    error?: string;
-  }> {
-    try {
-      const res = await hamApiFetch(`${BASE}/providers/x/reactive/reply/apply`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Ham-Operator-Authorization": `Bearer ${input.operatorToken}`,
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          proposal_digest: input.proposalDigest,
-          confirmation_phrase: input.confirmationPhrase,
-          client_request_id: input.clientRequestId,
-        }),
-      });
-      if (!res.ok) {
-        let detail = `HTTP ${res.status}`;
-        try {
-          const body = (await res.json()) as { detail?: { error?: { message?: string } } | string };
-          if (typeof body.detail === "string") detail = body.detail;
-          else if (body.detail?.error?.message) detail = body.detail.error.message;
-        } catch {
-          /* ignore */
-        }
-        throw new Error(detail);
-      }
-      return {
-        apply: (await res.json()) as SocialReactiveReplyApplyResponse,
-        bridge: { status: "ready" },
-      };
-    } catch (e) {
-      return {
-        apply: null,
-        bridge: workspaceApiPending("social", null, e),
-        error: e instanceof Error ? e.message : String(e),
-      };
-    }
-  },
-
-  async sendLiveReactiveBatch(input: {
-    proposalDigest: string;
-    confirmationPhrase: string;
-    operatorToken: string;
-    clientRequestId?: string;
-  }): Promise<{
-    apply: SocialReactiveBatchApplyResponse | null;
-    bridge: SocialBridge;
-    error?: string;
-  }> {
-    try {
-      const res = await hamApiFetch(`${BASE}/providers/x/reactive/batch/apply`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Ham-Operator-Authorization": `Bearer ${input.operatorToken}`,
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          proposal_digest: input.proposalDigest,
-          confirmation_phrase: input.confirmationPhrase,
-          client_request_id: input.clientRequestId,
-        }),
-      });
-      if (!res.ok) {
-        let detail = `HTTP ${res.status}`;
-        try {
-          const body = (await res.json()) as { detail?: { error?: { message?: string } } | string };
-          if (typeof body.detail === "string") detail = body.detail;
-          else if (body.detail?.error?.message) detail = body.detail.error.message;
-        } catch {
-          /* ignore */
-        }
-        throw new Error(detail);
-      }
-      return {
-        apply: (await res.json()) as SocialReactiveBatchApplyResponse,
-        bridge: { status: "ready" },
-      };
-    } catch (e) {
-      return {
-        apply: null,
-        bridge: workspaceApiPending("social", null, e),
-        error: e instanceof Error ? e.message : String(e),
-      };
-    }
-  },
-
-  async sendOneLivePost(input: {
-    proposalDigest: string;
-    confirmationPhrase: string;
-    operatorToken: string;
-    clientRequestId?: string;
-  }): Promise<{
-    apply: SocialBroadcastApplyResponse | null;
-    bridge: SocialBridge;
-    error?: string;
-  }> {
-    try {
-      const res = await hamApiFetch(`${BASE}/providers/x/broadcast/apply`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Ham-Operator-Authorization": `Bearer ${input.operatorToken}`,
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          proposal_digest: input.proposalDigest,
-          confirmation_phrase: input.confirmationPhrase,
-          client_request_id: input.clientRequestId,
-        }),
-      });
-      if (!res.ok) {
-        let detail = `HTTP ${res.status}`;
-        try {
-          const body = (await res.json()) as { detail?: { error?: { message?: string } } | string };
-          if (typeof body.detail === "string") detail = body.detail;
-          else if (body.detail?.error?.message) detail = body.detail.error.message;
-        } catch {
-          /* ignore */
-        }
-        throw new Error(detail);
-      }
-      return {
-        apply: (await res.json()) as SocialBroadcastApplyResponse,
-        bridge: { status: "ready" },
-      };
-    } catch (e) {
-      return {
-        apply: null,
         bridge: workspaceApiPending("social", null, e),
         error: e instanceof Error ? e.message : String(e),
       };

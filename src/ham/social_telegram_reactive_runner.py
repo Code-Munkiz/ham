@@ -11,6 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.ham.social_autonomy.runner_gate import autonomy_reasons_for_runner
 from src.ham.social_delivery_log import MAX_LOG_SCAN_BYTES, default_delivery_log_path
 from src.ham.social_telegram_reactive import (
     TELEGRAM_REACTIVE_REPLY_ACTION_TYPE,
@@ -114,7 +115,10 @@ def run_telegram_reactive_once(
             **base,
         )
 
-    reasons = _live_gate_reasons()
+    reasons = [
+        *autonomy_reasons_for_runner(channel="telegram", action="reply"),
+        *_live_gate_reasons(),
+    ]
     if cfg.readiness != "ready":
         reasons.append("telegram_readiness_not_ready")
     if cfg.gateway_runtime_state != "connected":

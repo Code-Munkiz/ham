@@ -10,6 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.ham.social_autonomy.runner_gate import autonomy_reasons_for_runner
 from src.ham.social_telegram_activity import (
     TELEGRAM_ACTIVITY_EXECUTION_KIND,
     TelegramActivityKind,
@@ -97,7 +98,10 @@ def run_telegram_activity_once(
             **base,
         )
 
-    blocked_reasons = _live_gate_reasons()
+    blocked_reasons = [
+        *autonomy_reasons_for_runner(channel="telegram", action="activity"),
+        *_live_gate_reasons(),
+    ]
     if preview.status != "completed" or not preview.proposal_digest:
         blocked_reasons.extend(["telegram_activity_preview_not_available", *preview.reasons])
     if not bool(preview.governor.get("allowed")):
