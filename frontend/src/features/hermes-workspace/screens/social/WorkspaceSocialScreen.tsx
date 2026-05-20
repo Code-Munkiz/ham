@@ -2745,7 +2745,7 @@ export function WorkspaceSocialScreen() {
         variant="dark"
         eyebrow="Social"
         title="HAMgomoon Social"
-        subtitle="Operate autonomous social reach with previews first, confirmations second, and voice locked to Ham’s persona."
+        subtitle="HAMgomoon. Preview drafts. Review. Learn."
         actions={
           <Button
             type="button"

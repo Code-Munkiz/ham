@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import logging
 import os
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -48,6 +49,13 @@ from src.ham.ham_x.reactive_governor import (
 )
 from src.ham.ham_x.reactive_policy import evaluate_reactive_policy
 from src.ham.ham_x.redaction import redact
+from src.ham.ham_x.review_queue import read_recent_review_records
+from src.ham.hamgomoon_learning import (
+    LearningRecord,
+    SocialDraftRecord,
+    append_learning_record,
+    render_hamgomoon_learning_hints,
+)
 from src.ham.social_persona import load_social_persona, persona_digest
 from src.ham.social_policy import (
     DEFAULT_SOCIAL_POLICY,
@@ -77,6 +85,8 @@ from src.ham.social_telegram_send import (
 )
 
 router = APIRouter(prefix="/api/social", tags=["social"])
+
+_LOG = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Bounds
@@ -1413,7 +1423,7 @@ def _telegram_preview_text(intent: TelegramMessageIntent) -> str:
     if intent == "greeting":
         text = (
             f"Hey, this is {persona.display_name}. Telegram preview is connected, persona-protected, "
-            "and still dry-run only from HAM Social."
+            "and still dry-run only from HAMgomoon."
         )
     elif intent == "announcement":
         text = (
@@ -3592,6 +3602,59 @@ def x_audit_summary(
     )
 
 
+_HAMGOMOON_LEARNING_ENABLED_ENV = "HAM_HAMGOMOON_LEARNING_ENABLED"
+
+
+def _hamgomoon_learning_enabled() -> bool:
+    value = os.environ.get(_HAMGOMOON_LEARNING_ENABLED_ENV, "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+def _append_draft_record_from_preview(
+    *,
+    channel: str,
+    proposed_action: str,
+    draft_text: str,
+    safety_state: str,
+    persona_id: str | None = None,
+    prompt: str = "",
+) -> None:
+    """Best-effort: log a HAMgomoon learning draft record from a preview.
+
+    Never raises, never propagates, never changes the surrounding route's
+    response body. Wrapped defensively because pinning existing snapshot /
+    contract tests is non-negotiable. Opt-in via
+    ``HAM_HAMGOMOON_LEARNING_ENABLED=1`` so existing test surfaces don't
+    incidentally create the JSONL store.
+    """
+    if not _hamgomoon_learning_enabled():
+        return
+    try:
+        draft = SocialDraftRecord(
+            channel=channel,  # type: ignore[arg-type]
+            proposed_action=proposed_action,  # type: ignore[arg-type]
+            draft_text=draft_text,
+            prompt=prompt,
+            safety_state=safety_state,  # type: ignore[arg-type]
+            persona_id=persona_id,
+            workspace_id=None,
+            project_id=None,
+        )
+        rec = LearningRecord(
+            channel=channel,  # type: ignore[arg-type]
+            draft=draft,
+            review=None,
+            delivery=None,
+            critique=None,
+            safe_future_hint=None,
+            workspace_id=None,
+            project_id=None,
+        )
+        append_learning_record(rec)
+    except Exception:  # noqa: BLE001 — must never break preview routes
+        _LOG.warning("hamgomoon_learning append failed (preview)", exc_info=True)
+
+
 @router.post("/providers/x/reactive/inbox/preview", response_model=SocialPreviewResponse)
 def x_reactive_inbox_preview(
     body: SocialPreviewRequest | None = None,
@@ -3605,6 +3668,22 @@ def x_reactive_inbox_preview(
     proposal_digest = _inbox_proposal_digest(result, actual_cfg)
     reasons = _dedupe(list(result.reasons))
     status: PreviewStatus = "completed" if result.status == "completed" else "blocked"
+    try:
+        selected = getattr(result, "selected_candidate", None)
+        reply_text = ""
+        if selected is not None:
+            reply_text = str(getattr(selected, "reply_candidate_text", "") or "")
+        persona_fields = _persona_ref_fields()
+        persona_id_value = persona_fields.get("persona_id") if isinstance(persona_fields, dict) else None
+        _append_draft_record_from_preview(
+            channel="x",
+            proposed_action="reply",
+            draft_text=reply_text,
+            safety_state="preview_ok" if status == "completed" else "preview_blocked",
+            persona_id=str(persona_id_value) if persona_id_value else None,
+        )
+    except Exception:  # noqa: BLE001
+        _LOG.warning("hamgomoon_learning preview hook failed", exc_info=True)
     return SocialPreviewResponse(
         **_persona_ref_fields(),
         preview_kind="reactive_inbox",
@@ -3895,6 +3974,78 @@ def x_broadcast_apply(
     )
 
 
+class ReviewQueueSafeItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    record_id: str
+    action_type: str | None = None
+    channel: str | None = None
+    created_at: str | None = None
+    text: str = ""
+    decision_state: str | None = None
+
+
+class ReviewQueueSummaryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pending_count: int
+    approved_recent_count: int = 0
+    rejected_recent_count: int = 0
+    items: list[ReviewQueueSafeItem] = Field(default_factory=list)
+    generated_at: str
+
+
+class LearningHintsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    hints: str
+    generated_at: str
+
+
+@router.get(
+    "/review-queue/summary",
+    response_model=ReviewQueueSummaryResponse,
+)
+def social_review_queue_summary(
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+    limit: int = 20,
+) -> ReviewQueueSummaryResponse:
+    del _actor
+    cfg = load_ham_x_config()
+    clamped = max(1, min(int(limit), 100))
+    rows = read_recent_review_records(limit=clamped, path=Path(cfg.review_queue_path))
+    items = [ReviewQueueSafeItem.model_validate(row) for row in rows]
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S") + "Z"
+    return ReviewQueueSummaryResponse(
+        pending_count=len(items),
+        approved_recent_count=0,
+        rejected_recent_count=0,
+        items=items,
+        generated_at=now,
+    )
+
+
+@router.get(
+    "/learning/hints",
+    response_model=LearningHintsResponse,
+)
+def social_learning_hints(
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+    channel: str | None = None,
+    limit: int = 20,
+) -> LearningHintsResponse:
+    del _actor
+    safe_channel: str | None
+    if channel in {"x", "telegram", "discord", "other"}:
+        safe_channel = channel
+    else:
+        safe_channel = None
+    clamped = max(1, min(int(limit), 200))
+    block = render_hamgomoon_learning_hints(channel=safe_channel, limit=clamped)
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S") + "Z"
+    return LearningHintsResponse(hints=block, generated_at=now)
+
+
 __all__ = [
     "router",
     "SocialProvidersResponse",
@@ -3930,4 +4081,7 @@ __all__ = [
     "SocialReactiveBatchApplyResponse",
     "SocialBroadcastApplyRequest",
     "SocialBroadcastApplyResponse",
+    "ReviewQueueSafeItem",
+    "ReviewQueueSummaryResponse",
+    "LearningHintsResponse",
 ]

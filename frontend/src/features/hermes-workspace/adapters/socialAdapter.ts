@@ -1201,4 +1201,74 @@ export const socialAdapter = {
       };
     }
   },
+
+  async getReviewQueueSummary(input?: { limit?: number }): Promise<{
+    summary: ReviewQueueSummary | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
+    try {
+      const params = new URLSearchParams();
+      if (typeof input?.limit === "number") {
+        params.set("limit", String(input.limit));
+      }
+      const query = params.toString();
+      const path = query ? `${BASE}/review-queue/summary?${query}` : `${BASE}/review-queue/summary`;
+      const summary = await getJson<ReviewQueueSummary>(path);
+      return { summary, bridge: { status: "ready" } };
+    } catch (e) {
+      return {
+        summary: null,
+        bridge: workspaceApiPending("social", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
+
+  async getLearningHints(input?: {
+    channel?: "x" | "telegram" | "discord" | "other";
+    limit?: number;
+  }): Promise<{
+    hints: LearningHints | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
+    try {
+      const params = new URLSearchParams();
+      if (input?.channel) params.set("channel", input.channel);
+      if (typeof input?.limit === "number") params.set("limit", String(input.limit));
+      const query = params.toString();
+      const path = query ? `${BASE}/learning/hints?${query}` : `${BASE}/learning/hints`;
+      const hints = await getJson<LearningHints>(path);
+      return { hints, bridge: { status: "ready" } };
+    } catch (e) {
+      return {
+        hints: null,
+        bridge: workspaceApiPending("social", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
 } as const;
+
+export type ReviewQueueSafeItem = {
+  record_id: string;
+  action_type: string | null;
+  channel: string | null;
+  created_at: string | null;
+  text: string;
+  decision_state: string | null;
+};
+
+export type ReviewQueueSummary = {
+  pending_count: number;
+  approved_recent_count: number;
+  rejected_recent_count: number;
+  items: ReviewQueueSafeItem[];
+  generated_at: string;
+};
+
+export type LearningHints = {
+  hints: string;
+  generated_at: string;
+};
