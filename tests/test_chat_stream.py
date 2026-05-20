@@ -917,12 +917,178 @@ def test_chat_stream_rejects_concurrent_same_session_streams(
     )
     assert second.status_code == 409
     detail = second.json().get("detail", {})
-    assert detail.get("error", {}).get("code") == "STREAM_ALREADY_ACTIVE"
+    err = detail.get("error", {})
+    assert err.get("code") == "STREAM_ALREADY_ACTIVE"
+    assert isinstance(err.get("retry_after_ms"), int)
+    assert err["retry_after_ms"] > 0
+    assert isinstance(err.get("lock_age_sec"), (int, float))
+    assert err["lock_age_sec"] >= 0
 
     allow_finish.set()
     t.join(timeout=2.0)
     assert not t.is_alive()
     assert first["status_code"] == 200
+
+
+def test_chat_stream_lock_expires_after_ttl(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from src.api import chat as chat_mod
+
+    chat_mod._reset_active_stream_sessions_for_testing()
+    monkeypatch.setattr(chat_mod, "_stream_lock_ttl_sec", lambda: 0.08)
+
+    stream_started = threading.Event()
+    allow_finish = threading.Event()
+
+    def blocked_stream(_msgs: list, **_kwargs):
+        yield "hold "
+        stream_started.set()
+        assert allow_finish.wait(timeout=2.0)
+        yield "release"
+
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", blocked_stream)
+    create = client.post("/api/chat/sessions")
+    assert create.status_code == 200
+    sid = create.json()["session_id"]
+
+    first: dict[str, object] = {}
+
+    def run_first() -> None:
+        res = client.post(
+            "/api/chat/stream",
+            json={"session_id": sid, "messages": [{"role": "user", "content": "first"}]},
+        )
+        first["status_code"] = res.status_code
+
+    t = threading.Thread(target=run_first, daemon=True)
+    t.start()
+    assert stream_started.wait(timeout=1.0)
+
+    blocked = client.post(
+        "/api/chat/stream",
+        json={"session_id": sid, "messages": [{"role": "user", "content": "blocked"}]},
+    )
+    assert blocked.status_code == 409
+
+    time.sleep(0.12)
+    reclaimed = client.post(
+        "/api/chat/stream",
+        json={"session_id": sid, "messages": [{"role": "user", "content": "reclaimed"}]},
+    )
+    assert reclaimed.status_code == 200, reclaimed.text
+
+    allow_finish.set()
+    t.join(timeout=2.0)
+    assert not t.is_alive()
+
+
+def test_chat_stream_stale_lock_release_does_not_clear_reclaimed_lock(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from src.api import chat as chat_mod
+
+    chat_mod._reset_active_stream_sessions_for_testing()
+    monkeypatch.setattr(chat_mod, "_stream_lock_ttl_sec", lambda: 0.05)
+
+    stream_started_old = threading.Event()
+    stream_started_new = threading.Event()
+    allow_old_finish = threading.Event()
+    allow_new_finish = threading.Event()
+    call_count = {"n": 0}
+
+    def blocked_stream(_msgs: list, **_kwargs):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            yield "old "
+            stream_started_old.set()
+            assert allow_old_finish.wait(timeout=2.0)
+            yield "old-done"
+            return
+        yield "new "
+        stream_started_new.set()
+        assert allow_new_finish.wait(timeout=2.0)
+        yield "new-done"
+
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", blocked_stream)
+    create = client.post("/api/chat/sessions")
+    sid = create.json()["session_id"]
+
+    def run_stream(label: str) -> int:
+        res = client.post(
+            "/api/chat/stream",
+            json={"session_id": sid, "messages": [{"role": "user", "content": label}]},
+        )
+        return int(res.status_code)
+
+    old_thread = threading.Thread(target=lambda: run_stream("old"), daemon=True)
+    old_thread.start()
+    assert stream_started_old.wait(timeout=1.0)
+    time.sleep(0.08)
+
+    reclaim_holder: dict[str, int] = {}
+
+    def run_reclaim() -> None:
+        reclaim_holder["status"] = run_stream("new")
+
+    reclaim_thread = threading.Thread(target=run_reclaim, daemon=True)
+    reclaim_thread.start()
+    assert stream_started_new.wait(timeout=1.0)
+
+    still_blocked = client.post(
+        "/api/chat/stream",
+        json={"session_id": sid, "messages": [{"role": "user", "content": "third"}]},
+    )
+    assert still_blocked.status_code == 409
+
+    allow_old_finish.set()
+    old_thread.join(timeout=2.0)
+
+    still_blocked_after_old = client.post(
+        "/api/chat/stream",
+        json={"session_id": sid, "messages": [{"role": "user", "content": "fourth"}]},
+    )
+    assert still_blocked_after_old.status_code == 409
+
+    allow_new_finish.set()
+    reclaim_thread.join(timeout=2.0)
+    assert reclaim_holder.get("status") == 200
+
+    after_both_finish = client.post(
+        "/api/chat/stream",
+        json={"session_id": sid, "messages": [{"role": "user", "content": "after"}]},
+    )
+    assert after_both_finish.status_code == 200, after_both_finish.text
+
+
+def test_chat_stream_lock_releases_on_generator_exception(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from src.api import chat as chat_mod
+
+    chat_mod._reset_active_stream_sessions_for_testing()
+
+    def boom_stream(_msgs: list, **_kwargs):
+        yield "partial "
+        raise RuntimeError("simulated stream failure")
+
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", boom_stream)
+    create = client.post("/api/chat/sessions")
+    sid = create.json()["session_id"]
+
+    res = client.post(
+        "/api/chat/stream",
+        json={"session_id": sid, "messages": [{"role": "user", "content": "boom"}]},
+    )
+    assert res.status_code == 200, res.text
+    events = _parse_ndjson(res.text)
+    assert any(e.get("type") == "done" and e.get("stream_aborted") for e in events)
+
+    follow = client.post(
+        "/api/chat/stream",
+        json={"session_id": sid, "messages": [{"role": "user", "content": "after"}]},
+    )
+    assert follow.status_code == 200, follow.text
 
 
 _MAX_TRANSCRIBE = 15 * 1024 * 1024

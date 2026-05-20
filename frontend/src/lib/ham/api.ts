@@ -3220,6 +3220,27 @@ export class HamChatStreamIncompleteError extends Error {
   }
 }
 
+/** Server rejected a second concurrent stream on the same chat session (HTTP 409). */
+export class HamChatStreamAlreadyActiveError extends Error {
+  readonly code = "STREAM_ALREADY_ACTIVE";
+  readonly retryAfterMs: number;
+  readonly lockAgeSec: number | null;
+
+  constructor(message: string, opts?: { retryAfterMs?: number; lockAgeSec?: number | null }) {
+    super(message);
+    this.name = "HamChatStreamAlreadyActiveError";
+    this.retryAfterMs =
+      typeof opts?.retryAfterMs === "number" && opts.retryAfterMs > 0 ? opts.retryAfterMs : 3000;
+    this.lockAgeSec =
+      typeof opts?.lockAgeSec === "number" && Number.isFinite(opts.lockAgeSec)
+        ? opts.lockAgeSec
+        : null;
+  }
+}
+
+export const CHAT_STREAM_ALREADY_ACTIVE_USER_MESSAGE =
+  "Still working on your last message. Wait a moment or start a new chat.";
+
 /* ─── Chat session history ────────────────────────────────────────── */
 
 export type ChatSessionSummary = {
@@ -3611,15 +3632,31 @@ export async function postChatStream(
     let msg = `Chat stream failed (HTTP ${res.status})`;
     try {
       const j = (await res.json()) as { detail?: unknown };
-      if (fastApiStructuredErrorCode(j?.detail) === "HAM_EMAIL_RESTRICTION") {
+      const detail = j?.detail;
+      if (fastApiStructuredErrorCode(detail) === "HAM_EMAIL_RESTRICTION") {
         throw new HamAccessRestrictedError(
-          messageFromFastApiDetail(j?.detail) ?? "Access restricted for this Ham deployment.",
+          messageFromFastApiDetail(detail) ?? "Access restricted for this Ham deployment.",
         );
       }
-      const parsed = messageFromFastApiDetail(j?.detail);
+      if (res.status === 409 && fastApiStructuredErrorCode(detail) === "STREAM_ALREADY_ACTIVE") {
+        const structured =
+          typeof detail === "object" && detail !== null && "error" in detail
+            ? (
+                detail as {
+                  error?: { retry_after_ms?: number; lock_age_sec?: number };
+                }
+              ).error
+            : undefined;
+        throw new HamChatStreamAlreadyActiveError(CHAT_STREAM_ALREADY_ACTIVE_USER_MESSAGE, {
+          retryAfterMs: structured?.retry_after_ms,
+          lockAgeSec: structured?.lock_age_sec ?? null,
+        });
+      }
+      const parsed = messageFromFastApiDetail(detail);
       if (parsed) msg = parsed;
     } catch (err) {
       if (err instanceof HamAccessRestrictedError) throw err;
+      if (err instanceof HamChatStreamAlreadyActiveError) throw err;
       /* ignore JSON parse */
     }
     throw new Error(msg);

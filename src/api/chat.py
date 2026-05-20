@@ -6,8 +6,10 @@ import logging
 import os
 import re
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock, RLock
+from time import monotonic
 from types import SimpleNamespace
 from typing import Any, Literal, Self
 from uuid import uuid4
@@ -15,6 +17,7 @@ from uuid import uuid4
 import httpx
 from fastapi import APIRouter, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from src.api.clerk_gate import enforce_clerk_session_and_email_for_request
@@ -223,21 +226,97 @@ _BUILDER_STREAM_PREVIEW_NOT_CONFIGURED_LINE = (
     "Cloud preview is not configured in this environment. You can still use the Code tab; "
     "connect a local preview URL in Advanced when your dev server is running."
 )
-_ACTIVE_STREAM_SESSIONS: set[str] = set()
+# In-memory per-instance lease; stale locks expire so poisoned sessions recover without restart.
+_DEFAULT_STREAM_LOCK_TTL_SEC = 480.0  # 8m — above Cloud Run's common ~300s request ceiling
+_MIN_STREAM_LOCK_TTL_SEC = 30.0
+_DEFAULT_STREAM_LOCK_RETRY_AFTER_MS = 3000
+_MAX_STREAM_LOCK_RETRY_AFTER_MS = 30_000
+
+_ACTIVE_STREAM_SESSIONS: dict[str, tuple[float, int]] = {}
 _ACTIVE_STREAM_SESSIONS_LOCK = RLock()
+_STREAM_LOCK_GENERATION = 0
 
 
-def _claim_stream_session(session_id: str) -> bool:
+@dataclass(frozen=True)
+class _StreamLockClaim:
+    claimed: bool
+    lock_token: int | None = None
+    lock_age_sec: float | None = None
+    retry_after_ms: int | None = None
+    reclaimed_stale: bool = False
+
+
+def _stream_lock_ttl_sec() -> float:
+    raw = os.getenv("HAM_CHAT_STREAM_LOCK_TTL_SEC", str(_DEFAULT_STREAM_LOCK_TTL_SEC))
+    try:
+        ttl = float(raw)
+    except (TypeError, ValueError):
+        ttl = _DEFAULT_STREAM_LOCK_TTL_SEC
+    return max(_MIN_STREAM_LOCK_TTL_SEC, ttl)
+
+
+def _stream_lock_retry_after_ms(remaining_ttl_sec: float) -> int:
+    ms = int(remaining_ttl_sec * 1000)
+    ms = max(ms, _DEFAULT_STREAM_LOCK_RETRY_AFTER_MS)
+    return min(ms, _MAX_STREAM_LOCK_RETRY_AFTER_MS)
+
+
+def _stream_already_active_detail(
+    *,
+    lock_age_sec: float | None,
+    retry_after_ms: int,
+) -> dict[str, Any]:
+    err: dict[str, Any] = {
+        "code": "STREAM_ALREADY_ACTIVE",
+        "message": (
+            "A stream is already active for this session. "
+            "Wait for it to finish before starting another."
+        ),
+        "retry_after_ms": retry_after_ms,
+    }
+    if lock_age_sec is not None:
+        err["lock_age_sec"] = round(lock_age_sec, 3)
+    return {"error": err}
+
+
+def _claim_stream_session(session_id: str) -> _StreamLockClaim:
+    global _STREAM_LOCK_GENERATION
+    now = monotonic()
+    ttl = _stream_lock_ttl_sec()
     with _ACTIVE_STREAM_SESSIONS_LOCK:
-        if session_id in _ACTIVE_STREAM_SESSIONS:
-            return False
-        _ACTIVE_STREAM_SESSIONS.add(session_id)
-        return True
+        entry = _ACTIVE_STREAM_SESSIONS.get(session_id)
+        if entry is not None:
+            claimed_at, _ = entry
+            age = now - claimed_at
+            if age < ttl:
+                return _StreamLockClaim(
+                    claimed=False,
+                    lock_age_sec=age,
+                    retry_after_ms=_stream_lock_retry_after_ms(ttl - age),
+                )
+            _STREAM_LOCK_GENERATION += 1
+            token = _STREAM_LOCK_GENERATION
+            _ACTIVE_STREAM_SESSIONS[session_id] = (now, token)
+            return _StreamLockClaim(claimed=True, lock_token=token, reclaimed_stale=True)
+        _STREAM_LOCK_GENERATION += 1
+        token = _STREAM_LOCK_GENERATION
+        _ACTIVE_STREAM_SESSIONS[session_id] = (now, token)
+        return _StreamLockClaim(claimed=True, lock_token=token)
 
 
-def _release_stream_session(session_id: str) -> None:
+def _release_stream_session(session_id: str, lock_token: int | None = None) -> None:
     with _ACTIVE_STREAM_SESSIONS_LOCK:
-        _ACTIVE_STREAM_SESSIONS.discard(session_id)
+        entry = _ACTIVE_STREAM_SESSIONS.get(session_id)
+        if entry is None:
+            return
+        if lock_token is not None and entry[1] != lock_token:
+            return
+        _ACTIVE_STREAM_SESSIONS.pop(session_id, None)
+
+
+def _reset_active_stream_sessions_for_testing() -> None:
+    with _ACTIVE_STREAM_SESSIONS_LOCK:
+        _ACTIVE_STREAM_SESSIONS.clear()
 
 
 def _eligible_upstream_vision_text_fallback(
@@ -1825,6 +1904,7 @@ async def post_chat(
 @router.post("/api/chat/stream")
 def post_chat_stream(
     body: ChatRequest,
+    request: Request,
     authorization: str | None = Header(None, alias="Authorization"),
     x_ham_operator_authorization: str | None = Header(None, alias="X-Ham-Operator-Authorization"),
 ) -> StreamingResponse:
@@ -1880,22 +1960,22 @@ def post_chat_stream(
         ham_actor=ham_actor,
         allow_conversational_default=builder_intent != "build_or_create",
     )
-    if not _claim_stream_session(sid):
+    lock_claim = _claim_stream_session(sid)
+    if not lock_claim.claimed:
         raise HTTPException(
             status_code=409,
-            detail={
-                "error": {
-                    "code": "STREAM_ALREADY_ACTIVE",
-                    "message": "A stream is already active for this session. Wait for it to finish before starting another.",
-                }
-            },
+            detail=_stream_already_active_detail(
+                lock_age_sec=lock_claim.lock_age_sec,
+                retry_after_ms=lock_claim.retry_after_ms or _DEFAULT_STREAM_LOCK_RETRY_AFTER_MS,
+            ),
         )
     stream_lock_claimed = True
+    stream_lock_token = lock_claim.lock_token
 
     def release_stream_lock() -> None:
         nonlocal stream_lock_claimed
         if stream_lock_claimed:
-            _release_stream_session(sid)
+            _release_stream_session(sid, stream_lock_token)
             stream_lock_claimed = False
 
     # Claim runs before streaming; any failure below must release or the
@@ -1914,12 +1994,15 @@ def post_chat_stream(
     try:
         if defer_builder_hook:
 
-            def deferred_net_new_builder_gen():
+            async def deferred_net_new_builder_gen():
                 nonlocal builder_prefix, builder_meta, builder_intent
                 try:
                     yield json.dumps({"type": "session", "session_id": sid}) + "\n"
                     yield json.dumps({"type": "delta", "text": _BUILDER_STREAM_NET_NEW_ACK}) + "\n"
-                    builder_prefix, builder_meta = run_builder_happy_path_hook(
+                    if await request.is_disconnected():
+                        return
+                    builder_prefix, builder_meta = await run_in_threadpool(
+                        run_builder_happy_path_hook,
                         workspace_id=body.workspace_id,
                         project_id=(body_eff.project_id or "").strip() or None,
                         session_id=sid,

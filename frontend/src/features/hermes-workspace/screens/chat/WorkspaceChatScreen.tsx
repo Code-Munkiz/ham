@@ -24,7 +24,9 @@ import {
   fetchHamMediaJobStatus,
   fetchModelsCatalog,
   listHamProjects,
+  CHAT_STREAM_ALREADY_ACTIVE_USER_MESSAGE,
   HamAccessRestrictedError,
+  HamChatStreamAlreadyActiveError,
   HamChatStreamIncompleteError,
   putChatComposerPreference,
   postChatTranscribe,
@@ -628,6 +630,14 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [sessionId, setSessionId] = React.useState<string | null>(null);
   const [input, setInput] = React.useState("");
   const [sending, setSending] = React.useState(false);
+  const [streamConflictUntilMs, setStreamConflictUntilMs] = React.useState(0);
+
+  React.useEffect(() => {
+    if (streamConflictUntilMs <= Date.now()) return;
+    const delay = streamConflictUntilMs - Date.now();
+    const timer = window.setTimeout(() => setStreamConflictUntilMs(0), delay);
+    return () => window.clearTimeout(timer);
+  }, [streamConflictUntilMs]);
   const [loadErr, setLoadErr] = React.useState<string | null>(null);
   const [loadingSession, setLoadingSession] = React.useState(false);
   const [catalog, setCatalog] = React.useState<ModelCatalogPayload | null>(null);
@@ -1774,6 +1784,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       clearCodingPlanDraft(activeWorkspaceId, sidOpening);
     }
     previousLoadedWorkspaceSessionRef.current = null;
+    streamTurnSessionRef.current = null;
+    setStreamConflictUntilMs(0);
     revokeAllChatAttachmentLocalBlobs();
     setSessionId(null);
     writeWorkspaceLastChatSessionId(activeWorkspaceId, null);
@@ -2040,6 +2052,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       if (isV1 && !(outboundUser as HamChatUserContentV1).images?.length) return;
       if (isV2 && !(outboundUser as HamChatUserContentV2).attachments?.length) return;
       if (sending || voiceTranscribing || imageGenInFlight || videoGenInFlight) return;
+      if (streamConflictUntilMs > Date.now()) {
+        toast.message(CHAT_STREAM_ALREADY_ACTIVE_USER_MESSAGE, { duration: 10_000 });
+        return;
+      }
       const missionModeId = String(missionIdFromQuery || "").trim();
       const outboundPlain = !isV1 && !isV2;
       if (missionModeId && outboundPlain) {
@@ -2712,6 +2728,31 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         );
       } catch (err) {
         if (!requestStillCurrent()) return;
+        if (err instanceof HamChatStreamAlreadyActiveError) {
+          setStreamConflictUntilMs(Date.now() + err.retryAfterMs);
+          setInspectorEvents((prev) =>
+            appendInspectorEvent(prev, {
+              atIso: new Date().toISOString(),
+              kind: "stream_error",
+              status: "warning",
+              summary: "Chat stream already active for this session",
+              meta: {
+                code: "STREAM_ALREADY_ACTIVE",
+                retry_after_ms: err.retryAfterMs,
+                lock_age_sec: err.lockAgeSec,
+              },
+            }),
+          );
+          toast.message(CHAT_STREAM_ALREADY_ACTIVE_USER_MESSAGE, { duration: 10_000 });
+          setMessages((prev) => {
+            const assist = prev.find((m) => m.id === assistantPlaceId);
+            if (assist && assist.content.trim().length > 0) {
+              return prev;
+            }
+            return prev.filter((m) => m.id !== assistantPlaceId);
+          });
+          return;
+        }
         const safeMsg = safeInspectorErrorMessage(
           err instanceof HamAccessRestrictedError
             ? "Access restricted (email or domain not allowed for this deployment)."
@@ -2835,6 +2876,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       refreshContextMeters,
       cancelComposerPrefSaveTimer,
       registerBuilderPlanProposed,
+      streamConflictUntilMs,
     ],
   );
 
@@ -3713,7 +3755,12 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
               onChange={setInput}
               onSubmit={onFormSubmit}
               disabled={catalogLoading}
-              sending={sending || imageGenInFlight || videoGenInFlight}
+              sending={
+                sending ||
+                imageGenInFlight ||
+                videoGenInFlight ||
+                streamConflictUntilMs > Date.now()
+              }
               voiceTranscribing={voiceTranscribing}
               onVoiceBlob={handleVoiceBlob}
               attachments={attachments}
