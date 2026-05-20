@@ -404,42 +404,10 @@ def _derive_tetris_style_profile(
 def _build_tetris_scaffold_files(
     *, title: str, safe_pkg: str, style_profile: dict[str, Any]
 ) -> dict[str, str]:
+    from src.ham.builder_preview_bootstrap import build_vite_bootstrap_files
+
     return {
-        "package.json": json.dumps(
-            {
-                "name": safe_pkg,
-                "private": True,
-                "version": "0.0.1",
-                "type": "module",
-                "scripts": {
-                    "dev": "vite build && vite preview",
-                    "build": "vite build",
-                    "preview": "vite preview",
-                },
-                "dependencies": {"react": "^18.3.1", "react-dom": "^18.3.1"},
-                "devDependencies": {
-                    "@vitejs/plugin-react": "^4.3.4",
-                    "typescript": "^5.6.3",
-                    "vite": "^5.4.11",
-                },
-            },
-            indent=2,
-        )
-        + "\n",
-        "index.html": (
-            "<!doctype html>\n"
-            '<html lang="en">\n'
-            "  <head>\n"
-            '    <meta charset="UTF-8" />\n'
-            f"    <title>{title}</title>\n"
-            '    <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n'
-            "  </head>\n"
-            "  <body>\n"
-            '    <div id="root"></div>\n'
-            '    <script type="module" src="/src/main.tsx"></script>\n'
-            "  </body>\n"
-            "</html>\n"
-        ),
+        **build_vite_bootstrap_files(title=title, safe_pkg=safe_pkg),
         "src/main.tsx": (
             "import React from \"react\";\n"
             "import ReactDOM from \"react-dom/client\";\n"
@@ -450,17 +418,6 @@ def _build_tetris_scaffold_files(
             "    <App />\n"
             "  </React.StrictMode>,\n"
             ");\n"
-        ),
-        "vite.config.ts": (
-            "import { defineConfig } from \"vite\";\n"
-            "import react from \"@vitejs/plugin-react\";\n"
-            "\n"
-            "export default defineConfig({\n"
-            "  plugins: [react()],\n"
-            "  server: {\n"
-            "    hmr: false,\n"
-            "  },\n"
-            "});\n"
         ),
         "src/App.tsx": (
             "import React, { useCallback, useEffect, useMemo, useState } from \"react\";\n"
@@ -1752,6 +1709,13 @@ def _maybe_llm_scaffold_replace(
         from src.ham.builder_error_codes import STEP_VERIFICATION_FAILED  # noqa: PLC0415
 
         return _llm_scaffold_failed_marker(STEP_VERIFICATION_FAILED)
+
+    from src.ham.builder_preview_bootstrap import ensure_preview_bootstrap_files  # noqa: PLC0415
+
+    new_files = ensure_preview_bootstrap_files(
+        new_files,
+        project_name=_sanitize_title(user_message),
+    )
 
     # Carry forward non-template metadata; mark the source so downstream
     # consumers (verifier, snapshot metadata) know this is a real generation.

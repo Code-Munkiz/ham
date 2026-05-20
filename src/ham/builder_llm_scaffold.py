@@ -136,6 +136,7 @@ Output ONLY a JSON object matching this exact schema (no markdown, no prose):
 
 Rules:
 - file_changes: list of {path, content} objects. Include every file needed.
+- REQUIRED files (always include): package.json (with a runnable dev script), vite.config.ts, index.html, src/main.tsx.
 - Max 24 files. Max 200 KB total content.
 - assertions: 1–5 plain-English test assertions for the builder_verifier.
 - Output only the JSON object — no markdown fences, no commentary.
