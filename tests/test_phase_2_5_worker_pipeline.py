@@ -263,7 +263,13 @@ def test_gke_scheduler_creates_job_with_required_spec() -> None:
     sec = container["securityContext"]
     assert sec["allowPrivilegeEscalation"] is False
     assert sec["runAsNonRoot"] is True
+    assert sec["runAsUser"] == 10001
+    assert sec["runAsGroup"] == 10001
     assert sec["capabilities"]["drop"] == ["ALL"]
+
+    env = {e["name"]: e["value"] for e in container["env"]}
+    assert env["HOME"] == "/tmp"
+    assert env["XDG_CACHE_HOME"] == "/tmp/.cache"
 
 
 def test_gke_scheduler_get_before_create_is_idempotent() -> None:

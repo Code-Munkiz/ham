@@ -66,6 +66,8 @@ _FIRESTORE_DATABASE_ENV = "HAM_FIRESTORE_DATABASE"
 _TTL_SECONDS_AFTER_FINISHED = 3600
 _BACKOFF_LIMIT = 0
 _RESTART_POLICY = "Never"
+_WORKER_RUN_AS_USER = 10001
+_WORKER_RUN_AS_GROUP = 10001
 
 _DIGEST_REF_PATTERN = re.compile(r"^[A-Za-z0-9._/:-]+@sha256:[0-9a-f]{64}$")
 
@@ -254,6 +256,12 @@ class WorkerPodSchedulerGKE(WorkerPodSchedulerProtocol):
         ]
         if self._firestore_database:
             env.append({"name": "HAM_FIRESTORE_DATABASE", "value": self._firestore_database})
+        env.extend(
+            [
+                {"name": "HOME", "value": "/tmp"},
+                {"name": "XDG_CACHE_HOME", "value": "/tmp/.cache"},
+            ]
+        )
         return env
 
     def _build_job_manifest(
@@ -308,6 +316,8 @@ class WorkerPodSchedulerGKE(WorkerPodSchedulerProtocol):
                                     "allowPrivilegeEscalation": False,
                                     "readOnlyRootFilesystem": False,
                                     "runAsNonRoot": True,
+                                    "runAsUser": _WORKER_RUN_AS_USER,
+                                    "runAsGroup": _WORKER_RUN_AS_GROUP,
                                     "capabilities": {"drop": ["ALL"]},
                                 },
                             },
