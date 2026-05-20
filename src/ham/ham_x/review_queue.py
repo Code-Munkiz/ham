@@ -68,6 +68,36 @@ def append_review_record(
 _SAFE_PROJECTION_KEYS = ("action_type", "channel", "created_at")
 _MAX_TEXT_PREVIEW_CHARS = 240
 _MAX_READ_LIMIT = 500
+# Single-read cap: append_review_record caps each JSONL line at MAX_RECORD_CHARS;
+# reserve headroom so the tail window can hold ``limit`` worst-case lines plus one
+# partial line after a binary seek (mirrors hamgomoon_learning.store._read_lines).
+_APPROX_MAX_JSONL_LINE_BYTES = MAX_RECORD_CHARS + 128
+_MAX_REVIEW_QUEUE_TAIL_READ_BYTES = 8 * 1024 * 1024
+
+
+def _tail_byte_budget(*, clamped: int) -> int:
+    need = (clamped + 1) * _APPROX_MAX_JSONL_LINE_BYTES
+    return min(_MAX_REVIEW_QUEUE_TAIL_READ_BYTES, max(262_144, need))
+
+
+def _read_jsonl_lines_tail(target: Path, *, clamped: int) -> list[str]:
+    """Read only a bounded tail of the JSONL file (avoids loading unbounded queues)."""
+    try:
+        size = target.stat().st_size
+    except OSError:
+        return []
+    if size <= 0:
+        return []
+    budget = _tail_byte_budget(clamped=clamped)
+    try:
+        with target.open("rb") as fh:
+            if size > budget:
+                fh.seek(max(0, size - budget))
+                fh.readline()  # discard partial leading line after mid-file seek
+            raw = fh.read().decode("utf-8", errors="replace")
+    except OSError:
+        return []
+    return [ln for ln in raw.splitlines() if ln.strip()]
 
 
 def _stable_record_id(line: str, payload: dict[str, Any]) -> str:
@@ -115,11 +145,7 @@ def read_recent_review_records(
     clamped = max(1, min(int(limit), _MAX_READ_LIMIT))
     if not target.exists():
         return []
-    try:
-        raw = target.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return []
-    lines = [ln for ln in raw.splitlines() if ln.strip()]
+    lines = _read_jsonl_lines_tail(target, clamped=clamped)
     out: list[dict[str, Any]] = []
     for line in reversed(lines):
         if len(out) >= clamped:
