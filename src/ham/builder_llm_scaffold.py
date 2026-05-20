@@ -42,12 +42,38 @@ from src.llm_client import (
     complete_chat_messages_openrouter,
     resolve_openrouter_api_key_for_actor,
     resolve_openrouter_model_name,
+    scaffold_llm_timeout_sec,
 )
 
 _LOG = logging.getLogger(__name__)
 
 _MAX_FILES = 24
 _MAX_TOTAL_BYTES = 200_000
+
+
+def _is_openrouter_timeout_error(exc: BaseException) -> bool:
+    name = type(exc).__name__
+    if "Timeout" in name:
+        return True
+    msg = str(exc).lower()
+    return "timeout" in msg or "timed out" in msg
+
+
+def _raise_scaffold_llm_error(exc: Exception, *, attempt: int) -> None:
+    if _is_openrouter_timeout_error(exc):
+        raise LLMScaffoldError(
+            f"LLM scaffold timed out (attempt {attempt})",
+            error_code=STEP_MODEL_UNAVAILABLE,
+        ) from exc
+    if isinstance(exc, RuntimeError):
+        raise LLMScaffoldError(
+            f"LLM API error during scaffold (attempt {attempt}): {exc}",
+            error_code=STEP_MODEL_UNAVAILABLE,
+        ) from exc
+    raise LLMScaffoldError(
+        f"LLM error during scaffold (attempt {attempt}): {exc}",
+        error_code=STEP_MODEL_UNAVAILABLE,
+    ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -295,6 +321,7 @@ def generate_scaffold(
     model = _get_scaffold_model(model_override=model_override)
     template_kind = (plan.metadata or {}).get("template_kind", "")
     kit = get_kit_for_template_kind(template_kind)
+    scaffold_timeout = scaffold_llm_timeout_sec()
 
     # --- Attempt 1 ---
     messages = _build_scaffold_messages(
@@ -305,6 +332,7 @@ def generate_scaffold(
             messages,
             model_override=model,
             api_key_override=api_key,
+            timeout_sec=scaffold_timeout,
         )
         result = _parse_scaffold_result(raw)
         _LOG.info(
@@ -323,15 +351,9 @@ def generate_scaffold(
             first_exc,
         )
     except RuntimeError as llm_exc:
-        raise LLMScaffoldError(
-            f"LLM API error during scaffold (attempt 1): {llm_exc}",
-            error_code=STEP_MODEL_UNAVAILABLE,
-        ) from llm_exc
+        _raise_scaffold_llm_error(llm_exc, attempt=1)
     except Exception as llm_exc:  # noqa: BLE001
-        raise LLMScaffoldError(
-            f"LLM error during scaffold (attempt 1): {llm_exc}",
-            error_code=STEP_MODEL_UNAVAILABLE,
-        ) from llm_exc
+        _raise_scaffold_llm_error(llm_exc, attempt=1)
 
     # --- Attempt 2 (stricter prompt) ---
     messages2 = _build_scaffold_messages(
@@ -342,6 +364,7 @@ def generate_scaffold(
             messages2,
             model_override=model,
             api_key_override=api_key,
+            timeout_sec=scaffold_timeout,
         )
         result2 = _parse_scaffold_result(raw2)
         _LOG.info(
@@ -358,8 +381,6 @@ def generate_scaffold(
             error_code=STEP_VERIFICATION_FAILED,
         ) from second_exc
     except RuntimeError as llm_exc:
-        # LLM API errors (bad key, network, model unavailable) on attempt 2
-        raise LLMScaffoldError(
-            f"LLM API error during scaffold (attempt 2): {llm_exc}",
-            error_code=STEP_MODEL_UNAVAILABLE,
-        ) from llm_exc
+        _raise_scaffold_llm_error(llm_exc, attempt=2)
+    except Exception as llm_exc:  # noqa: BLE001
+        _raise_scaffold_llm_error(llm_exc, attempt=2)

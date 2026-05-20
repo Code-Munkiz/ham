@@ -285,6 +285,89 @@ def test_chat_stream_build_intent_handoffs_without_long_llm_stream(
     assert "Connection interrupted. Ask me to continue." not in assistant
 
 
+def test_should_defer_builder_scaffold_hook_for_empty_project_net_new_build(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.api.chat import _should_defer_builder_scaffold_hook
+    from src.persistence.builder_source_store import (
+        BuilderSourceStore,
+        set_builder_source_store_for_tests,
+    )
+
+    monkeypatch.setenv(
+        "OPENROUTER_API_KEY",
+        "sk-or-v1-testkey000000000000000000000000000000",
+    )
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    try:
+        assert _should_defer_builder_scaffold_hook(
+            last_user_plain="build me a game like asteroids",
+            workspace_id="ws_defer",
+            project_id="proj_defer",
+            ham_actor=None,
+        )
+    finally:
+        set_builder_source_store_for_tests(None)
+
+
+def test_chat_stream_deferred_net_new_build_surfaces_scaffold_failure(
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from src.persistence.builder_source_store import (
+        BuilderSourceStore,
+        set_builder_source_store_for_tests,
+    )
+
+    monkeypatch.setenv(
+        "OPENROUTER_API_KEY",
+        "sk-or-v1-testkey000000000000000000000000000000",
+    )
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    hook_calls = 0
+
+    def _fail_hook(**_kwargs):  # type: ignore[no-untyped-def]
+        nonlocal hook_calls
+        hook_calls += 1
+        return (
+            "I couldn't build this yet because the openrouter/test model call failed. "
+            "Check Connected Tools (OpenRouter key) or pick a different model in "
+            "Settings, then try again.\n\n",
+            {
+                "builder_intent": "build_or_create",
+                "llm_scaffold_failed": True,
+                "llm_scaffold_failed_model": "openrouter/test",
+                "llm_scaffold_error_code": "STEP_MODEL_UNAVAILABLE",
+            },
+        )
+
+    monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _fail_hook)
+    try:
+        res = client.post(
+            "/api/chat/stream",
+            json={
+                "messages": [{"role": "user", "content": "build me a game like asteroids"}],
+                "workspace_id": "ws_defer_stream",
+                "project_id": "proj_defer_stream",
+            },
+        )
+        assert res.status_code == 200, res.text
+        assert hook_calls == 1
+        events = _parse_ndjson(res.text)
+        assert events[0]["type"] == "session"
+        assert events[1]["type"] == "delta"
+        assert "Building your app" in events[1]["text"]
+        done = [e for e in events if e.get("type") == "done"][0]
+        assert done.get("builder", {}).get("llm_scaffold_failed") is True
+        assert "openrouter/test" in done["messages"][-1]["content"]
+    finally:
+        set_builder_source_store_for_tests(None)
+
+
 @pytest.mark.parametrize("conv_env", [None, "openrouter/sentinel-conv:free"])
 def test_chat_stream_artifact_verification_failure_skips_llm_stream(
     mock_mode: None, monkeypatch: pytest.MonkeyPatch, conv_env: str | None,

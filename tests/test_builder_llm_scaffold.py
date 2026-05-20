@@ -568,3 +568,47 @@ class TestGetScaffoldModel:
         monkeypatch.setenv("DEFAULT_MODEL", "minimax/minimax-m2.5:free")
         monkeypatch.setenv("HERMES_GATEWAY_MODEL", "hermes-agent")
         assert _get_scaffold_model() == "openrouter/minimax/minimax-m2.5:free"
+
+
+class TestGenerateScaffoldTimeout:
+    def test_passes_timeout_to_openrouter(self, monkeypatch):
+        monkeypatch.setenv("HAM_SCAFFOLD_LLM_TIMEOUT_SEC", "33")
+        monkeypatch.setattr(
+            "src.ham.builder_llm_scaffold.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
+        )
+        seen: list[float | None] = []
+
+        def _capture(messages, **kwargs):
+            seen.append(kwargs.get("timeout_sec"))
+            return _VALID_LLM_JSON
+
+        monkeypatch.setattr(
+            "src.ham.builder_llm_scaffold.complete_chat_messages_openrouter",
+            _capture,
+        )
+        plan = _make_plan()
+        generate_scaffold(plan, project_id="proj_test", workspace_id="ws_test")
+        assert seen == [33.0]
+
+    def test_timeout_maps_to_model_unavailable(self, monkeypatch):
+        monkeypatch.setattr(
+            "src.ham.builder_llm_scaffold.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test-key",
+        )
+
+        class FakeTimeoutError(Exception):
+            pass
+
+        def _timeout(messages, **kwargs):
+            raise FakeTimeoutError("timed out")
+
+        monkeypatch.setattr(
+            "src.ham.builder_llm_scaffold.complete_chat_messages_openrouter",
+            _timeout,
+        )
+        plan = _make_plan()
+        with pytest.raises(LLMScaffoldError) as exc_info:
+            generate_scaffold(plan, project_id="proj_test", workspace_id="ws_test")
+        assert exc_info.value.error_code == STEP_MODEL_UNAVAILABLE
+        assert "timed out" in str(exc_info.value).lower()

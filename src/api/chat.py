@@ -86,6 +86,7 @@ from src.ham.builder_chat_hooks import (
     resolve_effective_chat_project_id,
     run_builder_happy_path_hook,
 )
+from src.ham.builder_chat_intent import classify_builder_chat_intent
 from src.ham.operator_audit import append_operator_action_audit
 from src.ham.transcription_config import resolve_transcription_openai_api_key_for_actor
 from src.ham.ui_actions import split_assistant_ui_actions, ui_actions_system_instructions
@@ -1208,6 +1209,33 @@ def _builder_skip_planner_for_net_new_build(
     )
 
 
+_BUILDER_STREAM_NET_NEW_ACK = "Building your app from this prompt…\n\n"
+
+
+def _should_defer_builder_scaffold_hook(
+    *,
+    last_user_plain: str,
+    workspace_id: str | None,
+    project_id: str | None,
+    ham_actor: HamActor | None,
+) -> bool:
+    """Defer sync scaffold LLM for empty-project build turns so stream bytes start first."""
+    ws = (workspace_id or "").strip()
+    pid = (project_id or "").strip()
+    plain = str(last_user_plain or "").strip()
+    if not ws or not pid or not plain:
+        return False
+    if classify_builder_chat_intent(plain) != "build_or_create":
+        return False
+    if not resolve_openrouter_api_key_for_actor(ham_actor):
+        return False
+    from src.persistence.builder_source_store import get_builder_source_store
+
+    rows = get_builder_source_store().list_project_sources(workspace_id=ws, project_id=pid)
+    has_active = any(bool(str(row.active_snapshot_id or "").strip()) for row in rows)
+    return not has_active
+
+
 def _builder_edit_worker_blocked(builder_meta: dict[str, Any] | None) -> bool:
     return bool((builder_meta or {}).get("builder_edit_worker_blocked"))
 
@@ -1241,14 +1269,16 @@ def _builder_verification_failure_assistant_text(
             "Connect OpenRouter in Settings (Connected Tools) and try again.\n\n"
         )
     if _builder_llm_scaffold_failed(builder_meta):
-        if intent == "build_or_create":
-            return (
-                "I couldn't build this yet because the OpenRouter model call failed. "
-                "Check Connected Tools (OpenRouter key) and your selected chat model, then try again.\n\n"
-            )
-        return (
-            "I couldn't apply that edit yet because the OpenRouter model call failed. "
-            "Check Connected Tools (OpenRouter key) and your selected chat model, then try again.\n\n"
+        from src.ham.builder_chat_hooks import _llm_scaffold_failure_message
+        from src.ham.builder_error_codes import STEP_MODEL_UNAVAILABLE
+
+        failed_model = str((builder_meta or {}).get("llm_scaffold_failed_model") or "").strip() or None
+        error_code = str((builder_meta or {}).get("llm_scaffold_error_code") or STEP_MODEL_UNAVAILABLE).strip()
+        operation = "build_or_create" if intent == "build_or_create" else "update_existing_project"
+        return _llm_scaffold_failure_message(
+            operation=operation,
+            error_code=error_code,
+            model_slug=failed_model,
         )
     ver = _artifact_verification_payload(builder_meta)
     if ver:
@@ -1789,15 +1819,26 @@ def post_chat_stream(
         llm_attachment_user_id=aid,
         authenticated_actor_user_id=aid,
     )
-    builder_prefix, builder_meta = run_builder_happy_path_hook(
+    defer_builder_hook = _should_defer_builder_scaffold_hook(
+        last_user_plain=last_user_plain,
         workspace_id=body.workspace_id,
         project_id=(body_eff.project_id or "").strip() or None,
-        session_id=sid,
-        last_user_plain=last_user_plain,
         ham_actor=ham_actor,
-        model_id=body.model_id,
     )
-    builder_intent = str((builder_meta or {}).get("builder_intent") or "").strip().lower()
+    if defer_builder_hook:
+        provisional_intent = classify_builder_chat_intent(last_user_plain)
+        builder_prefix, builder_meta = None, {"builder_intent": provisional_intent}
+        builder_intent = provisional_intent
+    else:
+        builder_prefix, builder_meta = run_builder_happy_path_hook(
+            workspace_id=body.workspace_id,
+            project_id=(body_eff.project_id or "").strip() or None,
+            session_id=sid,
+            last_user_plain=last_user_plain,
+            ham_actor=ham_actor,
+            model_id=body.model_id,
+        )
+        builder_intent = str((builder_meta or {}).get("builder_intent") or "").strip().lower()
     if (
         builder_prefix
         and builder_meta is not None
@@ -1841,6 +1882,121 @@ def post_chat_stream(
         raise
 
     try:
+        if defer_builder_hook:
+
+            def deferred_net_new_builder_gen():
+                nonlocal builder_prefix, builder_meta, builder_intent
+                try:
+                    yield json.dumps({"type": "session", "session_id": sid}) + "\n"
+                    yield json.dumps({"type": "delta", "text": _BUILDER_STREAM_NET_NEW_ACK}) + "\n"
+                    builder_prefix, builder_meta = run_builder_happy_path_hook(
+                        workspace_id=body.workspace_id,
+                        project_id=(body_eff.project_id or "").strip() or None,
+                        session_id=sid,
+                        last_user_plain=last_user_plain,
+                        ham_actor=ham_actor,
+                        model_id=body.model_id,
+                    )
+                    builder_intent = str((builder_meta or {}).get("builder_intent") or "").strip().lower()
+                    if (
+                        builder_prefix
+                        and builder_meta is not None
+                        and "acknowledgement_template" not in builder_meta
+                    ):
+                        builder_meta["acknowledgement_template"] = builder_prefix
+                    if _builder_clarification_turn(builder_meta):
+                        clar_msg = str(builder_prefix or "").strip() or "What should I change?\n\n"
+                        store.append_turns(sid, [ChatTurn(role="assistant", content=clar_msg)])
+                        msgs = store.list_messages(sid)
+                        yield json.dumps({"type": "delta", "text": clar_msg}) + "\n"
+                        payload: dict[str, Any] = {
+                            "type": "done",
+                            "session_id": sid,
+                            "messages": msgs,
+                            "actions": [],
+                            "operator_result": None,
+                            "execution_mode": stream_execution_mode,
+                        }
+                        if stream_active_meta:
+                            payload["active_agent"] = stream_active_meta
+                        if builder_meta is not None:
+                            payload["builder"] = builder_meta
+                        _chat_payload_attach_artifact_verification(payload, builder_meta)
+                        yield json.dumps(payload) + "\n"
+                        return
+                    if _builder_should_short_circuit_failure(builder_meta):
+                        vf_text = _builder_verification_failure_assistant_text(
+                            builder_prefix,
+                            builder_meta,
+                        )
+                        store.append_turns(sid, [ChatTurn(role="assistant", content=vf_text)])
+                        msgs = store.list_messages(sid)
+                        yield json.dumps({"type": "delta", "text": vf_text}) + "\n"
+                        payload = {
+                            "type": "done",
+                            "session_id": sid,
+                            "messages": msgs,
+                            "actions": [],
+                            "operator_result": None,
+                            "execution_mode": stream_execution_mode,
+                        }
+                        if stream_active_meta:
+                            payload["active_agent"] = stream_active_meta
+                        if builder_meta is not None:
+                            payload["builder"] = builder_meta
+                        _chat_payload_attach_artifact_verification(payload, builder_meta)
+                        yield json.dumps(payload) + "\n"
+                        return
+                    if _builder_stream_should_handoff_early(builder_intent, builder_meta):
+                        handoff_text = _builder_stream_handoff_text(builder_prefix)
+                        store.append_turns(sid, [ChatTurn(role="assistant", content=handoff_text)])
+                        msgs = store.list_messages(sid)
+                        yield json.dumps({"type": "delta", "text": handoff_text}) + "\n"
+                        payload = {
+                            "type": "done",
+                            "session_id": sid,
+                            "messages": msgs,
+                            "actions": [],
+                            "operator_result": None,
+                            "execution_mode": stream_execution_mode,
+                        }
+                        if stream_active_meta:
+                            payload["active_agent"] = stream_active_meta
+                        if builder_meta is not None:
+                            payload["builder"] = builder_meta
+                        _chat_payload_attach_artifact_verification(payload, builder_meta)
+                        yield json.dumps(payload) + "\n"
+                        return
+                    fallback = _builder_verification_failure_assistant_text(builder_prefix, builder_meta)
+                    store.append_turns(sid, [ChatTurn(role="assistant", content=fallback)])
+                    msgs = store.list_messages(sid)
+                    yield json.dumps({"type": "delta", "text": fallback}) + "\n"
+                    payload = {
+                        "type": "done",
+                        "session_id": sid,
+                        "messages": msgs,
+                        "actions": [],
+                        "operator_result": None,
+                        "execution_mode": stream_execution_mode,
+                    }
+                    if stream_active_meta:
+                        payload["active_agent"] = stream_active_meta
+                    if builder_meta is not None:
+                        payload["builder"] = builder_meta
+                    _chat_payload_attach_artifact_verification(payload, builder_meta)
+                    yield json.dumps(payload) + "\n"
+                finally:
+                    release_stream_lock()
+
+            return StreamingResponse(
+                deferred_net_new_builder_gen(),
+                media_type="application/x-ndjson; charset=utf-8",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                },
+            )
+
         if _builder_clarification_turn(builder_meta):
             clar_msg = str(builder_prefix or "").strip() or "What should I change?\n\n"
             store.append_turns(sid, [ChatTurn(role="assistant", content=clar_msg)])

@@ -100,6 +100,15 @@ def openrouter_api_key_is_plausible(raw: str | None = None) -> bool:
     return False
 
 
+def scaffold_llm_timeout_sec() -> float:
+    """Bounded timeout for builder scaffold/planner OpenRouter calls (seconds)."""
+    raw = (os.getenv("HAM_SCAFFOLD_LLM_TIMEOUT_SEC") or "45").strip()
+    try:
+        return max(5.0, min(float(raw), 120.0))
+    except ValueError:
+        return 45.0
+
+
 def resolve_openrouter_model_name_for_chat() -> str:
     """
     Model for dashboard/API chat when using OpenRouter.
@@ -120,6 +129,7 @@ def complete_chat_messages_openrouter(
     *,
     model_override: str | None = None,
     api_key_override: str | None = None,
+    timeout_sec: float | None = None,
 ) -> str:
     """
     Multi-turn chat completion via OpenRouter (LiteLLM).
@@ -134,6 +144,7 @@ def complete_chat_messages_openrouter(
             messages,
             model_override=model_override,
             api_key_override=api_key_override,
+            timeout_sec=timeout_sec,
         ),
     ).strip()
 
@@ -143,6 +154,7 @@ def stream_chat_messages_openrouter(
     *,
     model_override: str | None = None,
     api_key_override: str | None = None,
+    timeout_sec: float | None = None,
 ):
     """Streaming chat completion via OpenRouter (LiteLLM). Yields content deltas (str)."""
     import litellm
@@ -179,6 +191,8 @@ def stream_chat_messages_openrouter(
         extra_headers["X-Title"] = ttl
     if extra_headers:
         kwargs["extra_headers"] = extra_headers
+    if timeout_sec is not None and timeout_sec > 0:
+        kwargs["timeout"] = timeout_sec
 
     stream = litellm.completion(**kwargs)
     for chunk in stream:
