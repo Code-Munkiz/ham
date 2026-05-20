@@ -55,6 +55,11 @@ class TestInjectBuilderTurnSystem:
         assert "Cloud Agent narration" in text
         assert "managed mission" not in text.lower()
 
+    def test_injection_forbids_iterative_build_promises(self) -> None:
+        text = _BUILDER_TURN_SYSTEM_INJECTION
+        assert "Do NOT promise iterative" in text
+        assert "multi-step agent is building in the background" in text
+
 
 # ---------------------------------------------------------------------------
 # Unit: _builder_ack_prefix

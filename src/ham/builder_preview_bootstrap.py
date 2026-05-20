@@ -92,6 +92,46 @@ def repair_package_json(files: dict[str, str]) -> dict[str, str]:
     return out
 
 
+def _package_json_type_is_module(package_json_content: str) -> bool:
+    try:
+        obj = json.loads(package_json_content)
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(obj, dict):
+        return False
+    return obj.get("type") == "module"
+
+
+def _is_commonjs_config_content(content: str) -> bool:
+    text = content.strip()
+    if not text:
+        return False
+    if "export default" in text or "export {" in text:
+        return False
+    if re.search(r"^\s*import\s", text, re.MULTILINE):
+        return False
+    return "module.exports" in text or "require(" in text
+
+
+def normalize_esm_config_extensions(files: dict[str, str]) -> dict[str, str]:
+    """Rename CommonJS tailwind/postcss configs to .cjs when package.json uses type:module."""
+    if "package.json" not in files:
+        return files
+    if not _package_json_type_is_module(files["package.json"]):
+        return files
+    out = dict(files)
+    for js_name, cjs_name in (
+        ("tailwind.config.js", "tailwind.config.cjs"),
+        ("postcss.config.js", "postcss.config.cjs"),
+    ):
+        content = out.get(js_name)
+        if content is None or not _is_commonjs_config_content(content):
+            continue
+        out[cjs_name] = content
+        del out[js_name]
+    return out
+
+
 def normalize_preview_scripts(files: dict[str, str]) -> dict[str, str]:
     """Normalize package.json scripts for cloud preview (build + preview, not dev HMR)."""
     if "package.json" not in files:
@@ -122,4 +162,5 @@ def ensure_preview_bootstrap_files(files: dict[str, str], *, project_name: str) 
             out[key] = bootstrap[key]
     out = repair_package_json(out)
     out = normalize_preview_scripts(out)
+    out = normalize_esm_config_extensions(out)
     return out
