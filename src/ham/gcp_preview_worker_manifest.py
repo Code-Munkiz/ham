@@ -180,6 +180,25 @@ def build_gke_preview_pod_manifest(
                     "image": runner_image.strip(),
                     "imagePullPolicy": "IfNotPresent",
                     "ports": [{"containerPort": preview_port, "protocol": "TCP"}],
+                    # Gate pod readiness on the dev server actually listening,
+                    # not merely on the container process starting. The
+                    # entrypoint runs `npm ci`/`npm install` (cold start) before
+                    # `exec npm run dev`; with no probe, K8s reports Ready=True
+                    # the instant the process starts, so poll_pod_ready returns
+                    # early, the preview endpoint is recorded "ready", and the
+                    # proxy 504s ("build finished but iframe could not reach the
+                    # app") while Vite is still installing. tcpSocket (not
+                    # httpGet) confirms the port is bound without tripping any
+                    # app-level Host/path checks. failureThreshold*periodSeconds
+                    # (~300s) matches HAM_BUILDER_GCP_RUNTIME_START_TIMEOUT_SECONDS.
+                    "readinessProbe": {
+                        "tcpSocket": {"port": preview_port},
+                        "initialDelaySeconds": 5,
+                        "periodSeconds": 5,
+                        "timeoutSeconds": 3,
+                        "failureThreshold": 60,
+                        "successThreshold": 1,
+                    },
                     "env": [
                         {"name": "PREVIEW_PORT", "value": str(preview_port)},
                         {"name": "PREVIEW_SOURCE_URI", "value": bundle_gs_uri.strip()},

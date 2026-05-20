@@ -63,6 +63,33 @@ def test_manifest_ttl_labels_and_no_privileged_hostpath() -> None:
     assert container_sec["allowPrivilegeEscalation"] is False
 
 
+def test_manifest_readiness_probe_gates_on_dev_server_port() -> None:
+    """Pod must not report Ready until the dev server is actually listening.
+
+    Without a readinessProbe the container is Ready the instant the process
+    starts (still running npm install), so poll_pod_ready returns early, the
+    preview endpoint is marked "ready", and the proxy 504s before Vite serves.
+    """
+    doc = build_gke_preview_pod_manifest(
+        workspace_id="ws_demo_alpha",
+        project_id="proj_demo_alpha",
+        runtime_session_id="rs_demo_alpha",
+        namespace="ham-builder-preview-spike",
+        bundle_gs_uri="gs://bucket/prefix/preview-source.zip",
+        runner_image="us-central1-docker.pkg.dev/proj/ham/ham-preview-runner:spike",
+        preview_port=4321,
+    )
+    container = doc["spec"]["containers"][0]
+    probe = container.get("readinessProbe")
+    assert probe is not None, "preview pod must define a readinessProbe"
+    assert probe["tcpSocket"]["port"] == 4321, "probe must target the dev server port"
+    # Cold-start tolerant: install + dev start can take minutes; the probe
+    # window must cover HAM_BUILDER_GCP_RUNTIME_START_TIMEOUT_SECONDS (default 300s).
+    window = probe.get("initialDelaySeconds", 0) + probe["periodSeconds"] * probe["failureThreshold"]
+    assert window >= 240, f"readiness window {window}s too short for npm cold start"
+    assert probe.get("successThreshold", 1) == 1
+
+
 def test_manifest_rejects_traversal_workspace_id() -> None:
     with pytest.raises(ManifestValidationError):
         validate_manifest_inputs(
