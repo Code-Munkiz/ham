@@ -150,7 +150,6 @@ export function BuilderDetailDrawer({
             />
           </dl>
 
-
           {isOperator ? (
             <button
               type="button"

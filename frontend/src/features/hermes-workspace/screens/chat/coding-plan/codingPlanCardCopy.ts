@@ -20,7 +20,8 @@ import type {
 export const CODING_PLAN_NO_LAUNCH_FOOTER =
   "Nothing has started yet. Use the approval controls below when you're ready.";
 
-export const CODING_PLAN_LAUNCH_DISABLED_TITLE = "Approval is required before HAM starts this work.";
+export const CODING_PLAN_LAUNCH_DISABLED_TITLE =
+  "Approval is required before HAM starts this work.";
 
 export const CODING_PLAN_SECTION_LABEL = "Next step";
 
