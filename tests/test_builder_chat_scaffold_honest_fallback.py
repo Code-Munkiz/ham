@@ -166,8 +166,8 @@ def test_llm_scaffold_failure_surfaces_model_slug_in_meta_and_message(
             )
         assert meta.get("llm_scaffold_failed") is True
         assert meta.get("llm_scaffold_failed_model") == resolved_model
-        assert resolved_model in prefix
-        assert "couldn't build this yet because the" in prefix.lower()
+        assert "anthropic/claude-3.5-haiku" in prefix
+        assert "scaffold model" in prefix.lower()
         assert "connected tools" in prefix.lower()
     finally:
         set_builder_source_store_for_tests(None)

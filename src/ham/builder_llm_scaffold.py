@@ -229,23 +229,32 @@ def _parse_scaffold_result(raw: str) -> ScaffoldResult:
     return ScaffoldResult(file_changes=file_changes, assertions=assertions)
 
 
+def _normalize_openrouter_litellm_model(slug: str) -> str:
+    raw = (slug or "").strip()
+    if not raw:
+        return raw
+    if raw.startswith("openrouter/"):
+        return raw
+    return f"openrouter/{raw}"
+
+
 def _get_scaffold_model(*, model_override: str | None = None) -> str:
     """Resolve the model to use for LLM scaffold calls.
 
     Resolution order: explicit ``model_override`` (from chat ``model_id``),
-    then ``HAM_PLANNER_MODEL``, then ``DEFAULT_MODEL`` via
-    :func:`resolve_openrouter_model_name` (not ``HERMES_GATEWAY_MODEL``).
+    then ``HAM_SCAFFOLD_MODEL``, then ``HAM_PLANNER_MODEL``, then ``DEFAULT_MODEL``
+    via :func:`resolve_openrouter_model_name` (not ``HERMES_GATEWAY_MODEL`` or
+    ``HAM_CHAT_CONVERSATIONAL_MODEL``).
     """
     explicit = (model_override or "").strip()
     if explicit:
-        if explicit.startswith("openrouter/"):
-            return explicit
-        return f"openrouter/{explicit}"
+        return _normalize_openrouter_litellm_model(explicit)
+    scaffold = (os.environ.get("HAM_SCAFFOLD_MODEL") or "").strip()
+    if scaffold:
+        return _normalize_openrouter_litellm_model(scaffold)
     planner = (os.environ.get("HAM_PLANNER_MODEL") or "").strip()
     if planner:
-        if planner.startswith("openrouter/"):
-            return planner
-        return f"openrouter/{planner}"
+        return _normalize_openrouter_litellm_model(planner)
     return resolve_openrouter_model_name()
 
 

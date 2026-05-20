@@ -554,9 +554,26 @@ class TestGetScaffoldModel:
             "openrouter/qwen/qwen3-coder:free"
         )
 
+    def test_scaffold_env_wins_over_planner_and_default(self, monkeypatch):
+        from src.ham.builder_llm_scaffold import _get_scaffold_model
+
+        monkeypatch.setenv("HAM_SCAFFOLD_MODEL", "qwen/qwen3-coder:free")
+        monkeypatch.setenv("HAM_PLANNER_MODEL", "minimax/minimax-m2.5:free")
+        monkeypatch.setenv("DEFAULT_MODEL", "minimax/minimax-m2.5:free")
+        assert _get_scaffold_model() == "openrouter/qwen/qwen3-coder:free"
+
+    def test_model_override_wins_over_scaffold_env(self, monkeypatch):
+        from src.ham.builder_llm_scaffold import _get_scaffold_model
+
+        monkeypatch.setenv("HAM_SCAFFOLD_MODEL", "qwen/qwen3-coder:free")
+        assert _get_scaffold_model(model_override="anthropic/claude-3.5-sonnet") == (
+            "openrouter/anthropic/claude-3.5-sonnet"
+        )
+
     def test_planner_env_wins_over_default(self, monkeypatch):
         from src.ham.builder_llm_scaffold import _get_scaffold_model
 
+        monkeypatch.delenv("HAM_SCAFFOLD_MODEL", raising=False)
         monkeypatch.setenv("HAM_PLANNER_MODEL", "minimax/minimax-m2.5:free")
         monkeypatch.setenv("HERMES_GATEWAY_MODEL", "hermes-agent")
         assert _get_scaffold_model() == "openrouter/minimax/minimax-m2.5:free"
@@ -564,6 +581,7 @@ class TestGetScaffoldModel:
     def test_default_model_not_hermes_gateway(self, monkeypatch):
         from src.ham.builder_llm_scaffold import _get_scaffold_model
 
+        monkeypatch.delenv("HAM_SCAFFOLD_MODEL", raising=False)
         monkeypatch.delenv("HAM_PLANNER_MODEL", raising=False)
         monkeypatch.setenv("DEFAULT_MODEL", "minimax/minimax-m2.5:free")
         monkeypatch.setenv("HERMES_GATEWAY_MODEL", "hermes-agent")

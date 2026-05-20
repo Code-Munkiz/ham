@@ -132,3 +132,45 @@ def test_advice_game_improvement_is_answer_only() -> None:
         active_template="tetris",
     )
     assert d.kind == "answer_only"
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        (
+            "Build me a simple launch task tracker with create, edit, delete, empty state, "
+            "and form validation. Use mock data only."
+        ),
+        "Build a CRUD app for notes with create, edit, delete",
+        "Make a todo app that supports create, edit, and delete items",
+    ],
+)
+def test_crud_feature_build_not_delete_clarification(prompt: str) -> None:
+    d = classify_builder_project_action(
+        prompt,
+        has_active_snapshot=False,
+        active_template=None,
+    )
+    assert d.kind != "ask_clarification"
+    assert d.reason in {
+        "crud_feature_build_net_new",
+        "crud_feature_build_with_snapshot",
+    }
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "delete this project",
+        "remove the old landing page",
+        "delete everything in the app",
+    ],
+)
+def test_direct_delete_still_needs_clarification_or_ambiguous(prompt: str) -> None:
+    d = classify_builder_project_action(
+        prompt,
+        has_active_snapshot=False,
+        active_template=None,
+    )
+    assert d.kind == "ask_clarification"
+    assert d.destructive is True

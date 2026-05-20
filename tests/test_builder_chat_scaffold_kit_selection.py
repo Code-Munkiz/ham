@@ -109,6 +109,47 @@ def test_synthetic_plan_carries_selected_kit(phrase: str, expected_kit: str) -> 
     assert metadata.get("originated_from") == "builder_chat_scaffold"
 
 
+def test_ham_scaffold_model_env_used_when_no_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.ham.builder_llm_scaffold import _get_scaffold_model as real_get_scaffold_model
+
+    seen: list[str] = []
+
+    def _spy_get_scaffold_model(**kwargs):
+        model = real_get_scaffold_model(**kwargs)
+        seen.append(model)
+        return model
+
+    def _fake_generate_scaffold(_plan, **_kw):
+        return ScaffoldResult(
+            file_changes=[("src/App.tsx", "export default function App(){return null;}")],
+            assertions=[],
+        )
+
+    monkeypatch.setenv("HAM_SCAFFOLD_MODEL", "qwen/qwen3-coder:free")
+    monkeypatch.delenv("HAM_PLANNER_MODEL", raising=False)
+    monkeypatch.setenv("DEFAULT_MODEL", "minimax/minimax-m2.5:free")
+
+    with patch(
+        "src.llm_client.resolve_openrouter_api_key_for_actor",
+        return_value="sk-or-v1-test_kit_selection_000000000000",
+    ), patch(
+        "src.ham.builder_llm_scaffold._get_scaffold_model",
+        side_effect=_spy_get_scaffold_model,
+    ), patch(
+        "src.ham.builder_llm_scaffold.generate_scaffold",
+        side_effect=_fake_generate_scaffold,
+    ):
+        _maybe_llm_scaffold_replace(
+            user_message="build me a landing page for roofers",
+            workspace_id="ws_kit",
+            project_id="proj_kit",
+            files={"src/App.tsx": "// placeholder"},
+            scaffold_meta={},
+            ham_actor=_byo_actor(),
+        )
+    assert "openrouter/qwen/qwen3-coder:free" in seen
+
+
 def test_landing_page_template_kind_resolves_to_landing_kit() -> None:
     metadata = _captured("build me a landing page for roofers")
     template_kind = metadata.get("template_kind")

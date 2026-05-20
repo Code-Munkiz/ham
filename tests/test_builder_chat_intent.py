@@ -6,6 +6,7 @@ from src.ham.builder_chat_intent import (
     classify_builder_chat_intent,
     is_builder_advice_or_question_turn,
     is_builder_edit_like_followup,
+    is_crud_feature_build_request,
     looks_like_explicit_no_build,
 )
 
@@ -47,6 +48,15 @@ from src.ham.builder_chat_intent import (
 )
 def test_classify_builder_chat_intent_buckets(text: str, expected: str) -> None:
     assert classify_builder_chat_intent(text) == expected
+
+
+def test_crud_task_tracker_maps_to_build_or_create() -> None:
+    prompt = (
+        "Build me a simple launch task tracker with create, edit, delete, empty state, "
+        "and form validation. Use mock data only."
+    )
+    assert is_crud_feature_build_request(prompt) is True
+    assert classify_builder_chat_intent(prompt) == "build_or_create"
 
 
 @pytest.mark.parametrize(

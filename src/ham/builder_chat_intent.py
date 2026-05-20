@@ -179,6 +179,33 @@ def is_builder_edit_like_followup(user_plain: str) -> bool:
     return False
 
 
+_CRUD_FEATURE_BUILD = re.compile(
+    r"(?i)"
+    r"\b(crud|c\.r\.u\.d\.)\b"
+    r"|\bcreate\b.{0,56}\bedit\b.{0,56}\bdelete\b"
+    r"|\bcreate\b.{0,56}\bdelete\b.{0,56}\bedit\b"
+    r"|\bedit\b.{0,56}\bdelete\b.{0,56}\bcreate\b"
+    r"|\bbuild\b.{0,160}\b(task\s+tracker|todo\s+app|todo\b|crud)\b"
+    r"|\b(task\s+tracker|todo\s+app)\b.{0,120}\b(create|edit|delete)\b"
+    r"|\b(delete|remove)\s+(an?\s+)?(item|items|entry|entries|task|tasks|record|records)\b"
+    r"|\b(empty\s+state|form\s+validation).{0,96}\b(create|edit|delete|remove)\b"
+)
+
+
+def is_crud_feature_build_request(user_plain: str) -> bool:
+    """True when delete/remove names a product feature (CRUD), not a destructive command."""
+    low = _norm_chat_1l(user_plain)
+    if not low:
+        return False
+    if not any(re.search(p, low) for p in _BUILD_PATTERNS):
+        if not re.search(
+            r"\b(make|build|create)\b.{0,48}\b(task\s+tracker|todo|tracker|crud)\b",
+            low,
+        ):
+            return False
+    return bool(_CRUD_FEATURE_BUILD.search(low))
+
+
 def looks_like_explicit_no_build(text: str) -> bool:
     """Return True when the prompt explicitly defers or refuses to build.
 

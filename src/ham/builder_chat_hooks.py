@@ -249,16 +249,17 @@ def _llm_scaffold_failure_message(
             "Try again or pick a different chat model.\n\n"
         )
     if model_label:
+        display = model_label.replace("openrouter/", "", 1) if model_label.startswith("openrouter/") else model_label
         if is_edit:
             return (
-                f"I couldn't apply that edit yet because the {model_label} model call failed. "
-                "Check Connected Tools (OpenRouter key) or pick a different model in "
-                "Settings, then try again.\n\n"
+                f"I couldn't apply that edit yet because the selected scaffold model ({display}) "
+                "is unavailable or the model call failed. Check Connected Tools (OpenRouter key) "
+                "or pick a different model in Settings, then try again.\n\n"
             )
         return (
-            f"I couldn't build this yet because the {model_label} model call failed. "
-            "Check Connected Tools (OpenRouter key) or pick a different model in "
-            "Settings, then try again.\n\n"
+            f"I couldn't build this yet because the selected scaffold model ({display}) "
+            "is unavailable or the model call failed. Check Connected Tools (OpenRouter key) "
+            "or pick a different model in Settings, then try again.\n\n"
         )
     if is_edit:
         return (

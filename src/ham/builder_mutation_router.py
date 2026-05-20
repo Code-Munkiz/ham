@@ -11,6 +11,7 @@ from src.ham.builder_chat_intent import (
     classify_builder_chat_intent,
     is_builder_advice_or_question_turn,
     is_builder_edit_like_followup,
+    is_crud_feature_build_request,
 )
 
 BuilderActionKind = Literal["mutate", "ask_clarification", "answer_only"]
@@ -151,6 +152,23 @@ def classify_builder_project_action(
                 "Which files, sections, or UI should I remove? Name the target so we do not delete the wrong thing.\n\n"
             ),
         )
+
+    if is_crud_feature_build_request(text):
+        bucket = classify_builder_chat_intent(text)
+        if bucket == "build_or_create":
+            if has_active_snapshot:
+                return BuilderActionDecision(
+                    "mutate",
+                    "medium",
+                    False,
+                    "crud_feature_build_with_snapshot",
+                )
+            return BuilderActionDecision(
+                "answer_only",
+                "medium",
+                False,
+                "crud_feature_build_net_new",
+            )
 
     destructive = bool(re.search(r"(?i)\b(delete|remove)\b", low))
 
