@@ -318,6 +318,10 @@ def _validate_gateway_patch_payload(
             return {}, f"path_not_allowed:{norm}"
         if ".." in norm.split("/"):
             return {}, "path_traversal"
+        # Reject whitespace-only payloads: non-calculator verify_* only ensures paths exist,
+        # so an empty string would otherwise replace real sources and persist a wiped file.
+        if not str(v).strip():
+            return {}, "empty_file_content"
         if len(v.encode("utf-8")) > _EDIT_MAX_FILE_BYTES:
             return {}, "file_too_large"
         if _forbidden_secret_markers(v) or _forbidden_internal_urls(v):
