@@ -10,6 +10,7 @@ import pytest
 from src.ham.builder_llm_scaffold import ScaffoldResult
 from src.ham.builder_preview_bootstrap import (
     ensure_preview_bootstrap_files,
+    normalize_esm_config_extensions,
     normalize_preview_scripts,
     repair_package_json,
     safe_npm_package_name,
@@ -91,6 +92,80 @@ def test_normalize_preview_scripts_is_idempotent_for_bootstrap() -> None:
 def test_normalize_preview_scripts_absent_package_json_unchanged() -> None:
     files = {"src/App.tsx": "export default function App() { return null; }\n"}
     assert normalize_preview_scripts(files) == files
+
+
+def test_normalize_esm_config_renames_commonjs_tailwind_under_type_module() -> None:
+    cjs_tailwind = "module.exports = { content: ['./src/**/*.{js,ts,jsx,tsx}'] };\n"
+    files = {
+        "package.json": json.dumps({"name": "demo", "type": "module"}) + "\n",
+        "tailwind.config.js": cjs_tailwind,
+    }
+    out = normalize_esm_config_extensions(files)
+    assert "tailwind.config.js" not in out
+    assert out["tailwind.config.cjs"] == cjs_tailwind
+
+
+def test_normalize_esm_config_leaves_esm_tailwind_unchanged() -> None:
+    esm_tailwind = "export default { content: ['./src/**/*.{js,ts,jsx,tsx}'] };\n"
+    files = {
+        "package.json": json.dumps({"name": "demo", "type": "module"}) + "\n",
+        "tailwind.config.js": esm_tailwind,
+    }
+    out = normalize_esm_config_extensions(files)
+    assert out["tailwind.config.js"] == esm_tailwind
+    assert "tailwind.config.cjs" not in out
+
+
+def test_normalize_esm_config_renames_commonjs_postcss_under_type_module() -> None:
+    cjs_postcss = "module.exports = { plugins: { tailwindcss: {}, autoprefixer: {} } };\n"
+    files = {
+        "package.json": json.dumps({"name": "demo", "type": "module"}) + "\n",
+        "postcss.config.js": cjs_postcss,
+    }
+    out = normalize_esm_config_extensions(files)
+    assert "postcss.config.js" not in out
+    assert out["postcss.config.cjs"] == cjs_postcss
+
+
+def test_normalize_esm_config_unchanged_without_type_module() -> None:
+    cjs_tailwind = "module.exports = { content: ['./src/**/*.{js,ts,jsx,tsx}'] };\n"
+    files = {
+        "package.json": json.dumps({"name": "demo"}) + "\n",
+        "tailwind.config.js": cjs_tailwind,
+    }
+    out = normalize_esm_config_extensions(files)
+    assert out["tailwind.config.js"] == cjs_tailwind
+    assert "tailwind.config.cjs" not in out
+
+
+def test_normalize_esm_config_unchanged_when_package_json_missing() -> None:
+    cjs_tailwind = "module.exports = { content: ['./src/**/*.{js,ts,jsx,tsx}'] };\n"
+    files = {"tailwind.config.js": cjs_tailwind}
+    out = normalize_esm_config_extensions(files)
+    assert out == files
+
+
+def test_normalize_esm_config_unchanged_when_package_json_invalid() -> None:
+    cjs_tailwind = "module.exports = { content: ['./src/**/*.{js,ts,jsx,tsx}'] };\n"
+    files = {
+        "package.json": "not valid json\n",
+        "tailwind.config.js": cjs_tailwind,
+    }
+    out = normalize_esm_config_extensions(files)
+    assert out == files
+
+
+def test_ensure_preview_bootstrap_renames_commonjs_tailwind_config() -> None:
+    cjs_tailwind = "module.exports = { content: ['./src/**/*.{js,ts,jsx,tsx}'] };\n"
+    files = {
+        "package.json": json.dumps({"name": "demo", "type": "module", "scripts": {"dev": "vite"}})
+        + "\n",
+        "tailwind.config.js": cjs_tailwind,
+        "src/main.tsx": "export {};\n",
+    }
+    out = ensure_preview_bootstrap_files(files, project_name="demo")
+    assert "tailwind.config.js" not in out
+    assert out["tailwind.config.cjs"] == cjs_tailwind
 
 
 def test_safe_npm_package_name_matches_tetris_sanitizer() -> None:

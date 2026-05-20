@@ -47,8 +47,8 @@ from src.llm_client import (
 
 _LOG = logging.getLogger(__name__)
 
-_MAX_FILES = 24
-_MAX_TOTAL_BYTES = 200_000
+_MAX_FILES = 40
+_MAX_TOTAL_BYTES = 400_000
 
 
 def _is_openrouter_timeout_error(exc: BaseException) -> bool:

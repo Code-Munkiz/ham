@@ -11,6 +11,8 @@ from src.ham.builder_error_codes import STEP_MODEL_UNAVAILABLE, STEP_VERIFICATIO
 from src.ham.builder_llm_scaffold import (
     LLMScaffoldError,
     ScaffoldResult,
+    _MAX_FILES,
+    _MAX_TOTAL_BYTES,
     _build_scaffold_messages,
     _extract_json,
     _parse_scaffold_result,
@@ -186,6 +188,50 @@ class TestParseScaffoldResult:
         result = _parse_scaffold_result(payload)
         assert len(result.file_changes) == 1
         assert result.file_changes[0][0] == "good.ts"
+
+    def test_scaffold_budget_constants(self):
+        assert _MAX_FILES == 40
+        assert _MAX_TOTAL_BYTES == 400_000
+
+    def test_accepts_scaffold_up_to_max_files(self):
+        payload = json.dumps(
+            {
+                "file_changes": [
+                    {"path": f"src/file{i}.ts", "content": f"export const v{i} = {i};\n"}
+                    for i in range(_MAX_FILES)
+                ],
+                "assertions": [],
+            }
+        )
+        result = _parse_scaffold_result(payload)
+        assert len(result.file_changes) == _MAX_FILES
+
+    def test_truncates_scaffold_beyond_max_files(self):
+        payload = json.dumps(
+            {
+                "file_changes": [
+                    {"path": f"src/file{i}.ts", "content": f"export const v{i} = {i};\n"}
+                    for i in range(_MAX_FILES + 1)
+                ],
+                "assertions": [],
+            }
+        )
+        result = _parse_scaffold_result(payload)
+        assert len(result.file_changes) == _MAX_FILES
+
+    def test_truncates_scaffold_when_total_bytes_exceed_budget(self):
+        big_content = "x" * (_MAX_TOTAL_BYTES // 2 + 1)
+        payload = json.dumps(
+            {
+                "file_changes": [
+                    {"path": "src/a.ts", "content": big_content},
+                    {"path": "src/b.ts", "content": big_content},
+                ],
+                "assertions": [],
+            }
+        )
+        result = _parse_scaffold_result(payload)
+        assert len(result.file_changes) == 1
 
     def test_file_changes_are_tuples(self):
         result = _parse_scaffold_result(_VALID_LLM_JSON)

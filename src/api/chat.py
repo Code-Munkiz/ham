@@ -652,6 +652,9 @@ _BUILDER_TURN_SYSTEM_INJECTION = (
     '"Plan with coding agents" chatter, Cloud Agent narration, '
     "\"I can't build directly from chat,\" or anything that skips approval.\n"
     "- Keep Builder approval gates intact — never autosubmit plans or approvals.\n"
+    "- Do NOT promise iterative or staged ongoing build work (e.g. \"I'll keep adding…\", "
+    "\"as the build progresses…\", \"I'll then add…\", \"next I'll…\", \"I'll iterate on…\") "
+    "or imply a multi-step agent is building in the background.\n"
 )
 
 
