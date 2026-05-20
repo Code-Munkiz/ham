@@ -13,6 +13,11 @@ def safe_npm_package_name(project_name: str) -> str:
     return re.sub(r"[^a-z0-9-]", "-", title.lower())[:40].strip("-") or "ham-builder-app"
 
 
+_PREVIEW_DEV_SCRIPT = "vite build && vite preview"
+_PREVIEW_BUILD_SCRIPT = "vite build"
+_PREVIEW_PREVIEW_SCRIPT = "vite preview"
+
+
 def build_vite_bootstrap_files(*, title: str, safe_pkg: str) -> dict[str, str]:
     """Return package.json, index.html, and vite.config.ts for cloud preview."""
     return {
@@ -23,9 +28,9 @@ def build_vite_bootstrap_files(*, title: str, safe_pkg: str) -> dict[str, str]:
                 "version": "0.0.1",
                 "type": "module",
                 "scripts": {
-                    "dev": "vite build && vite preview",
-                    "build": "vite build",
-                    "preview": "vite preview",
+                    "dev": _PREVIEW_DEV_SCRIPT,
+                    "build": _PREVIEW_BUILD_SCRIPT,
+                    "preview": _PREVIEW_PREVIEW_SCRIPT,
                 },
                 "dependencies": {"react": "^18.3.1", "react-dom": "^18.3.1"},
                 "devDependencies": {
@@ -87,6 +92,25 @@ def repair_package_json(files: dict[str, str]) -> dict[str, str]:
     return out
 
 
+def normalize_preview_scripts(files: dict[str, str]) -> dict[str, str]:
+    """Normalize package.json scripts for cloud preview (build + preview, not dev HMR)."""
+    if "package.json" not in files:
+        return files
+    out = dict(files)
+    obj = json.loads(out["package.json"])
+    if not isinstance(obj, dict):
+        return files
+    scripts = obj.get("scripts")
+    if not isinstance(scripts, dict):
+        scripts = {}
+    scripts["dev"] = _PREVIEW_DEV_SCRIPT
+    scripts["build"] = _PREVIEW_BUILD_SCRIPT
+    scripts["preview"] = _PREVIEW_PREVIEW_SCRIPT
+    obj["scripts"] = scripts
+    out["package.json"] = json.dumps(obj, indent=2) + "\n"
+    return out
+
+
 def ensure_preview_bootstrap_files(files: dict[str, str], *, project_name: str) -> dict[str, str]:
     """Add missing Vite bootstrap files without overwriting LLM output."""
     out = dict(files)
@@ -96,4 +120,6 @@ def ensure_preview_bootstrap_files(files: dict[str, str], *, project_name: str) 
     for key in ("package.json", "vite.config.ts", "index.html"):
         if key not in out:
             out[key] = bootstrap[key]
-    return repair_package_json(out)
+    out = repair_package_json(out)
+    out = normalize_preview_scripts(out)
+    return out

@@ -10,6 +10,7 @@ import pytest
 from src.ham.builder_llm_scaffold import ScaffoldResult
 from src.ham.builder_preview_bootstrap import (
     ensure_preview_bootstrap_files,
+    normalize_preview_scripts,
     repair_package_json,
     safe_npm_package_name,
 )
@@ -38,7 +39,7 @@ def test_ensure_preview_bootstrap_adds_index_html_when_missing() -> None:
 
 
 def test_ensure_preview_bootstrap_does_not_overwrite_existing() -> None:
-    custom_pkg = '{"name":"custom-app","scripts":{"dev":"echo custom"}}\n'
+    custom_pkg = '{"name":"custom-app","scripts":{"dev":"echo custom","lint":"eslint ."}}\n'
     custom_vite = "export default {};\n"
     files = {
         "package.json": custom_pkg,
@@ -46,7 +47,10 @@ def test_ensure_preview_bootstrap_does_not_overwrite_existing() -> None:
         "src/App.tsx": "export default function App() { return null; }\n",
     }
     out = ensure_preview_bootstrap_files(files, project_name="Custom")
-    assert out["package.json"] == custom_pkg
+    parsed = json.loads(out["package.json"])
+    assert parsed["scripts"]["dev"] == "vite build && vite preview"
+    assert parsed["scripts"]["lint"] == "eslint ."
+    assert parsed["name"] == "custom-app"
     assert out["vite.config.ts"] == custom_vite
 
 
@@ -56,8 +60,37 @@ def test_injected_package_json_parses_and_runs_vite() -> None:
         project_name="ham build me asteroids",
     )
     payload = json.loads(out["package.json"])
-    dev_script = str(payload.get("scripts", {}).get("dev", ""))
-    assert "vite" in dev_script
+    assert payload["scripts"]["dev"] == "vite build && vite preview"
+
+
+def test_normalize_preview_scripts_replaces_vite_dev() -> None:
+    raw = json.dumps({"name": "demo", "scripts": {"dev": "vite", "lint": "eslint ."}})
+    out = normalize_preview_scripts({"package.json": raw + "\n"})
+    parsed = json.loads(out["package.json"])
+    assert parsed["scripts"]["dev"] == "vite build && vite preview"
+    assert parsed["scripts"]["build"] == "vite build"
+    assert parsed["scripts"]["preview"] == "vite preview"
+    assert parsed["scripts"]["lint"] == "eslint ."
+    assert parsed["name"] == "demo"
+
+
+def test_normalize_preview_scripts_creates_scripts_when_missing() -> None:
+    raw = json.dumps({"name": "demo"})
+    out = normalize_preview_scripts({"package.json": raw + "\n"})
+    parsed = json.loads(out["package.json"])
+    assert parsed["scripts"]["dev"] == "vite build && vite preview"
+
+
+def test_normalize_preview_scripts_is_idempotent_for_bootstrap() -> None:
+    out = ensure_preview_bootstrap_files({"src/main.tsx": "export {};\n"}, project_name="demo")
+    once = out["package.json"]
+    twice = normalize_preview_scripts({"package.json": once})["package.json"]
+    assert once == twice
+
+
+def test_normalize_preview_scripts_absent_package_json_unchanged() -> None:
+    files = {"src/App.tsx": "export default function App() { return null; }\n"}
+    assert normalize_preview_scripts(files) == files
 
 
 def test_safe_npm_package_name_matches_tetris_sanitizer() -> None:
@@ -174,3 +207,4 @@ def test_maybe_llm_scaffold_replace_serializes_object_package_json(
     package = json.loads(files["package.json"])
     assert package["name"] == "asteroids-game"
     assert package["private"] is True
+    assert package["scripts"]["dev"] == "vite build && vite preview"
