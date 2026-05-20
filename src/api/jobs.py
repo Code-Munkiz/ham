@@ -42,6 +42,9 @@ router = APIRouter(tags=["builder-jobs"])
 
 # Terminal statuses — stream closes when job reaches one of these
 _TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
+# Contract 4 — terminal payload types on the event log (must close even when
+# job_store cannot be polled, e.g. missing/empty workspace scope on the record).
+_TERMINAL_SSE_PAYLOAD_TYPES = frozenset({"job_completed", "job_failed", "job_cancelled"})
 
 # SSE heartbeat interval (seconds) per Phase 0 Contract 4 / ADR-0002
 _HEARTBEAT_INTERVAL = 15
@@ -105,10 +108,28 @@ async def _stream_events(
             _LOG.warning("stream_events: read_from failed for %s: %s", job_id, exc)
             new_events = []
 
+        terminal_from_events = False
         for event in new_events:
             yield _event_frame(event)
             last_seq = event.seq
             idle_ticks = 0
+            if event.event.type in _TERMINAL_SSE_PAYLOAD_TYPES:
+                terminal_from_events = True
+
+        if terminal_from_events:
+            try:
+                remaining = events_store.read_from(job_id=job_id, since_seq=last_seq)
+            except Exception as exc:
+                _LOG.warning("stream_events: drain after terminal event failed for %s: %s", job_id, exc)
+                remaining = []
+            for event in remaining:
+                yield _event_frame(event)
+                last_seq = event.seq
+            _LOG.info(
+                "stream_events: job %s emitted terminal SSE payload — closing stream",
+                job_id,
+            )
+            return
 
         # --- Check job terminal status ---
         job = None
