@@ -1269,6 +1269,38 @@ def _derive_preview_status(
     return ("waiting", "Local preview status is waiting for endpoint readiness.")
 
 
+def _latest_cloud_runtime_logs_hint(*, workspace_id: str, project_id: str) -> str | None:
+    """Most recent failed/cancelled cloud job summary for Workbench diagnostics."""
+    store = get_builder_runtime_job_store()
+    for job in store.list_cloud_runtime_jobs(workspace_id=workspace_id, project_id=project_id):
+        status = str(job.status or "").strip().lower()
+        if status not in {"failed", "cancelled"}:
+            continue
+        hint = str(job.logs_summary or job.error_message or "").strip()
+        if hint:
+            return hint[:500]
+    return None
+
+
+def _cloud_preview_failed_message(
+    *,
+    active_snapshot_id: str | None,
+    runtime_message: str | None,
+) -> str:
+    detail = str(runtime_message or "").strip()
+    if active_snapshot_id:
+        if detail:
+            return (
+                "Source files are available in the Code tab. "
+                f"Cloud preview failed: {detail}"
+            )
+        return (
+            "Source files are available in the Code tab. "
+            "Cloud preview failed to start (sandbox only—not deployed)."
+        )
+    return detail or "Cloud preview is unavailable."
+
+
 def _build_preview_status_payload(*, workspace_id: str, project_id: str) -> dict[str, Any]:
     source_rows = get_builder_source_store().list_project_sources(
         workspace_id=workspace_id,
@@ -1344,7 +1376,13 @@ def _build_preview_status_payload(*, workspace_id: str, project_id: str) -> dict
                 message = "Cloud runtime is running; preview will appear when the proxy endpoint is ready."
         elif runtime_status in {"failed", "unsupported"}:
             status = "error"
-            message = "Cloud preview is unavailable."
+            linked_snapshot = active_snapshot_id or (
+                str(runtime.snapshot_id or "").strip() if runtime is not None else None
+            )
+            message = _cloud_preview_failed_message(
+                active_snapshot_id=linked_snapshot,
+                runtime_message=runtime.message if runtime is not None else None,
+            )
         else:
             status = "waiting"
             message = "Cloud preview status is waiting for endpoint readiness."
@@ -1356,6 +1394,9 @@ def _build_preview_status_payload(*, workspace_id: str, project_id: str) -> dict
             endpoint_status=endpoint.status if endpoint is not None else None,
             safe_preview_url=safe_preview_url,
         )
+    logs_hint: str | None = None
+    if mode == "cloud" and status == "error":
+        logs_hint = _latest_cloud_runtime_logs_hint(workspace_id=workspace_id, project_id=project_id)
     return {
         "project_id": project_id,
         "workspace_id": workspace_id,
@@ -1368,7 +1409,7 @@ def _build_preview_status_payload(*, workspace_id: str, project_id: str) -> dict
         "source_snapshot_id": runtime.snapshot_id if runtime and runtime.snapshot_id else active_snapshot_id,
         "runtime_session_id": runtime.id if runtime is not None else None,
         "preview_endpoint_id": endpoint.id if endpoint is not None else None,
-        "logs_hint": None,
+        "logs_hint": logs_hint,
     }
 
 

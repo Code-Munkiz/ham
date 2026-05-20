@@ -311,6 +311,59 @@ def test_preview_status_failed_runtime_reports_error(tmp_path: Path) -> None:
     set_builder_runtime_store_for_tests(None)
 
 
+def test_preview_status_failed_with_snapshot_reports_honest_copy(tmp_path: Path) -> None:
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    project = project_store.make_record(name="proj-a", root=str(tmp_path), metadata={"workspace_id": ws_id})
+    project_store.register(project)
+    set_project_store_for_tests(project_store)
+    builder_store = BuilderSourceStore(store_path=tmp_path / "builder_sources.json")
+    src = builder_store.upsert_project_source(
+        ProjectSource(workspace_id=ws_id, project_id=project.id, kind="chat_scaffold"),
+    )
+    snap = builder_store.upsert_source_snapshot(
+        SourceSnapshot(
+            workspace_id=ws_id,
+            project_id=project.id,
+            project_source_id=src.id,
+            artifact_uri="builder-artifact://bzip_fail",
+            digest_sha256="b" * 64,
+        ),
+    )
+    snap_id = snap.id
+    src.active_snapshot_id = snap_id
+    builder_store.upsert_project_source(src)
+    set_builder_source_store_for_tests(builder_store)
+    runtime_store = BuilderRuntimeStore(store_path=tmp_path / "builder_runtime.json")
+    runtime_store.upsert_runtime_session(
+        RuntimeSession(
+            workspace_id=ws_id,
+            project_id=project.id,
+            mode="cloud",
+            status="failed",
+            health="unhealthy",
+            snapshot_id=snap_id,
+            message="Preview pod entered a failed phase.",
+        )
+    )
+    set_builder_runtime_store_for_tests(runtime_store)
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    res = client.get(f"/api/workspaces/{ws_id}/projects/{project.id}/builder/preview-status")
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["status"] == "error"
+    assert body["source_snapshot_id"] == snap_id
+    assert "Source files are available" in body["message"]
+    assert "Preview pod entered a failed phase" in body["message"]
+    assert "preview is ready" not in body["message"].lower()
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+    set_builder_runtime_store_for_tests(None)
+
+
 def test_preview_status_workspace_scope_enforced_and_no_cross_project_leak(tmp_path: Path) -> None:
     ws_store = InMemoryWorkspaceStore()
     ws_a = "ws_aaaaaaaaaaaaaaaa"

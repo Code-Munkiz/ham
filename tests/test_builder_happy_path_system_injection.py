@@ -433,4 +433,6 @@ class TestBuilderAckDedupePreservesOtherPaths:
         done = events[-1]
         visible = done["messages"][-1]["content"]
         assert "prepare the Workbench" in visible
-        assert "started the live preview handoff" in visible
+        assert "saved the project source" in visible
+        assert "started the live preview handoff" not in visible
+        assert "I've generated" not in visible

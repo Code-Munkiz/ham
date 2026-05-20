@@ -1114,11 +1114,17 @@ function WorkbenchPreviewPanel({
                   title:
                     iframeProxyError === "PREVIEW_PROXY_FAILED"
                       ? "Preview gateway lost contact with your hosted runtime."
-                      : "Preview could not start.",
+                      : hasBackendSource
+                        ? "Source saved — preview failed"
+                        : "Preview could not start.",
                   subtitle:
                     iframeProxyError === "PREVIEW_PROXY_FAILED"
                       ? "The sandbox build finished but the iframe proxy still could not reach the app. Retry Refresh status, or prompt another tiny edit."
-                      : "",
+                      : hasBackendSource
+                        ? preview?.message ||
+                          "Source files are in the Code tab. This build was not deployed. Use Refresh status or Retry preview in Advanced."
+                        : preview?.message ||
+                          "Something went wrong. Open Advanced for diagnostics.",
                 }
               : { title: "", subtitle: "" };
   return (
@@ -1472,6 +1478,11 @@ function WorkbenchPreviewPanel({
               {preview.source_snapshot_id && preview.status !== "ready" ? (
                 <span> · snapshot linked</span>
               ) : null}
+            </p>
+          ) : null}
+          {preview?.logs_hint ? (
+            <p className="text-[10px] text-white/45" data-testid="hww-preview-logs-hint">
+              Runtime log hint: {preview.logs_hint}
             </p>
           ) : null}
           {previewUrl ? (

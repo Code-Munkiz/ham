@@ -212,9 +212,16 @@ _STREAM_PRETOKEN_ABORT_ASSISTANT = (
 )
 _STREAM_CHECKPOINT_MIN_CHARS = 800
 _STREAM_CHECKPOINT_MIN_SEC = 1.5
-_BUILDER_STREAM_HANDOFF_MESSAGE = (
-    "I've generated the project files and started the live preview handoff. "
-    "You can watch progress in the Preview and Code tabs."
+_BUILDER_STREAM_SOURCE_SAVED_LINE = (
+    "I've saved the project source to your workspace. Browse files in the Workbench Code tab."
+)
+_BUILDER_STREAM_PREVIEW_STARTING_LINE = (
+    "Cloud preview is starting in the Workbench Preview tab (sandbox only—not deployed). "
+    "Watch progress there with Refresh status; if it does not load, use Retry preview."
+)
+_BUILDER_STREAM_PREVIEW_NOT_CONFIGURED_LINE = (
+    "Cloud preview is not configured in this environment. You can still use the Code tab; "
+    "connect a local preview URL in Advanced when your dev server is running."
 )
 _ACTIVE_STREAM_SESSIONS: set[str] = set()
 _ACTIVE_STREAM_SESSIONS_LOCK = RLock()
@@ -1305,11 +1312,31 @@ def _chat_payload_attach_artifact_verification(
         payload["artifact_verification"] = av
 
 
-def _builder_stream_handoff_text(builder_prefix: str | None) -> str:
+def _builder_stream_handoff_suffix(builder_meta: dict[str, Any] | None) -> str:
+    """Honest post-scaffold copy: source is saved; preview may still be provisioning or fail."""
+    meta = builder_meta or {}
+    lines = [_BUILDER_STREAM_SOURCE_SAVED_LINE]
+    if meta.get("cloud_runtime_job_id") or meta.get("cloud_runtime_job_deduplicated"):
+        lines.append(_BUILDER_STREAM_PREVIEW_STARTING_LINE)
+    else:
+        from src.ham.builder_chat_cloud_runtime import builder_chat_cloud_runtime_auto_enqueue_eligible
+
+        if builder_chat_cloud_runtime_auto_enqueue_eligible():
+            lines.append(_BUILDER_STREAM_PREVIEW_STARTING_LINE)
+        else:
+            lines.append(_BUILDER_STREAM_PREVIEW_NOT_CONFIGURED_LINE)
+    return " ".join(lines)
+
+
+def _builder_stream_handoff_text(
+    builder_prefix: str | None,
+    builder_meta: dict[str, Any] | None = None,
+) -> str:
     prefix = str(builder_prefix or "").strip()
+    suffix = _builder_stream_handoff_suffix(builder_meta)
     if not prefix:
-        return _BUILDER_STREAM_HANDOFF_MESSAGE
-    return f"{prefix}\n\n{_BUILDER_STREAM_HANDOFF_MESSAGE}"
+        return suffix
+    return f"{prefix}\n\n{suffix}"
 
 
 @router.get("/api/chat/capabilities")
@@ -1948,7 +1975,7 @@ def post_chat_stream(
                         yield json.dumps(payload) + "\n"
                         return
                     if _builder_stream_should_handoff_early(builder_intent, builder_meta):
-                        handoff_text = _builder_stream_handoff_text(builder_prefix)
+                        handoff_text = _builder_stream_handoff_text(builder_prefix, builder_meta)
                         store.append_turns(sid, [ChatTurn(role="assistant", content=handoff_text)])
                         msgs = store.list_messages(sid)
                         yield json.dumps({"type": "delta", "text": handoff_text}) + "\n"
@@ -2159,7 +2186,7 @@ def post_chat_stream(
             )
 
         if _builder_stream_should_handoff_early(builder_intent, builder_meta):
-            handoff_text = _builder_stream_handoff_text(builder_prefix)
+            handoff_text = _builder_stream_handoff_text(builder_prefix, builder_meta)
             store.append_turns(sid, [ChatTurn(role="assistant", content=handoff_text)])
             msgs = store.list_messages(sid)
 

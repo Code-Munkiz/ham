@@ -39,6 +39,23 @@ def _parse_ndjson(text: str) -> list[dict]:
     return out
 
 
+def test_builder_stream_handoff_text_honest_when_scaffolded() -> None:
+    from src.api.chat import _builder_stream_handoff_text
+
+    text = _builder_stream_handoff_text(
+        "I'll create a dashboard project and prepare the Workbench.\n\n",
+        {"scaffolded": True, "cloud_runtime_job_id": "job_abc"},
+    )
+    low = text.lower()
+    assert "saved the project source" in low
+    assert "code tab" in low
+    assert "preview is starting" in low
+    assert "i've generated" not in low
+    assert "live preview handoff" not in low
+    assert "preview is ready" not in low
+    assert "shipped" not in low
+
+
 def test_chat_stream_rejects_multiple_messages_in_one_request(mock_mode: None) -> None:
     """Data minimization: each turn sends one user message; prior context is session-backed."""
     res = client.post(
@@ -281,7 +298,11 @@ def test_chat_stream_build_intent_handoffs_without_long_llm_stream(
     done = [e for e in events if e.get("type") == "done"][0]
     assistant = done["messages"][-1]["content"]
     assert "prepare the Workbench" in assistant
-    assert "started the live preview handoff" in assistant
+    assert "saved the project source" in assistant
+    assert "Code tab" in assistant
+    assert "started the live preview handoff" not in assistant
+    assert "I've generated" not in assistant
+    assert "preview is ready" not in assistant.lower()
     assert "Connection interrupted. Ask me to continue." not in assistant
 
 
