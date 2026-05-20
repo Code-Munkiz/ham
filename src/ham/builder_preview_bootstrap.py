@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 
@@ -64,6 +65,28 @@ def build_vite_bootstrap_files(*, title: str, safe_pkg: str) -> dict[str, str]:
     }
 
 
+def repair_package_json(files: dict[str, str]) -> dict[str, str]:
+    """Repair package.json when it is present but not valid JSON for npm."""
+    if "package.json" not in files:
+        return files
+    out = dict(files)
+    raw = out["package.json"]
+    try:
+        json.loads(raw)
+    except json.JSONDecodeError:
+        try:
+            obj = ast.literal_eval(raw.strip())
+        except (SyntaxError, ValueError):
+            obj = None
+        if isinstance(obj, dict):
+            out["package.json"] = json.dumps(obj, indent=2) + "\n"
+        else:
+            safe_pkg = safe_npm_package_name("HAM Builder App")
+            bootstrap = build_vite_bootstrap_files(title="HAM Builder App", safe_pkg=safe_pkg)
+            out["package.json"] = bootstrap["package.json"]
+    return out
+
+
 def ensure_preview_bootstrap_files(files: dict[str, str], *, project_name: str) -> dict[str, str]:
     """Add missing Vite bootstrap files without overwriting LLM output."""
     out = dict(files)
@@ -73,4 +96,4 @@ def ensure_preview_bootstrap_files(files: dict[str, str], *, project_name: str) 
     for key in ("package.json", "vite.config.ts", "index.html"):
         if key not in out:
             out[key] = bootstrap[key]
-    return out
+    return repair_package_json(out)

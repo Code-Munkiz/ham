@@ -193,6 +193,29 @@ class TestParseScaffoldResult:
             assert isinstance(item, tuple)
             assert len(item) == 2
 
+    def test_object_file_content_serializes_as_json(self):
+        payload = json.dumps(
+            {
+                "file_changes": [
+                    {
+                        "path": "package.json",
+                        "content": {
+                            "name": "asteroids-game",
+                            "private": True,
+                            "scripts": {"dev": "vite", "build": "vite build"},
+                        },
+                    }
+                ],
+                "assertions": [],
+            }
+        )
+        result = _parse_scaffold_result(payload)
+        content_map = dict(result.file_changes)
+        parsed = json.loads(content_map["package.json"])
+        assert parsed["name"] == "asteroids-game"
+        assert parsed["private"] is True
+        assert parsed["scripts"]["dev"] == "vite"
+
     def test_non_string_assertions_skipped(self):
         payload = json.dumps(
             {

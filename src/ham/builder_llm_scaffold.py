@@ -136,6 +136,7 @@ Output ONLY a JSON object matching this exact schema (no markdown, no prose):
 
 Rules:
 - file_changes: list of {path, content} objects. Include every file needed.
+- Each file's "content" must be a JSON string; package.json must be strict JSON (double-quoted keys/strings, lowercase true/false/null — never Python dict syntax).
 - REQUIRED files (always include): package.json (with a runnable dev script), vite.config.ts, index.html, src/main.tsx.
 - Max 24 files. Max 200 KB total content.
 - assertions: 1–5 plain-English test assertions for the builder_verifier.
@@ -206,7 +207,12 @@ def _parse_scaffold_result(raw: str) -> ScaffoldResult:
         if not isinstance(item, dict):
             continue
         path = str(item.get("path", "")).strip()
-        content = str(item.get("content", ""))
+        raw_content = item.get("content", "")
+        content = (
+            json.dumps(raw_content, indent=2)
+            if isinstance(raw_content, (dict, list))
+            else str(raw_content)
+        )
         if not path:
             continue
         encoded = content.encode("utf-8")

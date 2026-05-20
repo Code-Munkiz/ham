@@ -10,6 +10,7 @@ import pytest
 from src.ham.builder_llm_scaffold import ScaffoldResult
 from src.ham.builder_preview_bootstrap import (
     ensure_preview_bootstrap_files,
+    repair_package_json,
     safe_npm_package_name,
 )
 
@@ -63,6 +64,32 @@ def test_safe_npm_package_name_matches_tetris_sanitizer() -> None:
     assert safe_npm_package_name("Asteroids Game!!!") == "asteroids-game"
 
 
+def test_repair_package_json_fixes_python_repr() -> None:
+    raw = "{'name': 'x', 'private': True, 'scripts': {'dev': 'vite'}}\n"
+    out = repair_package_json({"package.json": raw})
+    parsed = json.loads(out["package.json"])
+    assert parsed["name"] == "x"
+    assert parsed["private"] is True
+
+
+def test_repair_package_json_leaves_valid_json_unchanged() -> None:
+    raw = '{"name":"custom-app","scripts":{"dev":"vite"}}\n'
+    out = repair_package_json({"package.json": raw, "src/App.tsx": "x\n"})
+    assert out["package.json"] == raw
+
+
+def test_repair_package_json_replaces_unparseable_garbage() -> None:
+    out = repair_package_json({"package.json": "not valid json {{{"})
+    parsed = json.loads(out["package.json"])
+    assert parsed["name"] == "ham-builder-app"
+    assert "scripts" in parsed
+
+
+def test_repair_package_json_absent_is_unchanged() -> None:
+    files = {"src/App.tsx": "export default function App() { return null; }\n"}
+    assert repair_package_json(files) == files
+
+
 def test_maybe_llm_scaffold_replace_injects_package_json(monkeypatch: pytest.MonkeyPatch) -> None:
     from src.ham.builder_chat_scaffold import _maybe_llm_scaffold_replace
 
@@ -96,3 +123,54 @@ def test_maybe_llm_scaffold_replace_injects_package_json(monkeypatch: pytest.Mon
     assert "package.json" in files
     assert "vite.config.ts" in files
     assert meta.get("llm_scaffold_file_count", 0) >= 5
+
+
+def test_maybe_llm_scaffold_replace_serializes_object_package_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.ham.builder_chat_scaffold import _maybe_llm_scaffold_replace
+    from src.ham.builder_llm_scaffold import _parse_scaffold_result
+
+    payload = json.dumps(
+        {
+            "file_changes": [
+                {
+                    "path": "package.json",
+                    "content": {
+                        "name": "asteroids-game",
+                        "private": True,
+                        "scripts": {"dev": "vite"},
+                    },
+                },
+                {"path": "src/App.tsx", "content": "export default function App() { return null; }\n"},
+                {"path": "src/main.tsx", "content": "import App from './App';\n"},
+            ],
+            "assertions": [],
+        }
+    )
+    parsed = _parse_scaffold_result(payload)
+
+    monkeypatch.setattr(
+        "src.llm_client.resolve_openrouter_api_key_for_actor",
+        lambda ham_actor=None: "sk-or-test-key",
+    )
+    monkeypatch.setattr(
+        "src.ham.builder_llm_scaffold._get_scaffold_model",
+        lambda **kwargs: "openrouter/test-model",
+    )
+    with patch(
+        "src.ham.builder_llm_scaffold.generate_scaffold",
+        return_value=parsed,
+    ):
+        result = _maybe_llm_scaffold_replace(
+            user_message="ham build me a game like asteroids",
+            workspace_id="ws_asteroids",
+            project_id="proj_asteroids",
+            files={},
+            scaffold_meta={},
+        )
+    assert isinstance(result, tuple)
+    files, _meta = result
+    package = json.loads(files["package.json"])
+    assert package["name"] == "asteroids-game"
+    assert package["private"] is True
