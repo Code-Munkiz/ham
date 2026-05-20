@@ -3226,16 +3226,11 @@ export class HamChatStreamAlreadyActiveError extends Error {
   readonly retryAfterMs: number;
   readonly lockAgeSec: number | null;
 
-  constructor(
-    message: string,
-    opts?: { retryAfterMs?: number; lockAgeSec?: number | null },
-  ) {
+  constructor(message: string, opts?: { retryAfterMs?: number; lockAgeSec?: number | null }) {
     super(message);
     this.name = "HamChatStreamAlreadyActiveError";
     this.retryAfterMs =
-      typeof opts?.retryAfterMs === "number" && opts.retryAfterMs > 0
-        ? opts.retryAfterMs
-        : 3000;
+      typeof opts?.retryAfterMs === "number" && opts.retryAfterMs > 0 ? opts.retryAfterMs : 3000;
     this.lockAgeSec =
       typeof opts?.lockAgeSec === "number" && Number.isFinite(opts.lockAgeSec)
         ? opts.lockAgeSec
@@ -3643,15 +3638,14 @@ export async function postChatStream(
           messageFromFastApiDetail(detail) ?? "Access restricted for this Ham deployment.",
         );
       }
-      if (
-        res.status === 409 &&
-        fastApiStructuredErrorCode(detail) === "STREAM_ALREADY_ACTIVE"
-      ) {
+      if (res.status === 409 && fastApiStructuredErrorCode(detail) === "STREAM_ALREADY_ACTIVE") {
         const structured =
           typeof detail === "object" && detail !== null && "error" in detail
-            ? (detail as {
-                error?: { retry_after_ms?: number; lock_age_sec?: number };
-              }).error
+            ? (
+                detail as {
+                  error?: { retry_after_ms?: number; lock_age_sec?: number };
+                }
+              ).error
             : undefined;
         throw new HamChatStreamAlreadyActiveError(CHAT_STREAM_ALREADY_ACTIVE_USER_MESSAGE, {
           retryAfterMs: structured?.retry_after_ms,
