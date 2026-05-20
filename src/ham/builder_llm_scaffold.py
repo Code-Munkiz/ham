@@ -1,9 +1,10 @@
 """LLM-driven scaffold generator — Phase 2 Subsystem 9 (ADR-0011).
 
 Generates file scaffolds for new template kinds via a single LLM call
-(BYO OpenRouter key, per ADR-0009).  Calculator and tetris remain on the
-deterministic path in ``builder_chat_scaffold.py``; all other template kinds
-land here.
+(BYO OpenRouter key, per ADR-0009).  Every template kind — including
+``calculator`` and ``tetris`` — routes through this generator; the legacy
+deterministic runtime path was retired (see
+``tests/test_legacy_runtime_cut.py``).
 
 Public API:
     ``generate_scaffold(plan, project_id, workspace_id) → ScaffoldResult``

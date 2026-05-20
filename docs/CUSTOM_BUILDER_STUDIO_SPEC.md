@@ -207,7 +207,7 @@ flowchart LR
   API[Builder API]
 ```
 
-- **Workspace → Builder Studio** (primary configuration surface): client routes
+- **Workspace → Builder Studio** (internal cookbook only — see status callout at top of file; the user-facing route now redirects to `/workspace/settings?section=builders`): client routes
   **`/workspace/builder-studio`** (list + create) and
   **`/workspace/builder-studio/:builderId`** (detail / edit). The active workspace
   comes from shell context (no `:wid` segment in the path).
@@ -738,7 +738,7 @@ frontend/src/features/hermes-workspace/adapters/
 
 **Hermes workspace shell wiring** (`frontend/src/features/hermes-workspace/`):
 
-- **`WorkspaceApp.tsx`**: registers **`/workspace/builder-studio`** and
+- **`WorkspaceApp.tsx`** (historical — current frontend redirects this route to Settings → Builders; see Status callout): registers **`/workspace/builder-studio`** and
   **`/workspace/builder-studio/:builderId`** → `BuilderStudioScreen`. Registers
   **`/workspace/coding-agents`** → `Navigate` to **`/workspace/builder-studio`**
   (legacy compatibility only).

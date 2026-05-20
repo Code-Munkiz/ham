@@ -29,6 +29,7 @@ from src.ham.clerk_auth import HamActor
 from src.ham.builder_chat_intent import (
     classify_builder_chat_intent,
     is_builder_edit_like_followup,
+    looks_like_explicit_no_build,
 )
 from src.ham.builder_mutation_router import classify_builder_project_action, resolve_snapshot_project_template
 
@@ -373,6 +374,10 @@ def run_builder_happy_path_hook(
         return directive.assistant_note, meta_d
     # Prefix directive ack when present alongside an edit (preference saved first).
     directive_prefix = directive.assistant_note or ""
+
+    if looks_like_explicit_no_build(effective_plain):
+        meta = {"builder_intent": "plan_only"}
+        return None, meta
 
     base_intent = classify_builder_chat_intent(effective_plain)
     action_decision = classify_builder_project_action(

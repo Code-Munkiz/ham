@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from src.ham.builder_artifact_verifier import verify_builder_scaffold_artifact
-from src.ham.builder_chat_intent import classify_builder_chat_intent
+from src.ham.builder_chat_intent import classify_builder_chat_intent, looks_like_explicit_no_build
 from src.ham.clerk_auth import HamActor
 from src.persistence.builder_source_store import (
     ImportJob,
@@ -1690,6 +1690,10 @@ def _maybe_llm_scaffold_replace(
 
     effective_model = _get_scaffold_model(model_override=resolved_model)
 
+    from src.ham.builder_kit_router import select_kit_for_prompt  # noqa: PLC0415
+
+    selected_kit_id = select_kit_for_prompt(user_message)
+
     try:
         synthetic_plan = Plan(
             workspace_id=workspace_id,
@@ -1703,7 +1707,7 @@ def _maybe_llm_scaffold_replace(
             ],
             planner_confidence="medium",
             metadata={
-                "template_kind": "chat_initial_scaffold",
+                "template_kind": selected_kit_id,
                 "originated_from": "builder_chat_scaffold",
             },
         )
@@ -1776,6 +1780,8 @@ def maybe_chat_scaffold_for_turn(
     if not ws or not pid:
         return None
     if operation == "build_or_create" and classify_builder_chat_intent(last_user_plain) != "build_or_create":
+        return None
+    if looks_like_explicit_no_build(last_user_plain):
         return None
     fp = _fingerprint(session_id, last_user_plain, operation)
     existing_snapshot_id = _existing_fingerprint_snapshot_id(

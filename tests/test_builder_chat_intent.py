@@ -6,6 +6,7 @@ from src.ham.builder_chat_intent import (
     classify_builder_chat_intent,
     is_builder_advice_or_question_turn,
     is_builder_edit_like_followup,
+    looks_like_explicit_no_build,
 )
 
 
@@ -32,10 +33,43 @@ from src.ham.builder_chat_intent import (
         ("try building a game like asteroids again", "build_or_create"),
         ("let's build a feature", "build_or_create"),
         ("", "answer_question"),
+        ("don't build yet", "plan_only"),
+        ("do not build this", "plan_only"),
+        ("don't create it", "plan_only"),
+        ("without building it", "plan_only"),
+        ("plan only -- don't build", "plan_only"),
+        ("just plan, don't build", "plan_only"),
+        ("help me plan, but don't build yet", "plan_only"),
+        ("talk through it before building", "plan_only"),
+        ("create a dashboard", "build_or_create"),
+        ("make a calculator app", "build_or_create"),
     ],
 )
 def test_classify_builder_chat_intent_buckets(text: str, expected: str) -> None:
     assert classify_builder_chat_intent(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("don't build yet", True),
+        ("do not build this", True),
+        ("don't create it", True),
+        ("without building it", True),
+        ("plan only", True),
+        ("just plan, don't build", True),
+        ("talk through it before building", True),
+        ("plan only -- don't build", True),
+        ("build me a landing page", False),
+        ("create a dashboard", False),
+        ("this builds character", False),
+        ("building blocks are fun", False),
+        ("", False),
+        ("   ", False),
+    ],
+)
+def test_looks_like_explicit_no_build(text: str, expected: bool) -> None:
+    assert looks_like_explicit_no_build(text) is expected
 
 
 @pytest.mark.parametrize(

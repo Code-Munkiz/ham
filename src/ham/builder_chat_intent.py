@@ -57,6 +57,15 @@ _DENY_BUILD = (
     r"\bmake up\b",
 )
 
+_NO_BUILD_PATTERNS = (
+    r"\b(?:don'?t|do\s+not)\s+(?:actually\s+)?(?:build|create|make|generate|scaffold|spin\s+up|start)\b",
+    r"\bwithout\s+(?:building|creating|scaffolding|coding)\b",
+    r"\bbefore\s+(?:building|coding|implement(?:ing)?|scaffolding)\b",
+    r"\bplan\s+only\b",
+    r"\bjust\s+plan\b",
+    r"\btalk\s+(?:it\s+)?through\b",
+)
+
 _BUILD_PATTERNS = (
     r"\bbuild\b",
     r"\bcreate\b",
@@ -170,12 +179,28 @@ def is_builder_edit_like_followup(user_plain: str) -> bool:
     return False
 
 
+def looks_like_explicit_no_build(text: str) -> bool:
+    """Return True when the prompt explicitly defers or refuses to build.
+
+    Pattern set is intentionally narrow — only phrases that unambiguously
+    signal 'don't scaffold right now'. Idioms like 'build character' are
+    not matched. Used as a defense-in-depth guard in the chat hook and
+    scaffold entry, independent of intent classification.
+    """
+    if not text:
+        return False
+    low = text.lower()
+    return any(re.search(pat, low) for pat in _NO_BUILD_PATTERNS)
+
+
 def classify_builder_chat_intent(user_plain: str) -> BuilderChatIntent:
     """Return MVP intent bucket; never raises."""
     text = " ".join(str(user_plain or "").replace("\r", " ").replace("\n", " ").split()).strip()
     low = text.lower()
     if not low:
         return "answer_question"
+    if looks_like_explicit_no_build(low):
+        return "plan_only"
     if re.search(r"^\s*how\s+(would|could|should)\s+(you|we)\s+build\b", low):
         return "plan_only"
     for pat in _DENY_BUILD:
