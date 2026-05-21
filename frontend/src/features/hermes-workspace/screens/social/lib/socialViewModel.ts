@@ -271,7 +271,7 @@ export function derivePersonaProductStatus(persona: SocialPersona): PersonaProdu
   return {
     headline: persona.display_name,
     detail: persona.read_only
-      ? "Voice is locked; edits happen outside this cockpit."
+      ? "Voice is locked; edits happen outside the Social workspace."
       : "Persona can be edited via your usual workflow.",
     voiceLocked: Boolean(persona.read_only),
   };

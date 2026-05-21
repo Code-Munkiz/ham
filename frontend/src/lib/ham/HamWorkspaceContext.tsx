@@ -3,7 +3,7 @@
  *
  * Wraps `/api/me` + `/api/workspaces` consumption with a small state machine
  * and per-user localStorage selection. Distinct from the legacy
- * `WorkspaceContext` (UI cockpit state) — see `frontend/src/lib/ham/WorkspaceContext.tsx`.
+ * `WorkspaceContext` (UI workspace state) — see `frontend/src/lib/ham/WorkspaceContext.tsx`.
  *
  * The provider intentionally **never throws during render**: all error paths
  * surface as `state: "error"` so `App.tsx` stays mountable even when the

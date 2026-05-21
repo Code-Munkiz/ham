@@ -30,7 +30,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [isControlPanelOpen, setIsControlPanelOpen] = React.useState(false);
   const [showContextBudget, setShowContextBudget] = React.useState(true);
 
-  // Rough heuristic-based estimates for the "premium cockpit" feel
+  // Rough heuristic-based estimates for the "premium workspace" feel
   const contextUsage = {
     used: 48200,
     total: 200000,

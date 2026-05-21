@@ -428,8 +428,8 @@ function renderRedirect(initialPath: string) {
   return () => observedPath;
 }
 
-describe("legacy Social redirects", () => {
-  it("redirects legacy HAMgomoon and policy routes to the Social page using production routes", async () => {
+describe("legacy Social routing", () => {
+  it("redirects legacy HAMgomoon and leaves removed policy route unmatched using production routes", async () => {
     installMswBackend();
     const hamgomoonPath = renderRedirect("/workspace/hamgomoon");
     await screen.findByRole("heading", { name: /^Social$/ });
@@ -440,8 +440,8 @@ describe("legacy Social redirects", () => {
     server.resetHandlers();
     installMswBackend();
     const policyPath = renderRedirect("/workspace/social/policy");
-    await screen.findByRole("heading", { name: /^Social$/ });
-    expect(policyPath()).toBe("/workspace/social");
+    expect(screen.queryByRole("heading", { name: /^Social$/ })).not.toBeInTheDocument();
+    expect(policyPath()).toBe("/workspace/social/policy");
     expect(screen.queryByText(/preview \/ diff \/ apply/i)).not.toBeInTheDocument();
     expect(
       screen.queryByText(new RegExp(["type", "confirmation", "phrase"].join(" "), "i")),

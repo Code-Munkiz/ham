@@ -52,7 +52,6 @@ export function WorkspaceRoutes() {
         path="builder-studio/:builderId"
         element={<Navigate to="/workspace/settings?section=builders" replace />}
       />
-      <Route path="social/policy" element={<Navigate to="/workspace/social" replace />} />
       <Route path="social" element={<WorkspaceSocialScreen />} />
       <Route path="hamgomoon" element={<Navigate to="/workspace/social" replace />} />
       <Route path="memory" element={<WorkspaceMemoryScreen />} />

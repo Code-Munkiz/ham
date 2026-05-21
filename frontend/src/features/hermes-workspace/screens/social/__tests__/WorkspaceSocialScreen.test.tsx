@@ -331,7 +331,7 @@ describe("Social route behavior", () => {
     expect(screen.queryByText(/preview & send/i)).not.toBeInTheDocument();
   });
 
-  it("redirects legacy social routes to /workspace/social", async () => {
+  it("redirects legacy HAMgomoon but leaves removed policy route unmatched", async () => {
     const hamgomoonPath = renderRoute("/workspace/hamgomoon");
     expect(await screen.findByRole("heading", { name: /^Social$/ })).toBeInTheDocument();
     expect(hamgomoonPath()).toBe("/workspace/social");
@@ -340,8 +340,9 @@ describe("Social route behavior", () => {
     vi.clearAllMocks();
     mockLoad();
     const policyPath = renderRoute("/workspace/social/policy");
-    expect(await screen.findByRole("heading", { name: /^Social$/ })).toBeInTheDocument();
-    expect(policyPath()).toBe("/workspace/social");
+    expect(screen.queryByRole("heading", { name: /^Social$/ })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("workspace-fallback")).not.toBeInTheDocument();
+    expect(policyPath()).toBe("/workspace/social/policy");
   });
 
   it("does not mount operator or advanced social surfaces", () => {
