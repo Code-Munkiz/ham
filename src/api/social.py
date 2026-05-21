@@ -660,9 +660,23 @@ class SocialAutonomyStopRequest(BaseModel):
     emergency_stop: bool = False
 
 
+class SocialAutonomyChannelEnabledPatch(BaseModel):
+    """Writable channel settings accepted by PATCH /api/social/autonomy/settings.
+
+    Only ``enabled`` may be supplied. The ``available`` field is server-managed
+    (read-only) and must not be sent by callers — attempts to do so are rejected
+    with a 422 schema error.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+
+
 class SocialAutonomySettingsPatchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    channels: dict[SocialAutonomyChannel, SocialAutonomyChannelEnabledPatch] | None = None
     daily_caps: dict[SocialAutonomyChannel, Annotated[int, Field(ge=0)]] | None = None
     quiet_hours: QuietHours | None = None
 
@@ -3115,6 +3129,21 @@ def update_social_autonomy_settings(
     token = _require_social_autonomy_write_token(ham_bearer)
     current = read_social_autonomy_profile(_project_root())
     updates: dict[str, Any] = {"updated_at": _utc_now()}
+    if "channels" in body.model_fields_set and body.channels is not None:
+        # Merge: update only the ``enabled`` flag per channel; ``available`` is
+        # server-managed (read-only) and is preserved from the current profile.
+        current_channels: dict[str, Any] = profile_to_safe_dict(current)["channels"]
+        for ch_key, ch_patch in body.channels.items():
+            ch_str = str(ch_key)
+            if ch_str in current_channels:
+                current_channels[ch_str] = {
+                    **current_channels[ch_str],
+                    "enabled": ch_patch.enabled,
+                }
+            else:
+                # Channel not yet in profile; available defaults to False (fail-closed).
+                current_channels[ch_str] = {"enabled": ch_patch.enabled, "available": False}
+        updates["channels"] = current_channels
     if "daily_caps" in body.model_fields_set:
         updates["daily_caps"] = body.daily_caps
     if "quiet_hours" in body.model_fields_set:
