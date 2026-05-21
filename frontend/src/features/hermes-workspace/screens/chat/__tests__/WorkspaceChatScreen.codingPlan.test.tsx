@@ -1,5 +1,5 @@
 /**
- * Planning is internal orchestration — chat must not expose manual plan controls.
+ * Planning is internal orchestration — chat exposes one approved Plan toggle only.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -168,9 +168,12 @@ describe("WorkspaceChatScreen planning UI demotion", () => {
     vi.restoreAllMocks();
   });
 
-  it("does not render a manual plan icon/button in the composer toolbar", async () => {
+  it("renders exactly one Plan toggle in the composer toolbar (default OFF)", async () => {
     const { container } = renderChat();
     await waitFor(() => expect(screen.getByTestId("hww-command-panel")).toBeInTheDocument());
+    const toggles = container.querySelectorAll("[data-hww-plan-toggle]");
+    expect(toggles.length).toBe(1);
+    expect(toggles[0]).toHaveAttribute("aria-pressed", "false");
     expect(container.querySelector("[data-hww-coding-plan-action]")).toBeNull();
   });
 

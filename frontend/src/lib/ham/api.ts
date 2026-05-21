@@ -3062,6 +3062,8 @@ export interface HamChatRequest {
   project_id?: string;
   /** When true (default), append compact HAM active-agent guidance from project settings. */
   include_active_agent_guidance?: boolean;
+  /** When true, builder chat proposes a short plan before build/edit. Session-local default OFF. */
+  plan_mode?: boolean;
   model_id?: string;
   workbench_mode?: "ask" | "plan" | "agent";
   worker?: string;

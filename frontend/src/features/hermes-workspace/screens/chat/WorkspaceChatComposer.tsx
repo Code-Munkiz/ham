@@ -103,6 +103,9 @@ type WorkspaceChatComposerProps = {
   quickTipsResetSignal?: string | null;
   /** Main composer textarea — optional ref for parent focus management. */
   composerTextareaRef?: React.Ref<HTMLTextAreaElement>;
+  /** User-facing Plan toggle — proposes a short plan before build/edit when ON. */
+  planMode?: boolean;
+  onPlanModeChange?: (enabled: boolean) => void;
 };
 
 const COMPOSER_MENU_FOOTER_HINT =
@@ -303,6 +306,8 @@ export function WorkspaceChatComposer({
   onQuickSuggestion,
   quickTipsResetSignal = null,
   composerTextareaRef,
+  planMode = false,
+  onPlanModeChange,
 }: WorkspaceChatComposerProps) {
   const [quickTipsDismissed, setQuickTipsDismissed] = React.useState(false);
   const [voiceState, setVoiceState] = React.useState<VoiceUiState>("idle");
@@ -776,6 +781,31 @@ export function WorkspaceChatComposer({
           <span className={composerToolbarDensity === "tight" ? "sr-only" : undefined}>GOHAM</span>
         </button>
       ) : null}
+      <button
+        type="button"
+        onClick={() => onPlanModeChange?.(!planMode)}
+        disabled={Boolean(sending || voiceBusy || disabled)}
+        aria-pressed={planMode}
+        title={
+          planMode
+            ? "Plan ON — I'll propose a short plan before building or editing"
+            : "Plan OFF — build or edit directly when intent is clear"
+        }
+        className={cn(
+          "flex shrink-0 items-center gap-1 rounded-full border font-medium transition-colors disabled:opacity-45",
+          composerToolbarDensity === "comfortable" && "px-2.5 py-1 text-[10px]",
+          composerToolbarDensity === "compact" && "px-2 py-0.5 text-[9px]",
+          composerToolbarDensity === "tight" && "px-1.5 py-0.5 text-[9px]",
+          planMode
+            ? "border-amber-400/40 bg-amber-500/[0.14] text-amber-100/95 hover:bg-amber-500/22"
+            : "border-white/[0.12] bg-white/[0.06] text-white/65 hover:bg-white/[0.1]",
+        )}
+        aria-label={planMode ? "Plan mode on" : "Plan mode off"}
+        data-hww-plan-toggle
+      >
+        <Lightbulb className="h-3 w-3 shrink-0 opacity-90" aria-hidden strokeWidth={2} />
+        <span className={composerToolbarDensity === "tight" ? "sr-only" : undefined}>Plan</span>
+      </button>
       <WorkspaceChatComposerActionsMenu
         onFiles={handleAddFiles}
         attachDisabled={sending || voiceBusy || disabled || uploadsPending}

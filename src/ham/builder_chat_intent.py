@@ -285,6 +285,37 @@ _STATUS_DIAGNOSTIC_PATTERNS = (
 )
 
 
+_AFFIRMATION_PATTERNS = (
+    r"^\s*yes\b",
+    r"^\s*yep\b",
+    r"^\s*yup\b",
+    r"^\s*yeah\b",
+    r"^\s*ok\b",
+    r"^\s*okay\b",
+    r"^\s*go\b",
+    r"^\s*go ahead\b",
+    r"^\s*proceed\b",
+    r"^\s*continue\b",
+    r"^\s*looks good\b",
+    r"^\s*sounds good\b",
+    r"\bbuild it\b",
+    r"\bdo it\b",
+    r"\bmake it\b",
+    r"\blet'?s go\b",
+    r"\blet'?s do it\b",
+)
+
+
+def is_affirmation_continuation(user_plain: str) -> bool:
+    """True for short natural affirmations that may continue a pending chat plan."""
+    low = _norm_chat_1l(user_plain)
+    if not low:
+        return False
+    if len(low) > 96 and not any(re.search(p, low) for p in (r"\bbuild it\b", r"\bdo it\b")):
+        return False
+    return any(re.search(p, low) for p in _AFFIRMATION_PATTERNS)
+
+
 def is_builder_status_diagnostic_turn(user_plain: str) -> bool:
     """True when the user is complaining about preview/build visibility (not pure Q&A)."""
     low = _norm_chat_1l(user_plain)

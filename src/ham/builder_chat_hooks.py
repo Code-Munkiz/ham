@@ -381,6 +381,8 @@ def run_builder_happy_path_hook(
     last_user_plain: str,
     ham_actor: HamActor | None,
     model_id: str | None = None,
+    plan_mode: bool = False,
+    conversation_history: list[Any] | None = None,
 ) -> tuple[str | None, dict[str, Any]]:
     """Returns optional stream prefix and metadata for /api/chat responses."""
     from src.ham.builder_chat_scaffold import maybe_chat_scaffold_for_turn
@@ -481,7 +483,80 @@ def run_builder_happy_path_hook(
             "builder_intent": "answer_question",
             "builder_grounded_status": True,
         }
-    if not forced_update and intent_out != "build_or_create":
+
+    plan_mode_on = bool(plan_mode)
+    plan_continuation = False
+    if plan_mode_on:
+        from src.ham.builder_chat_intent import is_affirmation_continuation
+        from src.ham.builder_chat_plan_mode import (
+            approve_pending_chat_plan,
+            create_chat_plan_proposal,
+            find_pending_chat_plan,
+        )
+
+        if is_affirmation_continuation(effective_plain):
+            pending_plan, pending_rec = find_pending_chat_plan(
+                workspace_id=ws,
+                project_id=pid,
+            )
+            if pending_plan is None or pending_rec is None:
+                return None, {
+                    **meta,
+                    "builder_intent": "answer_question",
+                    "builder_affirmation_without_plan": True,
+                }
+            approve_pending_chat_plan(plan=pending_plan, record=pending_rec)
+            effective_plain = pending_plan.user_message
+            base_intent = classify_builder_chat_intent(effective_plain)
+            action_decision = classify_builder_project_action(
+                effective_plain,
+                has_active_snapshot=has_active_snapshot,
+                active_template=active_template,
+            )
+            meta = {
+                "builder_intent": base_intent,
+                "builder_action_decision": action_decision.to_safe_dict(),
+            }
+            advice_only = action_decision.kind == "answer_only"
+            wants_update = (not advice_only) and (
+                is_builder_edit_like_followup(effective_plain)
+                or _looks_like_followup_edit(effective_plain)
+                or _looks_like_active_app_iteration(effective_plain)
+            )
+            discrete_new = base_intent == "build_or_create" and _looks_like_discrete_new_product_request(
+                effective_plain
+            )
+            forced_update = bool(has_active_snapshot and wants_update and not discrete_new)
+            operation = "update_existing_project" if forced_update else "build_or_create"
+            intent_out = (
+                "build_or_create"
+                if forced_update or base_intent == "build_or_create"
+                else str(base_intent)
+            )
+            meta["builder_intent"] = intent_out
+            meta["builder_plan_continuation"] = True
+            meta["builder_plan_id"] = pending_plan.plan_id
+            plan_continuation = True
+        elif intent_out == "build_or_create":
+            plan_text, plan = create_chat_plan_proposal(
+                user_message=effective_plain,
+                workspace_id=ws,
+                project_id=pid,
+                session_id=session_id,
+                requested_by=created_by,
+                ham_actor=ham_actor,
+                model_override=model_id,
+                conversation_history=conversation_history,
+                is_edit=operation == "update_existing_project",
+            )
+            return f"{directive_prefix}{plan_text}", {
+                **meta,
+                "builder_plan_pending": True,
+                "builder_plan_id": plan.plan_id,
+                "builder_intent": "build_or_create",
+            }
+
+    if not plan_continuation and not forced_update and intent_out != "build_or_create":
         return None, meta
 
     if operation == "update_existing_project" and has_active_snapshot:

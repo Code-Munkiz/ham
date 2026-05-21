@@ -153,6 +153,35 @@ class TestPlannerPathWithKey:
         # produce_plan was called
         assert mock_produce.called
 
+    def test_plan_mode_suppresses_legacy_plan_proposed_sse(
+        self,
+        mock_mode: None,
+        monkeypatch: pytest.MonkeyPatch,
+        mutation_builder_meta: dict[str, Any],
+    ) -> None:
+        """User-facing Plan toggle must not emit legacy plan_proposed approval-card SSE."""
+        monkeypatch.setattr("src.api.chat.resolve_openrouter_api_key_for_actor", lambda ham_actor=None: "sk-or-test")
+        monkeypatch.setattr(
+            "src.api.chat.run_builder_happy_path_hook",
+            lambda **_kw: (None, mutation_builder_meta),
+        )
+
+        with patch("src.ham.builder_planner.produce_plan") as mock_produce:
+            res = client.post(
+                "/api/chat/stream",
+                json={
+                    "messages": [{"role": "user", "content": "add a login form"}],
+                    "workspace_id": "ws_test",
+                    "project_id": "proj_test",
+                    "plan_mode": True,
+                },
+            )
+
+        assert res.status_code == 200, res.text
+        events = _parse_ndjson(res.text)
+        assert not any(e.get("type") == "plan_proposed" for e in events)
+        mock_produce.assert_not_called()
+
     def test_plan_proposed_event_contains_no_delta(
         self,
         mock_mode: None,
