@@ -83,7 +83,10 @@ function mockLoad(nextProfile: GoHamSocialProfile | null = profile()) {
     bridge: { status: "ready" },
   });
   adapterMock.getLearningHints.mockResolvedValue({
-    hints: { hints: "HAM learned to keep social updates concise.", generated_at: "2026-05-20T00:00:00Z" },
+    hints: {
+      hints: "HAM learned to keep social updates concise.",
+      generated_at: "2026-05-20T00:00:00Z",
+    },
     bridge: { status: "ready" },
   });
   adapterMock.getAutonomyWriteStatus.mockResolvedValue({
@@ -288,7 +291,9 @@ describe("SocialStatusPanel", () => {
     fireEvent.click(button);
     fireEvent.click(button);
 
-    expect(await within(await statusPanel()).findByRole("button", { name: /previewing/i })).toBeDisabled();
+    expect(
+      await within(await statusPanel()).findByRole("button", { name: /previewing/i }),
+    ).toBeDisabled();
     expect(adapterMock.previewAutonomyTick).toHaveBeenCalledTimes(1);
 
     resolvePreview({ tick: tickResult(), bridge: { status: "ready" } });
@@ -325,12 +330,16 @@ describe("SocialStatusPanel", () => {
 
     const panel = await statusPanel();
     for (const label of retiredLabels) {
-      expect(within(panel).queryByRole("button", { name: new RegExp(`^${label}$`, "i") })).toBeNull();
+      expect(
+        within(panel).queryByRole("button", { name: new RegExp(`^${label}$`, "i") }),
+      ).toBeNull();
     }
     expect(within(panel).queryByRole("button", { name: /^apply\b/i })).toBeNull();
     expect(within(panel).queryByLabelText(/token/i)).toBeNull();
     expect(within(panel).queryByPlaceholderText(/token/i)).toBeNull();
-    expect(screen.queryByLabelText(new RegExp(["confirmation", "phrase"].join("\\s+"), "i"))).toBeNull();
+    expect(
+      screen.queryByLabelText(new RegExp(["confirmation", "phrase"].join("\\s+"), "i")),
+    ).toBeNull();
     expect(screen.queryByText(new RegExp(["live", "token"].join("\\s*"), "i"))).toBeNull();
   });
 
@@ -338,12 +347,18 @@ describe("SocialStatusPanel", () => {
     mockLoad(profile({ status: "draft" }));
     renderSocial();
 
-    const writeTokenInput = await screen.findByLabelText("HAM_SOCIAL_AUTONOMY_WRITE_TOKEN (session only)");
+    const writeTokenInput = await screen.findByLabelText(
+      "HAM_SOCIAL_AUTONOMY_WRITE_TOKEN (session only)",
+    );
     fireEvent.change(writeTokenInput, { target: { value: "session-write-token" } });
     fireEvent.click(screen.getByRole("button", { name: /^Launch$/i }));
 
     await waitFor(() =>
-      expect(within(screen.getByRole("region", { name: /autonomy status/i })).getByRole("status", { name: "Running" })).toBeInTheDocument(),
+      expect(
+        within(screen.getByRole("region", { name: /autonomy status/i })).getByRole("status", {
+          name: "Running",
+        }),
+      ).toBeInTheDocument(),
     );
   });
 });

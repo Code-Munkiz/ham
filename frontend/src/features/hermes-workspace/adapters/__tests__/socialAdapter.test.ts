@@ -265,7 +265,9 @@ describe("socialAdapter autonomy methods", () => {
   );
 
   it("previewAutonomyTick method exists with dry_run signature", async () => {
-    const input = { dry_run: true } satisfies Parameters<typeof socialAdapter.previewAutonomyTick>[0];
+    const input = { dry_run: true } satisfies Parameters<
+      typeof socialAdapter.previewAutonomyTick
+    >[0];
     const tick: SocialAutonomyTickResult = {
       ran: false,
       dry_run: true,
