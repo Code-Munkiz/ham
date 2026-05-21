@@ -629,6 +629,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [messages, setMessages] = React.useState<HwwMsgRow[]>([]);
   const [sessionId, setSessionId] = React.useState<string | null>(null);
   const [input, setInput] = React.useState("");
+  const [planMode, setPlanMode] = React.useState(false);
   const [sending, setSending] = React.useState(false);
   const [streamConflictUntilMs, setStreamConflictUntilMs] = React.useState(0);
 
@@ -2607,6 +2608,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             execution_mode_preference: execPrefEffective,
             execution_environment: executionEnvironment,
             ...(requestWorkspaceId?.trim() ? { workspace_id: requestWorkspaceId.trim() } : {}),
+            ...(planMode ? { plan_mode: true } : {}),
           },
           {
             onSession: (sid) => {
@@ -3804,6 +3806,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                 blockedReason: pdfExportBlockedReason,
               }}
               composerTextareaRef={composerTextareaRef}
+              planMode={planMode}
+              onPlanModeChange={setPlanMode}
             />
           </div>
         </div>

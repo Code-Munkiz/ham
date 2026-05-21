@@ -144,6 +144,8 @@ class ChatRequest(BaseModel):
     workspace_id: str | None = Field(default=None, max_length=180)
     model_id: str | None = Field(default=None, max_length=256)
     workbench_mode: Literal["ask", "plan", "agent"] | None = None
+    # When true, builder workspace chat proposes a short markdown plan before build/edit.
+    plan_mode: bool = False
     worker: str | None = Field(default=None, max_length=64)
     max_mode: bool | None = None
     # Server-side operator (projects, agents preview/apply, runs, launch) — see docs/HAM_CHAT_CONTROL_PLANE.md
@@ -1328,8 +1330,11 @@ def _should_defer_builder_scaffold_hook(
     workspace_id: str | None,
     project_id: str | None,
     ham_actor: HamActor | None,
+    plan_mode: bool = False,
 ) -> bool:
     """Defer sync scaffold LLM for empty-project build turns so stream bytes start first."""
+    if plan_mode:
+        return False
     ws = (workspace_id or "").strip()
     pid = (project_id or "").strip()
     plain = str(last_user_plain or "").strip()
@@ -1356,6 +1361,10 @@ def _builder_clarification_turn(builder_meta: dict[str, Any] | None) -> bool:
 
 def _builder_grounded_status_turn(builder_meta: dict[str, Any] | None) -> bool:
     return bool((builder_meta or {}).get("builder_grounded_status"))
+
+
+def _builder_plan_pending_turn(builder_meta: dict[str, Any] | None) -> bool:
+    return bool((builder_meta or {}).get("builder_plan_pending"))
 
 
 def _chat_in_builder_workspace(
@@ -1807,6 +1816,8 @@ async def post_chat(
         last_user_plain=last_user_plain,
         ham_actor=ham_actor,
         model_id=body.model_id,
+        plan_mode=body.plan_mode,
+        conversation_history=store.list_messages(sid)[:-1],
     )
     builder_intent = str((builder_meta or {}).get("builder_intent") or "").strip().lower()
     if (
@@ -1843,6 +1854,20 @@ async def post_chat(
     if _builder_grounded_status_turn(builder_meta):
         grounded_msg = str(builder_prefix or "").strip()
         store.append_turns(sid, [ChatTurn(role="assistant", content=grounded_msg)])
+        return ChatResponse(
+            session_id=sid,
+            messages=store.list_messages(sid),
+            actions=[],
+            active_agent=ChatActiveAgentMeta.model_validate(active_meta) if active_meta else None,
+            operator_result=None,
+            execution_mode=execution_mode,
+            builder=builder_meta,
+            artifact_verification=_artifact_verification_payload(builder_meta),
+            hermes_http_context_budget=None,
+        )
+    if _builder_plan_pending_turn(builder_meta):
+        plan_msg = str(builder_prefix or "").strip()
+        store.append_turns(sid, [ChatTurn(role="assistant", content=plan_msg)])
         return ChatResponse(
             session_id=sid,
             messages=store.list_messages(sid),
@@ -1988,6 +2013,7 @@ def post_chat_stream(
         workspace_id=body.workspace_id,
         project_id=(body_eff.project_id or "").strip() or None,
         ham_actor=ham_actor,
+        plan_mode=body.plan_mode,
     )
     if defer_builder_hook:
         provisional_intent = classify_builder_chat_intent(last_user_plain)
@@ -2001,6 +2027,8 @@ def post_chat_stream(
             last_user_plain=last_user_plain,
             ham_actor=ham_actor,
             model_id=body.model_id,
+            plan_mode=body.plan_mode,
+            conversation_history=store.list_messages(sid)[:-1],
         )
         builder_intent = str((builder_meta or {}).get("builder_intent") or "").strip().lower()
     if (
@@ -2063,6 +2091,8 @@ def post_chat_stream(
                         last_user_plain=last_user_plain,
                         ham_actor=ham_actor,
                         model_id=body.model_id,
+                        plan_mode=body.plan_mode,
+                        conversation_history=store.list_messages(sid)[:-1],
                     )
                     builder_intent = str((builder_meta or {}).get("builder_intent") or "").strip().lower()
                     if (
@@ -2096,6 +2126,26 @@ def post_chat_stream(
                         store.append_turns(sid, [ChatTurn(role="assistant", content=grounded_msg)])
                         msgs = store.list_messages(sid)
                         yield json.dumps({"type": "delta", "text": grounded_msg}) + "\n"
+                        payload = {
+                            "type": "done",
+                            "session_id": sid,
+                            "messages": msgs,
+                            "actions": [],
+                            "operator_result": None,
+                            "execution_mode": stream_execution_mode,
+                        }
+                        if stream_active_meta:
+                            payload["active_agent"] = stream_active_meta
+                        if builder_meta is not None:
+                            payload["builder"] = builder_meta
+                        _chat_payload_attach_artifact_verification(payload, builder_meta)
+                        yield json.dumps(payload) + "\n"
+                        return
+                    if _builder_plan_pending_turn(builder_meta):
+                        plan_msg = str(builder_prefix or "").strip()
+                        store.append_turns(sid, [ChatTurn(role="assistant", content=plan_msg)])
+                        msgs = store.list_messages(sid)
+                        yield json.dumps({"type": "delta", "text": plan_msg}) + "\n"
                         payload = {
                             "type": "done",
                             "session_id": sid,
@@ -2280,6 +2330,40 @@ def post_chat_stream(
                     "X-Accel-Buffering": "no",
                 },
             )
+        if _builder_plan_pending_turn(builder_meta):
+            plan_msg = str(builder_prefix or "").strip()
+            store.append_turns(sid, [ChatTurn(role="assistant", content=plan_msg)])
+            msgs = store.list_messages(sid)
+
+            def plan_pending_only():
+                try:
+                    yield json.dumps({"type": "session", "session_id": sid}) + "\n"
+                    yield json.dumps({"type": "delta", "text": plan_msg}) + "\n"
+                    payload: dict[str, Any] = {
+                        "type": "done",
+                        "session_id": sid,
+                        "messages": msgs,
+                        "actions": [],
+                        "operator_result": None,
+                        "execution_mode": stream_execution_mode,
+                    }
+                    if stream_active_meta:
+                        payload["active_agent"] = stream_active_meta
+                    if builder_meta is not None:
+                        payload["builder"] = builder_meta
+                    _chat_payload_attach_artifact_verification(payload, builder_meta)
+                    yield json.dumps(payload) + "\n"
+                finally:
+                    release_stream_lock()
+
+            return StreamingResponse(
+                plan_pending_only(),
+                media_type="application/x-ndjson; charset=utf-8",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                },
+            )
         if (
             body.enable_operator
             and body.messages[-1].role == "user"
@@ -2414,11 +2498,9 @@ def post_chat_stream(
                 },
             )
 
-        # Phase 2 PR 2 — Planner path for builder-mutation turns.
-        # Spec: docs/PHASE_2_DESIGN.md § Subsystem 1.  ADR-0009: BYO key / regex fallback.
-        # When builder_mutation_router classifies the turn as "mutate" AND an OpenRouter key is
-        # configured, call produce_plan() instead of streaming an LLM reply.  With no key the
-        # branch is skipped and the existing regex / LLM stream flow runs unchanged.
+        # Phase 2 PR 2 — Planner path for builder-mutation turns (legacy approval cards).
+        # Suppressed when the user-facing Plan toggle (`plan_mode`) is active — that path uses
+        # markdown plans via `run_builder_happy_path_hook` instead of `plan_proposed` SSE cards.
         _builder_action_kind = str(
             ((builder_meta or {}).get("builder_action_decision") or {}).get("kind") or ""
         ).strip()
@@ -2432,6 +2514,7 @@ def post_chat_stream(
             _builder_action_kind == "mutate"
             and resolve_openrouter_api_key_for_actor(ham_actor)
             and not _builder_skip_planner_for_net_new_build(builder_intent, builder_meta)
+            and not body_eff.plan_mode
         ):
             from src.ham.builder_planner import PlannerOutputInvalidError, produce_plan
 
