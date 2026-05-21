@@ -47,7 +47,7 @@ _DELETE_SCOPED = re.compile(
 
 _MUTATION_CUE = re.compile(
     r"(?i)\b("
-    r"add|create|build|edit|change|update|fix|refactor|rename|move|wire|integrate|style|"
+    r"add|create|build|design|edit|change|update|fix|refactor|rename|move|wire|integrate|style|"
     r"set|turn|make|delete|remove"
     r")\b"
 )

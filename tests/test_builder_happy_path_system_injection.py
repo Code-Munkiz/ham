@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.api.chat import (
+    _BUILDER_GROUNDING_SYSTEM_INJECTION,
     _BUILDER_TURN_SYSTEM_INJECTION,
     _DEFAULT_CHAT_SYSTEM_PROMPT,
     _inject_builder_turn_system,
@@ -28,10 +29,22 @@ class TestInjectBuilderTurnSystem:
         result = _inject_builder_turn_system(msgs, "answer_question")
         assert result[0]["content"] == "base"
 
+    def test_grounding_injection_for_answer_question_in_builder_workspace(self) -> None:
+        msgs = [{"role": "system", "content": "base"}, {"role": "user", "content": "hi"}]
+        result = _inject_builder_turn_system(msgs, "answer_question", in_builder_workspace=True)
+        assert "Builder workspace grounding" in result[0]["content"]
+        assert "NEVER invent local files" in result[0]["content"]
+        assert "Builder turn override" not in result[0]["content"]
+
     def test_no_injection_for_plan_only(self) -> None:
         msgs = [{"role": "system", "content": "base"}]
         result = _inject_builder_turn_system(msgs, "plan_only")
         assert result[0]["content"] == "base"
+
+    def test_grounding_injection_for_plan_only_in_builder_workspace(self) -> None:
+        msgs = [{"role": "system", "content": "base"}]
+        result = _inject_builder_turn_system(msgs, "plan_only", in_builder_workspace=True)
+        assert "Builder workspace grounding" in result[0]["content"]
 
     def test_injection_appended_for_build_or_create(self) -> None:
         msgs = [{"role": "system", "content": "base"}, {"role": "user", "content": "build a game"}]
@@ -54,6 +67,12 @@ class TestInjectBuilderTurnSystem:
         assert "Plan with coding agents" in text
         assert "Cloud Agent narration" in text
         assert "managed mission" not in text.lower()
+        assert "NEVER invent local filesystem" in text
+
+    def test_grounding_injection_forbids_local_machine_hallucination(self) -> None:
+        text = _BUILDER_GROUNDING_SYSTEM_INJECTION
+        assert "on this machine" in text.lower()
+        assert "open it in your browser" in text.lower()
 
     def test_injection_forbids_iterative_build_promises(self) -> None:
         text = _BUILDER_TURN_SYSTEM_INJECTION

@@ -734,25 +734,46 @@ _BUILDER_TURN_SYSTEM_INJECTION = (
     "- Do NOT promise iterative or staged ongoing build work (e.g. \"I'll keep adding…\", "
     "\"as the build progresses…\", \"I'll then add…\", \"next I'll…\", \"I'll iterate on…\") "
     "or imply a multi-step agent is building in the background.\n"
+    "- Ground every claim in this workspace's builder records only. NEVER invent local filesystem "
+    "paths, games/apps on the user's machine, or offers to open something in their browser.\n"
+    "- NEVER refer to \"this machine\", \"your computer\", pre-existing local projects, or off-workspace files.\n"
+)
+
+_BUILDER_GROUNDING_SYSTEM_INJECTION = (
+    "**Builder workspace grounding.** This chat turn is inside a HAM Builder workspace. "
+    "You MUST ground every factual claim in Workbench/builder records for this project only.\n"
+    "- NEVER invent local files, paths, games/apps on the user's machine, or runtime state not backed "
+    "by workspace builder records.\n"
+    "- NEVER say \"on this machine\", \"your computer\", \"game files actually went\", or offer to "
+    "\"open it in your browser\" unless the Workbench already shows that artifact.\n"
+    "- If preview/source/job state is unknown, say so honestly and offer to build or retry in the "
+    "Workbench — do not guess or narrate a local environment.\n"
 )
 
 
 def _inject_builder_turn_system(
     llm_messages: list[dict[str, Any]],
     builder_intent: str,
+    *,
+    in_builder_workspace: bool = False,
 ) -> list[dict[str, Any]]:
-    """Inject per-turn system guidance when builder_intent is build_or_create."""
-    if builder_intent != "build_or_create":
+    """Inject per-turn system guidance for builder workspace turns."""
+    if builder_intent != "build_or_create" and not in_builder_workspace:
         return llm_messages
+    block = (
+        f"{_BUILDER_TURN_SYSTEM_INJECTION}\n\n{_BUILDER_GROUNDING_SYSTEM_INJECTION}".strip()
+        if builder_intent == "build_or_create"
+        else _BUILDER_GROUNDING_SYSTEM_INJECTION
+    )
     out = [dict(m) for m in llm_messages]
     if out and out[0].get("role") == "system":
         first = (out[0].get("content") or "").strip()
         out[0] = {
             "role": "system",
-            "content": f"{first}\n\n{_BUILDER_TURN_SYSTEM_INJECTION}".strip(),
+            "content": f"{first}\n\n{block}".strip() if first else block,
         }
     else:
-        out.insert(0, {"role": "system", "content": _BUILDER_TURN_SYSTEM_INJECTION})
+        out.insert(0, {"role": "system", "content": block})
     return out
 
 
@@ -1333,6 +1354,18 @@ def _builder_clarification_turn(builder_meta: dict[str, Any] | None) -> bool:
     return bool((builder_meta or {}).get("builder_clarification"))
 
 
+def _builder_grounded_status_turn(builder_meta: dict[str, Any] | None) -> bool:
+    return bool((builder_meta or {}).get("builder_grounded_status"))
+
+
+def _chat_in_builder_workspace(
+    *,
+    workspace_id: str | None,
+    project_id: str | None,
+) -> bool:
+    return bool((workspace_id or "").strip() and (project_id or "").strip())
+
+
 def _artifact_verification_payload(builder_meta: dict[str, Any] | None) -> dict[str, Any] | None:
     if not builder_meta:
         return None
@@ -1807,6 +1840,20 @@ async def post_chat(
             artifact_verification=_artifact_verification_payload(builder_meta),
             hermes_http_context_budget=None,
         )
+    if _builder_grounded_status_turn(builder_meta):
+        grounded_msg = str(builder_prefix or "").strip()
+        store.append_turns(sid, [ChatTurn(role="assistant", content=grounded_msg)])
+        return ChatResponse(
+            session_id=sid,
+            messages=store.list_messages(sid),
+            actions=[],
+            active_agent=ChatActiveAgentMeta.model_validate(active_meta) if active_meta else None,
+            operator_result=None,
+            execution_mode=execution_mode,
+            builder=builder_meta,
+            artifact_verification=_artifact_verification_payload(builder_meta),
+            hermes_http_context_budget=None,
+        )
     if (
         body.enable_operator
         and body.messages[-1].role == "user"
@@ -1863,7 +1910,14 @@ async def post_chat(
             artifact_verification=_artifact_verification_payload(builder_meta),
             hermes_http_context_budget=None,
         )
-    llm_messages = _inject_builder_turn_system(llm_messages, builder_intent)
+    llm_messages = _inject_builder_turn_system(
+        llm_messages,
+        builder_intent,
+        in_builder_workspace=_chat_in_builder_workspace(
+            workspace_id=body.workspace_id,
+            project_id=(body_eff.project_id or "").strip() or None,
+        ),
+    )
     budget_diag_rest: dict[str, Any] = {}
     try:
         assistant_raw = complete_chat_turn(
@@ -2037,6 +2091,26 @@ def post_chat_stream(
                         _chat_payload_attach_artifact_verification(payload, builder_meta)
                         yield json.dumps(payload) + "\n"
                         return
+                    if _builder_grounded_status_turn(builder_meta):
+                        grounded_msg = str(builder_prefix or "").strip()
+                        store.append_turns(sid, [ChatTurn(role="assistant", content=grounded_msg)])
+                        msgs = store.list_messages(sid)
+                        yield json.dumps({"type": "delta", "text": grounded_msg}) + "\n"
+                        payload = {
+                            "type": "done",
+                            "session_id": sid,
+                            "messages": msgs,
+                            "actions": [],
+                            "operator_result": None,
+                            "execution_mode": stream_execution_mode,
+                        }
+                        if stream_active_meta:
+                            payload["active_agent"] = stream_active_meta
+                        if builder_meta is not None:
+                            payload["builder"] = builder_meta
+                        _chat_payload_attach_artifact_verification(payload, builder_meta)
+                        yield json.dumps(payload) + "\n"
+                        return
                     if _builder_should_short_circuit_failure(builder_meta):
                         vf_text = _builder_verification_failure_assistant_text(
                             builder_prefix,
@@ -2166,6 +2240,40 @@ def post_chat_stream(
 
             return StreamingResponse(
                 clarify_only(),
+                media_type="application/x-ndjson; charset=utf-8",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                },
+            )
+        if _builder_grounded_status_turn(builder_meta):
+            grounded_msg = str(builder_prefix or "").strip()
+            store.append_turns(sid, [ChatTurn(role="assistant", content=grounded_msg)])
+            msgs = store.list_messages(sid)
+
+            def grounded_only():
+                try:
+                    yield json.dumps({"type": "session", "session_id": sid}) + "\n"
+                    yield json.dumps({"type": "delta", "text": grounded_msg}) + "\n"
+                    payload: dict[str, Any] = {
+                        "type": "done",
+                        "session_id": sid,
+                        "messages": msgs,
+                        "actions": [],
+                        "operator_result": None,
+                        "execution_mode": stream_execution_mode,
+                    }
+                    if stream_active_meta:
+                        payload["active_agent"] = stream_active_meta
+                    if builder_meta is not None:
+                        payload["builder"] = builder_meta
+                    _chat_payload_attach_artifact_verification(payload, builder_meta)
+                    yield json.dumps(payload) + "\n"
+                finally:
+                    release_stream_lock()
+
+            return StreamingResponse(
+                grounded_only(),
                 media_type="application/x-ndjson; charset=utf-8",
                 headers={
                     "Cache-Control": "no-cache",
@@ -2464,7 +2572,14 @@ def post_chat_stream(
             )
 
         assistant_turn_id = str(uuid4())
-        llm_messages = _inject_builder_turn_system(llm_messages, builder_intent)
+        llm_messages = _inject_builder_turn_system(
+        llm_messages,
+        builder_intent,
+        in_builder_workspace=_chat_in_builder_workspace(
+            workspace_id=body.workspace_id,
+            project_id=(body_eff.project_id or "").strip() or None,
+        ),
+    )
 
         def ndjson_gen():
             yield json.dumps({"type": "session", "session_id": sid}) + "\n"

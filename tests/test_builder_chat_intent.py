@@ -6,6 +6,7 @@ from src.ham.builder_chat_intent import (
     classify_builder_chat_intent,
     is_builder_advice_or_question_turn,
     is_builder_edit_like_followup,
+    is_builder_status_diagnostic_turn,
     is_crud_feature_build_request,
     looks_like_explicit_no_build,
 )
@@ -46,6 +47,11 @@ from src.ham.builder_chat_intent import (
         ("show me the plan before building", "plan_only"),
         ("create a dashboard", "build_or_create"),
         ("make a calculator app", "build_or_create"),
+        ("design a landing page for my startup", "build_or_create"),
+        ("update the dashboard layout", "build_or_create"),
+        ("change the app preview screen", "build_or_create"),
+        ("fix the preview build error", "build_or_create"),
+        ("generate a SaaS tool", "build_or_create"),
     ],
 )
 def test_classify_builder_chat_intent_buckets(text: str, expected: str) -> None:
@@ -160,3 +166,21 @@ def test_live_followup_phrases_are_edit_like_not_advice(text: str) -> None:
 def test_advice_followups_are_not_edit_like(text: str) -> None:
     assert is_builder_advice_or_question_turn(text) is True
     assert is_builder_edit_like_followup(text) is False
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "i don't see anything in the preview screen",
+        "preview is blank",
+        "nothing shows in the preview",
+        "where is it",
+        "it didn't build",
+    ],
+)
+def test_status_diagnostic_turns(text: str) -> None:
+    assert is_builder_status_diagnostic_turn(text) is True
+
+
+def test_pure_what_question_is_not_status_diagnostic() -> None:
+    assert is_builder_status_diagnostic_turn("what is a preview panel") is False
