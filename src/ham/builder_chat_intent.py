@@ -79,6 +79,10 @@ _BUILD_PATTERNS = (
     r"\bcreate\b",
     r"\bscaffold\b",
     r"\bgenerate\b",
+    r"\bdesign\b.{0,48}\b(landing|website|site|app|dashboard|tool|tracker|saas|portal|crm|game|clone|mvp|prototype)\b",
+    r"\bupdate\b.{0,48}\b(landing|website|site|app|dashboard|tool|tracker|game|clone|preview|ui|screen|layout)\b",
+    r"\bchange\b.{0,48}\b(landing|website|site|app|dashboard|tool|tracker|game|clone|preview|ui|screen|layout|theme|design)\b",
+    r"\bfix\b.{0,48}\b(landing|website|site|app|dashboard|tool|tracker|game|clone|preview|ui|screen|build|bug|error)\b",
     r"\bspin up\b",
     r"\bturn .{0,40}\binto an app\b",
     r"\bturn this into\b",
@@ -264,3 +268,30 @@ def classify_builder_chat_intent(user_plain: str) -> BuilderChatIntent:
     if re.search(r"^\s*make\s+", low) and len(low) < 220:
         return "plan_only"
     return "answer_question"
+
+
+_STATUS_DIAGNOSTIC_PATTERNS = (
+    r"\bpreview\b.{0,48}\b(blank|empty|broken|not working|doesn't work|doesnt work|missing|nothing|white|black)\b",
+    r"\b(blank|empty|broken)\b.{0,48}\bpreview\b",
+    r"\bi (?:do not|don't|dont) see\b",
+    r"\bnothing shows\b",
+    r"\bnothing (?:in|on|in the|shows in)\b.{0,32}\bpreview\b",
+    r"\bit didn't build\b",
+    r"\bit did not build\b",
+    r"\bwhere is it\b",
+    r"\bpreview (?:is )?(?:blank|empty|broken|not working)\b",
+    r"\bdidn't (?:build|generate|show)\b",
+    r"\bdid not (?:build|generate|show)\b",
+)
+
+
+def is_builder_status_diagnostic_turn(user_plain: str) -> bool:
+    """True when the user is complaining about preview/build visibility (not pure Q&A)."""
+    low = _norm_chat_1l(user_plain)
+    if not low:
+        return False
+    if any(re.search(p, low) for p in _ANSWER_PATTERNS) and not any(
+        re.search(p, low) for p in _STATUS_DIAGNOSTIC_PATTERNS
+    ):
+        return False
+    return any(re.search(p, low) for p in _STATUS_DIAGNOSTIC_PATTERNS)

@@ -29,6 +29,7 @@ from src.ham.clerk_auth import HamActor
 from src.ham.builder_chat_intent import (
     classify_builder_chat_intent,
     is_builder_edit_like_followup,
+    is_builder_status_diagnostic_turn,
     looks_like_explicit_no_build,
 )
 from src.ham.builder_mutation_router import classify_builder_project_action, resolve_snapshot_project_template
@@ -282,6 +283,64 @@ def _artifact_verification_failure_message(*, operation: str, detail: str) -> st
     return f"I couldn't build that yet{tail}.\n\n"
 
 
+def compose_builder_grounded_status_reply(*, workspace_id: str, project_id: str) -> str:
+    """Deterministic Workbench status copy from source + preview job records (never raises)."""
+    from src.persistence.builder_runtime_job_store import get_builder_runtime_job_store
+    from src.persistence.builder_source_store import get_builder_source_store
+
+    ws = (workspace_id or "").strip()
+    pid = (project_id or "").strip()
+    if not ws or not pid:
+        return (
+            "I don't have workspace builder records for this turn yet. "
+            "Open the project in the Workbench and try again.\n\n"
+        )
+
+    source_store = get_builder_source_store()
+    job_store = get_builder_runtime_job_store()
+    source_rows = source_store.list_project_sources(workspace_id=ws, project_id=pid)
+    has_active_source = any(bool(str(row.active_snapshot_id or "").strip()) for row in source_rows)
+    snapshots = source_store.list_source_snapshots(workspace_id=ws, project_id=pid)
+    latest_snapshot_id = str(snapshots[0].id or "").strip() if snapshots else ""
+    jobs = job_store.list_cloud_runtime_jobs(workspace_id=ws, project_id=pid)
+    latest_job = jobs[0] if jobs else None
+
+    if not has_active_source:
+        return (
+            "There isn't any committed project source in this workspace yet, so the preview has "
+            "nothing to show. Tell me what you'd like to build and I can create the first version "
+            "in the Workbench.\n\n"
+        )
+
+    job_status = str(getattr(latest_job, "status", "") or "").strip().lower()
+    job_phase = str(getattr(latest_job, "phase", "") or "").strip().lower()
+    failed = job_status in {"failed", "cancelled", "unsupported"} or job_phase in {"failed", "error"}
+
+    if failed:
+        detail_bits: list[str] = []
+        if job_status:
+            detail_bits.append(f"status {job_status}")
+        if job_phase:
+            detail_bits.append(f"phase {job_phase}")
+        detail = f" ({', '.join(detail_bits)})" if detail_bits else ""
+        snap_hint = f" Latest snapshot: {latest_snapshot_id}." if latest_snapshot_id else ""
+        return (
+            "Project source exists in this workspace, but the latest preview run did not succeed"
+            f"{detail}.{snap_hint} Retry the preview from the Workbench or ask me to rebuild.\n\n"
+        )
+
+    if job_status in {"queued", "running", "cancelling"}:
+        return (
+            "Project source exists and a preview run is still in progress. "
+            "Check the Workbench preview panel — it should update when the job finishes.\n\n"
+        )
+
+    return (
+        "Project source exists in this workspace. If the preview still looks empty, refresh the "
+        "Workbench preview or ask me to rebuild.\n\n"
+    )
+
+
 def resolve_effective_chat_project_id(
     *,
     workspace_id: str | None,
@@ -415,6 +474,13 @@ def run_builder_happy_path_hook(
         else str(base_intent)
     )
     meta["builder_intent"] = intent_out
+    if is_builder_status_diagnostic_turn(effective_plain):
+        grounded = compose_builder_grounded_status_reply(workspace_id=ws, project_id=pid)
+        return f"{directive_prefix}{grounded}", {
+            **meta,
+            "builder_intent": "answer_question",
+            "builder_grounded_status": True,
+        }
     if not forced_update and intent_out != "build_or_create":
         return None, meta
 
