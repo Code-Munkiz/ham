@@ -2,6 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+import * as React from "react";
 import { MemoryRouter } from "react-router-dom";
 
 vi.mock("../WorkspaceVoiceMessageInput", () => ({
@@ -22,7 +23,7 @@ vi.mock("../WorkspaceChatComposerActionsMenu", () => ({
 
 import { WorkspaceChatComposer } from "../WorkspaceChatComposer";
 
-const baseProps = {
+const baseProps: React.ComponentProps<typeof WorkspaceChatComposer> = {
   value: "",
   onChange: vi.fn(),
   onSubmit: vi.fn(),
