@@ -314,6 +314,49 @@ def apply_social_autonomy_profile(
     )
 
 
+def save_profile(
+    root: Path | None,
+    profile: GoHamSocialProfile,
+    *,
+    actor: str = "system",
+) -> ApplyResult:
+    """Persist an internally-trusted profile mutation with audit.
+
+    Autonomous tick execution is not an operator-facing write route, so it must
+    not depend on ``HAM_SOCIAL_AUTONOMY_WRITE_TOKEN`` being configured. This
+    helper shares the same atomic write, backup, path-safety, and audit envelope
+    behavior as ``apply_social_autonomy_profile`` while intentionally omitting
+    the external write-token gate.
+    """
+
+    paths = _store_paths(root)
+    _assert_safe_write_path(paths)
+
+    after_raw = _canonical_profile_bytes(profile)
+    before_raw = _read_document_bytes(paths.document)
+    backup_id: str | None = None
+    if before_raw is not None:
+        backup_id = _new_id()
+        paths.backup_dir.mkdir(parents=True, exist_ok=True)
+        (paths.backup_dir / f"{backup_id}.json").write_bytes(before_raw)
+
+    _atomic_write_bytes(paths.document, after_raw)
+    audit_id = _write_audit_envelope(
+        paths,
+        op="apply",
+        actor=actor,
+        before_raw=before_raw,
+        after_raw=after_raw,
+        backup_id=backup_id,
+    )
+    return ApplyResult(
+        backup_id=backup_id,
+        audit_id=audit_id,
+        effective_after=profile_to_safe_dict(profile),
+        new_revision=revision_for_bytes(after_raw),
+    )
+
+
 def _write_audit_envelope(
     paths: _StorePaths,
     *,

@@ -674,6 +674,13 @@ class SocialAutonomyPreviewTickRequest(BaseModel):
     action: SocialAutonomyAction | None = None
 
 
+class SocialAutonomyTickRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dry_run: bool = True
+    run_once: bool = False
+
+
 class SocialReactiveReplyApplyRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -3124,6 +3131,42 @@ def preview_social_autonomy_tick(
     del _actor
     profile = read_social_autonomy_profile(_project_root())
     return preview_autonomy_runner_tick(profile, channel=body.channel, action=body.action)
+
+
+@router.post("/autonomy/tick")
+def run_social_autonomy_tick_route(
+    body: SocialAutonomyTickRequest | None = None,
+    dry_run: bool | None = None,
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
+    authorization: str | None = Header(None, alias="Authorization"),
+    x_ham_operator_authorization: str | None = Header(None, alias="X-Ham-Operator-Authorization"),
+) -> Any:
+    if _actor is None:
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "error": {
+                    "code": "CLERK_SESSION_REQUIRED",
+                    "message": "Clerk session required for social autonomy tick.",
+                }
+            },
+        )
+    request = body or SocialAutonomyTickRequest()
+    effective_dry_run = dry_run if dry_run is not None else request.dry_run
+    if not effective_dry_run:
+        ham_bearer = resolve_ham_operator_authorization_header(
+            authorization=authorization,
+            x_ham_operator_authorization=x_ham_operator_authorization,
+        )
+        _require_social_live_token(ham_bearer)
+    from src.ham.social_autonomy.tick import run_social_autonomy_tick
+
+    return run_social_autonomy_tick(
+        store_path=_project_root(),
+        now=_utc_now(),
+        dry_run=effective_dry_run,
+        run_once=request.run_once,
+    )
 
 
 @router.get("/providers", response_model=SocialProvidersResponse)

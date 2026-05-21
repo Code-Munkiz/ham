@@ -1,5 +1,11 @@
 """GoHAM Social autonomy profile schema and state helpers."""
 
+from src.ham.social_autonomy.content_guards import (
+    collect_content_guard_reasons,
+    evaluate_content_guards,
+    forbidden_topic_matched,
+    safety_rules_checklist,
+)
 from src.ham.social_autonomy.enforcement import (
     AUTONOMY_ACTION_NOT_ALLOWED,
     AUTONOMY_APPLY_REASON_CODES,
@@ -10,6 +16,7 @@ from src.ham.social_autonomy.enforcement import (
     AUTONOMY_QUIET_HOURS_ACTIVE,
     autonomy_reasons_for_apply,
 )
+from src.ham.social_autonomy.learning_hook import append_tick_learning
 from src.ham.social_autonomy.schema import (
     GoHamSocialProfile,
     QuietHours,
@@ -17,6 +24,7 @@ from src.ham.social_autonomy.schema import (
     SocialAutonomyChannel,
     SocialAutonomyChannelConfig,
     SocialAutonomyStatus,
+    SocialAutonomyTickSummary,
 )
 from src.ham.social_autonomy.state import (
     AUTONOMY_INVALID_STATE_TRANSITION,
@@ -26,24 +34,73 @@ from src.ham.social_autonomy.state import (
     transition_to_running,
     transition_to_stopped,
 )
+from src.ham.social_autonomy.tick import (
+    AUTONOMY_CADENCE_NOT_DUE,
+    AUTONOMY_CAP_EXCEEDED,
+    AUTONOMY_CAP_TRACKING_UNAVAILABLE,
+    AUTONOMY_CAP_ZERO,
+    AUTONOMY_CHANNEL_UNAVAILABLE,
+    AUTONOMY_FORBIDDEN_TOPIC_MATCHED,
+    AUTONOMY_PAYLOAD_EMPTY_OR_TOO_SHORT,
+    AUTONOMY_PROFILE_MISSING,
+    AUTONOMY_SAFETY_RULE_UNENFORCED,
+    AUTONOMY_SAFETY_RULE_VIOLATION,
+    BLOCKED_REASON_CODES,
+    CadenceDecision,
+    SocialAutonomyTickResult,
+    cadence_due_state,
+    is_cadence_due,
+    is_quiet_hours_active,
+    next_run_at_for,
+    plan_social_autonomy_tick,
+    run_social_autonomy_tick,
+)
+from src.ham.social_autonomy.usage import UsageSourceUnavailable, count_actions_in_window
 
 __all__ = [
     "AUTONOMY_ACTION_NOT_ALLOWED",
     "AUTONOMY_APPLY_REASON_CODES",
+    "AUTONOMY_CAP_EXCEEDED",
+    "AUTONOMY_CAP_TRACKING_UNAVAILABLE",
+    "AUTONOMY_CAP_ZERO",
+    "AUTONOMY_CADENCE_NOT_DUE",
     "AUTONOMY_CHANNEL_DISABLED",
+    "AUTONOMY_CHANNEL_UNAVAILABLE",
     "AUTONOMY_DAILY_CAP_EXCEEDED",
     "AUTONOMY_EMERGENCY_STOP",
+    "AUTONOMY_FORBIDDEN_TOPIC_MATCHED",
+    "AUTONOMY_PAYLOAD_EMPTY_OR_TOO_SHORT",
+    "AUTONOMY_PROFILE_MISSING",
     "AUTONOMY_PROFILE_NOT_RUNNING",
     "AUTONOMY_QUIET_HOURS_ACTIVE",
+    "AUTONOMY_SAFETY_RULE_UNENFORCED",
+    "AUTONOMY_SAFETY_RULE_VIOLATION",
     "AUTONOMY_INVALID_STATE_TRANSITION",
+    "BLOCKED_REASON_CODES",
     "AutonomyTransitionResult",
+    "CadenceDecision",
     "GoHamSocialProfile",
     "QuietHours",
     "SocialAutonomyAction",
     "SocialAutonomyChannel",
     "SocialAutonomyChannelConfig",
     "SocialAutonomyStatus",
+    "SocialAutonomyTickSummary",
+    "SocialAutonomyTickResult",
+    "UsageSourceUnavailable",
+    "append_tick_learning",
     "autonomy_reasons_for_apply",
+    "cadence_due_state",
+    "collect_content_guard_reasons",
+    "count_actions_in_window",
+    "evaluate_content_guards",
+    "forbidden_topic_matched",
+    "is_cadence_due",
+    "is_quiet_hours_active",
+    "next_run_at_for",
+    "plan_social_autonomy_tick",
+    "run_social_autonomy_tick",
+    "safety_rules_checklist",
     "transition_status",
     "transition_to_paused",
     "transition_to_running",

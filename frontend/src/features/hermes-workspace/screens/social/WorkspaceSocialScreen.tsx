@@ -5,6 +5,8 @@ import {
   socialAdapter,
   type GoHamSocialProfile,
   type SocialAutonomyStatus,
+  type SocialAutonomyTickResult,
+  type SocialAutonomyTickSummary,
 } from "../../adapters/socialAdapter";
 import {
   WorkspaceSurfaceHeader,
@@ -58,6 +60,9 @@ function fallbackProfile(): GoHamSocialProfile {
     safety_rules: [...SAFETY_BOUNDARIES],
     learning_enabled: true,
     emergency_stop: false,
+    last_run_at: null,
+    next_run_at: null,
+    last_tick_summary: null,
     created_at: now,
     updated_at: now,
   };
@@ -105,6 +110,46 @@ function statusLabel(profile: GoHamSocialProfile): string {
   return labels[profile.status];
 }
 
+function statusBadge(
+  profile: GoHamSocialProfile,
+  profileInvalid: boolean,
+): { label: string; className: string } {
+  if (profileInvalid) {
+    return {
+      label: "Unknown",
+      className: "border-white/10 bg-white/[0.04] text-white/70",
+    };
+  }
+  if (profile.emergency_stop) {
+    return {
+      label: "Stopped",
+      className: "border-red-300/30 bg-red-500/10 text-red-100",
+    };
+  }
+  if (profile.status === "running") {
+    return {
+      label: "Running",
+      className: "border-emerald-300/30 bg-emerald-500/10 text-emerald-100",
+    };
+  }
+  if (profile.status === "paused") {
+    return {
+      label: "Paused",
+      className: "border-amber-300/30 bg-amber-500/10 text-amber-100",
+    };
+  }
+  if (profile.status === "stopped") {
+    return {
+      label: "Stopped",
+      className: "border-red-300/30 bg-red-500/10 text-red-100",
+    };
+  }
+  return {
+    label: "Unknown",
+    className: "border-white/10 bg-white/[0.04] text-white/70",
+  };
+}
+
 function channelBadge(profile: GoHamSocialProfile, channel: "x" | "telegram" | "discord"): string {
   if (channel === "discord") return "Not available";
   const cfg = profile.channels[channel];
@@ -135,6 +180,28 @@ function redactPlainText(value: string | null | undefined): string {
     .replace(/policy_[a-z0-9_\-]+/gi, "safety signal")
     .trim();
   return safe || "HAM is still gathering enough signal to share a useful lesson.";
+}
+
+function formatTickTimestamp(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed
+    .toISOString()
+    .replace("T", " ")
+    .replace(/\.\d{3}Z$/, " UTC")
+    .replace(/Z$/, " UTC");
+}
+
+function pluralize(count: number, singular: string): string {
+  return `${count} ${singular}${count === 1 ? "" : "s"}`;
+}
+
+function tickCountSummary(summary: SocialAutonomyTickSummary | SocialAutonomyTickResult): string {
+  return `${pluralize(summary.actions_considered.length, "considered")}; ${pluralize(
+    summary.actions_taken.length,
+    "taken",
+  )}`;
 }
 
 function formatActivity(profile: GoHamSocialProfile): string {
@@ -192,6 +259,127 @@ function NumberField({
         onChange={(event) => onChange(Math.max(0, Number(event.target.value) || 0))}
       />
     </label>
+  );
+}
+
+function SocialStatusPanel({
+  profile,
+  profileInvalid,
+}: {
+  profile: GoHamSocialProfile;
+  profileInvalid: boolean;
+}) {
+  const [previewResult, setPreviewResult] = React.useState<SocialAutonomyTickResult | null>(null);
+  const [previewBusy, setPreviewBusy] = React.useState(false);
+  const [previewError, setPreviewError] = React.useState<string | null>(null);
+  const badge = statusBadge(profile, profileInvalid);
+  const lastTickTime = formatTickTimestamp(profile.last_tick_summary?.recorded_at);
+  const nextRunTime = formatTickTimestamp(profile.next_run_at);
+  const previewEnabled = !profileInvalid && profile.status === "running";
+
+  const runPreview = async () => {
+    if (!previewEnabled || previewBusy) return;
+    setPreviewBusy(true);
+    setPreviewError(null);
+    setPreviewResult(null);
+    try {
+      const result = await socialAdapter.previewAutonomyTick({ dry_run: true });
+      if (result.tick) {
+        setPreviewResult(result.tick);
+      } else {
+        setPreviewError("Preview tick failed.");
+      }
+    } catch {
+      setPreviewError("Preview tick failed.");
+    } finally {
+      setPreviewBusy(false);
+    }
+  };
+
+  return (
+    <Card title="Autonomy status">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0">
+          <span
+            role="status"
+            aria-label={badge.label}
+            className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-semibold ${badge.className}`}
+          >
+            {badge.label}
+          </span>
+          <p className="mt-2 text-sm text-white/60">
+            Dry-run preview of the next autonomous social tick.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => void runPreview()}
+          disabled={!previewEnabled || previewBusy}
+          aria-busy={previewBusy ? "true" : undefined}
+        >
+          {previewBusy ? "Previewing…" : "Preview tick"}
+        </Button>
+      </div>
+
+      <dl className="mt-4 grid gap-3 md:grid-cols-2">
+        <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3">
+          <dt className="text-xs font-semibold uppercase tracking-[0.1em] text-white/45">
+            Last tick
+          </dt>
+          <dd
+            data-testid="social-status-last-tick"
+            className="mt-1 break-words text-sm text-white/80"
+          >
+            {profile.last_tick_summary && lastTickTime ? (
+              <>
+                <span>{lastTickTime}</span>
+                <span className="block text-xs text-white/55">
+                  {tickCountSummary(profile.last_tick_summary)}
+                </span>
+              </>
+            ) : (
+              "—"
+            )}
+          </dd>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3">
+          <dt className="text-xs font-semibold uppercase tracking-[0.1em] text-white/45">
+            Next run
+          </dt>
+          <dd data-testid="social-status-next-run" className="mt-1 text-sm text-white/80">
+            {nextRunTime ?? "—"}
+          </dd>
+        </div>
+      </dl>
+
+      {previewResult ? (
+        <div
+          aria-live="polite"
+          className="mt-4 rounded-xl border border-emerald-300/15 bg-emerald-500/5 px-3 py-3 text-sm text-emerald-50/85"
+        >
+          <p className="font-medium text-emerald-50">Preview summary</p>
+          <p className="mt-1">{tickCountSummary(previewResult)}</p>
+          <p className="mt-1">Profile status: {previewResult.profile_status}</p>
+          <p className="mt-1">
+            Blocked reasons:{" "}
+            {previewResult.blocked_reasons.length ? previewResult.blocked_reasons.join(", ") : "—"}
+          </p>
+          {previewResult.next_run_summary ? (
+            <p className="mt-1">{previewResult.next_run_summary}</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {previewError ? (
+        <p
+          role="alert"
+          className="mt-4 rounded-xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-100"
+        >
+          {previewError}
+        </p>
+      ) : null}
+    </Card>
   );
 }
 
@@ -398,6 +586,8 @@ export function WorkspaceSocialScreen() {
           </p>
         ) : null}
       </Card>
+
+      <SocialStatusPanel profile={profile} profileInvalid={profileInvalid} />
 
       <Card title="Goal">
         <label className="flex flex-col gap-2 text-sm text-white/70">

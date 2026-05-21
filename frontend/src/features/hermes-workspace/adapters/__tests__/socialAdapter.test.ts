@@ -11,7 +11,11 @@ vi.mock("@/lib/ham/clerkSession", () => ({
     getRegisteredClerkSessionTokenMock(opts),
 }));
 
-import { socialAdapter, type GoHamSocialProfile } from "../socialAdapter";
+import {
+  socialAdapter,
+  type GoHamSocialProfile,
+  type SocialAutonomyTickResult,
+} from "../socialAdapter";
 
 type Recorded = {
   url: string;
@@ -260,29 +264,49 @@ describe("socialAdapter autonomy methods", () => {
     },
   );
 
-  it("previewAutonomyTick posts channel and action", async () => {
-    const tick = {
-      channel: "x",
-      action: "reply",
-      would_run: true,
-      reasons: [],
-      next_run_summary: "Would inspect recent X replies.",
+  it("previewAutonomyTick method exists with dry_run signature", async () => {
+    const input = { dry_run: true } satisfies Parameters<typeof socialAdapter.previewAutonomyTick>[0];
+    const tick: SocialAutonomyTickResult = {
+      ran: false,
+      dry_run: true,
+      actions_considered: [],
+      actions_taken: [],
+      blocked_reasons: ["autonomy_cadence_not_due"],
+      next_run_summary: "Next due later.",
+      profile_status: "running",
     };
     const { recorded } = recordingFetch(() => jsonResponse(200, tick));
-    const result = await socialAdapter.previewAutonomyTick({ channel: "x", action: "reply" });
+
+    const result = await socialAdapter.previewAutonomyTick(input);
+
     expect(result.tick).toEqual(tick);
     expect(result.bridge.status).toBe("ready");
     expect(recorded[0]?.method).toBe("POST");
-    expect(recorded[0]?.url).toMatch(/\/api\/social\/autonomy\/preview-tick$/);
-    expect(JSON.parse(recorded[0]?.body ?? "{}")).toEqual({ channel: "x", action: "reply" });
+    expect(recorded[0]?.url).toMatch(/\/api\/social\/autonomy\/tick$/);
+    expect(JSON.parse(recorded[0]?.body ?? "{}")).toEqual({ dry_run: true });
   });
 
-  it("previewAutonomyTick maps errors", async () => {
+  it("previewAutonomyTick maps non-2xx errors", async () => {
     recordingFetch(() => jsonResponse(500, { detail: { error: { message: "tick failed" } } }));
-    const result = await socialAdapter.previewAutonomyTick({ channel: "telegram" });
+    const result = await socialAdapter.previewAutonomyTick({ dry_run: true });
     expect(result.tick).toBeNull();
     expect(result.bridge.status).not.toBe("ready");
     expect(result.error).toBe("tick failed");
+  });
+
+  it("previewAutonomyTick maps network failures", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("network down");
+      }),
+    );
+
+    const result = await socialAdapter.previewAutonomyTick({ dry_run: true });
+
+    expect(result.tick).toBeNull();
+    expect(result.bridge.status).not.toBe("ready");
+    expect(result.error).toBe("network down");
   });
 
   it("does not expose removed cockpit-only methods", () => {

@@ -643,6 +643,9 @@ export type GoHamSocialProfile = {
   safety_rules: string[];
   learning_enabled: boolean;
   emergency_stop: boolean;
+  last_run_at?: string | null;
+  next_run_at?: string | null;
+  last_tick_summary?: SocialAutonomyTickSummary | null;
   created_at: string;
   updated_at: string;
 };
@@ -658,6 +661,27 @@ export type SocialAutonomyTickPreview = {
   would_run: boolean;
   reasons: string[];
   next_run_summary: string;
+};
+
+export type SocialAutonomyTickSummary = {
+  ran: boolean;
+  dry_run: boolean;
+  actions_considered: string[];
+  actions_taken: string[];
+  blocked_reasons: string[];
+  profile_status: SocialAutonomyStatus;
+  recorded_at: string;
+  next_run_summary: string | null;
+};
+
+export type SocialAutonomyTickResult = {
+  ran: boolean;
+  dry_run: boolean;
+  actions_considered: string[];
+  actions_taken: string[];
+  blocked_reasons: string[];
+  next_run_summary: string | null;
+  profile_status: SocialAutonomyStatus;
 };
 
 export type SocialAutonomyWriteStatus = {
@@ -906,17 +930,14 @@ export const socialAdapter = {
     }
   },
 
-  async previewAutonomyTick(input: {
-    channel: SocialAutonomyChannel;
-    action?: SocialAutonomyAction;
-  }): Promise<{
-    tick: SocialAutonomyTickPreview | null;
+  async previewAutonomyTick(input: { dry_run: boolean }): Promise<{
+    tick: SocialAutonomyTickResult | null;
     bridge: SocialBridge;
     error?: string;
   }> {
     try {
       return {
-        tick: await requestJson<SocialAutonomyTickPreview>(`${BASE}/autonomy/preview-tick`, {
+        tick: await requestJson<SocialAutonomyTickResult>(`${BASE}/autonomy/tick`, {
           method: "POST",
           body: input,
         }),

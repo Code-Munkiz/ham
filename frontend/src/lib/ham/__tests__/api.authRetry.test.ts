@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { clearClerkSessionTokenCacheMock, getRegisteredClerkSessionTokenMock } = vi.hoisted(() => ({
-  clearClerkSessionTokenCacheMock: vi.fn(),
-  getRegisteredClerkSessionTokenMock: vi.fn(),
-}));
+const clerkSessionMocks = vi.hoisted(() => {
+  const clearTokenCache = vi.fn();
+  const getToken = vi.fn();
+  return { clearTokenCache, getToken };
+});
 
 vi.mock("@/lib/ham/clerkSession", () => ({
-  clearClerkSessionTokenCache: () => clearClerkSessionTokenCacheMock(),
-  getRegisteredClerkSessionToken: (opts?: { forceRefresh?: boolean }) =>
-    getRegisteredClerkSessionTokenMock(opts),
+  clearClerkSessionTokenCache: clerkSessionMocks.clearTokenCache,
+  getRegisteredClerkSessionToken: clerkSessionMocks.getToken,
 }));
 
 import { hamApiFetch } from "@/lib/ham/api";
@@ -36,10 +36,15 @@ describe("hamApiFetch auth retry", () => {
   it("retries once after a 401 and keeps auth in headers", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(new Response("unauthorized", { status: 401 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ detail: { code: "CLERK_SESSION_INVALID" } }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
     global.fetch = fetchMock as unknown as typeof fetch;
-    getRegisteredClerkSessionTokenMock.mockResolvedValue("clerk_jwt_mock");
+    clerkSessionMocks.getToken.mockResolvedValue("clerk_jwt_mock");
 
     const res = await hamApiFetch("/api/workspace/tools");
     expect(res.status).toBe(200);
@@ -57,8 +62,8 @@ describe("hamApiFetch auth retry", () => {
     const secondHeaders = calls[1]?.[1]?.headers as Headers;
     expect(firstHeaders.get("Authorization")).toBe("Bearer clerk_jwt_mock");
     expect(secondHeaders.get("Authorization")).toBe("Bearer clerk_jwt_mock");
-    expect(getRegisteredClerkSessionTokenMock).toHaveBeenNthCalledWith(1, { forceRefresh: false });
-    expect(getRegisteredClerkSessionTokenMock).toHaveBeenNthCalledWith(2, { forceRefresh: true });
-    expect(clearClerkSessionTokenCacheMock).toHaveBeenCalledTimes(1);
+    expect(clerkSessionMocks.getToken).toHaveBeenNthCalledWith(1, { forceRefresh: false });
+    expect(clerkSessionMocks.getToken).toHaveBeenNthCalledWith(2, { forceRefresh: true });
+    expect(clerkSessionMocks.clearTokenCache).toHaveBeenCalledTimes(1);
   });
 });
