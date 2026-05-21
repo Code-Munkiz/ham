@@ -52,7 +52,9 @@ const baseProps: React.ComponentProps<typeof WorkspaceChatComposer> = {
   },
 };
 
-function renderComposer(overrides: Partial<React.ComponentProps<typeof WorkspaceChatComposer>> = {}) {
+function renderComposer(
+  overrides: Partial<React.ComponentProps<typeof WorkspaceChatComposer>> = {},
+) {
   return render(
     <MemoryRouter>
       <div style={{ width: 480 }}>
