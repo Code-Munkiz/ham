@@ -253,6 +253,7 @@ def run_social_autonomy_tick(
     learning_store: Any = None,
     run_once: bool = False,
     critic: Any = None,
+    actor: str = "social-autonomy-tick",
 ) -> SocialAutonomyTickResult:
     """Run one bounded autonomy tick from the file-backed profile store."""
 
@@ -321,7 +322,7 @@ def run_social_autonomy_tick(
             "last_tick_summary": summary,
         }
     )
-    save_profile(root, updated, actor="social-autonomy-tick")
+    save_profile(root, updated, actor=actor)
 
     if updated.learning_enabled:
         from src.ham.social_autonomy.learning_hook import append_tick_learning

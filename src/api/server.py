@@ -47,6 +47,7 @@ from src.api.project_settings import router as project_settings_router
 from src.api.project_snapshots import router as project_snapshots_router
 from src.api.social import router as social_router
 from src.api.social_policy import router as social_policy_router
+from src.api.social_scheduler import router as social_scheduler_router
 from src.api.tts_endpoint import router as tts_router
 from src.api.workspace_conductor import router as workspace_conductor_router
 from src.api.workspace_files import resolve_workspace_context_snapshot_root
@@ -178,6 +179,7 @@ app.include_router(project_settings_router)
 app.include_router(project_snapshots_router)
 app.include_router(social_router)
 app.include_router(social_policy_router)
+app.include_router(social_scheduler_router)
 app.include_router(coding_agents_router)
 app.include_router(control_plane_runs_router)
 app.include_router(droid_audit_router)
