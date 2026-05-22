@@ -27,6 +27,7 @@ const {
   deleteBuilderLocalRunProfileMock,
   postBuilderLocalPreviewMock,
   deleteBuilderLocalPreviewMock,
+  downloadBuilderProjectZipMock,
 } = vi.hoisted(() => ({
   fetchWorkspaceToolsMock: vi.fn(),
   isLocalRuntimeConfiguredMock: vi.fn(() => false),
@@ -52,6 +53,7 @@ const {
   deleteBuilderLocalRunProfileMock: vi.fn(),
   postBuilderLocalPreviewMock: vi.fn(),
   deleteBuilderLocalPreviewMock: vi.fn(),
+  downloadBuilderProjectZipMock: vi.fn(),
 }));
 
 vi.mock("@/lib/ham/api", async (importOriginal) => {
@@ -87,6 +89,7 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
     deleteBuilderLocalRunProfile: (...args: unknown[]) => deleteBuilderLocalRunProfileMock(...args),
     postBuilderLocalPreview: (...args: unknown[]) => postBuilderLocalPreviewMock(...args),
     deleteBuilderLocalPreview: (...args: unknown[]) => deleteBuilderLocalPreviewMock(...args),
+    downloadBuilderProjectZip: (...args: unknown[]) => downloadBuilderProjectZipMock(...args),
   };
 });
 
@@ -111,10 +114,69 @@ function openPreviewDiagnostics() {
   fireEvent.click(screen.getByText("Advanced / Diagnostics"));
 }
 
+async function openWorkbenchMoreMenu() {
+  const trigger = screen.getByTestId("hww-workbench-more");
+  trigger.focus();
+  fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" });
+  fireEvent.click(trigger);
+  fireEvent.keyDown(trigger, { key: "Enter", code: "Enter" });
+  await waitFor(() => {
+    expect(screen.getByText(/Download project/i)).toBeInTheDocument();
+  });
+}
+
+function downloadMenuItem() {
+  return screen.getByText(/Download project/i).closest('[role="menuitem"]') as HTMLElement;
+}
+
+function mockProjectWithActiveSnapshot() {
+  listBuilderProjectSourcesMock.mockResolvedValue({
+    project_id: "proj_abc",
+    workspace_id: "ws_abc",
+    sources: [
+      {
+        id: "psrc_1",
+        project_id: "proj_abc",
+        workspace_id: "ws_abc",
+        kind: "chat_scaffold",
+        status: "ready",
+        display_name: "Chat scaffold",
+        origin_ref: "ham_chat",
+        active_snapshot_id: "ssnp_1",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+        created_by: "user_a",
+        metadata: {},
+      },
+    ],
+  });
+  listBuilderSourceSnapshotsMock.mockResolvedValue({
+    project_id: "proj_abc",
+    workspace_id: "ws_abc",
+    source_snapshots: [
+      {
+        id: "ssnp_1",
+        project_id: "proj_abc",
+        workspace_id: "ws_abc",
+        project_source_id: "psrc_1",
+        status: "materialized",
+        digest_sha256: "abc",
+        size_bytes: 123,
+        artifact_uri: "builder-artifact://bzip_1",
+        manifest: {},
+        created_at: "2026-01-01T00:00:00Z",
+        created_by: "user_a",
+        metadata: {},
+      },
+    ],
+  });
+}
+
 describe("WorkspaceWorkbench", () => {
   beforeEach(() => {
     fetchWorkspaceToolsMock.mockResolvedValue(toolsOk());
     isLocalRuntimeConfiguredMock.mockReturnValue(false);
+    downloadBuilderProjectZipMock.mockResolvedValue(undefined);
     listBuilderProjectSourcesMock.mockResolvedValue({
       project_id: "proj_abc",
       workspace_id: "ws_abc",
@@ -2410,5 +2472,102 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getByTestId("hww-workbench-tab-storage")).toBeInTheDocument();
     expect(screen.getByTestId("hww-workbench-tab-settings")).toBeInTheDocument();
     expect(screen.queryByTestId("hww-workbench-tab-terminal")).toBeNull();
+  });
+
+  it("Download project action is enabled when a project snapshot exists", async () => {
+    mockProjectWithActiveSnapshot();
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(listBuilderProjectSourcesMock).toHaveBeenCalled();
+    });
+    await openWorkbenchMoreMenu();
+    const item = downloadMenuItem();
+    expect(item).toHaveTextContent("Download project");
+    expect(item).not.toHaveAttribute("data-disabled");
+  });
+
+  it("Download project action stays disabled when no project is selected", async () => {
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench />
+      </MemoryRouter>,
+    );
+    await openWorkbenchMoreMenu();
+    const item = downloadMenuItem();
+    expect(item).toHaveTextContent("Download project");
+    expect(item).toHaveAttribute("data-disabled");
+  });
+
+  it("Download project click calls the export client helper", async () => {
+    mockProjectWithActiveSnapshot();
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(listBuilderProjectSourcesMock).toHaveBeenCalled();
+    });
+    await openWorkbenchMoreMenu();
+    fireEvent.click(downloadMenuItem());
+    await waitFor(() => {
+      expect(downloadBuilderProjectZipMock).toHaveBeenCalledWith("ws_abc", "proj_abc", "ssnp_1");
+    });
+  });
+
+  it("Download project shows loading copy while export is in flight", async () => {
+    mockProjectWithActiveSnapshot();
+    let resolveDownload: (() => void) | undefined;
+    downloadBuilderProjectZipMock.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveDownload = resolve;
+        }),
+    );
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(listBuilderProjectSourcesMock).toHaveBeenCalled();
+    });
+    await openWorkbenchMoreMenu();
+    fireEvent.click(downloadMenuItem());
+    expect(await screen.findByText("Downloading project…")).toBeInTheDocument();
+    resolveDownload?.();
+    await waitFor(() => {
+      expect(screen.queryByText("Downloading project…")).toBeNull();
+    });
+  });
+
+  it("Download project failure renders friendly copy without internal details", async () => {
+    mockProjectWithActiveSnapshot();
+    downloadBuilderProjectZipMock.mockRejectedValueOnce(
+      new Error("ARTIFACT_NOT_FOUND builder-artifact://bzip_secret argv runner URL"),
+    );
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(listBuilderProjectSourcesMock).toHaveBeenCalled();
+    });
+    await openWorkbenchMoreMenu();
+    fireEvent.click(downloadMenuItem());
+    const err = await screen.findByTestId("hww-workbench-download-error");
+    expect(err).toHaveTextContent("Could not download the project. Try again in a moment.");
+    const dom = document.body.textContent || "";
+    expect(dom).not.toMatch(/safe_edit_low/i);
+    expect(dom).not.toMatch(/HAM_DROID_EXEC_TOKEN/i);
+    expect(dom).not.toMatch(/droid exec/i);
+    expect(dom).not.toMatch(/\bargv\b/i);
+    expect(dom).not.toMatch(/runner url/i);
+    expect(dom).not.toMatch(/builder-artifact/i);
   });
 });

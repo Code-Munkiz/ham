@@ -826,6 +826,45 @@ export async function getBuilderSnapshotFileContent(
   }>;
 }
 
+/** Download the builder source snapshot as a ZIP (Workbench export finish line). */
+export async function downloadBuilderProjectZip(
+  workspaceId: string,
+  projectId: string,
+  snapshotId: string,
+): Promise<void> {
+  const path = `/api/workspaces/${encodeURIComponent(workspaceId)}/projects/${encodeURIComponent(projectId)}/builder/source-snapshots/${encodeURIComponent(snapshotId)}/export`;
+  const res = await hamApiFetch(path);
+  if (!res.ok) {
+    const detail = (await hamApiErrorDetailMessage(res)) || "";
+    if (res.status === 404) {
+      throw new Error("This project is not ready to download yet.");
+    }
+    if (/artifact|snapshot|export empty/i.test(detail)) {
+      throw new Error("This project is not ready to download yet.");
+    }
+    throw new Error("Could not download the project. Try again in a moment.");
+  }
+  const blob = await res.blob();
+  const cd = res.headers.get("Content-Disposition") ?? "";
+  let filename = "ham-project.zip";
+  const mQ = /filename="([^"]+)"/i.exec(cd);
+  if (mQ?.[1]) {
+    filename = mQ[1].trim();
+  }
+  const url = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 export type BuilderSnapshotFileChatMode = "explain" | "edit";
 
 export async function postBuilderSnapshotFileChat(

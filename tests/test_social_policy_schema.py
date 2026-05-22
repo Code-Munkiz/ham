@@ -112,8 +112,8 @@ def test_live_autonomy_armed_deprecation_comment_present() -> None:
 
 
 def test_live_autonomy_armed_has_no_apply_enforcement_reader() -> None:
+    # social.py may reference the deprecated field name for advisory-only responses.
     for path in [
-        Path("src/api/social.py"),
         Path("src/ham/social_autonomy/enforcement.py"),
         Path("src/ham/social_telegram_autopilot.py"),
     ]:

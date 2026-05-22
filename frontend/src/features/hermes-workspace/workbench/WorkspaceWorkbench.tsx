@@ -35,6 +35,7 @@ import {
   createBuilderVisualEditRequest,
   deleteBuilderLocalRunProfile,
   deleteBuilderLocalPreview,
+  downloadBuilderProjectZip,
   getBuilderActivity,
   getBuilderCloudRuntime,
   getBuilderCloudRuntimeJobStatus,
@@ -55,7 +56,10 @@ import {
   saveBuilderLocalRunProfile,
   shouldResetHamWorkbenchProjectSelection,
 } from "@/lib/ham/api";
-import { sanitizeWorkbenchProjectAccessMessage } from "@/lib/ham/workbenchProjectMessages";
+import {
+  sanitizeWorkbenchProjectAccessMessage,
+  sanitizeWorkbenchDownloadErrorMessage,
+} from "@/lib/ham/workbenchProjectMessages";
 import { workspaceProjectScope } from "@/lib/ham/workspaceProjectScope";
 import { detectPreviewIframeProxySignals } from "@/features/hermes-workspace/workbench/previewProxyIframeSignals";
 import { cn } from "@/lib/utils";
@@ -115,6 +119,66 @@ export function WorkspaceWorkbench({
   const [workbenchTabBarMode, setWorkbenchTabBarMode] = React.useState<"labeled" | "icons">(
     "labeled",
   );
+  const [exportSnapshotId, setExportSnapshotId] = React.useState<string | null>(null);
+  const [exportSnapshotLoading, setExportSnapshotLoading] = React.useState(false);
+  const [downloadBusy, setDownloadBusy] = React.useState(false);
+  const [downloadError, setDownloadError] = React.useState<string | null>(null);
+
+  const ws = workspaceId?.trim() || "";
+  const pid = projectId?.trim() || "";
+  const canDownloadProject = Boolean(ws && pid && exportSnapshotId && !exportSnapshotLoading);
+
+  React.useEffect(() => {
+    if (!ws || !pid) {
+      setExportSnapshotId(null);
+      setExportSnapshotLoading(false);
+      setDownloadError(null);
+      return;
+    }
+    let cancelled = false;
+    setExportSnapshotLoading(true);
+    void (async () => {
+      try {
+        const [sn, src] = await Promise.all([
+          listBuilderSourceSnapshots(ws, pid),
+          listBuilderProjectSources(ws, pid),
+        ]);
+        if (cancelled) return;
+        const snaps = sn.source_snapshots || [];
+        const active =
+          (src.sources || []).find((row) => row.active_snapshot_id)?.active_snapshot_id ||
+          latestListedSourceSnapshotId(snaps);
+        setExportSnapshotId(active);
+        setDownloadError(null);
+      } catch (e) {
+        if (cancelled) return;
+        setExportSnapshotId(null);
+        setDownloadError(
+          sanitizeWorkbenchDownloadErrorMessage(e instanceof Error ? e.message : String(e)),
+        );
+      } finally {
+        if (!cancelled) setExportSnapshotLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ws, pid, sourceRefreshKey]);
+
+  const handleDownloadProject = React.useCallback(async () => {
+    if (!canDownloadProject || !exportSnapshotId) return;
+    setDownloadBusy(true);
+    setDownloadError(null);
+    try {
+      await downloadBuilderProjectZip(ws, pid, exportSnapshotId);
+    } catch (e) {
+      setDownloadError(
+        sanitizeWorkbenchDownloadErrorMessage(e instanceof Error ? e.message : String(e)),
+      );
+    } finally {
+      setDownloadBusy(false);
+    }
+  }, [canDownloadProject, exportSnapshotId, ws, pid]);
 
   React.useEffect(() => {
     if (workbenchRefreshSignal > 0) {
@@ -193,6 +257,15 @@ export function WorkspaceWorkbench({
           })}
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          {downloadError ? (
+            <p
+              className="max-w-[12rem] truncate text-[10px] text-amber-200/90"
+              data-testid="hww-workbench-download-error"
+              title={downloadError}
+            >
+              {downloadError}
+            </p>
+          ) : null}
           <Button
             type="button"
             size="sm"
@@ -237,10 +310,20 @@ export function WorkspaceWorkbench({
                 align="end"
               >
                 <DropdownMenu.Item
-                  disabled
-                  className="cursor-not-allowed rounded px-2 py-1.5 text-white/40 outline-none"
+                  disabled={!canDownloadProject || downloadBusy}
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    void handleDownloadProject();
+                  }}
+                  className={cn(
+                    "rounded px-2 py-1.5 outline-none",
+                    canDownloadProject && !downloadBusy
+                      ? "cursor-pointer text-white/88 hover:bg-white/[0.06]"
+                      : "cursor-not-allowed text-white/40",
+                  )}
+                  data-testid="hww-workbench-download-zip"
                 >
-                  Download ZIP — Coming soon
+                  {downloadBusy ? "Downloading project…" : "Download project"}
                 </DropdownMenu.Item>
                 <DropdownMenu.Item
                   disabled
