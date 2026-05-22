@@ -1,0 +1,55 @@
+{
+  "assertion_id": "VAL-M15-CROSS-DURABILITY-E2E-001",
+  "description": "AutonomyProfile state survives a Cloud Run revision rollover (M1→M2)",
+  "timestamp_utc": "2026-05-22T19:00:00Z",
+  "pre_rollover": {
+    "revision_id": "ham-api-00313-s64",
+    "git_sha": "ae465525a580226061a0c111036e42d96031b6bd",
+    "milestone": "M1",
+    "snapshot_method": "Clerk-authed GET /api/social/autonomy via browser-harness",
+    "snapshot": {
+      "profile_status": "draft",
+      "channels": {
+        "x": {"enabled": false, "available": true},
+        "telegram": {"enabled": false, "available": true},
+        "discord": {"enabled": false, "available": false}
+      },
+      "daily_caps": {"x": 0, "telegram": 0, "discord": 0},
+      "emergency_stop": false
+    },
+    "clerk_jwt": "<REDACTED>",
+    "seeding_attempted": true,
+    "seeding_result": "BLOCKED - AUTONOMY_WRITE_DISABLED (HAM_SOCIAL_AUTONOMY_WRITE_TOKEN not configured on live revision ham-api-00313-s64)"
+  },
+  "post_rollover": {
+    "revision_id": "PENDING_M2_DEPLOY",
+    "git_sha": "PENDING_M2_DEPLOY",
+    "milestone": "M2",
+    "snapshot": null,
+    "note": "Operator must deploy M2 (git_sha e9a0ef72a0a62cb839ce44cbb2468685ecb0a9a6) to Cloud Run to capture post-rollover snapshot. M2 code is on origin/main as of 2026-05-22."
+  },
+  "m2_sha_on_main": "e9a0ef72a0a62cb839ce44cbb2468685ecb0a9a6",
+  "m1_firestore_env_vars_present": [
+    "HAM_SOCIAL_AUTONOMY_STORE_BACKEND",
+    "HAM_SOCIAL_DELIVERY_LOG_BACKEND",
+    "HAM_HAMGOMOON_LEARNING_BACKEND",
+    "HAM_TELEGRAM_TRANSCRIPT_BACKEND",
+    "HAM_TELEGRAM_OFFSET_BACKEND",
+    "HAM_SOCIAL_SCHEDULER_STATE_BACKEND"
+  ],
+  "m2_critic_env_vars_present": [],
+  "m2_critic_env_vars_absent": [
+    "HAM_SOCIAL_CRITIC_USE_HERMES",
+    "HAM_SOCIAL_CRITIC_MODEL",
+    "HAM_SOCIAL_CRITIC_TIMEOUT_SEC",
+    "HAM_SOCIAL_CRITIC_MAX_INPUT_CHARS"
+  ],
+  "verdict": "PARTIAL - pre-rollover snapshot captured (M1 revision ham-api-00313-s64, Firestore-backed); seeding blocked by AUTONOMY_WRITE_DISABLED; post-rollover snapshot PENDING operator M2 deploy",
+  "operator_actions_required": [
+    "Deploy M2 (e9a0ef72) to Cloud Run ham-api service",
+    "Set HAM_SOCIAL_AUTONOMY_WRITE_TOKEN on the new revision to enable write seeding",
+    "Set M2 critic env vars (HAM_SOCIAL_CRITIC_USE_HERMES, HAM_SOCIAL_CRITIC_MODEL, HAM_SOCIAL_CRITIC_TIMEOUT_SEC, HAM_SOCIAL_CRITIC_MAX_INPUT_CHARS) on the new revision",
+    "After M2 deploy: seed profile via Clerk-authed PATCH /api/social/autonomy/settings (channels.telegram.enabled=true, daily_caps.telegram=3) + POST /api/social/autonomy/launch",
+    "After M2 deploy: capture GET /api/social/autonomy post-rollover snapshot and verify byte-equality with pre-rollover + seeded state"
+  ]
+}

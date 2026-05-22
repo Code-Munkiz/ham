@@ -1,0 +1,62 @@
+{
+  "milestone": "m2-readiness-patch-critic",
+  "feature": "m2-deploy-verification-and-baselines",
+  "timestamp_utc": "2026-05-22T19:00:00Z",
+  "m2_sha": "e9a0ef72a0a62cb839ce44cbb2468685ecb0a9a6",
+  "m2_pushed_to_main": true,
+  "lint_fix_sha": "707cfb2d",
+  "assertions": {
+    "VAL-M15-M2-DEPLOY-COMMIT-001": {
+      "status": "passed",
+      "evidence": "git show e9a0ef72 --stat touches only src/ham/hamgomoon_learning/, src/ham/social_autonomy/, tests/; no frontend/, desktop/, docs/, .github/. test_mission15_m2_commit_scope.py PASSED.",
+      "commit_sha": "e9a0ef72a0a62cb839ce44cbb2468685ecb0a9a6",
+      "files_changed": [
+        "src/ham/hamgomoon_learning/hermes_critic.py",
+        "src/ham/hamgomoon_learning/hermes_critic_real.py",
+        "src/ham/hamgomoon_learning/models.py",
+        "src/ham/social_autonomy/learning_hook.py",
+        "src/ham/social_autonomy/tick.py",
+        "tests/test_hamgomoon_learning_critic.py",
+        "tests/test_social_autonomy_tick.py"
+      ]
+    },
+    "VAL-M15-M2-DEPLOY-STAGING-REACHABLE-002": {
+      "status": "blocked",
+      "rationale": "Cloud Run still serving M1 revision ham-api-00313-s64 (git_sha ae465525). M2 code (e9a0ef72) is on origin/main but operator deploy has not occurred. New capabilities fields (telegram_readiness, hermes_gateway_readiness) not yet verifiable.",
+      "pre_m2_build_info": {
+        "git_sha": "ae465525a580226061a0c111036e42d96031b6bd",
+        "deployed_revision": "ham-api-00313-s64"
+      }
+    },
+    "VAL-M15-M2-DEPLOY-CRITIC-ENV-PRESENCE-001": {
+      "status": "blocked",
+      "rationale": "M2 not yet deployed; critic env vars (HAM_SOCIAL_CRITIC_USE_HERMES, HAM_SOCIAL_CRITIC_MODEL, HAM_SOCIAL_CRITIC_TIMEOUT_SEC, HAM_SOCIAL_CRITIC_MAX_INPUT_CHARS) absent on ham-api-00313-s64. Will be verified post-M2-deploy."
+    },
+    "VAL-M15-M2-LINT-RUFF-CHECK-001": {
+      "status": "passed",
+      "evidence": "ruff check . --exclude browser-harness --output-format=concise | wc -l = 732 (≤ 732 baseline). test_mission15_m2_lint_baseline.py::test_ruff_check_at_or_below_baseline PASSED."
+    },
+    "VAL-M15-M2-LINT-RUFF-FORMAT-001": {
+      "status": "passed",
+      "evidence": "ruff format --check . --exclude browser-harness | grep -c 'Would reformat' = 432 (≤ 433 ceiling). test_mission15_m2_lint_baseline.py::test_ruff_format_at_or_below_baseline PASSED."
+    },
+    "VAL-M15-M2-SECRET-STATIC-SCAN-001": {
+      "status": "passed",
+      "evidence": "rg scan found zero new production-leak class hits. All matches are pre-existing test fixtures with synthetic/redacted values (Authorization: Bearer user-a.jwt, xai-secret-value, etc.). No TELEGRAM_BOT_TOKEN=, HAM_SOCIAL_LIVE_APPLY_TOKEN=, HERMES_GATEWAY_API_KEY= literal assignments."
+    },
+    "VAL-M15-M2-SNAPSHOT-PINS-001": {
+      "status": "passed",
+      "evidence": "tests/test_social_api_policy_snapshot.py (14 passed), tests/test_social_api_autonomy_gate.py (23 passed), tests/test_social_autonomy_telegram_adapter_readiness_propagation.py (5 passed), tests/test_social_autonomy_usage.py (17 passed), test_tick_succeeds_for_telegram_when_delivery_log_missing (1 passed). Total: 60 snapshot pin tests PASSED."
+    },
+    "VAL-M15-CROSS-DURABILITY-E2E-001": {
+      "status": "partial",
+      "rationale": "Pre-rollover snapshot captured on M1 revision (ham-api-00313-s64, Firestore-backed). Seeding blocked by AUTONOMY_WRITE_DISABLED (write token not set). Post-rollover snapshot pending operator M2 deploy. See durability-e2e.json.",
+      "evidence_file": "validation/m2/user-testing/durability-e2e.json"
+    }
+  },
+  "local_test_gate": {
+    "scoped_tests_passed": 720,
+    "command": ".venv/bin/python -m pytest tests/ -k 'social_autonomy or social_telegram or autonomy_tick or social_delivery or hamgomoon_learning or scheduler or firestore' -q",
+    "status": "passed"
+  }
+}
