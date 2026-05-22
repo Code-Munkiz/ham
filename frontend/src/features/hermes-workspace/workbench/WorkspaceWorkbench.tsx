@@ -56,10 +56,14 @@ import {
   saveBuilderLocalRunProfile,
   shouldResetHamWorkbenchProjectSelection,
 } from "@/lib/ham/api";
+import { sanitizeWorkbenchProjectAccessMessage, sanitizeWorkbenchDownloadErrorMessage } from "@/lib/ham/workbenchProjectMessages";
 import {
-  sanitizeWorkbenchProjectAccessMessage,
-  sanitizeWorkbenchDownloadErrorMessage,
-} from "@/lib/ham/workbenchProjectMessages";
+  buildPreviewPrimaryState,
+  previewPhaseUserLabel,
+  sanitizePreviewDetailsStatus,
+  sanitizePreviewFetchError,
+  sanitizePreviewStateError,
+} from "@/lib/ham/workbenchPreviewMessages";
 import { workspaceProjectScope } from "@/lib/ham/workspaceProjectScope";
 import { detectPreviewIframeProxySignals } from "@/features/hermes-workspace/workbench/previewProxyIframeSignals";
 import { cn } from "@/lib/utils";
@@ -403,11 +407,6 @@ function MutedPanel({ children }: { children: React.ReactNode }) {
   return <div className="space-y-3 text-[12px] leading-relaxed text-white/70">{children}</div>;
 }
 
-function isProjectNotFoundError(message: string | null): boolean {
-  const text = (message || "").toLowerCase();
-  return text.includes("unknown project_id") || text.includes("project_not_found");
-}
-
 function isSessionAuthInterruption(message: string | null): boolean {
   const text = (message || "").toLowerCase();
   return (
@@ -420,25 +419,6 @@ function isSessionAuthInterruption(message: string | null): boolean {
     /(^|\\b)401(\\b|$)/.test(text) ||
     text.includes("http 401")
   );
-}
-
-function sanitizePreviewFetchError(message: string | null): string | null {
-  const raw = (message || "").trim();
-  if (!raw) return null;
-  if (/\b404\b/i.test(raw) || /HTTP\s*404/i.test(raw)) {
-    return "Preview status is not available yet.";
-  }
-  if (/\b502\b/i.test(raw) || /\bBAD_GATEWAY\b/i.test(raw)) {
-    return "Preview is still preparing (runtime warming). HAM keeps retrying with backoff.";
-  }
-  if (
-    /PREVIEW_PROXY_UPSTREAM_UNAVAILABLE/i.test(raw) ||
-    /PREVIEW_PROXY_TIMEOUT/i.test(raw) ||
-    /PREVIEW_PROXY_NOT_CONFIGURED/i.test(raw)
-  ) {
-    return "Preview is still warming up. HAM will keep retrying until it is ready.";
-  }
-  return raw;
 }
 
 function previewIframeUpstreamLooksHardBroken(params: {
@@ -560,6 +540,13 @@ function WorkbenchPreviewPanel({
   const activityDrivenPreviewRefreshAtRef = React.useRef(0);
   const staleScopeNotifiedRef = React.useRef(false);
   const staleBuilderCbRef = React.useRef(onStaleBuilderProject);
+  const previewAdvancedRef = React.useRef<HTMLDetailsElement | null>(null);
+  const openPreviewDetails = React.useCallback(() => {
+    const node = previewAdvancedRef.current;
+    if (!node) return;
+    node.open = true;
+    node.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+  }, []);
 
   React.useEffect(() => {
     staleBuilderCbRef.current = onStaleBuilderProject;
@@ -1148,68 +1135,29 @@ function WorkbenchPreviewPanel({
     "experiment_not_enabled",
     "config_missing",
   ].includes(cloudRuntimeState);
-  const primaryState =
-    previewPhase === "no_project" || previewPhase === "no_source"
-      ? {
-          title: "Tell HAM what to build.",
-          subtitle: "Your app preview will appear here once HAM creates the first source.",
-        }
-      : previewPhase === "preparing"
-        ? {
-            title: "Preparing your project…",
-            subtitle: "Hang tight while HAM sets up the first source snapshot.",
-          }
-        : previewPhase === "source_ready"
-          ? {
-              title:
-                preview?.mode === "cloud"
-                  ? preview?.message || "Preparing your cloud preview…"
-                  : "Source is ready. Preparing preview…",
-              subtitle:
-                preview?.mode === "cloud"
-                  ? cloudPreviewDisconnected
-                    ? preview?.message || "Cloud preview is not configured in this environment."
-                    : "Source files are visible in the Code tab. Your preview will load here when the environment is ready."
-                  : cloudPreviewDisconnected
-                    ? "Cloud preview is not connected in this environment."
-                    : "Connect a local preview URL when your dev server is running, or open Advanced for diagnostics.",
-            }
-          : previewPhase === "starting"
-            ? {
-                title:
-                  preview?.mode === "cloud" && preview?.message
-                    ? preview.message
-                    : "Starting preview environment…",
-                subtitle: iframeProxyWarmupPaused
-                  ? "Preview gateway is warming up. Use Refresh status, or wait a few seconds—we will retry without reloading the preview tab repeatedly."
-                  : iframeProxyError === "PREVIEW_PROXY_WARMUP"
-                    ? "Preview gateway is warming up. Retrying on a backoff so the browser does not hammer the preview tab."
-                    : preview?.mode === "cloud"
-                      ? authSessionRefreshing
-                        ? "Session refreshing... HAM will retry authenticated preview polling."
-                        : "Source files are visible in the Code tab."
-                      : activity[0]?.title
-                        ? `Latest: ${activity[0].title}`
-                        : "Provisioning or waiting for a preview URL.",
-              }
-            : previewPhase === "error"
-              ? {
-                  title:
-                    iframeProxyError === "PREVIEW_PROXY_FAILED"
-                      ? "Preview gateway lost contact with your hosted runtime."
-                      : hasBackendSource
-                        ? "Source saved — preview failed"
-                        : "Preview could not start.",
-                  subtitle:
-                    iframeProxyError === "PREVIEW_PROXY_FAILED"
-                      ? "The sandbox build finished but the iframe proxy still could not reach the app. Retry Refresh status, or prompt another tiny edit."
-                      : hasBackendSource
-                        ? preview?.message ||
-                          "Source files are in the Code tab. This build was not deployed. Use Refresh status or Retry preview in Advanced."
-                        : preview?.message ||
-                          "Something went wrong. Open Advanced for diagnostics.",
-                }
-              : { title: "", subtitle: "" };
+  const primaryState = buildPreviewPrimaryState(previewPhase, {
+    previewMode: preview?.mode ?? null,
+    previewMessage: preview?.message ?? null,
+    hasBackendSource,
+    iframeProxyError,
+    iframeProxyWarmupPaused,
+    authSessionRefreshing,
+    cloudPreviewDisconnected,
+    activityTitle: activity[0]?.title ?? null,
+    rawError: error,
+  });
+  const previewStateError =
+    previewPhase === "error"
+      ? sanitizePreviewStateError(error, preview?.message)
+      : null;
+  const showPreviewRetry =
+    previewPhase === "error" ||
+    previewPhase === "starting" ||
+    (previewPhase === "source_ready" && (iframeProxyWarmupPaused || iframeProxyError === "PREVIEW_PROXY_WARMUP"));
+  const showPreviewOpenDetails =
+    previewPhase !== "no_project" &&
+    previewPhase !== "no_source" &&
+    previewPhase !== "ready";
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden text-[12px] leading-relaxed text-white/70">
       <div className="flex flex-wrap items-center gap-2">
@@ -1326,7 +1274,7 @@ function WorkbenchPreviewPanel({
       {previewPhase !== "ready" ? (
         <div className="flex flex-wrap items-center gap-1.5" data-testid="hww-preview-status-pills">
           <span className="rounded-full border border-white/[0.12] bg-black/35 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/60">
-            {previewPhase.replaceAll("_", " ")}
+            {previewPhaseUserLabel(previewPhase)}
           </span>
         </div>
       ) : null}
@@ -1518,20 +1466,15 @@ function WorkbenchPreviewPanel({
                 Preview authentication failed. Refresh status and try again.
               </p>
             ) : null}
-            {previewPhase === "error" ? (
+            {previewStateError ? (
               <p
                 className="max-w-md text-[12px] text-amber-200/90"
                 data-testid="hww-preview-state-error"
               >
-                {isProjectNotFoundError(error || "")
-                  ? "Project record not found. Refresh workspace or create a new project."
-                  : sanitizePreviewFetchError(error || preview?.message || "") ||
-                    (error
-                      ? sanitizeWorkbenchProjectAccessMessage(String(error))
-                      : preview?.message || "Something went wrong. Open Advanced for details.")}
+                {previewStateError}
               </p>
             ) : null}
-            {previewPhase === "error" ? (
+            {showPreviewRetry ? (
               <Button
                 type="button"
                 size="sm"
@@ -1544,10 +1487,23 @@ function WorkbenchPreviewPanel({
                 Try again
               </Button>
             ) : null}
+            {showPreviewOpenDetails ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="text-[11px] text-white/60"
+                data-testid="hww-preview-open-details"
+                onClick={openPreviewDetails}
+              >
+                Open details
+              </Button>
+            ) : null}
           </div>
         )}
       </div>
       <details
+        ref={previewAdvancedRef}
         className="shrink-0 rounded-md border border-white/[0.08] bg-black/15 p-2"
         data-testid="hww-preview-advanced"
       >
@@ -1557,15 +1513,15 @@ function WorkbenchPreviewPanel({
         <div className="mt-3 space-y-3">
           {preview ? (
             <p className="text-[10px] text-white/45" data-testid="hww-preview-api-message">
-              API status: {preview.message || "—"}
+              Status: {sanitizePreviewDetailsStatus(preview.message)}
               {preview.source_snapshot_id && preview.status !== "ready" ? (
-                <span> · snapshot linked</span>
+                <span> · project files linked</span>
               ) : null}
             </p>
           ) : null}
           {preview?.logs_hint ? (
             <p className="text-[10px] text-white/45" data-testid="hww-preview-logs-hint">
-              Runtime log hint: {preview.logs_hint}
+              Runtime note: {sanitizePreviewDetailsStatus(preview.logs_hint)}
             </p>
           ) : null}
           {previewUrl ? (
@@ -1985,9 +1941,7 @@ function WorkbenchPreviewPanel({
             ) : null}
             {cloudRuntimeError ? (
               <p className="text-amber-200/90" data-testid="hww-cloud-runtime-error">
-                {isProjectNotFoundError(cloudRuntimeError)
-                  ? "Project record not found. Refresh workspace or create a new project."
-                  : sanitizePreviewFetchError(cloudRuntimeError) || cloudRuntimeError}
+                {sanitizePreviewStateError(cloudRuntimeError, null)}
               </p>
             ) : null}
           </div>
