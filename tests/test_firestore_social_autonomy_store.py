@@ -231,6 +231,26 @@ class TestApplyThenReadRoundtrip:
             "read() did not return the same profile revision as was applied"
         )
 
+    def test_apply_always_targets_singleton_doc_even_if_profile_id_differs(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Non-default profile_id must not write a ghost doc that read() ignores."""
+        monkeypatch.setenv("HAM_SOCIAL_AUTONOMY_WRITE_TOKEN", "test-write-token")  # noqa: S106
+
+        store, fake = _store_with_fake()
+        profile = _profile(profile_id="custom-profile-id", goal="Singleton path")
+
+        store.apply(None, profile, token="test-write-token", actor="test")
+
+        singleton = f"ham_social_autonomy_profiles/{_DEFAULT_PROFILE_ID}"
+        assert singleton in fake.docs
+        assert fake.docs[singleton]["goal"] == "Singleton path"
+        assert "ham_social_autonomy_profiles/custom-profile-id" not in fake.docs
+
+        recovered = store.read(None)
+        assert recovered.goal == "Singleton path"
+
     def test_read_returns_default_when_collection_empty(self) -> None:
         """read() returns a default draft when no document exists."""
         store, _ = _store_with_fake()

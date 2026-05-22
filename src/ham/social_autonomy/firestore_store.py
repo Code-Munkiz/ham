@@ -390,10 +390,13 @@ class FirestoreSocialAutonomyStore:
         actor: str,
     ) -> ApplyResult:
         """Core apply logic shared by :meth:`apply` and :meth:`save`."""
-        doc_id = profile.profile_id
         db = self._db()
 
-        doc_ref = db.collection(self._coll_name).document(doc_id)
+        # Always persist under the singleton document id. :meth:`read` only ever
+        # loads ``_SINGLETON_DOC_ID``; using ``profile.profile_id`` as the doc
+        # id would write to a different path so applies look successful but
+        # ``read()`` still returns the old default (silent data loss).
+        doc_ref = db.collection(self._coll_name).document(_SINGLETON_DOC_ID)
         after_payload = profile.model_dump(mode="json")
         after_raw = _canonical_profile_bytes(profile)
 
@@ -438,7 +441,7 @@ class FirestoreSocialAutonomyStore:
                 _LOG.warning(
                     "Failed to write backup %s for profile %s: %s",
                     backup_id,
-                    doc_id,
+                    profile.profile_id,
                     exc,
                 )
                 backup_id = None
