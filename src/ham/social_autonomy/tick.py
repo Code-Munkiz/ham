@@ -252,6 +252,7 @@ def run_social_autonomy_tick(
     x_caller: _XCaller | None = None,
     learning_store: Any = None,
     run_once: bool = False,
+    critic: Any = None,
 ) -> SocialAutonomyTickResult:
     """Run one bounded autonomy tick from the file-backed profile store."""
 
@@ -325,7 +326,12 @@ def run_social_autonomy_tick(
     if updated.learning_enabled:
         from src.ham.social_autonomy.learning_hook import append_tick_learning
 
-        append_tick_learning(updated, result.model_dump(mode="json"), learning_store=learning_store)
+        append_tick_learning(
+            updated,
+            result.model_dump(mode="json"),
+            critic=critic,
+            learning_store=learning_store,
+        )
 
     return result
 

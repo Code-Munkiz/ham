@@ -12,7 +12,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
 
-from src.ham.hamgomoon_learning.hermes_critic import StubSocialCritic
+from src.ham.hamgomoon_learning.hermes_critic import StubSocialCritic, get_default_social_critic
 from src.ham.hamgomoon_learning.models import LearningRecord
 from src.ham.hamgomoon_learning.redaction import (
     redact_external_id,
@@ -58,7 +58,7 @@ def append_tick_learning(
     if not profile.learning_enabled:
         return None
 
-    active_critic = critic if critic is not None else StubSocialCritic()
+    active_critic = critic if critic is not None else get_default_social_critic()
     record = active_critic.review(tick_result)
     record = _attach_profile_context(record, profile)
     record = _sanitize_learning_record(record)

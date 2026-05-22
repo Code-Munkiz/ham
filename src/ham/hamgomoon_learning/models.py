@@ -73,6 +73,8 @@ class HermesSocialCritique(BaseModel):
     policy_suggestion: str | None = None
     should_update_strategy: bool = False
     at: str = Field(default_factory=_utc_now_iso)
+    # Populated by HermesSocialCritic fallback paths only; None on successful Hermes critique.
+    notes: str | None = None
 
 
 class LearningRecord(BaseModel):

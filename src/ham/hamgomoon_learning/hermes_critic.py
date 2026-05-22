@@ -1,15 +1,19 @@
 """Pluggable Hermes-style social critic.
 
-The default implementation is a deterministic stub. A future implementation
-could route through :class:`src.hermes_feedback.HermesReviewer.evaluate(...)`
-with a social-critic prompt variant (currently the reviewer prompt is
-code-review oriented); leave that wiring for a follow-up — the contract here
-is intentionally LLM-free so tests can inject a mock critic without touching
-network.
+The default implementation is a deterministic stub. When
+``HAM_SOCIAL_CRITIC_USE_HERMES=1`` is set and the gateway is configured and
+healthy, ``get_default_social_critic()`` returns a live ``HermesSocialCritic``
+that calls the Hermes gateway. See ``hermes_critic_real.py`` for the
+implementation.
+
+The contract is intentionally LLM-free for the stub path so tests can inject
+a mock critic without touching the network.
 """
 
 from __future__ import annotations
 
+import logging
+import os
 from collections.abc import Mapping
 from dataclasses import asdict, is_dataclass
 from typing import Any, Protocol, runtime_checkable
@@ -20,6 +24,16 @@ from src.ham.hamgomoon_learning.models import (
     LearningRecord,
     ReviewOutcome,
     SocialDraftRecord,
+)
+
+_LOG = logging.getLogger(__name__)
+
+_HERMES_CRITIC_USE_HERMES_ENV = "HAM_SOCIAL_CRITIC_USE_HERMES"
+
+# Module-level import so tests can patch
+# ``src.ham.hamgomoon_learning.hermes_critic.probe_hermes_http_gateway``.
+from src.ham.hermes_gateway.adapters.http_gateway import (  # noqa: E402
+    probe_hermes_http_gateway,
 )
 
 
@@ -122,9 +136,69 @@ class StubSocialCritic:
         )
 
 
+class _FallbackSocialCritic(StubSocialCritic):
+    """StubSocialCritic subclass that adds a ``notes`` field to every critique.
+
+    Returned by ``get_default_social_critic()`` when the Hermes critic is
+    opted-in via env but the gateway is misconfigured or the probe is
+    unhealthy.  Satisfies ``isinstance(critic, StubSocialCritic)``.
+    """
+
+    def __init__(self, notes: str) -> None:
+        self._notes = notes
+
+    def critique(self, draft: SocialDraftRecord) -> HermesSocialCritique:
+        base = super().critique(draft)
+        return base.model_copy(update={"notes": self._notes})
+
+
 def get_default_social_critic() -> SocialCritic:
-    """Return the default critic. Tests monkeypatch this to inject mocks."""
-    return StubSocialCritic()
+    """Return the critic appropriate for the current environment.
+
+    * ``HAM_SOCIAL_CRITIC_USE_HERMES`` unset / ``0`` / ``false`` →
+      ``StubSocialCritic`` (existing, offline-safe behaviour).
+    * ``HAM_SOCIAL_CRITIC_USE_HERMES=1`` but ``HERMES_GATEWAY_BASE_URL``
+      absent → ``_FallbackSocialCritic(notes="hermes_critique_unavailable")``.
+    * ``HAM_SOCIAL_CRITIC_USE_HERMES=1``, gateway configured, but
+      ``probe_hermes_http_gateway()`` returns an unhealthy status →
+      ``_FallbackSocialCritic(notes="hermes_critique_unavailable")``.
+    * All conditions satisfied → ``HermesSocialCritic(config)``.
+    """
+    use_hermes = (os.environ.get(_HERMES_CRITIC_USE_HERMES_ENV) or "").strip().lower()
+    if use_hermes not in ("1", "true", "yes"):
+        return StubSocialCritic()
+
+    # Lazy imports keep module-load cost near-zero for the common stub path
+    # and break the potential hermes_critic_real ↔ hermes_critic import cycle.
+    from src.ham.hamgomoon_learning.hermes_critic_real import (  # noqa: PLC0415
+        HermesSocialCritic,
+        _resolve_hermes_critic_config,
+    )
+
+    config = _resolve_hermes_critic_config()
+    if config is None:
+        _LOG.info(
+            "hermes_social_critic: HERMES_GATEWAY_BASE_URL not configured; "
+            "returning fallback stub"
+        )
+        return _FallbackSocialCritic("hermes_critique_unavailable")
+
+    try:
+        probe_result = probe_hermes_http_gateway()
+        status = probe_result.get("status", "unknown")
+        if status != "healthy":
+            _LOG.info(
+                "hermes_social_critic: gateway probe status=%r; returning fallback stub",
+                status,
+            )
+            return _FallbackSocialCritic("hermes_critique_unavailable")
+    except Exception:  # noqa: BLE001
+        _LOG.info(
+            "hermes_social_critic: probe raised unexpectedly; returning fallback stub"
+        )
+        return _FallbackSocialCritic("hermes_critique_unavailable")
+
+    return HermesSocialCritic(config)
 
 
 __all__ = ["SocialCritic", "StubSocialCritic", "get_default_social_critic"]

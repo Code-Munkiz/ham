@@ -778,3 +778,84 @@ def test_tick_activity_still_blocks_when_status_setup_required(
     assert "telegram_self_probe_not_ok" in result.blocked_reasons
     # M2: Hermes gateway code no longer emitted by default activity lane.
     assert "telegram_gateway_not_connected" not in result.blocked_reasons
+
+
+def test_hermes_critic_failure_does_not_block_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """VAL-M15-M2-CRITIC-NEVER-BLOCKS-DISPATCH-007
+
+    With Hermes opted in and complete_chat_turn raising any error,
+    run_social_autonomy_tick proceeds to dispatch Telegram actions and
+    blocked_reasons contains NO hermes_critique_* codes.
+    """
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    import src.api.social as social_mod
+    from src.ham.hamgomoon_learning.hermes_critic_real import HermesSocialCritic
+    from src.ham.social_autonomy.tick import run_social_autonomy_tick
+    from src.integrations.nous_gateway_client import GatewayCallError
+
+    # Pin Telegram status to ready/connected so dispatch proceeds.
+    monkeypatch.setattr(
+        social_mod,
+        "_telegram_status_response",
+        lambda: SimpleNamespace(
+            overall_readiness="ready",
+            hermes_gateway=SimpleNamespace(provider_runtime_state="connected"),
+            telegram_self_probe_state="ok",
+        ),
+    )
+    monkeypatch.delenv("HAM_TELEGRAM_INBOUND_TRANSCRIPT_PATH", raising=False)
+    monkeypatch.delenv("HAM_HERMES_HOME", raising=False)
+    monkeypatch.delenv("HERMES_HOME", raising=False)
+
+    telegram_profile = _profile(
+        channels={
+            "telegram": {"enabled": True, "available": True},
+            "x": {"enabled": False, "available": True},
+            "discord": {"enabled": False, "available": False},
+        },
+        actions_allowed_per_channel={
+            "telegram": ["message", "activity"],
+            "x": [],
+            "discord": [],
+        },
+        daily_caps={"telegram": 3, "x": 0, "discord": 0},
+        cadence="manual",
+        learning_enabled=True,
+    )
+    _seed_profile(monkeypatch, tmp_path, telegram_profile)
+
+    # Use a HermesSocialCritic whose complete_chat_turn always raises
+    config = {"model": "hermes-agent", "timeout": 10.0, "max_input": 4096}
+    failing_critic = HermesSocialCritic(config)
+
+    # Capture learning records
+    captured_records: list[Any] = []
+
+    def _capture(record: Any) -> Any:
+        captured_records.append(record)
+        return record
+
+    with patch(
+        "src.ham.hamgomoon_learning.hermes_critic_real.complete_chat_turn",
+        side_effect=GatewayCallError("UPSTREAM_TIMEOUT", "Gateway down"),
+    ):
+        result = run_social_autonomy_tick(
+            store_path=tmp_path,
+            now=_NOW,
+            dry_run=True,
+            usage_counter=_zero_usage,
+            content_guard=_allowing_content_guard,
+            run_once=True,
+            critic=failing_critic,
+            learning_store=_capture,
+        )
+
+    # Dispatch must not be blocked by Hermes critique failure.
+    assert all(
+        "hermes_critique" not in reason for reason in result.blocked_reasons
+    ), f"hermes_critique_* found in blocked_reasons: {result.blocked_reasons}"
