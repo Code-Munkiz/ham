@@ -266,3 +266,34 @@ def test_social_autonomy_store_tick_summary_extra_forbid(
 
     with pytest.raises(ValidationError, match="extra_key"):
         read_social_autonomy_profile(tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# M2 schema extension tests
+# ---------------------------------------------------------------------------
+
+
+def test_default_profile_new_m2_fields() -> None:
+    """VAL-M15-M2-READINESS-PROFILE-FLAG-005: new M2 fields default to safe values."""
+    profile = GoHamSocialProfile.model_validate(_profile_payload())
+
+    assert profile.activity_requires_hermes_gateway is False
+    assert profile.telegram_self_probe_state == "unknown"
+
+
+def test_legacy_freeform_cadence_maps_to_manual(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """VAL-M15-M2-PATCH-CADENCE-LEGACY-MAP-003: legacy free-form cadence maps to 'manual' on read."""
+    target = _configure_store(monkeypatch, tmp_path)
+    # Write a profile JSON with a pre-M15 free-form cadence value
+    legacy_payload = _mission12_payload(cadence="legacy_freq_value")
+    target.write_text(
+        json.dumps(legacy_payload, indent=2, ensure_ascii=True, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    loaded = read_social_autonomy_profile(tmp_path)
+
+    # Must map to 'manual' without raising ValidationError
+    assert loaded.cadence == "manual"

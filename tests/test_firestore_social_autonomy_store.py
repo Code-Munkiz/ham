@@ -497,8 +497,8 @@ class TestLegacyPayloadLoadsWithDefaults:
         assert profile.quiet_hours is None
         assert profile.last_run_at is None
         assert profile.last_tick_summary is None
-        # Legacy cadence value is preserved as-is (M2's validator normalizes to "manual")
-        assert profile.cadence == "daily_frequency_legacy_v1"
+        # Legacy free-form cadence normalizes to "manual" via the M2 backward-compat validator
+        assert profile.cadence == "manual"
         # M2 additions: new fields load with safe defaults when absent in stored doc
         assert profile.activity_requires_hermes_gateway is False
         assert profile.telegram_self_probe_state == "unknown"

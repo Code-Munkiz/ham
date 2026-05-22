@@ -28,7 +28,7 @@ from types import SimpleNamespace
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.ham.clerk_auth import HamActor, resolve_ham_operator_authorization_header
@@ -57,6 +57,14 @@ from src.ham.hamgomoon_learning import (
     render_hamgomoon_learning_hints,
 )
 from src.ham.hamgomoon_learning.store import get_hamgomoon_learning_store
+from src.ham.social_autonomy.content_guards import (
+    SAFETY_RULE_CREDENTIAL_REQUEST,
+    SAFETY_RULE_MASS_TAGGING,
+    SAFETY_RULE_NO_EXTERNAL_LINKS,
+    SAFETY_RULE_PAYLOAD_MIN_LENGTH,
+    SAFETY_RULE_PRICE_GUARANTEE,
+    SAFETY_RULE_REPEATED_PAYLOAD,
+)
 from src.ham.social_autonomy.enforcement import (
     autonomy_reasons_for_apply,
     preview_autonomy_runner_tick,
@@ -74,7 +82,7 @@ from src.ham.social_autonomy.state import (
     transition_to_running,
     transition_to_stopped,
 )
-from src.ham.social_autonomy.store import get_social_autonomy_store
+from src.ham.social_autonomy.store import get_social_autonomy_store, revision_for_profile
 from src.ham.social_persona import load_social_persona, persona_digest
 from src.ham.social_policy import (
     DEFAULT_SOCIAL_POLICY,
@@ -110,6 +118,21 @@ from src.ham.social_telegram_send import (
 router = APIRouter(prefix="/api/social", tags=["social"])
 
 _LOG = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Content-guard canonical set
+# ---------------------------------------------------------------------------
+
+_CANONICAL_SAFETY_RULES: frozenset[str] = frozenset(
+    {
+        SAFETY_RULE_CREDENTIAL_REQUEST,
+        SAFETY_RULE_MASS_TAGGING,
+        SAFETY_RULE_NO_EXTERNAL_LINKS,
+        SAFETY_RULE_PAYLOAD_MIN_LENGTH,
+        SAFETY_RULE_PRICE_GUARANTEE,
+        SAFETY_RULE_REPEATED_PAYLOAD,
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Bounds
@@ -682,11 +705,46 @@ class SocialAutonomyChannelEnabledPatch(BaseModel):
 
 
 class SocialAutonomySettingsPatchRequest(BaseModel):
+    """Writable settings accepted by PATCH /api/social/autonomy/settings.
+
+    Explicitly excluded (must be rejected via extra="forbid"):
+    - ``status`` — managed by lifecycle endpoints (/launch, /pause, /stop).
+    - ``emergency_stop`` — dedicated control surface.
+    - Telegram bot token / target id / allowed users — env-driven only.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
+    # M14 M1b fields (semantics unchanged)
     channels: dict[SocialAutonomyChannel, SocialAutonomyChannelEnabledPatch] | None = None
     daily_caps: dict[SocialAutonomyChannel, Annotated[int, Field(ge=0)]] | None = None
     quiet_hours: QuietHours | None = None
+
+    # M2 new fields
+    goal: Annotated[str, Field(min_length=1, max_length=2_000)] | None = None
+    cadence: Literal["manual", "hourly", "daily"] | None = None
+    actions_allowed_per_channel: (
+        dict[SocialAutonomyChannel, list[SocialAutonomyAction]] | None
+    ) = None
+    forbidden_topics: Annotated[list[str], Field(max_length=64)] | None = None
+    safety_rules: Annotated[list[str], Field(max_length=64)] | None = None
+    learning_enabled: bool | None = None
+
+    @field_validator("safety_rules")
+    @classmethod
+    def _validate_safety_rules_canonical(
+        cls, value: list[str] | None
+    ) -> list[str] | None:
+        """Reject any safety_rule name not in the canonical six from content_guards.py."""
+        if value is None:
+            return None
+        for rule in value:
+            if rule not in _CANONICAL_SAFETY_RULES:
+                raise ValueError(
+                    f"safety_rules contains unknown rule: {rule!r}. "
+                    f"Allowed: {sorted(_CANONICAL_SAFETY_RULES)}"
+                )
+        return value
 
 
 class SocialAutonomyPreviewTickRequest(BaseModel):
@@ -3417,7 +3475,8 @@ def update_social_autonomy_settings(
     )
     token = _require_social_autonomy_write_token(ham_bearer)
     current = get_social_autonomy_store().read(_project_root())
-    updates: dict[str, Any] = {"updated_at": _utc_now()}
+    # Collect field-level updates (not including updated_at yet).
+    field_updates: dict[str, Any] = {}
     if "channels" in body.model_fields_set and body.channels is not None:
         # Merge: update only the ``enabled`` flag per channel; ``available`` is
         # server-managed (read-only) and is preserved from the current profile.
@@ -3432,15 +3491,39 @@ def update_social_autonomy_settings(
             else:
                 # Channel not yet in profile; available defaults to False (fail-closed).
                 current_channels[ch_str] = {"enabled": ch_patch.enabled, "available": False}
-        updates["channels"] = current_channels
+        field_updates["channels"] = current_channels
     if "daily_caps" in body.model_fields_set:
-        updates["daily_caps"] = body.daily_caps
+        field_updates["daily_caps"] = body.daily_caps
     if "quiet_hours" in body.model_fields_set:
-        updates["quiet_hours"] = (
+        field_updates["quiet_hours"] = (
             body.quiet_hours.model_dump(mode="json") if body.quiet_hours else None
         )
-    updated = _profile_with_updates(current, **updates)
-    return _persist_social_autonomy_profile(updated, token=token, actor=_actor)
+    # M2 new fields — per-field replace semantics
+    if "goal" in body.model_fields_set:
+        field_updates["goal"] = body.goal
+    if "cadence" in body.model_fields_set:
+        field_updates["cadence"] = body.cadence
+    if "actions_allowed_per_channel" in body.model_fields_set and body.actions_allowed_per_channel is not None:
+        # Per-channel replace semantics: replace the action list for each supplied channel;
+        # other channels' settings are preserved unchanged (merge across channels).
+        current_actions: dict[str, Any] = profile_to_safe_dict(current)["actions_allowed_per_channel"]
+        for ch_key, actions in body.actions_allowed_per_channel.items():
+            current_actions[str(ch_key)] = [str(a) for a in actions]
+        field_updates["actions_allowed_per_channel"] = current_actions
+    if "forbidden_topics" in body.model_fields_set:
+        field_updates["forbidden_topics"] = body.forbidden_topics
+    if "safety_rules" in body.model_fields_set:
+        field_updates["safety_rules"] = body.safety_rules
+    if "learning_enabled" in body.model_fields_set:
+        field_updates["learning_enabled"] = body.learning_enabled
+    # Build the candidate profile *without* touching updated_at first.
+    # Only advance updated_at when the profile content would actually change —
+    # this ensures that two identical PATCHes produce the same canonical bytes
+    # and therefore the same after_digest (idempotent merge).
+    candidate = _profile_with_updates(current, **field_updates)
+    if revision_for_profile(candidate) != revision_for_profile(current):
+        candidate = _profile_with_updates(candidate, updated_at=_utc_now())
+    return _persist_social_autonomy_profile(candidate, token=token, actor=_actor)
 
 
 @router.post("/autonomy/preview-tick")

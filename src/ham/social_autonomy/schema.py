@@ -131,6 +131,19 @@ class GoHamSocialProfile(BaseModel):
             raise ValueError("string fields must be non-empty.")
         return text
 
+    @field_validator("cadence")
+    @classmethod
+    def _normalize_cadence(cls, value: str) -> str:
+        """Map any unknown stored cadence to 'manual' for backward compatibility.
+
+        Pre-M15 profiles may have free-form cadence strings (e.g. "legacy_freq_value").
+        Those values map to the default manual cadence rather than raising ValidationError,
+        preserving load-time safety for profiles written before the enum was introduced.
+        """
+        if value in ("manual", "hourly", "daily"):
+            return value
+        return "manual"
+
     @field_validator("channels")
     @classmethod
     def _normalize_channel_capabilities(
