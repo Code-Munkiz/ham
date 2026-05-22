@@ -1,3 +1,7 @@
+import {
+  BUILDER_WORKBENCH_EMPTY_SUBTITLE,
+  BUILDER_WORKBENCH_EMPTY_TITLE,
+} from "@/lib/ham/builderFirstRunOnboarding";
 import { sanitizeWorkbenchProjectAccessMessage } from "@/lib/ham/workbenchProjectMessages";
 
 export type WorkbenchPreviewPhase =
@@ -108,8 +112,8 @@ export function buildPreviewPrimaryState(
 ): PreviewPrimaryState {
   if (phase === "no_project" || phase === "no_source") {
     return {
-      title: "Tell HAM what to build.",
-      subtitle: "Your app preview will appear here once HAM creates the first project files.",
+      title: BUILDER_WORKBENCH_EMPTY_TITLE,
+      subtitle: BUILDER_WORKBENCH_EMPTY_SUBTITLE,
     };
   }
 

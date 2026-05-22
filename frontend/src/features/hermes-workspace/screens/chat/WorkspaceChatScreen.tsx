@@ -666,6 +666,12 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [builderPlanEntries, setBuilderPlanEntries] = React.useState<BuilderPlanCardEntry[]>([]);
   const codingPlanDraftRestoreKeyRef = React.useRef<string | null>(null);
   const composerTextareaRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const fillComposerPrompt = React.useCallback((prompt: string) => {
+    setInput(prompt);
+    window.requestAnimationFrame(() => {
+      composerTextareaRef.current?.focus();
+    });
+  }, []);
   const [attachments, setAttachments] = React.useState<WorkspaceComposerAttachment[]>([]);
   const attachmentsRef = React.useRef(attachments);
   React.useEffect(() => {
@@ -3679,7 +3685,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                 </div>
               </div>
             ) : showEmpty ? (
-              <WorkspaceChatEmptyState />
+              <WorkspaceChatEmptyState onExamplePromptSelect={fillComposerPrompt} />
             ) : (
               <>
                 <WorkspaceChatMessageList
@@ -3751,7 +3757,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             )}
             <WorkspaceChatComposer
               quickSuggestions={WORKSPACE_CHAT_SUGGESTIONS}
-              onQuickSuggestion={(prompt) => void send(prompt)}
+              onQuickSuggestion={fillComposerPrompt}
               quickTipsResetSignal={sessionId}
               value={input}
               onChange={setInput}
