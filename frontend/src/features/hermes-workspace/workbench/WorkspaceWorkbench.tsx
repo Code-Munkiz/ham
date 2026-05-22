@@ -56,7 +56,10 @@ import {
   saveBuilderLocalRunProfile,
   shouldResetHamWorkbenchProjectSelection,
 } from "@/lib/ham/api";
-import { sanitizeWorkbenchProjectAccessMessage, sanitizeWorkbenchDownloadErrorMessage } from "@/lib/ham/workbenchProjectMessages";
+import {
+  sanitizeWorkbenchProjectAccessMessage,
+  sanitizeWorkbenchDownloadErrorMessage,
+} from "@/lib/ham/workbenchProjectMessages";
 import { workspaceProjectScope } from "@/lib/ham/workspaceProjectScope";
 import { detectPreviewIframeProxySignals } from "@/features/hermes-workspace/workbench/previewProxyIframeSignals";
 import { cn } from "@/lib/utils";
@@ -150,7 +153,9 @@ export function WorkspaceWorkbench({
       } catch (e) {
         if (cancelled) return;
         setExportSnapshotId(null);
-        setDownloadError(sanitizeWorkbenchDownloadErrorMessage(e instanceof Error ? e.message : String(e)));
+        setDownloadError(
+          sanitizeWorkbenchDownloadErrorMessage(e instanceof Error ? e.message : String(e)),
+        );
       } finally {
         if (!cancelled) setExportSnapshotLoading(false);
       }
