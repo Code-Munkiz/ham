@@ -188,7 +188,7 @@ describe("WorkspaceChatScreen split containment", () => {
 
     expect(
       screen
-        .getByRole("heading", { name: "Begin a session" })
+        .getByRole("heading", { name: "What do you want to build?" })
         .closest('[data-testid="hww-command-panel"]'),
     ).toBe(commandPanel);
 

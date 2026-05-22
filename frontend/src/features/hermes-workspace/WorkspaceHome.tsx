@@ -106,8 +106,9 @@ export function WorkspaceHome() {
             HAM&apos;s Workspace
           </p>
           <p className="mt-2 max-w-lg text-sm leading-relaxed text-white/45">
-            Your workspaces and quick links. Open <span className="text-white/55">Library</span> in
-            the sidebar for files, terminal, jobs, and more.
+            Describe what you want to build in chat — HAM will create a preview you can refine. Open{" "}
+            <span className="text-white/55">Library</span> in the sidebar for files, terminal, jobs,
+            and more.
           </p>
         </div>
 

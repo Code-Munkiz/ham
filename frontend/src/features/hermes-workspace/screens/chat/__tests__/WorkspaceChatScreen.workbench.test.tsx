@@ -162,6 +162,26 @@ describe("WorkspaceChatScreen workbench shell", () => {
     expect(within(command).getByRole("textbox")).toBeInTheDocument();
   });
 
+  it("fills the composer when a first-run example prompt is clicked", async () => {
+    const { container } = renderChat();
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-chat-empty-examples")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId("hww-chat-empty-example-newsletter-landing-page"));
+    const textarea = container.querySelector("#hww-chat-composer") as HTMLTextAreaElement;
+    expect(textarea.value).toBe("Build a landing page for my newsletter.");
+  });
+
+  it("fills the composer from quick starter prompts without auto-submitting", async () => {
+    const { container } = renderChat();
+    await waitFor(() => {
+      expect(screen.getByRole("toolbar", { name: "Starter prompts" })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTitle("Simple task tracker"));
+    const textarea = container.querySelector("#hww-chat-composer") as HTMLTextAreaElement;
+    expect(textarea.value).toBe("Create a simple task tracker.");
+  });
+
   it("shows a resize handle on desktop split layout", async () => {
     mockMatchMedia(true);
     renderChat();
