@@ -25,6 +25,7 @@ from src.ham.social_telegram_send import (
     TelegramTransport,
     send_confirmed_telegram_message,
 )
+from src.ham.social_telegram_transcript_store import TelegramTranscriptStoreProtocol
 
 TelegramReactiveRunStatus = Literal["completed", "blocked", "sent", "failed", "duplicate"]
 
@@ -78,9 +79,23 @@ def run_telegram_reactive_once(
     config: TelegramReactiveRunConfig | None = None,
     *,
     transport: TelegramTransport | None = None,
+    transcript_store: TelegramTranscriptStoreProtocol | None = None,
 ) -> TelegramReactiveRunResult:
     cfg = config or TelegramReactiveRunConfig()
-    preview = preview_telegram_reactive_replies_once(transcript_paths=cfg.transcript_paths, max_reply_candidates=1)
+
+    # Production wiring: injectable store takes priority; fall back to auto-detect.
+    resolved_store = transcript_store or _resolve_transcript_store_if_needed(cfg.transcript_paths)
+
+    if resolved_store is not None:
+        preview = preview_telegram_reactive_replies_once(
+            transcripts=resolved_store.iter_rows(),
+            max_reply_candidates=1,
+        )
+    else:
+        preview = preview_telegram_reactive_replies_once(
+            transcript_paths=cfg.transcript_paths,
+            max_reply_candidates=1,
+        )
     selected = _first_safe_candidate(preview.items)
     base = {
         "dry_run": cfg.dry_run,
@@ -291,6 +306,26 @@ def _parse_iso(value: str) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
+
+
+def _resolve_transcript_store_if_needed(
+    explicit_paths: list[Path] | None,
+) -> TelegramTranscriptStoreProtocol | None:
+    """Return the Firestore transcript store when configured and no explicit paths are provided.
+
+    Explicit ``transcript_paths`` take priority over auto-wiring (dev/test path).
+    Returns ``None`` when file-path mode should be used (default dev behaviour).
+    """
+    if explicit_paths is not None:
+        return None
+    backend = (os.environ.get("HAM_TELEGRAM_TRANSCRIPT_BACKEND") or "").strip().lower()
+    if backend == "firestore":
+        from src.ham.social_telegram_transcript_store import (
+            get_telegram_transcript_store,  # noqa: PLC0415
+        )
+
+        return get_telegram_transcript_store()
+    return None
 
 
 def _dedupe(items: list[str]) -> list[str]:

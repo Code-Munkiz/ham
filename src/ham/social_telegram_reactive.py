@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -89,6 +90,7 @@ class TelegramReactivePreviewResult(BaseModel):
 def preview_telegram_reactive_replies_once(
     *,
     transcript_paths: list[Path] | None = None,
+    transcripts: Iterator[dict[str, Any]] | None = None,
     max_reply_candidates: int = MAX_REACTIVE_REPLY_CANDIDATES,
 ) -> TelegramReactivePreviewResult:
     persona = load_social_persona("ham-canonical", 1)
@@ -97,7 +99,10 @@ def preview_telegram_reactive_replies_once(
         "persona_version": persona.version,
         "persona_digest": persona_digest(persona),
     }
-    inbound = discover_telegram_inbound_once(transcript_paths=transcript_paths)
+    inbound = discover_telegram_inbound_once(
+        transcript_paths=transcript_paths,
+        transcripts=transcripts,
+    )
     if inbound.status != "completed":
         return TelegramReactivePreviewResult(
             status="blocked",

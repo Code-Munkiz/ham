@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, Literal
 
@@ -53,11 +54,27 @@ class TelegramInboundDiscoveryResult(BaseModel):
 def discover_telegram_inbound_once(
     *,
     transcript_paths: list[Path] | None = None,
+    transcripts: Iterator[dict[str, Any]] | None = None,
     max_items: int = MAX_INBOUND_ITEMS,
 ) -> TelegramInboundDiscoveryResult:
+    """Discover Telegram inbound items from a file path or a transcript iterable.
+
+    Args:
+        transcript_paths: Explicit JSONL file paths to read from.  When provided,
+            file-path mode is used (dev/local default).
+        transcripts: A transcript-store iterable (e.g. ``TelegramTranscriptStoreProtocol.iter_rows()``).
+            When provided, file-path mode is bypassed entirely.  Production wires the
+            M1 Firestore-backed transcript store here.
+        max_items: Upper bound on returned items (capped at ``MAX_INBOUND_ITEMS``).
+    """
+    # Transcript-iterable path — Firestore-backed (production) or in-memory (tests).
+    if transcripts is not None:
+        return _discover_from_iterable(transcripts, max_items=max_items)
+
+    # File-path path (existing dev/local behaviour).
     paths = transcript_paths if transcript_paths is not None else _default_transcript_paths()
     if not paths:
-        # M2: distinguish "no source configured at all" from "source configured but
+        # M2/M3: distinguish "no source configured at all" from "source configured but
         # paths are empty / no files found".  When the caller supplies explicit paths
         # (transcript_paths is not None) or when env-var sources are configured but
         # yield no resolvable paths, fall back to the legacy signal.  Only emit
@@ -97,6 +114,50 @@ def discover_telegram_inbound_once(
                 items.append(item)
 
     if not saw_existing_source:
+        return _blocked("hermes_transcript_source_unavailable")
+
+    return TelegramInboundDiscoveryResult(
+        status="completed",
+        inbound_count=len(items),
+        items=items,
+        reasons=[],
+        warnings=_dedupe(warnings),
+        recommended_next_steps=_recommended_steps(items=items, warnings=warnings),
+    )
+
+
+def _discover_from_iterable(
+    transcripts: Iterator[dict[str, Any]],
+    *,
+    max_items: int,
+) -> TelegramInboundDiscoveryResult:
+    """Discover inbound items from a transcript-store iterable.
+
+    Consumes the iterable and applies the same ``_item_from_row`` filtering as
+    the file-path path.  Uses a synthetic path/line-no for the ``inbound_id``
+    fallback (rows from the M3 collector always carry ``message_id``).
+
+    Returns:
+        Blocked with ``hermes_transcript_source_unavailable`` when the iterable
+        yields zero rows (source is configured but has no data yet).
+        Completed when at least one row is consumed (even if no eligible items
+        remain after filtering).
+    """
+    synthetic_path = Path("transcript-store")
+    cap = max(1, min(max_items, MAX_INBOUND_ITEMS))
+    items: list[TelegramInboundItem] = []
+    warnings: list[str] = []
+    saw_rows = False
+
+    for idx, row in enumerate(transcripts, start=1):
+        saw_rows = True
+        if len(items) >= cap:
+            continue  # consume remaining rows but honour cap
+        item = _item_from_row(row, path=synthetic_path, line_no=idx)
+        if item is not None:
+            items.append(item)
+
+    if not saw_rows:
         return _blocked("hermes_transcript_source_unavailable")
 
     return TelegramInboundDiscoveryResult(
