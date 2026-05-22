@@ -149,6 +149,40 @@ Key flags:
 - `--schedule` uses standard cron syntax. `"0 * * * *"` = once per hour.
   Adjust as needed (e.g. `"*/15 * * * *"` for every 15 minutes).
 
+### Alternative: Bearer-Token Mode
+
+If OIDC is not available or not desired, Cloud Scheduler can pass the
+pre-shared `HAM_SOCIAL_AUTONOMY_SCHEDULER_TOKEN` secret as a static
+`Authorization` header instead.
+
+> **Workers do not execute this command.**
+
+```sh
+# Replace SCHEDULER_TOKEN_VALUE with the value of HAM_SOCIAL_AUTONOMY_SCHEDULER_TOKEN.
+# Keep the token in a Secret Manager reference — do not hard-code values.
+gcloud scheduler jobs create http ham-social-autonomy-scheduled-tick \
+  --project clarity-staging-488201 \
+  --location us-central1 \
+  --schedule "0 * * * *" \
+  --uri "https://goham.space/api/social/autonomy/scheduled-tick" \
+  --http-method POST \
+  --message-body '{"dry_run": true}' \
+  --headers "Content-Type=application/json,Authorization=Bearer SCHEDULER_TOKEN_VALUE" \
+  --time-zone UTC \
+  --description "Periodic GoHAM Social autonomy tick (bearer-token mode)"
+```
+
+Key differences from OIDC mode:
+- No `--oidc-service-account-email` / `--oidc-token-audience` flags.
+- The token is passed as a static header value — rotate it via Secret Manager
+  and update the scheduler job header when rotating.
+- `HAM_SOCIAL_AUTONOMY_SCHEDULER_SERVICE_ACCOUNT` and
+  `HAM_SOCIAL_AUTONOMY_SCHEDULER_AUDIENCE` are **not required** on the service
+  when using the bearer-only path; only `HAM_SOCIAL_AUTONOMY_SCHEDULER_TOKEN`
+  is needed.
+- Prefer OIDC in production; use bearer mode for simpler integrations or
+  local development testing only.
+
 ---
 
 ## Triple-Env Interlock for Live Mode
@@ -184,7 +218,7 @@ This means:
 **Workers do not execute the curl command against production.**
 This sequence is for operator verification after deploy.
 
-### Verify the route is disabled by default (before enabling)
+### 4a — Verify the route is disabled by default (before enabling)
 
 Before setting `HAM_SOCIAL_AUTONOMY_SCHEDULER_ENABLED=true`, the route
 should return 503:
@@ -195,6 +229,60 @@ curl -fsS https://goham.space/api/social/autonomy/scheduled-tick \
   | python3 -m json.tool
 # Expected: {"detail": {"error": {"code": "AUTONOMY_SCHEDULER_DISABLED", ...}}}
 ```
+
+### 4b — Smoke test via bearer token (dry-run; expected 200 response shape)
+
+After enabling the scheduler route and setting a bearer token, verify the
+endpoint accepts a valid token and returns a 200 with the dry-run tick result.
+
+> **Workers do not execute this against production.**
+> Replace `<HAM_SOCIAL_AUTONOMY_SCHEDULER_TOKEN_VALUE>` with the
+> pre-shared token value (never log or print the real value).
+
+```sh
+curl -fsS https://goham.space/api/social/autonomy/scheduled-tick \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <HAM_SOCIAL_AUTONOMY_SCHEDULER_TOKEN_VALUE>" \
+  -d '{"dry_run": true}' \
+  | python3 -m json.tool
+```
+
+Expected 200 response shape (exact values depend on profile and autonomy
+gate state):
+
+```json
+{
+  "ran": false,
+  "dry_run": true,
+  "actions_considered": [],
+  "actions_taken": [],
+  "blocked_reasons": ["autonomy_profile_missing"],
+  "next_run_summary": null,
+  "profile_status": "draft"
+}
+```
+
+Or, if a running profile is configured and the tick was allowed through all
+gates in dry-run mode:
+
+```json
+{
+  "ran": true,
+  "dry_run": true,
+  "actions_considered": ["telegram:message"],
+  "actions_taken": ["telegram:message"],
+  "blocked_reasons": [],
+  "next_run_summary": "Next run eligible after cadence window elapses.",
+  "profile_status": "running"
+}
+```
+
+A 200 response confirms:
+- The scheduler route is active (`HAM_SOCIAL_AUTONOMY_SCHEDULER_ENABLED=true`).
+- The bearer token was accepted.
+- The tick ran (or was gated for expected reasons such as cadence/profile state).
+- The endpoint returned the canonical `SocialAutonomyTickResult` shape.
 
 ### Verify OIDC auth (after enabling)
 
