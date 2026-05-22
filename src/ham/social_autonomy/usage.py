@@ -165,7 +165,7 @@ def _read_x_records(path: Path) -> list[dict[str, Any]]:
 
 def _read_jsonl_records(path: Path) -> list[dict[str, Any]]:
     if not path.is_file():
-        raise UsageSourceUnavailable(f"usage source is missing: {path}")
+        return []
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:

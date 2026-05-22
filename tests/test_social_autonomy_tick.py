@@ -562,6 +562,67 @@ def test_corrupt_profile_raises(
         run_social_autonomy_tick(store_path=tmp_path, now=_NOW)
 
 
+def test_tick_succeeds_for_telegram_when_delivery_log_missing(
+    tmp_path: Path,
+) -> None:
+    """Pinning the 'ran-despite-non-empty-blocked_reasons' contract.
+
+    A missing delivery-log JSONL must be treated as zero past records so that
+    the first dry-run on a fresh Cloud Run filesystem is not blocked by
+    AUTONOMY_CAP_TRACKING_UNAVAILABLE.  The discord/x channel reasons remain
+    present because they are BY DESIGN for the canary channel config.
+    """
+    from src.ham.social_autonomy.tick import (
+        AUTONOMY_CAP_TRACKING_UNAVAILABLE,
+        AUTONOMY_CHANNEL_DISABLED,
+        AUTONOMY_CHANNEL_UNAVAILABLE,
+        plan_social_autonomy_tick,
+    )
+    from src.ham.social_autonomy.usage import count_actions_in_window
+
+    missing_log = tmp_path / "delivery_log.jsonl"
+    assert not missing_log.exists()
+
+    profile = _profile(
+        channels={
+            "telegram": {"enabled": True, "available": True},
+            "x": {"enabled": False, "available": True},
+            "discord": {"enabled": False, "available": False},
+        },
+        actions_allowed_per_channel={
+            "telegram": ["message"],
+            "x": [],
+            "discord": [],
+        },
+        daily_caps={"telegram": 1, "x": 0, "discord": 0},
+        cadence="manual",
+    )
+
+    def _usage_with_missing_delivery_log(channel: str, action: str, now: datetime) -> int:
+        return count_actions_in_window(
+            channel,
+            action,
+            now,
+            delivery_log_path=missing_log,
+        )
+
+    result = plan_social_autonomy_tick(
+        profile,
+        now=_NOW,
+        usage_counter=_usage_with_missing_delivery_log,
+        content_guard=_allowing_content_guard,
+        dry_run=True,
+        run_once=True,
+    )
+
+    assert result.ran is True
+    assert any(a.startswith("telegram:") for a in result.actions_taken)
+    assert AUTONOMY_CAP_TRACKING_UNAVAILABLE not in result.blocked_reasons
+    # These two are BY DESIGN for the canary channel config:
+    assert AUTONOMY_CHANNEL_UNAVAILABLE in result.blocked_reasons  # discord
+    assert AUTONOMY_CHANNEL_DISABLED in result.blocked_reasons  # x
+
+
 def test_run_missing_profile_does_not_create_file(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

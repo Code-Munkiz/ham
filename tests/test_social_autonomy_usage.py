@@ -189,24 +189,28 @@ def test_social_autonomy_usage_timezone_aware_window_and_inclusive_edge(tmp_path
     assert count_actions_in_window("x", "reply", now, journal_path=journal) == 2
 
 
-def test_social_autonomy_usage_missing_x_source_raises(tmp_path: Path) -> None:
-    with pytest.raises(UsageSourceUnavailable):
+def test_social_autonomy_usage_missing_x_source_returns_zero(tmp_path: Path) -> None:
+    assert (
         count_actions_in_window(
             "x",
             "reply",
             datetime(2026, 5, 20, 12, 0, tzinfo=UTC),
             journal_path=tmp_path / "missing.jsonl",
         )
+        == 0
+    )
 
 
-def test_social_autonomy_usage_missing_telegram_source_raises(tmp_path: Path) -> None:
-    with pytest.raises(UsageSourceUnavailable):
+def test_social_autonomy_usage_missing_telegram_source_returns_zero(tmp_path: Path) -> None:
+    assert (
         count_actions_in_window(
             "telegram",
             "message",
             datetime(2026, 5, 20, 12, 0, tzinfo=UTC),
             delivery_log_path=tmp_path / "missing.jsonl",
         )
+        == 0
+    )
 
 
 def test_social_autonomy_usage_corrupt_x_record_raises(tmp_path: Path) -> None:
