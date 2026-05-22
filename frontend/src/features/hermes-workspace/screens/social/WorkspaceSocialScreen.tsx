@@ -4,9 +4,11 @@ import { Button } from "@/components/ui/button";
 import {
   socialAdapter,
   type GoHamSocialProfile,
+  type PollerStatus,
   type SocialAutonomyStatus,
   type SocialAutonomyTickResult,
   type SocialAutonomyTickSummary,
+  type TelegramCapabilitiesPanel,
 } from "../../adapters/socialAdapter";
 import {
   WorkspaceSurfaceHeader,
@@ -265,9 +267,15 @@ function NumberField({
 function SocialStatusPanel({
   profile,
   profileInvalid,
+  pollerStatus,
+  telegramCaps,
+  learningHintsText,
 }: {
   profile: GoHamSocialProfile;
   profileInvalid: boolean;
+  pollerStatus: PollerStatus | null;
+  telegramCaps: TelegramCapabilitiesPanel | null;
+  learningHintsText: string;
 }) {
   const [previewResult, setPreviewResult] = React.useState<SocialAutonomyTickResult | null>(null);
   const [previewBusy, setPreviewBusy] = React.useState(false);
@@ -276,6 +284,13 @@ function SocialStatusPanel({
   const lastTickTime = formatTickTimestamp(profile.last_tick_summary?.recorded_at);
   const nextRunTime = formatTickTimestamp(profile.next_run_at);
   const previewEnabled = !profileInvalid && profile.status === "running";
+  // Derived values for new read-only rows
+  const lastBlockedReason =
+    profile.last_tick_summary?.blocked_reasons &&
+    profile.last_tick_summary.blocked_reasons.length > 0
+      ? profile.last_tick_summary.blocked_reasons[0]
+      : null;
+  const pollerLastRunTime = formatTickTimestamp(pollerStatus?.last_run_at);
 
   const runPreview = async () => {
     if (!previewEnabled || previewBusy) return;
@@ -351,6 +366,159 @@ function SocialStatusPanel({
             {nextRunTime ?? "—"}
           </dd>
         </div>
+
+        {/* Storage backend — hidden when absent */}
+        {profile.storage?.backend != null ? (
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3">
+            <dt className="text-xs font-semibold uppercase tracking-[0.1em] text-white/45">
+              Storage backend
+            </dt>
+            <dd
+              data-testid="social-status-storage-backend"
+              className="mt-1 text-sm text-white/80"
+            >
+              {profile.storage.backend}
+            </dd>
+          </div>
+        ) : null}
+
+        {/* Telegram readiness — split from Hermes, hidden when absent */}
+        {telegramCaps?.telegram_readiness != null ? (
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3">
+            <dt className="text-xs font-semibold uppercase tracking-[0.1em] text-white/45">
+              Telegram readiness
+            </dt>
+            <dd
+              data-testid="social-status-telegram-readiness"
+              className="mt-1 text-sm text-white/80"
+            >
+              {telegramCaps.telegram_readiness}
+            </dd>
+          </div>
+        ) : null}
+
+        {/* Hermes critique status — hidden when absent */}
+        {telegramCaps?.social_critic?.status != null ? (
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3">
+            <dt className="text-xs font-semibold uppercase tracking-[0.1em] text-white/45">
+              Hermes critique
+            </dt>
+            <dd
+              data-testid="social-status-hermes-critique"
+              className="mt-1 text-sm text-white/80"
+            >
+              {telegramCaps.social_critic.status}
+            </dd>
+          </div>
+        ) : null}
+
+        {/* Poller status — hidden when pollerStatus is null */}
+        {pollerStatus != null ? (
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3">
+            <dt className="text-xs font-semibold uppercase tracking-[0.1em] text-white/45">
+              Poller status
+            </dt>
+            <dd
+              data-testid="social-status-poller"
+              className="mt-1 text-sm text-white/80"
+            >
+              <span data-testid="social-status-poller-last-run" className="block">
+                last run: {pollerLastRunTime ?? "—"}
+              </span>
+              <span data-testid="social-status-poller-offset" className="block text-xs text-white/55">
+                offset: {pollerStatus.last_offset ?? "—"}
+              </span>
+              <span
+                data-testid="social-status-poller-transcript-count"
+                className="block text-xs text-white/55"
+              >
+                transcripts today: {pollerStatus.transcript_count_today}
+              </span>
+            </dd>
+          </div>
+        ) : null}
+
+        {/* Scheduler-route state — hidden when absent */}
+        {profile.scheduler_route?.state != null ? (
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3">
+            <dt className="text-xs font-semibold uppercase tracking-[0.1em] text-white/45">
+              Scheduler route
+            </dt>
+            <dd
+              data-testid="social-status-scheduler-route"
+              className="mt-1 text-sm text-white/80"
+            >
+              {profile.scheduler_route.state}
+            </dd>
+          </div>
+        ) : null}
+
+        {/* Cap usage today — hidden when absent */}
+        {profile.usage_today != null ? (
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3">
+            <dt className="text-xs font-semibold uppercase tracking-[0.1em] text-white/45">
+              Cap usage today
+            </dt>
+            <dd
+              data-testid="social-status-cap-usage"
+              className="mt-1 text-sm text-white/80"
+            >
+              {Object.entries(profile.usage_today).map(([channel, usage]) => (
+                <span key={channel} className="block">
+                  {channel}:{" "}
+                  {typeof usage.total === "number"
+                    ? usage.total
+                    : typeof usage.messages === "number"
+                      ? `${usage.messages} msg`
+                      : "—"}
+                </span>
+              ))}
+            </dd>
+          </div>
+        ) : null}
+
+        {/* Emergency stop indicator */}
+        <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3">
+          <dt className="text-xs font-semibold uppercase tracking-[0.1em] text-white/45">
+            Emergency stop
+          </dt>
+          <dd
+            data-testid="social-status-emergency-stop"
+            className="mt-1 text-sm text-white/80"
+          >
+            {profile.emergency_stop ? "active" : "inactive"}
+          </dd>
+        </div>
+
+        {/* Last blocked reason — hidden when absent */}
+        {lastBlockedReason != null ? (
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3">
+            <dt className="text-xs font-semibold uppercase tracking-[0.1em] text-white/45">
+              Last blocked reason
+            </dt>
+            <dd
+              data-testid="social-status-last-blocked"
+              className="mt-1 break-words text-sm text-white/80"
+            >
+              {lastBlockedReason}
+            </dd>
+          </div>
+        ) : null}
+
+        {/* Learning summary — hidden when absent */}
+        {learningHintsText ? (
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 md:col-span-2">
+            <dt className="text-xs font-semibold uppercase tracking-[0.1em] text-white/45">
+              Learning summary
+            </dt>
+            <dd
+              data-testid="social-status-learning"
+              className="mt-1 break-words text-sm text-white/80"
+            >
+              {learningHintsText}
+            </dd>
+          </div>
+        ) : null}
       </dl>
 
       {previewResult ? (
@@ -396,6 +564,8 @@ export function WorkspaceSocialScreen() {
   const [profileInvalid, setProfileInvalid] = React.useState(false);
   const [writeToken, setWriteToken] = React.useState("");
   const [writesEnabled, setWritesEnabled] = React.useState(true);
+  const [pollerStatus, setPollerStatus] = React.useState<PollerStatus | null>(null);
+  const [telegramCaps, setTelegramCaps] = React.useState<TelegramCapabilitiesPanel | null>(null);
 
   const applyProfile = React.useCallback((next: GoHamSocialProfile | null) => {
     const usable = isUsableProfile(next);
@@ -410,21 +580,35 @@ export function WorkspaceSocialScreen() {
   const load = React.useCallback(async () => {
     setLoading(true);
     setError(null);
-    const [profileRes, hintsRes, writeStatusRes] = await Promise.all([
+    // Core profile load — required for the page to render usefully
+    const [profileRes, writeStatusRes] = await Promise.all([
       socialAdapter.getAutonomyProfile(),
-      socialAdapter.getLearningHints({ channel: "x", limit: 5 }),
       socialAdapter.getAutonomyWriteStatus(),
     ]);
     const usableProfile = applyProfile(profileRes.profile);
-    setLearningText(redactPlainText(hintsRes.hints?.hints));
     if (writeStatusRes.status) {
       setWritesEnabled(writeStatusRes.status.writes_enabled);
     }
-    const firstError = profileRes.error ?? hintsRes.error ?? writeStatusRes.error ?? null;
+    const firstError = profileRes.error ?? writeStatusRes.error ?? null;
     if (!usableProfile) {
       setError("Social autonomy profile could not be loaded safely.");
     } else if (firstError) setError(firstError);
     setLoading(false);
+
+    // Best-effort supplementary loads: each failure hides the corresponding row gracefully.
+    // Never surface supplementary errors as page-level errors.
+    void socialAdapter
+      .getLearningHints({ channel: "x", limit: 5 })
+      .then((res) => { setLearningText(redactPlainText(res.hints?.hints)); })
+      .catch(() => { /* learning summary row hides gracefully */ });
+    void socialAdapter
+      .getPollerStatus()
+      .then((res) => { setPollerStatus(res.pollerStatus); })
+      .catch(() => { /* poller row hides gracefully */ });
+    void socialAdapter
+      .getTelegramCapabilitiesPanel()
+      .then((res) => { setTelegramCaps(res.caps); })
+      .catch(() => { /* telegram readiness / hermes critique rows hide gracefully */ });
   }, [applyProfile]);
 
   React.useEffect(() => {
@@ -587,7 +771,13 @@ export function WorkspaceSocialScreen() {
         ) : null}
       </Card>
 
-      <SocialStatusPanel profile={profile} profileInvalid={profileInvalid} />
+      <SocialStatusPanel
+        profile={profile}
+        profileInvalid={profileInvalid}
+        pollerStatus={pollerStatus}
+        telegramCaps={telegramCaps}
+        learningHintsText={learningText}
+      />
 
       <Card title="Goal">
         <label className="flex flex-col gap-2 text-sm text-white/70">

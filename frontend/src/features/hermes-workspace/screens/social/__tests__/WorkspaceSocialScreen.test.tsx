@@ -15,6 +15,8 @@ const adapterMock = vi.hoisted(() => ({
   getAutonomyWriteStatus: vi.fn(),
   previewAutonomyProfile: vi.fn(),
   previewAutonomyTick: vi.fn(),
+  getPollerStatus: vi.fn(),
+  getTelegramCapabilitiesPanel: vi.fn(),
 }));
 
 vi.mock("@/features/hermes-workspace/adapters/socialAdapter", () => ({
@@ -89,6 +91,14 @@ function mockLoad(
   });
   adapterMock.updateAutonomyLimits.mockResolvedValue({
     profile: nextProfile,
+    bridge: { status: "ready" },
+  });
+  adapterMock.getPollerStatus.mockResolvedValue({
+    pollerStatus: null,
+    bridge: { status: "ready" },
+  });
+  adapterMock.getTelegramCapabilitiesPanel.mockResolvedValue({
+    caps: null,
     bridge: { status: "ready" },
   });
 }

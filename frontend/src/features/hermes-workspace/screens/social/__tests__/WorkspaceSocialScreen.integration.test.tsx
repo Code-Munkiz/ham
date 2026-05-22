@@ -163,6 +163,23 @@ function installMswBackend(options: BackendOptions = {}) {
         generated_at: "2026-05-20T00:00:00Z",
       });
     }),
+    http.get(api("/api/social/providers/telegram/poller/status"), async ({ request }) => {
+      calls.push(await recordRequest(request));
+      return HttpResponse.json({
+        last_run_at: null,
+        last_offset: null,
+        transcript_count_today: 0,
+        last_error_code: null,
+      });
+    }),
+    http.get(api("/api/social/providers/telegram/capabilities"), async ({ request }) => {
+      calls.push(await recordRequest(request));
+      return HttpResponse.json({
+        provider_id: "telegram",
+        telegram_readiness: null,
+        hermes_gateway_readiness: null,
+      });
+    }),
     http.all(
       new RegExp(`${API_ORIGIN}/api/social/providers/(?:x|telegram)/.*/apply$`),
       async ({ request }) => {

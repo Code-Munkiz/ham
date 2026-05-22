@@ -648,6 +648,33 @@ export type GoHamSocialProfile = {
   last_tick_summary?: SocialAutonomyTickSummary | null;
   created_at: string;
   updated_at: string;
+  // M4 optional status fields — absent when backend does not yet supply them
+  storage?: { backend: "file" | "firestore" } | null;
+  scheduler_route?: { state: "disabled" | "dry-run-only" | "live" } | null;
+  usage_today?: Record<string, { messages?: number; replies?: number; total?: number }> | null;
+};
+
+/** Poller status response from GET /api/social/providers/telegram/poller/status */
+export type PollerStatus = {
+  last_run_at: string | null;
+  last_offset: number | null;
+  transcript_count_today: number;
+  last_error_code: string | null;
+};
+
+/** Telegram readiness value for the status panel row. */
+export type TelegramReadinessValue =
+  | "ready"
+  | "setup_required"
+  | "degraded"
+  | "limited"
+  | "blocked";
+
+/** Shape returned by getTelegramCapabilitiesPanel — relevant fields for SocialStatusPanel. */
+export type TelegramCapabilitiesPanel = {
+  telegram_readiness?: TelegramReadinessValue | null;
+  hermes_gateway_readiness?: string | null;
+  social_critic?: { status: "available" | "unavailable" | "not configured" } | null;
 };
 
 export type SocialAutonomySettingsPatch = {
@@ -946,6 +973,61 @@ export const socialAdapter = {
     } catch (e) {
       return {
         tick: null,
+        bridge: workspaceApiPending("social", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
+
+  async getPollerStatus(): Promise<{
+    pollerStatus: PollerStatus | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
+    try {
+      return {
+        pollerStatus: await requestJson<PollerStatus>(
+          `${BASE}/providers/telegram/poller/status`,
+        ),
+        bridge: { status: "ready" },
+      };
+    } catch (e) {
+      return {
+        pollerStatus: null,
+        bridge: workspaceApiPending("social", null, e),
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  },
+
+  async getTelegramCapabilitiesPanel(): Promise<{
+    caps: TelegramCapabilitiesPanel | null;
+    bridge: SocialBridge;
+    error?: string;
+  }> {
+    try {
+      const raw = await requestJson<{
+        telegram_readiness?: string | null;
+        hermes_gateway_readiness?: string | null;
+      }>(`${BASE}/providers/telegram/capabilities`);
+
+      // Derive social_critic status from hermes_gateway_readiness.
+      let socialCriticStatus: "available" | "unavailable" | "not configured" = "unavailable";
+      if (raw.hermes_gateway_readiness === "ready") socialCriticStatus = "available";
+      else if (raw.hermes_gateway_readiness === "not_configured")
+        socialCriticStatus = "not configured";
+
+      return {
+        caps: {
+          telegram_readiness: (raw.telegram_readiness as TelegramReadinessValue) ?? null,
+          hermes_gateway_readiness: raw.hermes_gateway_readiness ?? null,
+          social_critic: { status: socialCriticStatus },
+        },
+        bridge: { status: "ready" },
+      };
+    } catch (e) {
+      return {
+        caps: null,
         bridge: workspaceApiPending("social", null, e),
         error: e instanceof Error ? e.message : String(e),
       };
