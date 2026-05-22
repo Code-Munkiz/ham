@@ -5,8 +5,9 @@ import os
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from src.api.browser_operator import router as browser_operator_router
@@ -69,6 +70,7 @@ from src.api.request_id_middleware import request_id_middleware
 from src.ham import sentry_wiring
 from src.ham.agent_profiles import agents_config_from_merged
 from src.ham.clerk_auth import HamActor, clerk_authorization_is_clerk_session
+from src.ham.social_autonomy.firestore_store import FirestoreSocialAutonomyStoreError
 from src.memory_heist import context_engine_dashboard_payload, discover_config
 from src.persistence.project_store import get_project_store
 from src.persistence.run_store import RunStore
@@ -78,6 +80,34 @@ from src.registry.profiles import DEFAULT_PROFILE_REGISTRY
 sentry_wiring.init()
 
 app = FastAPI(title="HAM API", version="0.1.0")
+
+
+@app.exception_handler(FirestoreSocialAutonomyStoreError)
+async def _firestore_social_autonomy_503(
+    request: Request,
+    exc: FirestoreSocialAutonomyStoreError,
+) -> JSONResponse:
+    """Convert FirestoreSocialAutonomyStoreError to a structured 503 response.
+
+    Fail-closed: when ``HAM_SOCIAL_AUTONOMY_STORE_BACKEND=firestore`` is set
+    and the Firestore client errors at runtime, API routes that call
+    ``get_social_autonomy_store().*`` propagate a
+    ``FirestoreSocialAutonomyStoreError``. This handler converts it to HTTP 503
+    with a structured ``firestore_unavailable`` body so clients (and operators)
+    receive an explicit, unambiguous signal rather than a generic 500.
+    """
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": {
+                "code": "firestore_unavailable",
+                "message": (
+                    "The social autonomy store (Firestore) is temporarily unavailable. "
+                    "Check Firestore IAM and network access for the Cloud Run service account."
+                ),
+            }
+        },
+    )
 
 _DEFAULT_CORS = [
     "http://localhost:3000",
