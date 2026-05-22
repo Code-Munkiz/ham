@@ -62,8 +62,6 @@ from src.persistence.builder_visual_edit_request_store import (
     get_builder_visual_edit_request_store,
 )
 from src.persistence.builder_usage_event_store import (
-    UsageEvent,
-    UsageEventAttribution,
     get_builder_usage_event_store,
 )
 from src.persistence.project_store import get_project_store

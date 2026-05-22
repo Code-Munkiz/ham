@@ -18,6 +18,11 @@ import pytest
 # The commit immediately before M2 work started (M2 F7 self-probe commit).
 _PRE_M2_BASELINE_SHA = "0f97579ce2e5f817ad2a39c90545f03d65bbf171"
 
+# The final M2 commit (F10 — HermesSocialCritic env-gated).  The scope check
+# examines only the M2 range (F7..F10), not HEAD, so that later non-M2 commits
+# on main do not cause false scope failures.
+_M2_END_SHA = "e9a0ef72a0a62cb839ce44cbb2468685ecb0a9a6"
+
 # Top-level path prefixes the M2 commit must NOT touch.
 _FORBIDDEN_PREFIXES: tuple[str, ...] = (
     "frontend/",
@@ -60,13 +65,13 @@ def test_m2_commit_only_touches_m2_paths() -> None:
     diff_output = _git(
         "diff",
         "--name-only",
-        f"{_PRE_M2_BASELINE_SHA}..HEAD",
+        f"{_PRE_M2_BASELINE_SHA}..{_M2_END_SHA}",
     )
     changed_files = [f.strip() for f in diff_output.splitlines() if f.strip()]
 
     assert changed_files, (
-        "Expected at least one file to have changed since the pre-M2 "
-        f"baseline ({_PRE_M2_BASELINE_SHA[:8]})."
+        "Expected at least one file to have changed in the M2 range "
+        f"({_PRE_M2_BASELINE_SHA[:8]}..{_M2_END_SHA[:8]})."
     )
 
     forbidden_files = [
