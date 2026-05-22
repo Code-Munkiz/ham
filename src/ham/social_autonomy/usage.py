@@ -87,9 +87,22 @@ def count_actions_in_window(
             mapping=_TELEGRAM_ACTION_EXECUTION_KINDS,
             channel=channel,
         )
-        records = _read_jsonl_records(
-            _path_or_default(delivery_log_path, _default_delivery_log_path())
-        )
+        if delivery_log_path is not None:
+            # Explicit path: use the JSONL file directly (backward compat / test override).
+            records: list[dict[str, Any]] = _read_jsonl_records(
+                _path_or_default(delivery_log_path, _default_delivery_log_path())
+            )
+        else:
+            # No explicit path: use the configured store (file or Firestore backend).
+            # The store's iter_records_in_window already applies the time-window filter;
+            # _count_records then applies the execution_kind / provider_id / status
+            # filters before counting.
+            records = list(
+                social_delivery_log.get_social_delivery_log_store().iter_records_in_window(
+                    start=start,
+                    end=end,
+                )
+            )
         return _count_records(
             records,
             execution_kind=execution_kind,
