@@ -756,6 +756,81 @@ def test_builder_create_workspace_project_route_creates_isolated_project(tmp_pat
     set_builder_source_store_for_tests(None)
 
 
+def test_builder_source_snapshot_export_zip_inline_bundle(tmp_path: Path) -> None:
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    project = project_store.make_record(name="alpha-project", root=str(tmp_path), metadata={"workspace_id": ws_id})
+    project_store.register(project)
+    set_project_store_for_tests(project_store)
+    builder_store = BuilderSourceStore(store_path=tmp_path / "builder_sources.json")
+    source = builder_store.upsert_project_source(ProjectSource(workspace_id=ws_id, project_id=project.id))
+    snap = builder_store.upsert_source_snapshot(
+        SourceSnapshot(
+            workspace_id=ws_id,
+            project_id=project.id,
+            project_source_id=source.id,
+            manifest={
+                "kind": "inline_text_bundle",
+                "entries": [{"path": "src/App.tsx", "size_bytes": 12}],
+                "inline_files": {"src/App.tsx": "export default function App(){return null;}\n"},
+            },
+        )
+    )
+    set_builder_source_store_for_tests(builder_store)
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+
+    res = client.get(
+        f"/api/workspaces/{ws_id}/projects/{project.id}/builder/source-snapshots/{snap.id}/export",
+    )
+    assert res.status_code == 200, res.text
+    assert res.headers["content-type"].startswith("application/zip")
+    zf = zipfile.ZipFile(io.BytesIO(res.content))
+    assert "src/App.tsx" in set(zf.namelist())
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+
+
+def test_builder_source_snapshot_export_zip_artifact(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    ws_store = InMemoryWorkspaceStore()
+    ws_id = "ws_aaaaaaaaaaaaaaaa"
+    _seed_workspace(ws_store, workspace_id=ws_id, org_id="org_a", owner_user_id="user_a", slug="alpha")
+    project_store = ProjectStore(store_path=tmp_path / "projects.json")
+    project = project_store.make_record(name="alpha-project", root=str(tmp_path), metadata={"workspace_id": ws_id})
+    project_store.register(project)
+    set_project_store_for_tests(project_store)
+    builder_store = BuilderSourceStore(store_path=tmp_path / "builder_sources.json")
+    source = builder_store.upsert_project_source(ProjectSource(workspace_id=ws_id, project_id=project.id))
+    payload = _zip_bytes({"src/main.py": b"print('ok')\n"})
+    artifact_dir = tmp_path / "artifacts" / ws_id / project.id
+    artifact_dir.mkdir(parents=True)
+    artifact_id = "bzip_test123"
+    (artifact_dir / f"{artifact_id}.zip").write_bytes(payload)
+    snap = builder_store.upsert_source_snapshot(
+        SourceSnapshot(
+            workspace_id=ws_id,
+            project_id=project.id,
+            project_source_id=source.id,
+            artifact_uri=f"builder-artifact://{artifact_id}",
+            manifest={"entries": [{"path": "src/main.py", "size_bytes": 13}]},
+        )
+    )
+    set_builder_source_store_for_tests(builder_store)
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+
+    res = client.get(
+        f"/api/workspaces/{ws_id}/projects/{project.id}/builder/source-snapshots/{snap.id}/export",
+    )
+    assert res.status_code == 200, res.text
+    assert res.content == payload
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+
+
 def test_builder_snapshot_file_chat_explain_mode_returns_message_without_snapshot(tmp_path: Path) -> None:
     ws_store = InMemoryWorkspaceStore()
     ws_id = "ws_aaaaaaaaaaaaaaaa"

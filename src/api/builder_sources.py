@@ -2551,6 +2551,44 @@ def _sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _safe_builder_export_filename(project_id: str) -> str:
+    stem = re.sub(r"[^a-zA-Z0-9_-]+", "-", str(project_id or "").strip()).strip("-")
+    if not stem:
+        stem = "project"
+    return f"ham-project-{stem[:48]}.zip"
+
+
+def _snapshot_export_zip_bytes(*, workspace_id: str, project_id: str, snapshot: SourceSnapshot) -> bytes:
+    from src.ham.builder_chat_scaffold import load_zip_bytes_for_snapshot
+
+    kind = str((snapshot.manifest or {}).get("kind") or "")
+    if kind == "inline_text_bundle":
+        bio = io.BytesIO()
+        with zipfile.ZipFile(bio, mode="w", compression=zipfile.ZIP_DEFLATED) as writer:
+            for rel_path, text in sorted(_inline_snapshot_files_map(snapshot).items()):
+                writer.writestr(rel_path.replace("\\", "/").lstrip("/"), text.encode("utf-8"))
+        payload = bio.getvalue()
+        if not payload:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": {"code": "EXPORT_EMPTY", "message": "Project snapshot has no files to export."}},
+            )
+        return payload
+    stem = _artifact_stem_from_uri(snapshot.artifact_uri) or str((snapshot.metadata or {}).get("artifact_id") or "").strip()
+    if not stem:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "ARTIFACT_NOT_FOUND", "message": "Project snapshot is not available for download yet."}},
+        )
+    zbytes = load_zip_bytes_for_snapshot(workspace_id=workspace_id, project_id=project_id, artifact_id=stem)
+    if zbytes is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "ARTIFACT_NOT_FOUND", "message": "Project snapshot is not available for download yet."}},
+        )
+    return zbytes
+
+
 def _snapshot_file_text_or_404(*, workspace_id: str, project_id: str, snapshot: SourceSnapshot, path: str) -> str:
     from src.ham.builder_chat_scaffold import (
         load_zip_bytes_for_snapshot,
@@ -2842,6 +2880,35 @@ async def read_builder_snapshot_file_content(
         "language": _language_hint_for_path(safe_path),
         "readonly": False,
     }
+
+
+@router.get(
+    "/api/workspaces/{workspace_id}/projects/{project_id}/builder/source-snapshots/{snapshot_id}/export",
+)
+@router.get(
+    "/api/workspaces/{workspace_id}/projects/{project_id}/source-snapshots/{snapshot_id}/export",
+)
+async def export_builder_source_snapshot(
+    project_id: str,
+    snapshot_id: str,
+    ctx: Annotated[WorkspaceContext, Depends(require_perm(PERM_WORKSPACE_READ))],
+) -> StreamingResponse:
+    snap = _source_snapshot_for_project_or_404(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        snapshot_id=snapshot_id,
+    )
+    payload = _snapshot_export_zip_bytes(
+        workspace_id=ctx.workspace_id,
+        project_id=project_id,
+        snapshot=snap,
+    )
+    fname = _safe_builder_export_filename(project_id)
+    return StreamingResponse(
+        io.BytesIO(payload),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
 
 
 @router.post(
