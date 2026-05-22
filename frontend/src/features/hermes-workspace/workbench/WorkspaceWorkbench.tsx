@@ -71,6 +71,7 @@ import { workspaceProjectScope } from "@/lib/ham/workspaceProjectScope";
 import { detectPreviewIframeProxySignals } from "@/features/hermes-workspace/workbench/previewProxyIframeSignals";
 import { cn } from "@/lib/utils";
 import { ProjectSourceIntakeDialog } from "./ProjectSourceIntakeDialog";
+import { WorkbenchSavedVersionsDialog } from "./WorkbenchSavedVersionsDialog";
 import { WorkbenchProjectSettingsPanel } from "./WorkbenchProjectSettingsPanel";
 import { MobilePreviewFrame } from "./preview/MobilePreviewFrame";
 import { DEFAULT_DEVICE_PRESET } from "./preview/devicePresets";
@@ -130,6 +131,11 @@ export function WorkspaceWorkbench({
   const [exportSnapshotLoading, setExportSnapshotLoading] = React.useState(false);
   const [downloadBusy, setDownloadBusy] = React.useState(false);
   const [downloadError, setDownloadError] = React.useState<string | null>(null);
+  const [savedVersionsOpen, setSavedVersionsOpen] = React.useState(false);
+  const [codeViewSnapshotRequest, setCodeViewSnapshotRequest] = React.useState<{
+    snapshotId: string;
+    nonce: number;
+  } | null>(null);
 
   const ws = workspaceId?.trim() || "";
   const pid = projectId?.trim() || "";
@@ -333,10 +339,20 @@ export function WorkspaceWorkbench({
                   {downloadBusy ? "Downloading project…" : "Download project"}
                 </DropdownMenu.Item>
                 <DropdownMenu.Item
-                  disabled
-                  className="cursor-not-allowed rounded px-2 py-1.5 text-white/40 outline-none"
+                  disabled={!ws || !pid}
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    setSavedVersionsOpen(true);
+                  }}
+                  className={cn(
+                    "rounded px-2 py-1.5 outline-none",
+                    ws && pid
+                      ? "cursor-pointer text-white/88 hover:bg-white/[0.06]"
+                      : "cursor-not-allowed text-white/40",
+                  )}
+                  data-testid="hww-workbench-saved-versions"
                 >
-                  Version history — Coming soon
+                  Saved versions
                 </DropdownMenu.Item>
                 <DropdownMenu.Item
                   disabled
@@ -378,6 +394,7 @@ export function WorkspaceWorkbench({
             workspaceId={workspaceId}
             projectId={projectId}
             sourceRefreshKey={sourceRefreshKey}
+            viewSnapshotRequest={codeViewSnapshotRequest}
             onAddProjectSource={() => setProjectSourceOpen(true)}
             onSnapshotUpdated={() => setSourceRefreshKey((prev) => prev + 1)}
           />
@@ -400,6 +417,18 @@ export function WorkspaceWorkbench({
         workspaceId={workspaceId}
         onZipImported={() => {
           setSourceRefreshKey((prev) => prev + 1);
+        }}
+      />
+      <WorkbenchSavedVersionsDialog
+        open={savedVersionsOpen}
+        onOpenChange={setSavedVersionsOpen}
+        workspaceId={workspaceId}
+        projectId={projectId}
+        refreshKey={sourceRefreshKey}
+        onViewVersion={(snapshotId) => {
+          setSavedVersionsOpen(false);
+          setCodeViewSnapshotRequest({ snapshotId, nonce: Date.now() });
+          setActiveTab("code");
         }}
       />
     </aside>
@@ -2260,6 +2289,7 @@ type WorkbenchCodePanelProps = {
   workspaceId?: string | null;
   projectId?: string | null;
   sourceRefreshKey: number;
+  viewSnapshotRequest?: { snapshotId: string; nonce: number } | null;
   onAddProjectSource: () => void;
   onSnapshotUpdated: () => void;
 };
@@ -2268,6 +2298,7 @@ function WorkbenchCodePanel({
   workspaceId = null,
   projectId = null,
   sourceRefreshKey,
+  viewSnapshotRequest = null,
   onAddProjectSource,
   onSnapshotUpdated,
 }: WorkbenchCodePanelProps) {
@@ -2291,6 +2322,8 @@ function WorkbenchCodePanel({
   const [fileChatBusy, setFileChatBusy] = React.useState(false);
   const [fileChatResult, setFileChatResult] = React.useState<string | null>(null);
   const [changedFiles, setChangedFiles] = React.useState<string[]>([]);
+  const ws = workspaceId?.trim() || "";
+  const pid = projectId?.trim() || "";
 
   const loadSnapshotFiles = React.useCallback(
     async (ws: string, pid: string, snapId: string) => {
@@ -2320,8 +2353,6 @@ function WorkbenchCodePanel({
   );
 
   React.useEffect(() => {
-    const ws = workspaceId?.trim() || "";
-    const pid = projectId?.trim() || "";
     if (!ws || !pid) {
       setSnapshots([]);
       setSources([]);
@@ -2371,10 +2402,31 @@ function WorkbenchCodePanel({
     return () => {
       cancelled = true;
     };
-  }, [workspaceId, projectId, sourceRefreshKey, loadSnapshotFiles]);
+  }, [workspaceId, projectId, sourceRefreshKey, loadSnapshotFiles, ws, pid]);
 
-  const ws = workspaceId?.trim() || "";
-  const pid = projectId?.trim() || "";
+  React.useEffect(() => {
+    const snapId = viewSnapshotRequest?.snapshotId?.trim() || "";
+    if (!snapId || !ws || !pid) return;
+    let cancelled = false;
+    setLoading(true);
+    setErr(null);
+    void loadSnapshotFiles(ws, pid, snapId)
+      .catch((e) => {
+        if (!cancelled) {
+          setErr(e instanceof Error ? e.message : String(e));
+          setFiles([]);
+          setActiveSnapshotId(null);
+          setContent(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [viewSnapshotRequest?.snapshotId, viewSnapshotRequest?.nonce, ws, pid, loadSnapshotFiles]);
+
   const activeSnapId =
     activeSnapshotId ||
     sources.find((s) => s.active_snapshot_id)?.active_snapshot_id ||
