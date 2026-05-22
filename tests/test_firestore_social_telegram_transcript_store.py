@@ -301,3 +301,89 @@ class TestFailClosed:
         store = FirestoreTelegramTranscriptStore(client=_FailClient())
         with pytest.raises(FirestoreTelegramTranscriptStoreError):
             list(store.iter_rows())
+
+
+# ---------------------------------------------------------------------------
+# Fail-closed: redaction failures never persist unredacted text
+# VAL-M15-M1B-TRANSCRIPT-REDACT-FAIL-CLOSED-001
+# ---------------------------------------------------------------------------
+
+
+class TestRedactFailClosed:
+    """VAL-M15-M1B-TRANSCRIPT-REDACT-FAIL-CLOSED-001
+
+    _redact_row_text must distinguish ImportError from runtime failure inside
+    redact_text(). Both must fail closed by raising
+    FirestoreTelegramTranscriptStoreError; under no circumstances may
+    unredacted free-form text be silently persisted to Firestore.
+    """
+
+    def test_redact_runtime_error_fails_closed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Forces redact_text() to raise a generic RuntimeError.
+
+        Asserts:
+        - append_row raises FirestoreTelegramTranscriptStoreError
+        - The document collection remains empty (zero rows persisted)
+        """
+        import src.ham.hamgomoon_learning.redaction as redaction_mod
+
+        def _raising_redact(text: str) -> str:
+            raise RuntimeError("Simulated redaction runtime failure")
+
+        monkeypatch.setattr(redaction_mod, "redact_text", _raising_redact)
+
+        store, fake = _store_with_fake()
+        with pytest.raises(FirestoreTelegramTranscriptStoreError):
+            store.append_row(_VALID_ROW.copy())
+
+        # Collection must remain empty — no unredacted text was persisted
+        docs = list(fake.collection("ham_social_telegram_transcripts").stream())
+        assert len(docs) == 0, (
+            "No documents should be persisted when redact_text() raises a RuntimeError"
+        )
+
+    def test_redact_import_error_fails_closed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Forces the redact_text import to raise ImportError.
+
+        Asserts:
+        - append_row raises FirestoreTelegramTranscriptStoreError
+        - The document collection remains empty (zero rows persisted)
+        """
+        import importlib
+        import sys
+
+        # Remove the redaction module from sys.modules so the inline import
+        # inside _redact_row_text will re-execute; then make the import fail.
+        original = sys.modules.pop("src.ham.hamgomoon_learning.redaction", None)
+        try:
+            import builtins
+
+            real_import = builtins.__import__
+
+            def _failing_import(name: str, *args: object, **kwargs: object) -> object:
+                if name == "src.ham.hamgomoon_learning.redaction":
+                    raise ImportError("Simulated missing redaction module")
+                return real_import(name, *args, **kwargs)
+
+            monkeypatch.setattr(builtins, "__import__", _failing_import)
+
+            store, fake = _store_with_fake()
+            with pytest.raises(FirestoreTelegramTranscriptStoreError):
+                store.append_row(_VALID_ROW.copy())
+
+            # Collection must remain empty — no unredacted text was persisted
+            docs = list(fake.collection("ham_social_telegram_transcripts").stream())
+            assert len(docs) == 0, (
+                "No documents should be persisted when the redaction module is unavailable"
+            )
+        finally:
+            # Restore the original module so subsequent tests are unaffected
+            if original is not None:
+                sys.modules["src.ham.hamgomoon_learning.redaction"] = original
+            else:
+                sys.modules.pop("src.ham.hamgomoon_learning.redaction", None)
+                # Re-import to restore for other tests
+                try:
+                    importlib.import_module("src.ham.hamgomoon_learning.redaction")
+                except ImportError:
+                    pass

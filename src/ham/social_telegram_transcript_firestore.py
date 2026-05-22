@@ -74,16 +74,32 @@ def _resolve_env(primary: str, fallback: str | None = None) -> str | None:
 
 
 def _redact_row_text(text: Any) -> Any:
-    """Apply text redaction to the ``text`` field of a transcript row."""
+    """Apply text redaction to the ``text`` field of a transcript row.
+
+    Fail-closed on both import failure and runtime failure:
+
+    * ``ImportError`` — the redaction module is unavailable; raises
+      :class:`FirestoreTelegramTranscriptStoreError` so the row is never
+      persisted with unredacted text.
+    * Any other exception from ``redact_text()`` — also raises
+      :class:`FirestoreTelegramTranscriptStoreError` for the same reason.
+
+    Under no circumstances is unredacted free-form text silently returned.
+    """
     if not isinstance(text, str):
         return text
     try:
         from src.ham.hamgomoon_learning.redaction import redact_text  # noqa: PLC0415
-
+    except ImportError as exc:
+        raise FirestoreTelegramTranscriptStoreError(
+            "Redaction module unavailable; refusing to persist unredacted text."
+        ) from exc
+    try:
         return redact_text(text)
-    except Exception:  # noqa: BLE001
-        # Defensive: if redaction import fails, return as-is (do not lose the row)
-        return text
+    except Exception as exc:  # noqa: BLE001
+        raise FirestoreTelegramTranscriptStoreError(
+            f"redact_text() failed; refusing to persist unredacted text: {exc}"
+        ) from exc
 
 
 class FirestoreTelegramTranscriptStoreError(RuntimeError):
