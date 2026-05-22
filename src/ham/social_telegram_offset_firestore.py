@@ -1,11 +1,39 @@
-"""Firestore-backed Telegram getUpdates offset store (skeleton).
+"""Firestore-backed Telegram getUpdates offset store (M1 F4 implementation).
 
-Full implementation: M1 F4 (telegram-transcript-and-offset-firestore-stores).
+Implements the ``FirestoreTelegramOffsetStore`` backend for the
+``TelegramOffsetStoreProtocol``. Selected by the factory in
+:mod:`src.ham.social_telegram_offset_store` when
+``HAM_TELEGRAM_OFFSET_BACKEND=firestore``.
 
-Per-store env-var overrides:
-- ``HAM_TELEGRAM_OFFSET_FIRESTORE_PROJECT_ID``  -> ``HAM_FIRESTORE_PROJECT_ID``
-- ``HAM_TELEGRAM_OFFSET_FIRESTORE_DATABASE``    -> ``HAM_FIRESTORE_DATABASE``
-- ``HAM_TELEGRAM_OFFSET_FIRESTORE_COLLECTION``  (default ``ham_social_telegram_poller_state``)
+Collection layout::
+
+    ham_social_telegram_poller_state/{bot_digest}
+
+Each document has a single field ``update_offset: int``.  The document ID is
+the ``bot_digest`` (``sha256(token)[:16]``) so each bot token has exactly one
+document, and writes are idempotent at the document level.
+
+Atomicity:
+    ``write_offset`` uses Firestore ``set()`` (full document replace), which is
+    atomic at the document level — either the full payload is written or nothing
+    is.  No explicit transaction is needed for a single-field single-document
+    write.
+
+Idempotency:
+    Writing the same offset twice simply overwrites the document with the same
+    value.  Because the document ID is the ``bot_digest``, collection size
+    remains ``1`` after duplicate writes.
+
+Fail-closed:
+    Any exception from the Firestore SDK is wrapped in
+    :class:`FirestoreTelegramOffsetStoreError` and re-raised.  The store
+    **never** silently falls back to the file backend.
+
+Per-store env-var overrides::
+
+    HAM_TELEGRAM_OFFSET_FIRESTORE_PROJECT_ID  -> HAM_FIRESTORE_PROJECT_ID
+    HAM_TELEGRAM_OFFSET_FIRESTORE_DATABASE    -> HAM_FIRESTORE_DATABASE
+    HAM_TELEGRAM_OFFSET_FIRESTORE_COLLECTION  (default ham_social_telegram_poller_state)
 """
 
 from __future__ import annotations
@@ -33,11 +61,23 @@ def _resolve_env(primary: str, fallback: str | None = None) -> str | None:
 
 
 class FirestoreTelegramOffsetStoreError(RuntimeError):
-    """Wrapper for unexpected errors from the Firestore SDK."""
+    """Wrapper for unexpected errors from the Firestore SDK.
+
+    Raised by every method when the Firestore client raises, ensuring callers
+    never silently swallow SDK errors and the API layer can convert them to
+    structured ``503 firestore_unavailable`` responses.
+    """
 
 
 class FirestoreTelegramOffsetStore:
-    """Firestore-backed Telegram offset store (skeleton; full impl in F4)."""
+    """Firestore-backed Telegram getUpdates offset store.
+
+    Satisfies :class:`~src.ham.social_telegram_offset_store.TelegramOffsetStoreProtocol`.
+
+    The constructor accepts an injected ``client`` for tests; in production
+    the real ``google.cloud.firestore.Client`` is constructed lazily on first
+    method call so importing this module never contacts Firestore at import time.
+    """
 
     def __init__(
         self,
@@ -53,7 +93,12 @@ class FirestoreTelegramOffsetStore:
         self._coll_name = coll.strip() or _DEFAULT_COLLECTION
         self._client = client
 
+    # ------------------------------------------------------------------
+    # Lazy client helper
+    # ------------------------------------------------------------------
+
     def _db(self) -> Any:
+        """Return the Firestore client, constructing it lazily when not injected."""
         if self._client is not None:
             return self._client
         try:
@@ -69,11 +114,70 @@ class FirestoreTelegramOffsetStore:
         self._client = firestore.Client(**kwargs) if kwargs else firestore.Client()
         return self._client
 
+    # ------------------------------------------------------------------
+    # Protocol implementation
+    # ------------------------------------------------------------------
+
     def read_offset(self, bot_digest: str) -> int | None:
-        raise NotImplementedError("FirestoreTelegramOffsetStore.read_offset — implemented in F4")
+        """Return the stored offset for ``bot_digest``, or ``None`` if absent.
+
+        An absent document returns ``None`` (not an error).
+        Only Firestore SDK errors raise :class:`FirestoreTelegramOffsetStoreError`.
+
+        Args:
+            bot_digest: Short hex digest of the bot token (``sha256(token)[:16]``).
+
+        Returns:
+            The stored ``update_offset`` integer, or ``None`` when not set.
+
+        Raises:
+            FirestoreTelegramOffsetStoreError: On any Firestore SDK error.
+        """
+        db = self._db()
+        key = str(bot_digest).strip()
+        try:
+            snap = db.collection(self._coll_name).document(key).get()
+        except FirestoreTelegramOffsetStoreError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise FirestoreTelegramOffsetStoreError(f"Firestore read_offset failed: {exc}") from exc
+
+        if not snap.exists:
+            return None
+        data = snap.to_dict() or {}
+        val = data.get("update_offset")
+        if val is None:
+            return None
+        try:
+            return int(val)
+        except (TypeError, ValueError):
+            return None
 
     def write_offset(self, bot_digest: str, update_offset: int) -> None:
-        raise NotImplementedError("FirestoreTelegramOffsetStore.write_offset — implemented in F4")
+        """Atomically persist ``update_offset`` for ``bot_digest``.
+
+        Uses Firestore ``set()`` (full document replace), which is atomic at the
+        document level.  Writing the same offset twice is a no-op in terms of
+        observable state — the document simply retains the same value.
+
+        Args:
+            bot_digest:    Short hex digest of the bot token.
+            update_offset: The new offset value to persist.
+
+        Raises:
+            FirestoreTelegramOffsetStoreError: On any Firestore SDK error.
+        """
+        db = self._db()
+        key = str(bot_digest).strip()
+        payload: dict[str, Any] = {"update_offset": int(update_offset)}
+        try:
+            db.collection(self._coll_name).document(key).set(payload)
+        except FirestoreTelegramOffsetStoreError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise FirestoreTelegramOffsetStoreError(
+                f"Firestore write_offset failed: {exc}"
+            ) from exc
 
 
 __all__ = [
