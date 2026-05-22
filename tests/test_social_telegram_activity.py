@@ -52,6 +52,7 @@ def test_activity_preview_completed_when_ready_and_governor_allows(
         activity_kind="test_activity",
         readiness="ready",
         gateway_runtime_state="connected",
+        telegram_self_probe_state="ok",
         delivery_log_path=log,
     )
     data = result.model_dump(mode="json")
@@ -125,15 +126,17 @@ def test_no_delivery_log_append_and_no_telegram_api_or_send_adapter_call(
 ) -> None:
     _ready_env(monkeypatch)
     log = tmp_path / "social_delivery_log.jsonl"
-    with patch("urllib.request.urlopen", side_effect=AssertionError("telegram api should not be called")):
+    with patch(
+        "urllib.request.urlopen", side_effect=AssertionError("telegram api should not be called")
+    ):
         with patch("src.ham.social_telegram_send.send_confirmed_telegram_message") as send:
             result = plan_telegram_activity_once(
                 activity_kind="test_activity",
                 readiness="ready",
                 gateway_runtime_state="connected",
+                telegram_self_probe_state="ok",
                 delivery_log_path=log,
             )
     assert result.status == "completed"
     assert send.call_count == 0
     assert log.exists() is False
-

@@ -22,8 +22,17 @@ class MockTransport:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
 
-    def send_message(self, *, bot_token: str, chat_id: str, text: str, timeout_seconds: float) -> TelegramSendResult:
-        self.calls.append({"bot_token": bot_token, "chat_id": chat_id, "text": text, "timeout_seconds": timeout_seconds})
+    def send_message(
+        self, *, bot_token: str, chat_id: str, text: str, timeout_seconds: float
+    ) -> TelegramSendResult:
+        self.calls.append(
+            {
+                "bot_token": bot_token,
+                "chat_id": chat_id,
+                "text": text,
+                "timeout_seconds": timeout_seconds,
+            }
+        )
         return TelegramSendResult(status="sent", execution_allowed=True, mutation_attempted=True)
 
 
@@ -109,7 +118,9 @@ def _write_transcript(path: Path, *, text: str = "How does Ham work?") -> None:
     path.write_text(json.dumps(row, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _reactive_result(status: str = "completed", *, mutation: bool = False, reasons: list[str] | None = None) -> TelegramReactiveRunResult:
+def _reactive_result(
+    status: str = "completed", *, mutation: bool = False, reasons: list[str] | None = None
+) -> TelegramReactiveRunResult:
     return TelegramReactiveRunResult(
         status=status,  # type: ignore[arg-type]
         dry_run=False,
@@ -125,7 +136,9 @@ def _reactive_result(status: str = "completed", *, mutation: bool = False, reaso
     )
 
 
-def _activity_result(status: str = "completed", *, mutation: bool = False, reasons: list[str] | None = None) -> TelegramActivityRunResult:
+def _activity_result(
+    status: str = "completed", *, mutation: bool = False, reasons: list[str] | None = None
+) -> TelegramActivityRunResult:
     return TelegramActivityRunResult(
         status=status,  # type: ignore[arg-type]
         dry_run=False,
@@ -175,7 +188,9 @@ def _blocked_reactive_result(*, reasons: list[str] | None = None) -> TelegramRea
     )
 
 
-def test_dry_run_runs_both_lanes_sends_nothing_and_no_log(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_dry_run_runs_both_lanes_sends_nothing_and_no_log(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     token, user, chat = _ready_env(monkeypatch, tmp_path)
     transcript = tmp_path / "telegram.jsonl"
     _write_transcript(transcript)
@@ -183,12 +198,15 @@ def test_dry_run_runs_both_lanes_sends_nothing_and_no_log(monkeypatch: pytest.Mo
     reactive_transport = MockTransport()
     activity_transport = MockTransport()
 
-    with patch("urllib.request.urlopen", side_effect=AssertionError("telegram api should not be called")):
+    with patch(
+        "urllib.request.urlopen", side_effect=AssertionError("telegram api should not be called")
+    ):
         result = run_hamgomoon_autopilot_once(
             HamgomoonAutopilotConfig(
                 dry_run=True,
                 readiness="ready",
                 gateway_runtime_state="connected",
+                telegram_self_probe_state="ok",
                 transcript_paths=[transcript],
                 delivery_log_path=log,
             ),
@@ -211,15 +229,25 @@ def test_dry_run_runs_both_lanes_sends_nothing_and_no_log(monkeypatch: pytest.Mo
         assert raw not in text
 
 
-def test_dry_run_reactive_candidate_activity_cap_is_partial_not_blocked(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_dry_run_reactive_candidate_activity_cap_is_partial_not_blocked(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     _ready_env(monkeypatch, tmp_path)
     log = tmp_path / "delivery.jsonl"
 
     with (
-        patch("src.ham.social_telegram_autopilot.run_telegram_reactive_once", return_value=_reactive_result("completed", mutation=False)),
-        patch("src.ham.social_telegram_autopilot.run_telegram_activity_once", return_value=_blocked_activity_result()),
+        patch(
+            "src.ham.social_telegram_autopilot.run_telegram_reactive_once",
+            return_value=_reactive_result("completed", mutation=False),
+        ),
+        patch(
+            "src.ham.social_telegram_autopilot.run_telegram_activity_once",
+            return_value=_blocked_activity_result(),
+        ),
     ):
-        result = run_hamgomoon_autopilot_once(HamgomoonAutopilotConfig(dry_run=True, delivery_log_path=log))
+        result = run_hamgomoon_autopilot_once(
+            HamgomoonAutopilotConfig(dry_run=True, delivery_log_path=log)
+        )
 
     assert result.status == "partial"
     assert result.selected_lane == "reactive"
@@ -234,26 +262,45 @@ def test_dry_run_reactive_candidate_activity_cap_is_partial_not_blocked(monkeypa
 
 def test_dry_run_both_lanes_blocked_is_blocked() -> None:
     with (
-        patch("src.ham.social_telegram_autopilot.run_telegram_reactive_once", return_value=_blocked_reactive_result()),
-        patch("src.ham.social_telegram_autopilot.run_telegram_activity_once", return_value=_blocked_activity_result()),
+        patch(
+            "src.ham.social_telegram_autopilot.run_telegram_reactive_once",
+            return_value=_blocked_reactive_result(),
+        ),
+        patch(
+            "src.ham.social_telegram_autopilot.run_telegram_activity_once",
+            return_value=_blocked_activity_result(),
+        ),
     ):
         result = run_hamgomoon_autopilot_once(HamgomoonAutopilotConfig(dry_run=True))
 
     assert result.status == "blocked"
     assert result.selected_lane is None
-    assert result.blocking_reasons == ["telegram_reactive_no_safe_candidate", "telegram_activity_daily_cap_reached"]
+    assert result.blocking_reasons == [
+        "telegram_reactive_no_safe_candidate",
+        "telegram_activity_daily_cap_reached",
+    ]
     assert result.non_blocking_reasons == []
 
 
-def test_live_mode_blocked_by_default_global_env_gates(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_live_mode_blocked_by_default_global_env_gates(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     _ready_env(monkeypatch, tmp_path)
     calls: list[str] = []
 
     with (
-        patch("src.ham.social_telegram_autopilot.run_telegram_reactive_once", side_effect=lambda *a, **k: calls.append("reactive")),
-        patch("src.ham.social_telegram_autopilot.run_telegram_activity_once", side_effect=lambda *a, **k: calls.append("activity")),
+        patch(
+            "src.ham.social_telegram_autopilot.run_telegram_reactive_once",
+            side_effect=lambda *a, **k: calls.append("reactive"),
+        ),
+        patch(
+            "src.ham.social_telegram_autopilot.run_telegram_activity_once",
+            side_effect=lambda *a, **k: calls.append("activity"),
+        ),
     ):
-        result = run_hamgomoon_autopilot_once(HamgomoonAutopilotConfig(dry_run=False, emergency_stop=False))
+        result = run_hamgomoon_autopilot_once(
+            HamgomoonAutopilotConfig(dry_run=False, emergency_stop=False)
+        )
 
     assert result.status == "blocked"
     assert "hamgomoon_autopilot_disabled" in result.reasons
@@ -262,12 +309,16 @@ def test_live_mode_blocked_by_default_global_env_gates(monkeypatch: pytest.Monke
     assert calls == []
 
 
-def test_live_mode_blocked_when_global_dry_run_gate_true(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_live_mode_blocked_when_global_dry_run_gate_true(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     _ready_env(monkeypatch, tmp_path)
     monkeypatch.setenv("HAMGOMOON_AUTOPILOT_ENABLED", "true")
     monkeypatch.setenv("HAMGOMOON_AUTOPILOT_DRY_RUN", "true")
 
-    result = run_hamgomoon_autopilot_once(HamgomoonAutopilotConfig(dry_run=False, emergency_stop=False))
+    result = run_hamgomoon_autopilot_once(
+        HamgomoonAutopilotConfig(dry_run=False, emergency_stop=False)
+    )
 
     assert result.status == "blocked"
     assert result.reasons == ["hamgomoon_autopilot_dry_run_enabled"]
@@ -275,7 +326,9 @@ def test_live_mode_blocked_when_global_dry_run_gate_true(monkeypatch: pytest.Mon
     assert result.activity is None
 
 
-def test_live_mode_respects_lane_specific_gates(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_live_mode_respects_lane_specific_gates(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     _ready_env(monkeypatch, tmp_path)
     _enable_global_gates(monkeypatch)
     transcript = tmp_path / "telegram.jsonl"
@@ -298,7 +351,9 @@ def test_live_mode_respects_lane_specific_gates(monkeypatch: pytest.MonkeyPatch,
     assert result.mutation_attempted is False
 
 
-def test_live_mode_calls_reactive_then_activity_when_no_reactive_send(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_live_mode_calls_reactive_then_activity_when_no_reactive_send(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _enable_global_gates(monkeypatch)
     order: list[str] = []
 
@@ -314,7 +369,9 @@ def test_live_mode_calls_reactive_then_activity_when_no_reactive_send(monkeypatc
         patch("src.ham.social_telegram_autopilot.run_telegram_reactive_once", side_effect=reactive),
         patch("src.ham.social_telegram_autopilot.run_telegram_activity_once", side_effect=activity),
     ):
-        result = run_hamgomoon_autopilot_once(HamgomoonAutopilotConfig(dry_run=False, emergency_stop=False))
+        result = run_hamgomoon_autopilot_once(
+            HamgomoonAutopilotConfig(dry_run=False, emergency_stop=False)
+        )
 
     assert order == ["reactive", "activity"]
     assert result.lane_order == ["reactive", "activity"]
@@ -322,7 +379,9 @@ def test_live_mode_calls_reactive_then_activity_when_no_reactive_send(monkeypatc
     assert result.activity and result.activity["status"] == "sent"
 
 
-def test_live_mode_can_select_reactive_when_activity_is_blocked_by_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_live_mode_can_select_reactive_when_activity_is_blocked_by_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _enable_global_gates(monkeypatch)
     order: list[str] = []
 
@@ -338,7 +397,9 @@ def test_live_mode_can_select_reactive_when_activity_is_blocked_by_cap(monkeypat
         patch("src.ham.social_telegram_autopilot.run_telegram_reactive_once", side_effect=reactive),
         patch("src.ham.social_telegram_autopilot.run_telegram_activity_once", side_effect=activity),
     ):
-        result = run_hamgomoon_autopilot_once(HamgomoonAutopilotConfig(dry_run=False, emergency_stop=False))
+        result = run_hamgomoon_autopilot_once(
+            HamgomoonAutopilotConfig(dry_run=False, emergency_stop=False)
+        )
 
     assert order == ["reactive", "activity"]
     assert result.status == "partial"
@@ -349,7 +410,9 @@ def test_live_mode_can_select_reactive_when_activity_is_blocked_by_cap(monkeypat
     assert result.mutation_attempted is False
 
 
-def test_reactive_live_send_skips_activity_by_default_unless_allow_both(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_reactive_live_send_skips_activity_by_default_unless_allow_both(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _enable_global_gates(monkeypatch)
     order: list[str] = []
 
@@ -365,8 +428,14 @@ def test_reactive_live_send_skips_activity_by_default_unless_allow_both(monkeypa
         patch("src.ham.social_telegram_autopilot.run_telegram_reactive_once", side_effect=reactive),
         patch("src.ham.social_telegram_autopilot.run_telegram_activity_once", side_effect=activity),
     ):
-        skipped = run_hamgomoon_autopilot_once(HamgomoonAutopilotConfig(dry_run=False, emergency_stop=False))
-        both = run_hamgomoon_autopilot_once(HamgomoonAutopilotConfig(dry_run=False, allow_both_live_lanes=True, emergency_stop=False))
+        skipped = run_hamgomoon_autopilot_once(
+            HamgomoonAutopilotConfig(dry_run=False, emergency_stop=False)
+        )
+        both = run_hamgomoon_autopilot_once(
+            HamgomoonAutopilotConfig(
+                dry_run=False, allow_both_live_lanes=True, emergency_stop=False
+            )
+        )
 
     assert skipped.status == "sent"
     assert skipped.selected_lane == "reactive"
@@ -382,10 +451,18 @@ def test_emergency_stop_blocks_live_before_lanes(monkeypatch: pytest.MonkeyPatch
     calls: list[str] = []
 
     with (
-        patch("src.ham.social_telegram_autopilot.run_telegram_reactive_once", side_effect=lambda *a, **k: calls.append("reactive")),
-        patch("src.ham.social_telegram_autopilot.run_telegram_activity_once", side_effect=lambda *a, **k: calls.append("activity")),
+        patch(
+            "src.ham.social_telegram_autopilot.run_telegram_reactive_once",
+            side_effect=lambda *a, **k: calls.append("reactive"),
+        ),
+        patch(
+            "src.ham.social_telegram_autopilot.run_telegram_activity_once",
+            side_effect=lambda *a, **k: calls.append("activity"),
+        ),
     ):
-        result = run_hamgomoon_autopilot_once(HamgomoonAutopilotConfig(dry_run=False, emergency_stop=True))
+        result = run_hamgomoon_autopilot_once(
+            HamgomoonAutopilotConfig(dry_run=False, emergency_stop=True)
+        )
 
     assert result.status == "blocked"
     assert result.reasons == ["emergency_stop"]
@@ -402,10 +479,18 @@ def test_autonomy_profile_not_running_blocks_live_before_lanes(
     calls: list[str] = []
 
     with (
-        patch("src.ham.social_telegram_autopilot.run_telegram_reactive_once", side_effect=lambda *a, **k: calls.append("reactive")),
-        patch("src.ham.social_telegram_autopilot.run_telegram_activity_once", side_effect=lambda *a, **k: calls.append("activity")),
+        patch(
+            "src.ham.social_telegram_autopilot.run_telegram_reactive_once",
+            side_effect=lambda *a, **k: calls.append("reactive"),
+        ),
+        patch(
+            "src.ham.social_telegram_autopilot.run_telegram_activity_once",
+            side_effect=lambda *a, **k: calls.append("activity"),
+        ),
     ):
-        result = run_hamgomoon_autopilot_once(HamgomoonAutopilotConfig(dry_run=False, emergency_stop=False))
+        result = run_hamgomoon_autopilot_once(
+            HamgomoonAutopilotConfig(dry_run=False, emergency_stop=False)
+        )
 
     assert result.status == "blocked"
     assert result.blocking_reasons[0] == "autonomy_profile_not_running"
@@ -426,10 +511,18 @@ def test_telegram_channel_disabled_blocks_live_before_lanes(
     calls: list[str] = []
 
     with (
-        patch("src.ham.social_telegram_autopilot.run_telegram_reactive_once", side_effect=lambda *a, **k: calls.append("reactive")),
-        patch("src.ham.social_telegram_autopilot.run_telegram_activity_once", side_effect=lambda *a, **k: calls.append("activity")),
+        patch(
+            "src.ham.social_telegram_autopilot.run_telegram_reactive_once",
+            side_effect=lambda *a, **k: calls.append("reactive"),
+        ),
+        patch(
+            "src.ham.social_telegram_autopilot.run_telegram_activity_once",
+            side_effect=lambda *a, **k: calls.append("activity"),
+        ),
     ):
-        result = run_hamgomoon_autopilot_once(HamgomoonAutopilotConfig(dry_run=False, emergency_stop=False))
+        result = run_hamgomoon_autopilot_once(
+            HamgomoonAutopilotConfig(dry_run=False, emergency_stop=False)
+        )
 
     assert result.status == "blocked"
     assert result.blocking_reasons[0] == "autonomy_channel_disabled"
@@ -444,12 +537,16 @@ def test_emergency_stop_dual_codes_put_autonomy_first(
     _enable_global_gates(monkeypatch)
     _write_autonomy_profile(monkeypatch, tmp_path, status="running", emergency_stop=True)
 
-    result = run_hamgomoon_autopilot_once(HamgomoonAutopilotConfig(dry_run=False, emergency_stop=True))
+    result = run_hamgomoon_autopilot_once(
+        HamgomoonAutopilotConfig(dry_run=False, emergency_stop=True)
+    )
 
     assert result.status == "blocked"
     assert result.blocking_reasons[0] == "autonomy_emergency_stop"
     assert "emergency_stop" in result.blocking_reasons
-    assert result.blocking_reasons.index("autonomy_emergency_stop") < result.blocking_reasons.index("emergency_stop")
+    assert result.blocking_reasons.index("autonomy_emergency_stop") < result.blocking_reasons.index(
+        "emergency_stop"
+    )
     assert result.mutation_attempted is False
 
 
@@ -466,7 +563,9 @@ def test_global_live_gate_reasons_permissive_profile_is_legacy_byte_equal(
     assert _global_live_gate_reasons(emergency_stop=False) == legacy
 
 
-def test_cli_summary_is_bounded_and_defaults_dry_run(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_cli_summary_is_bounded_and_defaults_dry_run(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     fake = _reactive_result("completed", mutation=False)
     with patch(
         "src.ham.social_telegram_autopilot.run_hamgomoon_autopilot_once",
@@ -501,6 +600,15 @@ def fake_model_result():
 
 def test_no_scheduler_loop_daemon_or_direct_api_surface_created() -> None:
     source = Path("src/ham/social_telegram_autopilot.py").read_text(encoding="utf-8")
-    forbidden = ["while True", "schedule.", "sched.", "daemon", "threading", "asyncio.create_task", "@router", "urlopen("]
+    forbidden = [
+        "while True",
+        "schedule.",
+        "sched.",
+        "daemon",
+        "threading",
+        "asyncio.create_task",
+        "@router",
+        "urlopen(",
+    ]
     for needle in forbidden:
         assert needle not in source

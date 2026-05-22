@@ -120,7 +120,7 @@ class _FakeCollection:
         for path, data in list(self.root.docs.items()):
             if not path.startswith(sep):
                 continue
-            rest = path[len(sep):]
+            rest = path[len(sep) :]
             if "/" not in rest:
                 yield _FakeDocSnap(id=rest, _data=dict(data))
 
@@ -260,9 +260,7 @@ class TestTransactionalReadModifyWrite:
         store.apply(None, profile, token="test-write-token", actor="test")
 
         # Exactly one transaction was initiated
-        assert fake.transaction_count == 1, (
-            f"Expected 1 transaction; got {fake.transaction_count}"
-        )
+        assert fake.transaction_count == 1, f"Expected 1 transaction; got {fake.transaction_count}"
 
         tx = fake.tx_records[0]
         # At least one get within the transaction (the main document read)
@@ -271,9 +269,7 @@ class TestTransactionalReadModifyWrite:
             f"Expected a get of {main_doc_path!r} in transaction; got {tx.gets}"
         )
         # Exactly one set within the transaction (the main document write)
-        assert main_doc_path in tx.sets, (
-            f"Expected main doc set within transaction; got {tx.sets}"
-        )
+        assert main_doc_path in tx.sets, f"Expected main doc set within transaction; got {tx.sets}"
         assert tx.sets.count(main_doc_path) == 1, (
             f"Expected exactly 1 set of main doc in transaction; got {tx.sets}"
         )
@@ -329,9 +325,7 @@ class TestApplyWritesAuditSubdoc:
 
         audit_id = result.audit_id
         audit_path = f"ham_social_autonomy_profiles/{_DEFAULT_PROFILE_ID}/_audit/{audit_id}"
-        assert audit_path in fake.docs, (
-            f"Audit document not found at {audit_path!r}"
-        )
+        assert audit_path in fake.docs, f"Audit document not found at {audit_path!r}"
 
         audit_doc = fake.docs[audit_path]
         # Verify required fields
@@ -356,9 +350,7 @@ class TestApplyWritesAuditSubdoc:
         expected_revision = revision_for_profile(profile)
 
         result = store.apply(None, profile, token="test-write-token", actor="test")
-        audit_path = (
-            f"ham_social_autonomy_profiles/{_DEFAULT_PROFILE_ID}/_audit/{result.audit_id}"
-        )
+        audit_path = f"ham_social_autonomy_profiles/{_DEFAULT_PROFILE_ID}/_audit/{result.audit_id}"
         audit_doc = fake.docs[audit_path]
         assert audit_doc["after_digest"] == expected_revision
 
@@ -416,12 +408,9 @@ class TestApplyWritesBackupOnOverwrite:
 
         # Backup document should exist
         backup_path = (
-            f"ham_social_autonomy_profiles/{_DEFAULT_PROFILE_ID}"
-            f"/_backups/{result2.backup_id}"
+            f"ham_social_autonomy_profiles/{_DEFAULT_PROFILE_ID}/_backups/{result2.backup_id}"
         )
-        assert backup_path in fake.docs, (
-            f"Backup document not found at {backup_path!r}"
-        )
+        assert backup_path in fake.docs, f"Backup document not found at {backup_path!r}"
 
         # Backup content should equal the pre-apply canonical bytes
         backup_data = fake.docs[backup_path]
@@ -449,10 +438,7 @@ class TestApplyWritesBackupOnOverwrite:
         )
         result2 = store.apply(None, p2, token="test-write-token", actor="test")
 
-        audit_path = (
-            f"ham_social_autonomy_profiles/{_DEFAULT_PROFILE_ID}"
-            f"/_audit/{result2.audit_id}"
-        )
+        audit_path = f"ham_social_autonomy_profiles/{_DEFAULT_PROFILE_ID}/_audit/{result2.audit_id}"
         audit_doc = fake.docs[audit_path]
         assert audit_doc["backup_id"] == result2.backup_id
 
@@ -513,6 +499,9 @@ class TestLegacyPayloadLoadsWithDefaults:
         assert profile.last_tick_summary is None
         # Legacy cadence value is preserved as-is (M2's validator normalizes to "manual")
         assert profile.cadence == "daily_frequency_legacy_v1"
+        # M2 additions: new fields load with safe defaults when absent in stored doc
+        assert profile.activity_requires_hermes_gateway is False
+        assert profile.telegram_self_probe_state == "unknown"
 
     def test_legacy_payload_missing_optional_fields(self) -> None:
         """Profile stored without workspace_id/project_id loads with None defaults."""

@@ -57,6 +57,14 @@ def discover_telegram_inbound_once(
 ) -> TelegramInboundDiscoveryResult:
     paths = transcript_paths if transcript_paths is not None else _default_transcript_paths()
     if not paths:
+        # M2: distinguish "no source configured at all" from "source configured but
+        # paths are empty / no files found".  When the caller supplies explicit paths
+        # (transcript_paths is not None) or when env-var sources are configured but
+        # yield no resolvable paths, fall back to the legacy signal.  Only emit
+        # telegram_inbound_source_not_configured when neither file-path env nor
+        # Firestore backend env is set and no explicit paths were provided.
+        if transcript_paths is None and not _telegram_inbound_source_configured():
+            return _blocked("telegram_inbound_source_not_configured")
         return _blocked("hermes_transcript_source_unavailable")
 
     warnings: list[str] = []
@@ -101,6 +109,23 @@ def discover_telegram_inbound_once(
     )
 
 
+def _telegram_inbound_source_configured() -> bool:
+    """Return True if any transcript source env var is configured.
+
+    M2: used to distinguish "no source configured" (emit
+    telegram_inbound_source_not_configured) from "source configured but files
+    absent / paths empty" (emit hermes_transcript_source_unavailable).
+    """
+    explicit = (os.environ.get("HAM_TELEGRAM_INBOUND_TRANSCRIPT_PATH") or "").strip()
+    if explicit:
+        return True
+    backend = (os.environ.get("HAM_TELEGRAM_TRANSCRIPT_BACKEND") or "").strip().lower()
+    if backend in ("file", "firestore"):
+        return True
+    home = (os.environ.get("HAM_HERMES_HOME") or os.environ.get("HERMES_HOME") or "").strip()
+    return bool(home)
+
+
 def _default_transcript_paths() -> list[Path]:
     explicit = (os.environ.get("HAM_TELEGRAM_INBOUND_TRANSCRIPT_PATH") or "").strip()
     if explicit:
@@ -135,7 +160,9 @@ def _item_from_row(row: dict[str, Any], *, path: Path, line_no: int) -> Telegram
     text = _message_text(row)
     if not text:
         return None
-    raw_session = _first_str(row, "session_id", "session", "conversation_id", "thread_id") or str(path)
+    raw_session = _first_str(row, "session_id", "session", "conversation_id", "thread_id") or str(
+        path
+    )
     raw_author = _first_str(row, "author_id", "user_id", "from_id", "sender_id", "author") or ""
     raw_chat = _first_str(row, "chat_id", "room_id", "channel_id", "chat") or ""
     reasons: list[str] = []
@@ -234,7 +261,9 @@ def _blocked(reason: str) -> TelegramInboundDiscoveryResult:
         inbound_count=0,
         items=[],
         reasons=[reason],
-        recommended_next_steps=["Provide a safe Hermes Telegram transcript/session JSONL source, then preview again."],
+        recommended_next_steps=[
+            "Provide a safe Hermes Telegram transcript/session JSONL source, then preview again."
+        ],
     )
 
 

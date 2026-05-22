@@ -714,11 +714,16 @@ def test_tick_activity_still_blocks_when_status_setup_required(
 ) -> None:
     """When _telegram_status_response returns setup_required/unknown, the adapter
     propagates those pessimistic values and the activity lane STILL emits
-    telegram_readiness_not_ready and telegram_gateway_not_connected (fail-closed
-    preserved).
+    telegram_readiness_not_ready (fail-closed preserved).
+
+    M2 update: with the default activity_requires_hermes_gateway=False, Hermes
+    gateway state is no longer checked for the activity lane.  The self-probe state
+    is checked instead: when telegram_self_probe_state is absent/unknown on the
+    mock response, the adapter defaults to "unknown", which causes
+    telegram_self_probe_not_ok to be emitted instead of telegram_gateway_not_connected.
 
     The reactive lane is pinned to fail (no transcript paths) so the activity-lane
-    readiness/gateway blockers are deterministically visible in the merged
+    readiness/probe blockers are deterministically visible in the merged
     blocked_reasons, regardless of local filesystem state.
     """
     from types import SimpleNamespace
@@ -727,6 +732,7 @@ def test_tick_activity_still_blocks_when_status_setup_required(
     from src.ham.social_autonomy.tick import run_social_autonomy_tick
 
     # Pin the status helper to setup_required/unknown.
+    # No telegram_self_probe_state attribute → adapter falls back to "unknown".
     monkeypatch.setattr(
         social_mod,
         "_telegram_status_response",
@@ -766,6 +772,9 @@ def test_tick_activity_still_blocks_when_status_setup_required(
         run_once=True,
     )
 
-    # Fail-closed: both blockers must still appear when status is pessimistic.
+    # Fail-closed: readiness blocker must still appear when status is pessimistic.
     assert "telegram_readiness_not_ready" in result.blocked_reasons
-    assert "telegram_gateway_not_connected" in result.blocked_reasons
+    # M2: self-probe gate replaces Hermes gateway gate for the default activity lane.
+    assert "telegram_self_probe_not_ok" in result.blocked_reasons
+    # M2: Hermes gateway code no longer emitted by default activity lane.
+    assert "telegram_gateway_not_connected" not in result.blocked_reasons

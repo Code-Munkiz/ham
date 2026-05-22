@@ -75,6 +75,8 @@ def plan_telegram_activity_once(
     emergency_stop: bool = False,
     now: datetime | None = None,
     delivery_log_path: Path | None = None,
+    activity_requires_hermes_gateway: bool = False,
+    telegram_self_probe_state: str = "unknown",
 ) -> TelegramActivityPreviewResult:
     persona = load_social_persona("ham-canonical", 1)
     persona_ref = {
@@ -105,8 +107,15 @@ def plan_telegram_activity_once(
     warnings: list[str] = []
     if readiness != "ready":
         reasons.append("telegram_readiness_not_ready")
-    if gateway_runtime_state != "connected":
-        reasons.append("telegram_gateway_not_connected")
+    if activity_requires_hermes_gateway:
+        # Hermes-required path: preserve M14 M1d behavior verbatim
+        if gateway_runtime_state != "connected":
+            reasons.append("telegram_gateway_not_connected")
+    else:
+        # Default path (activity_requires_hermes_gateway=False):
+        # Hermes gates skipped; require self-probe ok instead
+        if telegram_self_probe_state != "ok":
+            reasons.append("telegram_self_probe_not_ok")
     if not bool(target["configured"]):
         reasons.append("telegram_target_not_configured")
     if not decision.allowed:
@@ -128,7 +137,10 @@ def plan_telegram_activity_once(
             governor=decision,
         )
 
-    if decision.next_allowed_send_time and "telegram_activity_min_spacing_active" in decision.reasons:
+    if (
+        decision.next_allowed_send_time
+        and "telegram_activity_min_spacing_active" in decision.reasons
+    ):
         warnings.append("telegram_activity_next_window_scheduled")
 
     return TelegramActivityPreviewResult(
@@ -291,12 +303,22 @@ def _activity_proposal_digest(
 
 def _recommended_steps(*, reasons: list[str], next_allowed_send_time: str | None) -> list[str]:
     if not reasons:
-        return ["Dry-run activity proposal generated. Live activity apply is not available in TG-A1."]
+        return [
+            "Dry-run activity proposal generated. Live activity apply is not available in TG-A1."
+        ]
     steps: list[str] = []
     if "telegram_target_not_configured" in reasons:
-        steps.append("Configure TELEGRAM_TEST_GROUP_ID on the runtime host for TG-A1 activity previews.")
+        steps.append(
+            "Configure TELEGRAM_TEST_GROUP_ID on the runtime host for TG-A1 activity previews."
+        )
     if "telegram_gateway_not_connected" in reasons or "telegram_readiness_not_ready" in reasons:
-        steps.append("Restore Telegram readiness to ready/connected before generating activity previews.")
+        steps.append(
+            "Restore Telegram readiness to ready/connected before generating activity previews."
+        )
+    if "telegram_self_probe_not_ok" in reasons:
+        steps.append(
+            "Telegram self-probe (getMe) failed. Verify TELEGRAM_BOT_TOKEN is valid and api.telegram.org is reachable."
+        )
     if "telegram_activity_daily_cap_reached" in reasons:
         steps.append("Daily activity cap reached for TG-A1 dry-run governor.")
     if next_allowed_send_time:
@@ -334,4 +356,3 @@ def _dedupe(items: list[str]) -> list[str]:
             seen.add(text)
             out.append(text)
     return out
-

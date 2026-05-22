@@ -17,8 +17,8 @@ Safety rules enforced by this module:
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import logging
 import os
 from dataclasses import replace
@@ -100,6 +100,7 @@ from src.ham.social_telegram_reactive import (
     TELEGRAM_REACTIVE_REPLY_EXECUTION_KIND,
     preview_telegram_reactive_replies_once,
 )
+from src.ham.social_telegram_self_probe import probe_telegram_self
 from src.ham.social_telegram_send import (
     TELEGRAM_EXECUTION_KIND,
     TelegramSendRequest,
@@ -875,6 +876,9 @@ class SocialMessagingProviderStatusResponse(BaseModel):
     read_only: bool = True
     mutation_attempted: bool = False
     live_apply_available: bool = False
+    # M2: self-probe state surfaced on the status response so the adapter can
+    # read it without calling the probe a second time.  None for Discord.
+    telegram_self_probe_state: Literal["ok", "not_ok", "unknown"] | None = None
 
 
 class TelegramCapabilitiesResponse(BaseModel):
@@ -907,6 +911,12 @@ class TelegramCapabilitiesResponse(BaseModel):
     reactive_reply_apply_available: bool = False
     read_only: bool = True
     mutation_attempted: bool = False
+    # M2: decoupled Telegram readiness (self-probe) and Hermes gateway readiness
+    telegram_readiness: OverallReadiness = "setup_required"
+    telegram_self_probe_state: Literal["ok", "not_ok", "unknown"] = "unknown"
+    hermes_gateway_readiness: Literal[
+        "ready", "not_configured", "limited", "blocked", "unknown"
+    ] = "unknown"
 
 
 class DiscordCapabilitiesResponse(BaseModel):
@@ -1303,10 +1313,125 @@ def _messaging_readiness(
     )
 
 
+def _probe_state_from_result(
+    result_state: str,
+) -> Literal["ok", "not_ok", "unknown"]:
+    """Map a TelegramSelfProbeResult.state to the canonical three-value enum."""
+    if result_state == "ok":
+        return "ok"
+    if result_state in ("auth_failed", "network_error", "timeout"):
+        return "not_ok"
+    return "unknown"
+
+
+def _get_telegram_self_probe_state_cached_only() -> Literal["ok", "not_ok", "unknown"]:
+    """Read the Telegram self-probe state from the TTL cache WITHOUT making a
+    network call.  Returns 'unknown' when the cache is empty or the token is absent.
+
+    Used by _telegram_status_response() so that snapshot/aggregate endpoints
+    never trigger outbound network I/O.  The dedicated status / capabilities
+    endpoints call _get_telegram_self_probe_state_fresh() which performs the
+    actual probe and populates the cache.
+    """
+    from src.ham.social_telegram_self_probe import (  # noqa: PLC0415
+        _CACHE,
+        _cache_key,
+    )
+
+    token = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
+    if not token:
+        return "unknown"
+    key = _cache_key(token)
+    cached = _CACHE.get(key)
+    if cached is not None:
+        return _probe_state_from_result(cached.state)
+    return "unknown"
+
+
+def _get_telegram_self_probe_state() -> Literal["ok", "not_ok", "unknown"]:
+    """Call the Telegram self-probe (getMe), TTL-cached. Returns 'ok'|'not_ok'|'unknown'.
+
+    Makes a network call on cache miss (or TTL expiry).  Used by the dedicated
+    telegram/status and telegram/capabilities endpoints.
+    Never logs or echoes the token.  Never raises.
+    """
+    token = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
+    if not token:
+        return "unknown"
+    try:
+        result = probe_telegram_self(token=token, now=datetime.now(UTC))
+        return _probe_state_from_result(result.state)
+    except Exception:  # noqa: BLE001
+        return "unknown"
+
+
+def _telegram_readiness_without_hermes(
+    connections: dict[str, bool],
+    self_probe_state: Literal["ok", "not_ok", "unknown"],
+) -> tuple[OverallReadiness, list[str]]:
+    """Compute Telegram readiness based on self-probe, NOT Hermes gateway.
+
+    M2 decoupled path: Hermes gateway state does not block overall_readiness.
+    Returns 'ready' when all required connections are present and self-probe
+    returns 'ok'.  readiness_reasons will never contain hermes_gateway_* codes.
+
+    Mirrors the tiering logic from the original _messaging_readiness():
+    - bot_token missing → 'setup_required' (the most fundamental requirement)
+    - bot_token present but other connections/probe not ok → 'limited'
+    - all connections + self-probe ok → 'ready'
+    """
+    reasons: list[str] = []
+    # Check required connections (mirrors _messaging_readiness for telegram).
+    # home_channel_configured and guild_or_channel_configured are optional
+    # extras — they add advisory reasons but do not change the "limited" vs
+    # "setup_required" tier.
+    for key, ok in connections.items():
+        if not ok and key not in ("home_channel_configured", "guild_or_channel_configured"):
+            reasons.append(f"{key}_missing")
+    if not connections.get("home_channel_configured", False):
+        reasons.append("home_channel_not_configured")
+
+    if reasons:
+        # bot_token absent → setup_required (no way to do anything)
+        if not connections.get("bot_token_present"):
+            return "setup_required", _dedupe(reasons)
+        # token present but missing ancillary config → limited
+        return "limited", _dedupe(reasons)
+
+    # All connections present; gate on self-probe state
+    if self_probe_state == "ok":
+        return "ready", []
+    if self_probe_state == "not_ok":
+        return "limited", ["telegram_self_probe_not_ok"]
+    # "unknown" — probe not yet run or token absent
+    return "limited", ["telegram_self_probe_state_unknown"]
+
+
+def _hermes_gateway_readiness(
+    runtime: HermesGatewayRuntimeStatusDto,
+) -> Literal["ready", "not_configured", "limited", "blocked", "unknown"]:
+    """Classify Hermes gateway readiness independent of Telegram connections."""
+    if not runtime.configured and not runtime.status_path_configured:
+        return "not_configured"
+    if runtime.provider_runtime_state == "connected":
+        return "ready"
+    if runtime.provider_runtime_state == "fatal":
+        return "blocked"
+    if runtime.provider_runtime_state == "unknown":
+        return "unknown"
+    # connecting, retrying, stopped
+    return "limited"
+
+
 def _telegram_status_response() -> SocialMessagingProviderStatusResponse:
     runtime = _hermes_runtime_status("telegram")
     connections = _telegram_connections()
-    readiness, reasons = _messaging_readiness("telegram", connections, runtime)
+    # M2: Telegram readiness based on self-probe (cached only — no network call
+    # here so that aggregate endpoints like GET /api/social don't make outbound
+    # requests).  The dedicated /status and /capabilities endpoints call
+    # _get_telegram_self_probe_state() which refreshes the cache.
+    self_probe_state = _get_telegram_self_probe_state_cached_only()
+    readiness, reasons = _telegram_readiness_without_hermes(connections, self_probe_state)
     missing = _telegram_missing_requirements(connections, runtime)
     next_steps = _telegram_setup_steps(connections, runtime)
     safe_identifiers = {
@@ -1345,6 +1470,7 @@ def _telegram_status_response() -> SocialMessagingProviderStatusResponse:
         hermes_gateway_runtime_state=runtime.provider_runtime_state,
         telegram_platform_state=_telegram_platform_state(runtime),
         policy_advisory_reasons=advisory,
+        telegram_self_probe_state=self_probe_state,
     )
 
 
@@ -1656,6 +1782,9 @@ def _telegram_activity_preview_response(
         readiness=status.overall_readiness,
         gateway_runtime_state=status.hermes_gateway.provider_runtime_state,
         emergency_stop=emergency_stop,
+        # M2: pass self-probe state so the M2 gate logic works properly
+        activity_requires_hermes_gateway=False,
+        telegram_self_probe_state=status.telegram_self_probe_state or "unknown",
     )
     response = TelegramActivityPreviewResponse.model_validate(planned.model_dump(mode="json"))
     return response.model_copy(
@@ -1681,6 +1810,9 @@ def _telegram_activity_run_once_preview_response(
             readiness=status.overall_readiness,
             gateway_runtime_state=status.hermes_gateway.provider_runtime_state,
             emergency_stop=emergency_stop,
+            # M2: pass self-probe state so the M2 gate logic works properly
+            activity_requires_hermes_gateway=False,
+            telegram_self_probe_state=status.telegram_self_probe_state or "unknown",
         )
     )
     return TelegramActivityRunOncePreviewResponse(
@@ -3166,7 +3298,8 @@ def social_snapshot(
         xJournal=x_journal_summary(_actor),
         xAudit=x_audit_summary(_actor),
         telegramStatus=telegram_provider_status(_actor),
-        telegramCapabilities=telegram_capabilities(_actor),
+        # M2: use cached-only probe so aggregate endpoint never makes outbound calls
+        telegramCapabilities=_build_telegram_capabilities_response(fresh_probe=False),
         telegramSetup=telegram_setup_checklist(_actor),
         discordStatus=discord_provider_status(_actor),
         discordCapabilities=discord_capabilities(_actor),
@@ -3401,13 +3534,29 @@ def telegram_provider_status(
     return _telegram_status_response()
 
 
-@router.get("/providers/telegram/capabilities", response_model=TelegramCapabilitiesResponse)
-def telegram_capabilities(
-    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+def _build_telegram_capabilities_response(
+    *,
+    fresh_probe: bool = True,
 ) -> TelegramCapabilitiesResponse:
+    """Build the TelegramCapabilitiesResponse.
+
+    ``fresh_probe=True`` (default): calls ``_get_telegram_self_probe_state()``
+    which may make a network call (getMe) to refresh the TTL cache.  Used by
+    the dedicated ``GET /providers/telegram/capabilities`` endpoint.
+
+    ``fresh_probe=False``: reads only the TTL cache via
+    ``_get_telegram_self_probe_state_cached_only()`` — no outbound I/O.  Used
+    by the aggregate ``GET /api/social`` endpoint so that the policy-snapshot
+    does not make network calls.
+    """
     connections = _telegram_connections()
     runtime = _hermes_runtime_status("telegram")
-    readiness, _reasons = _messaging_readiness("telegram", connections, runtime)
+    # M2: use decoupled self-probe readiness for the primary readiness field
+    if fresh_probe:
+        self_probe_state = _get_telegram_self_probe_state()
+    else:
+        self_probe_state = _get_telegram_self_probe_state_cached_only()
+    readiness, _reasons = _telegram_readiness_without_hermes(connections, self_probe_state)
     return TelegramCapabilitiesResponse(
         bot_token_present=connections["bot_token_present"],
         allowed_users_configured=connections["allowed_users_configured"],
@@ -3427,7 +3576,18 @@ def telegram_capabilities(
         live_apply_available=readiness == "ready" and _social_live_token_enabled(),
         activity_apply_available=readiness == "ready" and _social_live_token_enabled(),
         reactive_reply_apply_available=readiness == "ready" and _social_live_token_enabled(),
+        # M2: new fields — split readiness reporting
+        telegram_readiness=readiness,
+        telegram_self_probe_state=self_probe_state,
+        hermes_gateway_readiness=_hermes_gateway_readiness(runtime),
     )
+
+
+@router.get("/providers/telegram/capabilities", response_model=TelegramCapabilitiesResponse)
+def telegram_capabilities(
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> TelegramCapabilitiesResponse:
+    return _build_telegram_capabilities_response(fresh_probe=True)
 
 
 @router.get(

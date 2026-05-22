@@ -55,6 +55,7 @@ class SocialAutonomyTelegramAdapter:
         # a broken status path does NOT crash dispatch.
         readiness: str = "setup_required"
         gateway_runtime_state: str = "unknown"
+        telegram_self_probe_state: str = "unknown"
         try:
             from src.api.social import _telegram_status_response  # noqa: PLC0415
 
@@ -68,6 +69,10 @@ class SocialAutonomyTelegramAdapter:
                     _g = getattr(_hg, "provider_runtime_state", None)
                     if _g is not None:
                         gateway_runtime_state = str(_g)
+                # M2: read self-probe state surfaced on the status response
+                _sp = getattr(_status, "telegram_self_probe_state", None)
+                if _sp is not None:
+                    telegram_self_probe_state = str(_sp)
         except Exception:  # noqa: BLE001,S110 - fall back to safe defaults on any error.
             pass
 
@@ -77,6 +82,9 @@ class SocialAutonomyTelegramAdapter:
                     dry_run=True,
                     readiness=readiness,
                     gateway_runtime_state=gateway_runtime_state,
+                    # M2: activity lane decoupled from Hermes by default
+                    activity_requires_hermes_gateway=False,
+                    telegram_self_probe_state=telegram_self_probe_state,  # type: ignore[arg-type]
                 ),
             )
         except AssertionError:

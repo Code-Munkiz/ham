@@ -66,6 +66,7 @@ def _live_config(log: Path, **overrides: object) -> TelegramActivityRunConfig:
         "dry_run": False,
         "readiness": "ready",
         "gateway_runtime_state": "connected",
+        "telegram_self_probe_state": "ok",
         "delivery_log_path": log,
     }
     data.update(overrides)
@@ -97,12 +98,15 @@ def test_dry_run_run_once_sends_nothing_and_returns_planned_activity(
     log = tmp_path / "dry-run.jsonl"
     transport = MockTransport()
 
-    with patch("urllib.request.urlopen", side_effect=AssertionError("telegram api should not be called")):
+    with patch(
+        "urllib.request.urlopen", side_effect=AssertionError("telegram api should not be called")
+    ):
         result = run_telegram_activity_once(
             TelegramActivityRunConfig(
                 dry_run=True,
                 readiness="ready",
                 gateway_runtime_state="connected",
+                telegram_self_probe_state="ok",
                 delivery_log_path=log,
             ),
             transport=transport,
@@ -124,7 +128,9 @@ def test_dry_run_run_once_sends_nothing_and_returns_planned_activity(
     assert test_group not in text
 
 
-def test_live_mode_blocked_by_default_env_gates(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_live_mode_blocked_by_default_env_gates(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     _ready_env(monkeypatch, tmp_path)
     log = tmp_path / "live-default-blocked.jsonl"
     transport = MockTransport()
@@ -158,7 +164,9 @@ def test_live_mode_blocked_when_autonomy_enabled_but_dry_run_env_true(
     assert log.exists() is False
 
 
-def test_live_mode_blocked_when_readiness_not_ready(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_live_mode_blocked_when_readiness_not_ready(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     _ready_env(monkeypatch, tmp_path)
     _enable_live_gates(monkeypatch)
     log = tmp_path / "readiness-blocked.jsonl"
@@ -177,7 +185,9 @@ def test_live_mode_blocked_when_readiness_not_ready(monkeypatch: pytest.MonkeyPa
     assert log.exists() is False
 
 
-def test_live_mode_blocked_when_governor_blocks(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_live_mode_blocked_when_governor_blocks(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     _ready_env(monkeypatch, tmp_path)
     _enable_live_gates(monkeypatch)
     log = tmp_path / "governor-blocked.jsonl"
@@ -222,7 +232,9 @@ def test_live_mode_calls_narrow_adapter_once_and_logs_activity_kind(
         assert raw not in text
 
 
-def test_duplicate_idempotency_blocks_before_transport(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_duplicate_idempotency_blocks_before_transport(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     _ready_env(monkeypatch, tmp_path)
     _enable_live_gates(monkeypatch)
     log = tmp_path / "duplicate.jsonl"
@@ -231,13 +243,16 @@ def test_duplicate_idempotency_blocks_before_transport(monkeypatch: pytest.Monke
             dry_run=True,
             readiness="ready",
             gateway_runtime_state="connected",
+            telegram_self_probe_state="ok",
             delivery_log_path=log,
         )
     )
     assert preview.proposal_digest
     import hashlib
 
-    digest = hashlib.sha256(f"telegram-activity-run-once:{preview.proposal_digest}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(
+        f"telegram-activity-run-once:{preview.proposal_digest}".encode("utf-8")
+    ).hexdigest()
     _write_delivery_row(
         log,
         execution_kind="social_telegram_message",
@@ -281,6 +296,14 @@ def test_provider_failure_does_not_retry(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
 def test_no_scheduler_loop_daemon_or_reactive_surface_created() -> None:
     source = Path("src/ham/social_telegram_activity_runner.py").read_text(encoding="utf-8")
-    forbidden = ["while True", "schedule.", "sched.", "daemon", "threading", "asyncio.create_task", "inbound"]
+    forbidden = [
+        "while True",
+        "schedule.",
+        "sched.",
+        "daemon",
+        "threading",
+        "asyncio.create_task",
+        "inbound",
+    ]
     for needle in forbidden:
         assert needle not in source

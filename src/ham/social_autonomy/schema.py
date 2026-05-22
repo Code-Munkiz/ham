@@ -12,6 +12,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
+SelfProbeState = Literal["ok", "not_ok", "unknown"]
+
 SocialAutonomyStatus = Literal["draft", "running", "paused", "stopped"]
 SocialAutonomyChannel = Literal["x", "telegram", "discord"]
 SocialAutonomyAction = Literal["reply", "broadcast", "activity", "message"]
@@ -115,6 +117,9 @@ class GoHamSocialProfile(BaseModel):
     last_run_at: datetime | None = None
     next_run_at: datetime | None = None
     last_tick_summary: SocialAutonomyTickSummary | None = None
+    # M2 fields: decouple Telegram readiness from Hermes gateway
+    activity_requires_hermes_gateway: bool = False
+    telegram_self_probe_state: SelfProbeState = "unknown"
 
     @field_validator("profile_id", "workspace_id", "project_id", "goal", "persona_id", "cadence")
     @classmethod

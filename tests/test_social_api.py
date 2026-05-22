@@ -11,6 +11,7 @@ These tests cover:
 - ``src/api/social.py`` does not import or call any provider write/execution
   helpers.
 """
+
 from __future__ import annotations
 
 import ast
@@ -174,6 +175,34 @@ def _write_hermes_gateway_state(path: Path, **fields: object) -> None:
     path.write_text(json.dumps(row, sort_keys=True), encoding="utf-8")
 
 
+def _seed_telegram_probe_cache(token: str) -> None:
+    """Seed the Telegram self-probe TTL cache with an 'ok' result for the given
+    token so that API calls that use cached-only probe state return 'ok'
+    without making real network calls.
+
+    M2: _telegram_readiness_without_hermes() requires telegram_self_probe_state
+    == 'ok' for overall_readiness == 'ready'.  Tests that call API endpoints
+    expecting 'ready' must seed the cache first.
+    """
+    import hashlib
+
+    from src.ham.social_telegram_self_probe import (
+        _CACHE as _probe_cache,
+    )
+    from src.ham.social_telegram_self_probe import (
+        TelegramSelfProbeResult,
+    )
+
+    now = datetime.now(UTC)
+    cache_key = hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
+    _probe_cache[cache_key] = TelegramSelfProbeResult(
+        state="ok",
+        checked_at=now,
+        error_code=None,
+        bot_username_digest="test",
+    )
+
+
 def _set_telegram_ready(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -191,6 +220,8 @@ def _set_telegram_ready(
         tmp_path / "hermes-home" / "gateway_state.json",
         platforms={"telegram": {"state": "connected"}},
     )
+    # M2: seed the self-probe cache so readiness doesn't require Hermes gateway
+    _seed_telegram_probe_cache(token)
     return token, allowed, home_channel, test_group
 
 
@@ -310,7 +341,10 @@ def _fake_batch_result(
     provider_post_ids: list[str] | None = None,
 ):
     ids = provider_post_ids or ["reply-post-1", "reply-post-2"]
-    items = [SimpleNamespace(execution_result=SimpleNamespace(provider_post_id=provider_post_id)) for provider_post_id in ids]
+    items = [
+        SimpleNamespace(execution_result=SimpleNamespace(provider_post_id=provider_post_id))
+        for provider_post_id in ids
+    ]
     return SimpleNamespace(
         status=status,
         execution_allowed=status != "blocked",
@@ -332,7 +366,10 @@ def _fake_batch_result(
             "executed_count": len(ids) if status == "completed" else 0,
             "failed_count": 0 if status == "completed" else 1,
             "blocked_count": 0,
-            "items": [{"execution_result": {"provider_post_id": provider_post_id}} for provider_post_id in ids],
+            "items": [
+                {"execution_result": {"provider_post_id": provider_post_id}}
+                for provider_post_id in ids
+            ],
             "audit_ids": ["audit-batch-1"],
             "journal_path": ".data/ham-x/execution_journal.jsonl",
             "audit_path": ".data/ham-x/audit.jsonl",
@@ -409,7 +446,9 @@ def _enable_broadcast_apply_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HAM_X_EMERGENCY_STOP", "false")
 
 
-def _enable_telegram_apply_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[str, str, str, str]:
+def _enable_telegram_apply_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> tuple[str, str, str, str]:
     monkeypatch.setenv("HAM_SOCIAL_LIVE_APPLY_TOKEN", _SOCIAL_TOKEN)
     monkeypatch.setenv("HAM_SOCIAL_DELIVERY_LOG_PATH", str(tmp_path / "social_delivery.jsonl"))
     out = _set_telegram_ready(monkeypatch, tmp_path)
@@ -418,7 +457,9 @@ def _enable_telegram_apply_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
 
 
 def _preview_digest(headers: dict[str, str] | None = None) -> str:
-    res = client.post("/api/social/providers/x/reactive/inbox/preview", headers=headers or {}, json={})
+    res = client.post(
+        "/api/social/providers/x/reactive/inbox/preview", headers=headers or {}, json={}
+    )
     assert res.status_code == 200
     digest = res.json().get("proposal_digest")
     assert isinstance(digest, str)
@@ -426,7 +467,9 @@ def _preview_digest(headers: dict[str, str] | None = None) -> str:
 
 
 def _batch_preview_digest(headers: dict[str, str] | None = None) -> str:
-    res = client.post("/api/social/providers/x/reactive/batch/dry-run", headers=headers or {}, json={})
+    res = client.post(
+        "/api/social/providers/x/reactive/batch/dry-run", headers=headers or {}, json={}
+    )
     assert res.status_code == 200
     digest = res.json().get("proposal_digest")
     assert isinstance(digest, str)
@@ -442,7 +485,9 @@ def _broadcast_preview_digest(headers: dict[str, str] | None = None) -> str:
 
 
 def _telegram_preview_digest(headers: dict[str, str] | None = None) -> str:
-    res = client.post("/api/social/providers/telegram/messages/preview", headers=headers or {}, json={})
+    res = client.post(
+        "/api/social/providers/telegram/messages/preview", headers=headers or {}, json={}
+    )
     assert res.status_code == 200
     digest = res.json().get("proposal_digest")
     assert isinstance(digest, str)
@@ -689,7 +734,10 @@ def test_telegram_inbound_has_no_reply_apply_or_live_routes(
 ) -> None:
     _isolate_journal(monkeypatch, tmp_path)
     _disable_clerk(monkeypatch)
-    assert client.post("/api/social/providers/telegram/inbound/reply/apply", json={}).status_code == 404
+    assert (
+        client.post("/api/social/providers/telegram/inbound/reply/apply", json={}).status_code
+        == 404
+    )
     assert client.post("/api/social/providers/telegram/inbound/apply", json={}).status_code == 404
     assert client.post("/api/social/providers/telegram/inbound/live", json={}).status_code == 404
 
@@ -746,8 +794,13 @@ def test_telegram_reactive_replies_has_no_live_route(
 ) -> None:
     _isolate_journal(monkeypatch, tmp_path)
     _disable_clerk(monkeypatch)
-    assert client.post("/api/social/providers/telegram/reactive/replies/apply", json={}).status_code in {200, 422}
-    assert client.post("/api/social/providers/telegram/reactive/replies/live", json={}).status_code == 404
+    assert client.post(
+        "/api/social/providers/telegram/reactive/replies/apply", json={}
+    ).status_code in {200, 422}
+    assert (
+        client.post("/api/social/providers/telegram/reactive/replies/live", json={}).status_code
+        == 404
+    )
 
 
 def test_telegram_reactive_reply_apply_blocked_without_proposal_digest(
@@ -761,7 +814,10 @@ def test_telegram_reactive_reply_apply_blocked_without_proposal_digest(
     body = client.post(
         _TELEGRAM_REACTIVE_APPLY_ROUTE,
         headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
-        json={"confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM, "inbound_id": candidate["inbound_id"]},
+        json={
+            "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM,
+            "inbound_id": candidate["inbound_id"],
+        },
     ).json()
     assert body["status"] == "blocked"
     assert body["execution_allowed"] is False
@@ -780,7 +836,11 @@ def test_telegram_reactive_reply_apply_blocked_with_wrong_digest(
     body = client.post(
         _TELEGRAM_REACTIVE_APPLY_ROUTE,
         headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
-        json={"proposal_digest": "0" * 64, "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM, "inbound_id": candidate["inbound_id"]},
+        json={
+            "proposal_digest": "0" * 64,
+            "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM,
+            "inbound_id": candidate["inbound_id"],
+        },
     ).json()
     assert body["status"] == "blocked"
     assert "proposal_digest_mismatch" in body["reasons"]
@@ -797,12 +857,19 @@ def test_telegram_reactive_reply_apply_blocked_without_or_unknown_inbound_id(
     missing = client.post(
         _TELEGRAM_REACTIVE_APPLY_ROUTE,
         headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
-        json={"proposal_digest": candidate["proposal_digest"], "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM},
+        json={
+            "proposal_digest": candidate["proposal_digest"],
+            "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM,
+        },
     ).json()
     unknown = client.post(
         _TELEGRAM_REACTIVE_APPLY_ROUTE,
         headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
-        json={"proposal_digest": candidate["proposal_digest"], "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM, "inbound_id": "configured:unknown"},
+        json={
+            "proposal_digest": candidate["proposal_digest"],
+            "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM,
+            "inbound_id": "configured:unknown",
+        },
     ).json()
     assert "inbound_id_required" in missing["reasons"]
     assert "inbound_id_not_found" in unknown["reasons"]
@@ -816,13 +883,20 @@ def test_telegram_reactive_reply_apply_auth_and_phrase_gates(
     _disable_clerk(monkeypatch)
     _enable_telegram_apply_env(monkeypatch, tmp_path)
     candidate = _telegram_reactive_candidate()
-    base = {"proposal_digest": candidate["proposal_digest"], "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM, "inbound_id": candidate["inbound_id"]}
+    base = {
+        "proposal_digest": candidate["proposal_digest"],
+        "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM,
+        "inbound_id": candidate["inbound_id"],
+    }
     assert client.post(_TELEGRAM_REACTIVE_APPLY_ROUTE, json=base).status_code == 401
-    assert client.post(
-        _TELEGRAM_REACTIVE_APPLY_ROUTE,
-        headers={"X-Ham-Operator-Authorization": "Bearer wrong-token"},
-        json=base,
-    ).status_code == 403
+    assert (
+        client.post(
+            _TELEGRAM_REACTIVE_APPLY_ROUTE,
+            headers={"X-Ham-Operator-Authorization": "Bearer wrong-token"},
+            json=base,
+        ).status_code
+        == 403
+    )
     body = client.post(
         _TELEGRAM_REACTIVE_APPLY_ROUTE,
         headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
@@ -840,11 +914,18 @@ def test_telegram_reactive_reply_apply_blocked_when_readiness_not_ready(
     _disable_clerk(monkeypatch)
     _enable_telegram_apply_env(monkeypatch, tmp_path)
     candidate = _telegram_reactive_candidate()
-    _write_hermes_gateway_state(tmp_path / "hermes-home" / "gateway_state.json", platforms={"telegram": {"state": "retrying"}})
+    _write_hermes_gateway_state(
+        tmp_path / "hermes-home" / "gateway_state.json",
+        platforms={"telegram": {"state": "retrying"}},
+    )
     body = client.post(
         _TELEGRAM_REACTIVE_APPLY_ROUTE,
         headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
-        json={"proposal_digest": candidate["proposal_digest"], "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM, "inbound_id": candidate["inbound_id"]},
+        json={
+            "proposal_digest": candidate["proposal_digest"],
+            "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM,
+            "inbound_id": candidate["inbound_id"],
+        },
     ).json()
     assert body["status"] == "blocked"
     assert "telegram_gateway_not_connected" in body["reasons"]
@@ -858,11 +939,22 @@ def test_telegram_reactive_reply_apply_blocked_when_persona_digest_changes(
     _disable_clerk(monkeypatch)
     _enable_telegram_apply_env(monkeypatch, tmp_path)
     candidate = _telegram_reactive_candidate()
-    with patch("src.api.social._persona_ref_fields", return_value={"persona_id": "ham-canonical", "persona_version": 1, "persona_digest": "d" * 64}):
+    with patch(
+        "src.api.social._persona_ref_fields",
+        return_value={
+            "persona_id": "ham-canonical",
+            "persona_version": 1,
+            "persona_digest": "d" * 64,
+        },
+    ):
         body = client.post(
             _TELEGRAM_REACTIVE_APPLY_ROUTE,
             headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
-            json={"proposal_digest": candidate["proposal_digest"], "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM, "inbound_id": candidate["inbound_id"]},
+            json={
+                "proposal_digest": candidate["proposal_digest"],
+                "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM,
+                "inbound_id": candidate["inbound_id"],
+            },
         ).json()
     assert body["status"] == "blocked"
     assert "persona_digest_mismatch" in body["reasons"]
@@ -877,17 +969,54 @@ def test_telegram_reactive_reply_apply_blocks_when_candidate_changes_or_answered
     _enable_telegram_apply_env(monkeypatch, tmp_path)
     transcript, _chat, _user, _session = _write_telegram_reactive_fixture(monkeypatch, tmp_path)
     candidate = _telegram_reactive_candidate()
-    transcript.write_text(json.dumps({"source": "telegram", "role": "user", "text": "attachment:/tmp/private.png", "chat_id": "-1009876543210", "user_id": "123456789", "session_id": "telegram-session-1"}, sort_keys=True) + "\n", encoding="utf-8")
+    transcript.write_text(
+        json.dumps(
+            {
+                "source": "telegram",
+                "role": "user",
+                "text": "attachment:/tmp/private.png",
+                "chat_id": "-1009876543210",
+                "user_id": "123456789",
+                "session_id": "telegram-session-1",
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     unsafe = client.post(
         _TELEGRAM_REACTIVE_APPLY_ROUTE,
         headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
-        json={"proposal_digest": candidate["proposal_digest"], "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM, "inbound_id": candidate["inbound_id"]},
+        json={
+            "proposal_digest": candidate["proposal_digest"],
+            "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM,
+            "inbound_id": candidate["inbound_id"],
+        },
     ).json()
-    transcript.write_text(json.dumps({"source": "telegram", "role": "user", "text": "How does Ham work?", "chat_id": "-1009876543210", "user_id": "123456789", "session_id": "telegram-session-1", "already_answered": True}, sort_keys=True) + "\n", encoding="utf-8")
+    transcript.write_text(
+        json.dumps(
+            {
+                "source": "telegram",
+                "role": "user",
+                "text": "How does Ham work?",
+                "chat_id": "-1009876543210",
+                "user_id": "123456789",
+                "session_id": "telegram-session-1",
+                "already_answered": True,
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     answered = client.post(
         _TELEGRAM_REACTIVE_APPLY_ROUTE,
         headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
-        json={"proposal_digest": candidate["proposal_digest"], "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM, "inbound_id": candidate["inbound_id"]},
+        json={
+            "proposal_digest": candidate["proposal_digest"],
+            "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM,
+            "inbound_id": candidate["inbound_id"],
+        },
     ).json()
     assert "telegram_reactive_policy_blocked" in unsafe["reasons"]
     assert "telegram_inbound_already_answered" in answered["reasons"]
@@ -913,7 +1042,11 @@ def test_telegram_reactive_reply_apply_calls_send_adapter_once_and_no_retry(
         body = client.post(
             _TELEGRAM_REACTIVE_APPLY_ROUTE,
             headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
-            json={"proposal_digest": candidate["proposal_digest"], "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM, "inbound_id": candidate["inbound_id"]},
+            json={
+                "proposal_digest": candidate["proposal_digest"],
+                "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM,
+                "inbound_id": candidate["inbound_id"],
+            },
         ).json()
     assert send.call_count == 1
     request = send.call_args.args[0]
@@ -934,31 +1067,57 @@ def test_telegram_reactive_reply_apply_provider_failure_duplicate_and_shape(
     _disable_clerk(monkeypatch)
     _enable_telegram_apply_env(monkeypatch, tmp_path)
     candidate = _telegram_reactive_candidate()
-    failed = TelegramSendResult(status="failed", execution_allowed=True, mutation_attempted=True, reasons=["provider_send_failed"])
+    failed = TelegramSendResult(
+        status="failed",
+        execution_allowed=True,
+        mutation_attempted=True,
+        reasons=["provider_send_failed"],
+    )
     with patch("src.api.social.send_confirmed_telegram_message", return_value=failed) as send:
         body = client.post(
             _TELEGRAM_REACTIVE_APPLY_ROUTE,
             headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
-            json={"proposal_digest": candidate["proposal_digest"], "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM, "inbound_id": candidate["inbound_id"]},
+            json={
+                "proposal_digest": candidate["proposal_digest"],
+                "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM,
+                "inbound_id": candidate["inbound_id"],
+            },
         ).json()
     assert send.call_count == 1
     assert body["status"] == "failed"
     assert "provider_send_failed" in body["reasons"]
-    duplicate = TelegramSendResult(status="duplicate", execution_allowed=False, mutation_attempted=False, reasons=["duplicate_idempotency_key"])
+    duplicate = TelegramSendResult(
+        status="duplicate",
+        execution_allowed=False,
+        mutation_attempted=False,
+        reasons=["duplicate_idempotency_key"],
+    )
     with patch("src.api.social.send_confirmed_telegram_message", return_value=duplicate):
         body = client.post(
             _TELEGRAM_REACTIVE_APPLY_ROUTE,
             headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
-            json={"proposal_digest": candidate["proposal_digest"], "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM, "inbound_id": candidate["inbound_id"]},
+            json={
+                "proposal_digest": candidate["proposal_digest"],
+                "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM,
+                "inbound_id": candidate["inbound_id"],
+            },
         ).json()
     assert body["status"] == "duplicate"
     assert "duplicate_idempotency_key" in body["reasons"]
     for extra in ("message_text", "target_id", "reply_text"):
-        assert client.post(
-            _TELEGRAM_REACTIVE_APPLY_ROUTE,
-            headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
-            json={"proposal_digest": candidate["proposal_digest"], "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM, "inbound_id": candidate["inbound_id"], extra: "client supplied"},
-        ).status_code == 422
+        assert (
+            client.post(
+                _TELEGRAM_REACTIVE_APPLY_ROUTE,
+                headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+                json={
+                    "proposal_digest": candidate["proposal_digest"],
+                    "confirmation_phrase": _TELEGRAM_REACTIVE_CONFIRM,
+                    "inbound_id": candidate["inbound_id"],
+                    extra: "client supplied",
+                },
+            ).status_code
+            == 422
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1009,7 +1168,9 @@ def test_social_snapshot_aggregates_read_only_redacted_data_without_live_calls(
     _isolate_journal(monkeypatch, tmp_path)
     _disable_clerk(monkeypatch)
     _set_x_creds(monkeypatch)
-    telegram_token, telegram_allowed, telegram_home, telegram_group = _set_telegram_ready(monkeypatch, tmp_path)
+    telegram_token, telegram_allowed, telegram_home, telegram_group = _set_telegram_ready(
+        monkeypatch, tmp_path
+    )
     discord_token = "discord-token-secret-1234567890"
     monkeypatch.setenv("DISCORD_BOT_TOKEN", discord_token)
     monkeypatch.setenv("DISCORD_ALLOWED_USERS", "discord-user-secret-1234567890")
@@ -1093,6 +1254,8 @@ def test_provider_list_marks_td_provider_active_when_gateway_reports_connected(
         status_path,
         platforms={"telegram": {"state": "connected"}},
     )
+    # M2: seed probe cache so readiness is 'ready' without Hermes gateway
+    _seed_telegram_probe_cache("telegram-token-1234567890")
     providers = client.get("/api/social/providers").json()["providers"]
     telegram = next(provider for provider in providers if provider["id"] == "telegram")
     assert telegram["coming_soon"] is False
@@ -1226,9 +1389,19 @@ def test_capabilities_reactive_inbox_discovery_requires_handle_or_query(
     monkeypatch.setenv("HAM_X_ENABLE_REACTIVE_INBOX_DISCOVERY", "true")
     monkeypatch.delenv("HAM_X_REACTIVE_INBOX_QUERY", raising=False)
     monkeypatch.delenv("HAM_X_REACTIVE_HANDLE", raising=False)
-    assert client.get("/api/social/providers/x/capabilities").json()["reactive_inbox_discovery_available"] is False
+    assert (
+        client.get("/api/social/providers/x/capabilities").json()[
+            "reactive_inbox_discovery_available"
+        ]
+        is False
+    )
     monkeypatch.setenv("HAM_X_REACTIVE_HANDLE", "@HamOfficial")
-    assert client.get("/api/social/providers/x/capabilities").json()["reactive_inbox_discovery_available"] is True
+    assert (
+        client.get("/api/social/providers/x/capabilities").json()[
+            "reactive_inbox_discovery_available"
+        ]
+        is True
+    )
 
 
 def test_telegram_status_capabilities_and_checklist_are_read_only_and_safe(
@@ -1252,6 +1425,8 @@ def test_telegram_status_capabilities_and_checklist_are_read_only_and_safe(
         active_agents=1,
         platforms={"telegram": {"state": "connected"}},
     )
+    # M2: seed probe cache so readiness is 'ready' without requiring Hermes
+    _seed_telegram_probe_cache(token)
 
     status = client.get("/api/social/providers/telegram/status")
     assert status.status_code == 200
@@ -1409,7 +1584,9 @@ def test_td_missing_or_unknown_gateway_status_is_limited_safely(
     body = client.get("/api/social/providers/telegram/status").json()
     assert body["overall_readiness"] == "limited"
     assert "home_channel_not_configured" in body["readiness_reasons"]
-    assert "hermes_gateway_runtime_unknown" in body["readiness_reasons"]
+    # M2: readiness_reasons are now probe/connection-based, not Hermes-gateway-based.
+    # Hermes gateway state is reported in hermes_gateway sub-object for diagnostics.
+    assert "hermes_gateway_runtime_unknown" not in body["readiness_reasons"]
     assert body["hermes_gateway"]["source"] == "unknown"
     assert body["hermes_gateway"]["status_file_available"] is False
     assert body["hermes_gateway"]["status_path_configured"] is True
@@ -1577,7 +1754,13 @@ def test_td_runtime_status_redacts_provider_errors(
     secret = "tok_abcdefghijklmnopqrstuvwxyz1234567890XYZ"
     _write_hermes_gateway_state(
         tmp_path / "hermes-home" / "gateway_state.json",
-        platforms={"discord": {"state": "fatal", "error_code": "auth", "error_message": f"Authorization: Bearer {secret}"}},
+        platforms={
+            "discord": {
+                "state": "fatal",
+                "error_code": "auth",
+                "error_message": f"Authorization: Bearer {secret}",
+            }
+        },
     )
     body = client.get("/api/social/providers/discord/status").json()
     text = json.dumps(body, sort_keys=True)
@@ -1593,13 +1776,23 @@ def test_td_has_no_preview_or_apply_routes(
 ) -> None:
     _isolate_journal(monkeypatch, tmp_path)
     _disable_clerk(monkeypatch)
-    assert client.post("/api/social/providers/telegram/messages/preview", json={}).status_code == 200
+    assert (
+        client.post("/api/social/providers/telegram/messages/preview", json={}).status_code == 200
+    )
     assert client.get("/api/social/providers/telegram/messages/preview").status_code == 405
     assert client.post("/api/social/providers/discord/messages/preview", json={}).status_code == 404
-    assert client.post("/api/social/providers/telegram/messages/apply", json={}).status_code in {200, 422}
+    assert client.post("/api/social/providers/telegram/messages/apply", json={}).status_code in {
+        200,
+        422,
+    }
     assert client.post("/api/social/providers/discord/messages/apply", json={}).status_code == 404
     for provider in ("telegram", "discord"):
-        assert client.post(f"/api/social/providers/{provider}/reactive/reply/apply", json={}).status_code == 404
+        assert (
+            client.post(
+                f"/api/social/providers/{provider}/reactive/reply/apply", json={}
+            ).status_code
+            == 404
+        )
 
 
 def test_social_persona_api_returns_read_only_bounded_dto(
@@ -1667,9 +1860,13 @@ def test_setup_checklist_returns_booleans_only(
     assert body["provider_id"] == "x"
     assert body["read_only"] is True
     item_ids = {item["id"]: item for item in body["items"]}
-    assert {"x_read_credential", "x_write_credential", "xai_key", "reactive_handle", "emergency_stop"} <= set(
-        item_ids.keys()
-    )
+    assert {
+        "x_read_credential",
+        "x_write_credential",
+        "xai_key",
+        "reactive_handle",
+        "emergency_stop",
+    } <= set(item_ids.keys())
     for item in body["items"]:
         assert isinstance(item["ok"], bool)
         assert isinstance(item["label"], str)
@@ -2163,18 +2360,27 @@ def test_telegram_message_preview_rejects_client_target_and_final_text(
     _isolate_journal(monkeypatch, tmp_path)
     _disable_clerk(monkeypatch)
     _set_telegram_ready(monkeypatch, tmp_path)
-    assert client.post(
-        "/api/social/providers/telegram/messages/preview",
-        json={"target_id": "-1001234567890"},
-    ).status_code == 422
-    assert client.post(
-        "/api/social/providers/telegram/messages/preview",
-        json={"message_text": "client supplied final text"},
-    ).status_code == 422
-    assert client.post(
-        "/api/social/providers/telegram/messages/preview",
-        json={"message_intent": "client supplied final text"},
-    ).status_code == 422
+    assert (
+        client.post(
+            "/api/social/providers/telegram/messages/preview",
+            json={"target_id": "-1001234567890"},
+        ).status_code
+        == 422
+    )
+    assert (
+        client.post(
+            "/api/social/providers/telegram/messages/preview",
+            json={"message_text": "client supplied final text"},
+        ).status_code
+        == 422
+    )
+    assert (
+        client.post(
+            "/api/social/providers/telegram/messages/preview",
+            json={"message_intent": "client supplied final text"},
+        ).status_code
+        == 422
+    )
 
 
 def test_telegram_has_preview_and_one_live_apply_route_only(
@@ -2184,14 +2390,27 @@ def test_telegram_has_preview_and_one_live_apply_route_only(
     _isolate_journal(monkeypatch, tmp_path)
     _disable_clerk(monkeypatch)
     _set_telegram_ready(monkeypatch, tmp_path)
-    assert client.post("/api/social/providers/telegram/messages/preview", json={}).status_code == 200
+    assert (
+        client.post("/api/social/providers/telegram/messages/preview", json={}).status_code == 200
+    )
     assert client.get("/api/social/providers/telegram/messages/preview").status_code == 405
-    assert client.post("/api/social/providers/telegram/activity/preview", json={}).status_code == 200
+    assert (
+        client.post("/api/social/providers/telegram/activity/preview", json={}).status_code == 200
+    )
     assert client.get("/api/social/providers/telegram/activity/preview").status_code == 405
-    assert client.post("/api/social/providers/telegram/activity/run-once/preview", json={}).status_code == 200
+    assert (
+        client.post("/api/social/providers/telegram/activity/run-once/preview", json={}).status_code
+        == 200
+    )
     assert client.get("/api/social/providers/telegram/activity/run-once/preview").status_code == 405
-    assert client.post("/api/social/providers/telegram/messages/apply", json={}).status_code in {200, 422}
-    assert client.post("/api/social/providers/telegram/activity/apply", json={}).status_code in {200, 422}
+    assert client.post("/api/social/providers/telegram/messages/apply", json={}).status_code in {
+        200,
+        422,
+    }
+    assert client.post("/api/social/providers/telegram/activity/apply", json={}).status_code in {
+        200,
+        422,
+    }
     assert client.post("/api/social/providers/telegram/messages/send", json={}).status_code == 404
 
 
@@ -2228,14 +2447,20 @@ def test_telegram_activity_preview_rejects_client_text_or_target(
     _isolate_journal(monkeypatch, tmp_path)
     _disable_clerk(monkeypatch)
     _set_telegram_ready(monkeypatch, tmp_path)
-    assert client.post(
-        "/api/social/providers/telegram/activity/preview",
-        json={"message_text": "client supplied final text"},
-    ).status_code == 422
-    assert client.post(
-        "/api/social/providers/telegram/activity/preview",
-        json={"target_id": "-1001234567890"},
-    ).status_code == 422
+    assert (
+        client.post(
+            "/api/social/providers/telegram/activity/preview",
+            json={"message_text": "client supplied final text"},
+        ).status_code
+        == 422
+    )
+    assert (
+        client.post(
+            "/api/social/providers/telegram/activity/preview",
+            json={"target_id": "-1001234567890"},
+        ).status_code
+        == 422
+    )
 
 
 def test_telegram_activity_run_once_preview_is_dry_run_only_and_non_mutating(
@@ -2248,8 +2473,12 @@ def test_telegram_activity_run_once_preview_is_dry_run_only_and_non_mutating(
     delivery_log = tmp_path / "social-delivery-log.jsonl"
     monkeypatch.setenv("HAM_SOCIAL_DELIVERY_LOG_PATH", str(delivery_log))
 
-    with patch("urllib.request.urlopen", side_effect=AssertionError("telegram api should not be called")):
-        with patch("src.ham.social_telegram_activity_runner.send_confirmed_telegram_message") as send:
+    with patch(
+        "urllib.request.urlopen", side_effect=AssertionError("telegram api should not be called")
+    ):
+        with patch(
+            "src.ham.social_telegram_activity_runner.send_confirmed_telegram_message"
+        ) as send:
             res = client.post(
                 "/api/social/providers/telegram/activity/run-once/preview",
                 json={"client_request_id": "ui-run-once-1", "activity_kind": "test_activity"},
@@ -2288,7 +2517,9 @@ def test_telegram_activity_run_once_preview_rejects_client_text_or_target(
     _disable_clerk(monkeypatch)
     _set_telegram_ready(monkeypatch, tmp_path)
     route = "/api/social/providers/telegram/activity/run-once/preview"
-    assert client.post(route, json={"message_text": "client supplied final text"}).status_code == 422
+    assert (
+        client.post(route, json={"message_text": "client supplied final text"}).status_code == 422
+    )
     assert client.post(route, json={"target_id": "-1001234567890"}).status_code == 422
 
 
@@ -2384,10 +2615,12 @@ def test_telegram_activity_apply_blocked_when_readiness_not_ready(
     _disable_clerk(monkeypatch)
     _enable_telegram_apply_env(monkeypatch, tmp_path)
     digest = _telegram_activity_preview_digest()
-    _write_hermes_gateway_state(
-        tmp_path / "hermes-home" / "gateway_state.json",
-        platforms={"telegram": {"state": "retrying"}},
-    )
+    # M2: readiness is now based on self-probe, not Hermes gateway.
+    # Simulate a probe cache miss (probe expired or bot token revoked) so
+    # readiness drops to "limited" between preview and apply.
+    from src.ham.social_telegram_self_probe import _CACHE as _probe_cache
+
+    _probe_cache.clear()
     body = client.post(
         _TELEGRAM_ACTIVITY_APPLY_ROUTE,
         headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
@@ -2462,16 +2695,45 @@ def test_no_batch_or_reactive_telegram_routes_added(
 ) -> None:
     _isolate_journal(monkeypatch, tmp_path)
     _disable_clerk(monkeypatch)
-    assert client.post("/api/social/providers/telegram/messages/batch/apply", json={}).status_code == 404
-    assert client.post("/api/social/providers/telegram/reactive/reply/apply", json={}).status_code == 404
-    assert client.post("/api/social/providers/telegram/reactive/batch/apply", json={}).status_code == 404
-    assert client.post("/api/social/providers/telegram/reactive/replies/apply", json={}).status_code in {200, 422}
-    assert client.post("/api/social/providers/telegram/reactive/replies/live", json={}).status_code == 404
-    assert client.post("/api/social/providers/telegram/activity/batch/apply", json={}).status_code == 404
-    assert client.post("/api/social/providers/telegram/activity/reactive/apply", json={}).status_code == 404
-    assert client.post("/api/social/providers/telegram/activity/run-once/apply", json={}).status_code == 404
-    assert client.post("/api/social/providers/telegram/activity/run-once/live", json={}).status_code == 404
-    assert client.post("/api/social/providers/telegram/activity/scheduler/start", json={}).status_code == 404
+    assert (
+        client.post("/api/social/providers/telegram/messages/batch/apply", json={}).status_code
+        == 404
+    )
+    assert (
+        client.post("/api/social/providers/telegram/reactive/reply/apply", json={}).status_code
+        == 404
+    )
+    assert (
+        client.post("/api/social/providers/telegram/reactive/batch/apply", json={}).status_code
+        == 404
+    )
+    assert client.post(
+        "/api/social/providers/telegram/reactive/replies/apply", json={}
+    ).status_code in {200, 422}
+    assert (
+        client.post("/api/social/providers/telegram/reactive/replies/live", json={}).status_code
+        == 404
+    )
+    assert (
+        client.post("/api/social/providers/telegram/activity/batch/apply", json={}).status_code
+        == 404
+    )
+    assert (
+        client.post("/api/social/providers/telegram/activity/reactive/apply", json={}).status_code
+        == 404
+    )
+    assert (
+        client.post("/api/social/providers/telegram/activity/run-once/apply", json={}).status_code
+        == 404
+    )
+    assert (
+        client.post("/api/social/providers/telegram/activity/run-once/live", json={}).status_code
+        == 404
+    )
+    assert (
+        client.post("/api/social/providers/telegram/activity/scheduler/start", json={}).status_code
+        == 404
+    )
 
 
 def test_preview_routes_are_post_only(
@@ -2485,11 +2747,15 @@ def test_preview_routes_are_post_only(
         assert client.get(route).status_code == 405
 
 
-def test_social_ui_contains_simple_autonomy_launch_surface_without_telegram_run_once_controls() -> None:
-    screen = Path("frontend/src/features/hermes-workspace/screens/social/WorkspaceSocialScreen.tsx").read_text(
+def test_social_ui_contains_simple_autonomy_launch_surface_without_telegram_run_once_controls() -> (
+    None
+):
+    screen = Path(
+        "frontend/src/features/hermes-workspace/screens/social/WorkspaceSocialScreen.tsx"
+    ).read_text(encoding="utf-8")
+    adapter = Path("frontend/src/features/hermes-workspace/adapters/socialAdapter.ts").read_text(
         encoding="utf-8"
     )
-    adapter = Path("frontend/src/features/hermes-workspace/adapters/socialAdapter.ts").read_text(encoding="utf-8")
     assert 'title="Social"' in screen
     assert "Launch state" in screen
     assert "Goal" in screen
@@ -2505,11 +2771,13 @@ def test_social_ui_contains_simple_autonomy_launch_surface_without_telegram_run_
 
 def test_social_ui_contains_learning_card_without_telegram_inbound_reply_controls() -> None:
     screen = _collapse_ws(
-        Path("frontend/src/features/hermes-workspace/screens/social/WorkspaceSocialScreen.tsx").read_text(
-            encoding="utf-8"
-        )
+        Path(
+            "frontend/src/features/hermes-workspace/screens/social/WorkspaceSocialScreen.tsx"
+        ).read_text(encoding="utf-8")
     )
-    adapter = Path("frontend/src/features/hermes-workspace/adapters/socialAdapter.ts").read_text(encoding="utf-8")
+    adapter = Path("frontend/src/features/hermes-workspace/adapters/socialAdapter.ts").read_text(
+        encoding="utf-8"
+    )
     assert "What HAM learned" in screen
     assert "Recent activity" in screen
     assert "getLearningHints" in screen
@@ -2519,13 +2787,17 @@ def test_social_ui_contains_learning_card_without_telegram_inbound_reply_control
     assert "TelegramInboundPreviewCard" not in screen
 
 
-def test_social_ui_removes_telegram_reactive_confirmed_reply_controls_without_raw_payloads() -> None:
+def test_social_ui_removes_telegram_reactive_confirmed_reply_controls_without_raw_payloads() -> (
+    None
+):
     screen = _collapse_ws(
-        Path("frontend/src/features/hermes-workspace/screens/social/WorkspaceSocialScreen.tsx").read_text(
-            encoding="utf-8"
-        )
+        Path(
+            "frontend/src/features/hermes-workspace/screens/social/WorkspaceSocialScreen.tsx"
+        ).read_text(encoding="utf-8")
     )
-    adapter = Path("frontend/src/features/hermes-workspace/adapters/socialAdapter.ts").read_text(encoding="utf-8")
+    adapter = Path("frontend/src/features/hermes-workspace/adapters/socialAdapter.ts").read_text(
+        encoding="utf-8"
+    )
     assert "Launch" in screen
     assert "Pause" in screen
     assert "Resume" in screen
@@ -2692,16 +2964,22 @@ def test_telegram_activity_apply_rejects_client_target_and_text(
         "proposal_digest": digest,
         "confirmation_phrase": _TELEGRAM_ACTIVITY_CONFIRM,
     }
-    assert client.post(
-        _TELEGRAM_ACTIVITY_APPLY_ROUTE,
-        headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
-        json={**base, "target_id": "-1009876543210"},
-    ).status_code == 422
-    assert client.post(
-        _TELEGRAM_ACTIVITY_APPLY_ROUTE,
-        headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
-        json={**base, "message_text": "client supplied final text"},
-    ).status_code == 422
+    assert (
+        client.post(
+            _TELEGRAM_ACTIVITY_APPLY_ROUTE,
+            headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+            json={**base, "target_id": "-1009876543210"},
+        ).status_code
+        == 422
+    )
+    assert (
+        client.post(
+            _TELEGRAM_ACTIVITY_APPLY_ROUTE,
+            headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+            json={**base, "message_text": "client supplied final text"},
+        ).status_code
+        == 422
+    )
 
 
 def test_telegram_apply_blocked_without_proposal_digest(
@@ -2746,7 +3024,10 @@ def test_telegram_apply_blocked_without_operator_auth(
     _disable_clerk(monkeypatch)
     _enable_telegram_apply_env(monkeypatch, tmp_path)
     digest = _telegram_preview_digest()
-    res = client.post(_TELEGRAM_APPLY_ROUTE, json={"proposal_digest": digest, "confirmation_phrase": _TELEGRAM_CONFIRM})
+    res = client.post(
+        _TELEGRAM_APPLY_ROUTE,
+        json={"proposal_digest": digest, "confirmation_phrase": _TELEGRAM_CONFIRM},
+    )
     assert res.status_code == 401
     assert res.json()["detail"]["error"]["code"] == "SOCIAL_LIVE_APPLY_AUTH_REQUIRED"
 
@@ -2838,7 +3119,11 @@ def test_telegram_apply_recomputes_preview_and_blocks_intent_mismatch(
     body = client.post(
         _TELEGRAM_APPLY_ROUTE,
         headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
-        json={"proposal_digest": digest, "confirmation_phrase": _TELEGRAM_CONFIRM, "message_intent": "greeting"},
+        json={
+            "proposal_digest": digest,
+            "confirmation_phrase": _TELEGRAM_CONFIRM,
+            "message_intent": "greeting",
+        },
     ).json()
     assert body["status"] == "blocked"
     assert "proposal_digest_mismatch" in body["reasons"]
@@ -2916,16 +3201,22 @@ def test_telegram_apply_rejects_client_target_and_final_message(
         "proposal_digest": digest,
         "confirmation_phrase": _TELEGRAM_CONFIRM,
     }
-    assert client.post(
-        _TELEGRAM_APPLY_ROUTE,
-        headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
-        json={**base, "target_id": "-1009876543210"},
-    ).status_code == 422
-    assert client.post(
-        _TELEGRAM_APPLY_ROUTE,
-        headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
-        json={**base, "message_text": "client supplied final text"},
-    ).status_code == 422
+    assert (
+        client.post(
+            _TELEGRAM_APPLY_ROUTE,
+            headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+            json={**base, "target_id": "-1009876543210"},
+        ).status_code
+        == 422
+    )
+    assert (
+        client.post(
+            _TELEGRAM_APPLY_ROUTE,
+            headers={"X-Ham-Operator-Authorization": f"Bearer {_SOCIAL_TOKEN}"},
+            json={**base, "message_text": "client supplied final text"},
+        ).status_code
+        == 422
+    )
 
 
 def test_reactive_inbox_preview_is_bounded_redacted_and_non_mutating(
@@ -2936,7 +3227,9 @@ def test_reactive_inbox_preview_is_bounded_redacted_and_non_mutating(
     _disable_clerk(monkeypatch)
     _set_x_creds(monkeypatch)
     monkeypatch.setenv("HAM_X_ENABLE_REACTIVE_INBOX_DISCOVERY", "false")
-    res = client.post("/api/social/providers/x/reactive/inbox/preview", json={"client_request_id": "abc"})
+    res = client.post(
+        "/api/social/providers/x/reactive/inbox/preview", json={"client_request_id": "abc"}
+    )
     body = res.json()
     _assert_preview_invariants(body)
     assert body["preview_kind"] == "reactive_inbox"
@@ -3149,7 +3442,9 @@ def test_apply_blocked_without_operator_auth(
     _enable_apply_env(monkeypatch)
     with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery()):
         digest = _preview_digest()
-    res = client.post(_APPLY_ROUTE, json={"proposal_digest": digest, "confirmation_phrase": _CONFIRM})
+    res = client.post(
+        _APPLY_ROUTE, json={"proposal_digest": digest, "confirmation_phrase": _CONFIRM}
+    )
     assert res.status_code == 401
     assert res.json()["detail"]["error"]["code"] == "SOCIAL_LIVE_APPLY_AUTH_REQUIRED"
 
@@ -3216,9 +3511,15 @@ def test_apply_blocked_when_preview_candidate_changes(
     _isolate_journal(monkeypatch, tmp_path)
     _disable_clerk(monkeypatch)
     _enable_apply_env(monkeypatch)
-    with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery(inbound_id="inbound-1")):
+    with patch(
+        "src.api.social.discover_reactive_inbox_once",
+        return_value=_fake_discovery(inbound_id="inbound-1"),
+    ):
         digest = _preview_digest()
-    with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery(inbound_id="inbound-2")):
+    with patch(
+        "src.api.social.discover_reactive_inbox_once",
+        return_value=_fake_discovery(inbound_id="inbound-2"),
+    ):
         body = client.post(
             _APPLY_ROUTE,
             headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
@@ -3258,7 +3559,9 @@ def test_apply_calls_live_reply_once_and_returns_journal_audit_ids(
     _enable_apply_env(monkeypatch)
     with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery()):
         digest = _preview_digest()
-        with patch("src.api.social.run_reactive_live_once", return_value=_fake_live_result()) as live:
+        with patch(
+            "src.api.social.run_reactive_live_once", return_value=_fake_live_result()
+        ) as live:
             body = client.post(
                 _APPLY_ROUTE,
                 headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
@@ -3291,7 +3594,11 @@ def test_apply_does_not_accept_arbitrary_reply_text(
     res = client.post(
         _APPLY_ROUTE,
         headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
-        json={"proposal_digest": digest, "confirmation_phrase": _CONFIRM, "reply_text": "client supplied"},
+        json={
+            "proposal_digest": digest,
+            "confirmation_phrase": _CONFIRM,
+            "reply_text": "client supplied",
+        },
     )
     assert res.status_code == 422
 
@@ -3307,7 +3614,9 @@ def test_apply_provider_failure_does_not_retry(
         digest = _preview_digest()
         with patch(
             "src.api.social.run_reactive_live_once",
-            return_value=_fake_live_result(status="failed", provider_status_code=500, provider_post_id=None),
+            return_value=_fake_live_result(
+                status="failed", provider_status_code=500, provider_post_id=None
+            ),
         ) as live:
             body = client.post(
                 _APPLY_ROUTE,
@@ -3328,9 +3637,15 @@ def test_apply_response_redacted_and_bounded(
     _disable_clerk(monkeypatch)
     _enable_apply_env(monkeypatch)
     secret = "tok_abcdefghijklmnopqrstuvwxyz1234567890XYZ"
-    with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery(reply_text=secret)):
+    with patch(
+        "src.api.social.discover_reactive_inbox_once",
+        return_value=_fake_discovery(reply_text=secret),
+    ):
         digest = _preview_digest()
-        with patch("src.api.social.run_reactive_live_once", return_value=_fake_live_result(provider_post_id=secret)):
+        with patch(
+            "src.api.social.run_reactive_live_once",
+            return_value=_fake_live_result(provider_post_id=secret),
+        ):
             body = client.post(
                 _APPLY_ROUTE,
                 headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
@@ -3385,7 +3700,9 @@ def test_batch_apply_blocked_without_operator_auth(
     _enable_batch_apply_env(monkeypatch)
     with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery()):
         digest = _batch_preview_digest()
-    res = client.post(_BATCH_APPLY_ROUTE, json={"proposal_digest": digest, "confirmation_phrase": _BATCH_CONFIRM})
+    res = client.post(
+        _BATCH_APPLY_ROUTE, json={"proposal_digest": digest, "confirmation_phrase": _BATCH_CONFIRM}
+    )
     assert res.status_code == 401
     assert res.json()["detail"]["error"]["code"] == "SOCIAL_LIVE_APPLY_AUTH_REQUIRED"
 
@@ -3452,9 +3769,15 @@ def test_batch_apply_blocked_when_dry_run_candidate_set_changes(
     _isolate_journal(monkeypatch, tmp_path)
     _disable_clerk(monkeypatch)
     _enable_batch_apply_env(monkeypatch)
-    with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery(inbound_id="inbound-1")):
+    with patch(
+        "src.api.social.discover_reactive_inbox_once",
+        return_value=_fake_discovery(inbound_id="inbound-1"),
+    ):
         digest = _batch_preview_digest()
-    with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery(inbound_id="inbound-2")):
+    with patch(
+        "src.api.social.discover_reactive_inbox_once",
+        return_value=_fake_discovery(inbound_id="inbound-2"),
+    ):
         body = client.post(
             _BATCH_APPLY_ROUTE,
             headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
@@ -3494,7 +3817,9 @@ def test_batch_apply_calls_batch_runner_once_and_returns_journal_audit_ids(
     _enable_batch_apply_env(monkeypatch)
     with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery()):
         digest = _batch_preview_digest()
-        with patch("src.api.social.run_reactive_batch_once", return_value=_fake_batch_result()) as batch:
+        with patch(
+            "src.api.social.run_reactive_batch_once", return_value=_fake_batch_result()
+        ) as batch:
             body = client.post(
                 _BATCH_APPLY_ROUTE,
                 headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
@@ -3545,7 +3870,10 @@ def test_batch_apply_provider_failure_does_not_retry(
     _enable_batch_apply_env(monkeypatch)
     with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery()):
         digest = _batch_preview_digest()
-        with patch("src.api.social.run_reactive_batch_once", return_value=_fake_batch_result(status="stopped", provider_post_ids=[])) as batch:
+        with patch(
+            "src.api.social.run_reactive_batch_once",
+            return_value=_fake_batch_result(status="stopped", provider_post_ids=[]),
+        ) as batch:
             body = client.post(
                 _BATCH_APPLY_ROUTE,
                 headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
@@ -3564,9 +3892,15 @@ def test_batch_apply_response_redacted_and_bounded(
     _disable_clerk(monkeypatch)
     _enable_batch_apply_env(monkeypatch)
     secret = "tok_abcdefghijklmnopqrstuvwxyz1234567890XYZ"
-    with patch("src.api.social.discover_reactive_inbox_once", return_value=_fake_discovery(reply_text=secret)):
+    with patch(
+        "src.api.social.discover_reactive_inbox_once",
+        return_value=_fake_discovery(reply_text=secret),
+    ):
         digest = _batch_preview_digest()
-        with patch("src.api.social.run_reactive_batch_once", return_value=_fake_batch_result(provider_post_ids=[secret])):
+        with patch(
+            "src.api.social.run_reactive_batch_once",
+            return_value=_fake_batch_result(provider_post_ids=[secret]),
+        ):
             body = client.post(
                 _BATCH_APPLY_ROUTE,
                 headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
@@ -3619,7 +3953,10 @@ def test_broadcast_apply_blocked_without_operator_auth(
     _disable_clerk(monkeypatch)
     _enable_broadcast_apply_env(monkeypatch)
     digest = _broadcast_preview_digest()
-    res = client.post(_BROADCAST_APPLY_ROUTE, json={"proposal_digest": digest, "confirmation_phrase": _BROADCAST_CONFIRM})
+    res = client.post(
+        _BROADCAST_APPLY_ROUTE,
+        json={"proposal_digest": digest, "confirmation_phrase": _BROADCAST_CONFIRM},
+    )
     assert res.status_code == 401
     assert res.json()["detail"]["error"]["code"] == "SOCIAL_LIVE_APPLY_AUTH_REQUIRED"
 
@@ -3722,7 +4059,9 @@ def test_broadcast_apply_calls_governed_controller_once_and_returns_journal_audi
     _disable_clerk(monkeypatch)
     _enable_broadcast_apply_env(monkeypatch)
     digest = _broadcast_preview_digest()
-    with patch("src.api.social.run_live_controller_once", return_value=_fake_broadcast_result()) as live:
+    with patch(
+        "src.api.social.run_live_controller_once", return_value=_fake_broadcast_result()
+    ) as live:
         body = client.post(
             _BROADCAST_APPLY_ROUTE,
             headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},
@@ -3772,7 +4111,9 @@ def test_broadcast_apply_provider_failure_does_not_retry(
     digest = _broadcast_preview_digest()
     with patch(
         "src.api.social.run_live_controller_once",
-        return_value=_fake_broadcast_result(status="failed", provider_status_code=500, provider_post_id=None),
+        return_value=_fake_broadcast_result(
+            status="failed", provider_status_code=500, provider_post_id=None
+        ),
     ) as live:
         body = client.post(
             _BROADCAST_APPLY_ROUTE,
@@ -3794,7 +4135,10 @@ def test_broadcast_apply_response_redacted_and_bounded(
     _enable_broadcast_apply_env(monkeypatch)
     secret = "tok_abcdefghijklmnopqrstuvwxyz1234567890XYZ"
     digest = _broadcast_preview_digest()
-    with patch("src.api.social.run_live_controller_once", return_value=_fake_broadcast_result(provider_post_id=secret)):
+    with patch(
+        "src.api.social.run_live_controller_once",
+        return_value=_fake_broadcast_result(provider_post_id=secret),
+    ):
         body = client.post(
             _BROADCAST_APPLY_ROUTE,
             headers={"Authorization": f"Bearer {_SOCIAL_TOKEN}"},

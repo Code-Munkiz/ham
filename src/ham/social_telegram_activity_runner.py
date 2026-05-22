@@ -24,6 +24,7 @@ from src.ham.social_telegram_send import (
 )
 
 TelegramActivityRunStatus = Literal["completed", "blocked", "sent", "failed", "duplicate"]
+SelfProbeState = Literal["ok", "not_ok", "unknown"]
 
 
 class TelegramActivityRunConfig(BaseModel):
@@ -37,6 +38,9 @@ class TelegramActivityRunConfig(BaseModel):
     now: datetime | None = None
     delivery_log_path: Path | None = None
     timeout_seconds: float = Field(default=10.0, gt=0, le=30)
+    # M2 fields: decouple Telegram readiness from Hermes gateway
+    activity_requires_hermes_gateway: bool = False
+    telegram_self_probe_state: SelfProbeState = "unknown"
 
 
 class TelegramActivityRunResult(BaseModel):
@@ -74,6 +78,8 @@ def run_telegram_activity_once(
         emergency_stop=cfg.emergency_stop,
         now=cfg.now,
         delivery_log_path=cfg.delivery_log_path,
+        activity_requires_hermes_gateway=cfg.activity_requires_hermes_gateway,
+        telegram_self_probe_state=cfg.telegram_self_probe_state,
     )
 
     base = {
@@ -105,7 +111,9 @@ def run_telegram_activity_once(
     if preview.status != "completed" or not preview.proposal_digest:
         blocked_reasons.extend(["telegram_activity_preview_not_available", *preview.reasons])
     if not bool(preview.governor.get("allowed")):
-        blocked_reasons.extend(["telegram_activity_governor_blocked", *_as_strings(preview.governor.get("reasons"))])
+        blocked_reasons.extend(
+            ["telegram_activity_governor_blocked", *_as_strings(preview.governor.get("reasons"))]
+        )
 
     reasons = _dedupe(blocked_reasons)
     if reasons:
@@ -148,15 +156,21 @@ def run_telegram_activity_once(
 
 def _live_gate_reasons() -> list[str]:
     reasons: list[str] = []
-    if (os.environ.get("HAM_SOCIAL_TELEGRAM_ACTIVITY_AUTONOMY_ENABLED") or "").strip().lower() != "true":
+    if (
+        os.environ.get("HAM_SOCIAL_TELEGRAM_ACTIVITY_AUTONOMY_ENABLED") or ""
+    ).strip().lower() != "true":
         reasons.append("telegram_activity_autonomy_disabled")
-    if (os.environ.get("HAM_SOCIAL_TELEGRAM_ACTIVITY_DRY_RUN") or "true").strip().lower() != "false":
+    if (
+        os.environ.get("HAM_SOCIAL_TELEGRAM_ACTIVITY_DRY_RUN") or "true"
+    ).strip().lower() != "false":
         reasons.append("telegram_activity_dry_run_enabled")
     return reasons
 
 
 def _run_once_idempotency_key(proposal_digest: str) -> str:
-    digest = hashlib.sha256(f"telegram-activity-run-once:{proposal_digest}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(
+        f"telegram-activity-run-once:{proposal_digest}".encode("utf-8")
+    ).hexdigest()
     return f"telegram-activity-run-once-{digest[:32]}"
 
 

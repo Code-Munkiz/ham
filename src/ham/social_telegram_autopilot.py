@@ -32,6 +32,7 @@ from src.ham.social_telegram_reactive_runner import (
 from src.ham.social_telegram_send import TelegramTransport
 
 HamgomoonAutopilotStatus = Literal["completed", "blocked", "sent", "failed", "partial"]
+SelfProbeState = Literal["ok", "not_ok", "unknown"]
 
 
 class HamgomoonAutopilotConfig(BaseModel):
@@ -49,6 +50,9 @@ class HamgomoonAutopilotConfig(BaseModel):
     timeout_seconds: float = Field(default=10.0, gt=0, le=30)
     reactive_hourly_cap: int = Field(default=2, ge=0, le=24)
     reactive_daily_cap: int = Field(default=3, ge=0, le=100)
+    # M2 fields: decouple Telegram readiness from Hermes gateway
+    activity_requires_hermes_gateway: bool = False
+    telegram_self_probe_state: SelfProbeState = "unknown"
 
 
 class HamgomoonAutopilotResult(BaseModel):
@@ -173,6 +177,8 @@ def _activity_config(
         now=cfg.now,
         delivery_log_path=cfg.delivery_log_path,
         timeout_seconds=cfg.timeout_seconds,
+        activity_requires_hermes_gateway=cfg.activity_requires_hermes_gateway,
+        telegram_self_probe_state=cfg.telegram_self_probe_state,
     )
 
 
@@ -268,7 +274,9 @@ def _status_for_lanes(
     statuses = [str(item.status) for item in lane_results]
     if selected_lane is None:
         return "blocked" if blocking_reasons or statuses else "completed"
-    if any(status == "failed" for status in statuses) and not any(status == "sent" for status in statuses):
+    if any(status == "failed" for status in statuses) and not any(
+        status == "sent" for status in statuses
+    ):
         return "failed"
     if any(status == "sent" for status in statuses):
         return "sent"
@@ -294,7 +302,9 @@ def _selected_lane(
 def _reactive_has_action(result: TelegramReactiveRunResult) -> bool:
     if result.status == "sent":
         return True
-    return result.status == "completed" and bool(result.proposal_digest and result.selected_inbound_id)
+    return result.status == "completed" and bool(
+        result.proposal_digest and result.selected_inbound_id
+    )
 
 
 def _activity_has_action(result: TelegramActivityRunResult) -> bool:
@@ -346,17 +356,29 @@ def _cli_summary(result: HamgomoonAutopilotResult) -> dict[str, object]:
         "warnings": result.warnings[:12],
         "reactive_lane_status": result.reactive_lane_status,
         "activity_lane_status": result.activity_lane_status,
-        "reactive_status": result.reactive.get("status") if isinstance(result.reactive, dict) else None,
-        "activity_status": result.activity.get("status") if isinstance(result.activity, dict) else None,
+        "reactive_status": result.reactive.get("status")
+        if isinstance(result.reactive, dict)
+        else None,
+        "activity_status": result.activity.get("status")
+        if isinstance(result.activity, dict)
+        else None,
     }
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run HAMgomoon Telegram autopilot once.")
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--dry-run", action="store_true", help="Preview both lanes without mutation (default).")
-    group.add_argument("--live-once", action="store_true", help="Attempt one live autopilot pass if all env gates allow it.")
-    parser.add_argument("--allow-both", action="store_true", help="Allow activity after a reactive live send.")
+    group.add_argument(
+        "--dry-run", action="store_true", help="Preview both lanes without mutation (default)."
+    )
+    group.add_argument(
+        "--live-once",
+        action="store_true",
+        help="Attempt one live autopilot pass if all env gates allow it.",
+    )
+    parser.add_argument(
+        "--allow-both", action="store_true", help="Allow activity after a reactive live send."
+    )
     args = parser.parse_args(argv)
 
     result = run_hamgomoon_autopilot_once(
