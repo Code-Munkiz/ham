@@ -554,6 +554,88 @@ class TestLegacyPayloadLoadsWithDefaults:
 
 
 # ---------------------------------------------------------------------------
+# VAL-M15-M1B-PROFILE-SINGLETON-PATH-001
+# ---------------------------------------------------------------------------
+
+
+class TestSingletonPathInvariant:
+    """VAL-M15-M1B-PROFILE-SINGLETON-PATH-001
+
+    Verifies that _apply_profile always writes to _SINGLETON_DOC_ID,
+    regardless of profile.profile_id.  After applying a profile with an
+    alternate profile_id, read() must return the same applied profile bytes
+    — not a default draft.
+    """
+
+    def test_singleton_path_with_alt_profile_id(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """apply() with alt profile_id writes to _SINGLETON_DOC_ID; read() returns the same profile."""
+        monkeypatch.setenv("HAM_SOCIAL_AUTONOMY_WRITE_TOKEN", "test-write-token")  # noqa: S106
+
+        store, fake = _store_with_fake()
+
+        # Use a profile_id that differs from the singleton doc id
+        alt_id = "alt-id"
+        profile = _profile(profile_id=alt_id, goal="Alt-id profile")
+
+        result = store.apply(None, profile, token="test-write-token", actor="test")
+
+        # The document must be written at the singleton path, not the alt-id path
+        singleton_path = "ham_social_autonomy_profiles/goham-social-default"
+        alt_path = f"ham_social_autonomy_profiles/{alt_id}"
+
+        assert singleton_path in fake.docs, (
+            f"Profile was NOT written to singleton path {singleton_path!r}; "
+            f"docs present: {list(fake.docs.keys())}"
+        )
+        assert alt_path not in fake.docs, (
+            f"Profile was incorrectly written to alt path {alt_path!r} — "
+            "write must always target _SINGLETON_DOC_ID"
+        )
+
+        # read() must return the applied profile bytes (not a default draft)
+        recovered = store.read(None)
+        assert isinstance(recovered, GoHamSocialProfile)
+        assert recovered.goal == "Alt-id profile", (
+            f"read() returned goal={recovered.goal!r}; "
+            "expected the applied profile, not the default draft"
+        )
+        assert recovered.status != "draft" or profile.status == "draft", (
+            "read() returned a default draft instead of the applied profile"
+        )
+
+        # Revision must match what was applied
+        assert result.new_revision == revision_for_profile(profile), (
+            "apply() result revision does not match the applied profile"
+        )
+
+    def test_apply_doc_path_is_always_singleton_for_any_profile_id(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The Firestore document path written by apply() is _SINGLETON_DOC_ID regardless of profile.profile_id."""
+        monkeypatch.setenv("HAM_SOCIAL_AUTONOMY_WRITE_TOKEN", "test-write-token")  # noqa: S106
+
+        store, fake = _store_with_fake()
+        profile = _profile(profile_id="some-other-id", goal="Path invariant test")
+
+        store.apply(None, profile, token="test-write-token", actor="test")
+
+        # Collect all top-level document paths (not subcollections) in the profile collection
+        top_level_docs = [
+            path
+            for path in fake.docs
+            if path.startswith("ham_social_autonomy_profiles/")
+            and path.count("/") == 1  # top-level docs only
+        ]
+        assert top_level_docs == ["ham_social_autonomy_profiles/goham-social-default"], (
+            f"Expected only the singleton doc to be written; got: {top_level_docs}"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Error handling
 # ---------------------------------------------------------------------------
 

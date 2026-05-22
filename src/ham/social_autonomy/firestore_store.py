@@ -389,8 +389,15 @@ class FirestoreSocialAutonomyStore:
         *,
         actor: str,
     ) -> ApplyResult:
-        """Core apply logic shared by :meth:`apply` and :meth:`save`."""
-        doc_id = profile.profile_id
+        """Core apply logic shared by :meth:`apply` and :meth:`save`.
+
+        Always writes to ``_SINGLETON_DOC_ID`` regardless of
+        ``profile.profile_id``, so that a subsequent :meth:`read` (which
+        always reads from ``_SINGLETON_DOC_ID``) is guaranteed to return the
+        applied profile even when the caller supplies a profile whose
+        ``profile_id`` differs from the singleton key.
+        """
+        doc_id = _SINGLETON_DOC_ID  # always write to the singleton path
         db = self._db()
 
         doc_ref = db.collection(self._coll_name).document(doc_id)
