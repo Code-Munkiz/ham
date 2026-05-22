@@ -2699,9 +2699,7 @@ describe("WorkspaceWorkbench", () => {
 
   it("Preview error DOM scan hides forbidden internal infrastructure strings", async () => {
     getBuilderPreviewStatusMock.mockRejectedValue(
-      new Error(
-        "PREVIEW_PROXY_FAILED gcs kubernetes pod ControlPlaneRun safe_edit_low runner url",
-      ),
+      new Error("PREVIEW_PROXY_FAILED gcs kubernetes pod ControlPlaneRun safe_edit_low runner url"),
     );
     render(
       <MemoryRouter>
@@ -2715,9 +2713,7 @@ describe("WorkspaceWorkbench", () => {
       "Preview could not start.",
     );
     const dom =
-      screen.getByTestId("hww-preview-canvas").textContent ||
-      document.body.textContent ||
-      "";
+      screen.getByTestId("hww-preview-canvas").textContent || document.body.textContent || "";
     expect(dom).not.toMatch(/PREVIEW_PROXY/i);
     expect(dom).not.toMatch(/ControlPlaneRun/i);
     expect(dom).not.toMatch(/safe_edit_low/i);

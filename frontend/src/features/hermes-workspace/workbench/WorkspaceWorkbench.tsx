@@ -56,7 +56,10 @@ import {
   saveBuilderLocalRunProfile,
   shouldResetHamWorkbenchProjectSelection,
 } from "@/lib/ham/api";
-import { sanitizeWorkbenchProjectAccessMessage, sanitizeWorkbenchDownloadErrorMessage } from "@/lib/ham/workbenchProjectMessages";
+import {
+  sanitizeWorkbenchProjectAccessMessage,
+  sanitizeWorkbenchDownloadErrorMessage,
+} from "@/lib/ham/workbenchProjectMessages";
 import {
   buildPreviewPrimaryState,
   previewPhaseUserLabel,
@@ -1147,17 +1150,14 @@ function WorkbenchPreviewPanel({
     rawError: error,
   });
   const previewStateError =
-    previewPhase === "error"
-      ? sanitizePreviewStateError(error, preview?.message)
-      : null;
+    previewPhase === "error" ? sanitizePreviewStateError(error, preview?.message) : null;
   const showPreviewRetry =
     previewPhase === "error" ||
     previewPhase === "starting" ||
-    (previewPhase === "source_ready" && (iframeProxyWarmupPaused || iframeProxyError === "PREVIEW_PROXY_WARMUP"));
+    (previewPhase === "source_ready" &&
+      (iframeProxyWarmupPaused || iframeProxyError === "PREVIEW_PROXY_WARMUP"));
   const showPreviewOpenDetails =
-    previewPhase !== "no_project" &&
-    previewPhase !== "no_source" &&
-    previewPhase !== "ready";
+    previewPhase !== "no_project" && previewPhase !== "no_source" && previewPhase !== "ready";
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden text-[12px] leading-relaxed text-white/70">
       <div className="flex flex-wrap items-center gap-2">
