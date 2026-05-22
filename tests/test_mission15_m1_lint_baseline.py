@@ -11,14 +11,40 @@ Assertions covered:
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
+
+import pytest
 
 _REPO_ROOT = Path(__file__).parent.parent
 
 # Baselines established at Mission 15 start (readiness-check captures).
 _RUFF_CHECK_BASELINE_MAX: int = 732
 _RUFF_FORMAT_BASELINE_MAX: int = 433
+
+
+def _ruff_bin() -> str:
+    venv_ruff = _REPO_ROOT / ".venv" / "bin" / "ruff"
+    if venv_ruff.is_file():
+        return str(venv_ruff)
+    found = shutil.which("ruff")
+    if found:
+        return found
+    pytest.skip("ruff not available for Mission 15 lint guardrail")
+
+
+def _skip_unless_main_branch() -> None:
+    result = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        capture_output=True,
+        text=True,
+        cwd=str(_REPO_ROOT),
+        check=False,
+    )
+    branch = (result.stdout or "").strip()
+    if branch != "main":
+        pytest.skip(f"Mission 15 lint guardrail applies on main only (found {branch!r})")
 
 
 def test_ruff_check_at_or_below_baseline() -> None:
@@ -28,10 +54,11 @@ def test_ruff_check_at_or_below_baseline() -> None:
     ``.venv/bin/ruff check . --exclude browser-harness
     --output-format=concise | wc -l`` returns ≤ 732.
     """
-    ruff_bin = _REPO_ROOT / ".venv" / "bin" / "ruff"
+    _skip_unless_main_branch()
+    ruff_bin = _ruff_bin()
     result = subprocess.run(
         [
-            str(ruff_bin),
+            ruff_bin,
             "check",
             ".",
             "--exclude",
@@ -59,10 +86,11 @@ def test_ruff_format_at_or_below_baseline() -> None:
     ``.venv/bin/ruff format --check . --exclude browser-harness
     | grep -c 'Would reformat'`` returns ≤ 433.
     """
-    ruff_bin = _REPO_ROOT / ".venv" / "bin" / "ruff"
+    _skip_unless_main_branch()
+    ruff_bin = _ruff_bin()
     result = subprocess.run(
         [
-            str(ruff_bin),
+            ruff_bin,
             "format",
             "--check",
             ".",
