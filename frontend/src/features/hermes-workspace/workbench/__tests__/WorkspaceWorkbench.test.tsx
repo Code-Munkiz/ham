@@ -2571,6 +2571,24 @@ describe("WorkspaceWorkbench", () => {
     expect(dom).not.toMatch(/builder-artifact/i);
   });
 
+  it("Saved versions menu opens the saved versions dialog", async () => {
+    mockProjectWithActiveSnapshot();
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(listBuilderSourceSnapshotsMock).toHaveBeenCalled();
+    });
+    await openWorkbenchMoreMenu();
+    fireEvent.click(screen.getByTestId("hww-workbench-saved-versions"));
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-saved-versions-dialog")).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Version history — Coming soon/i)).toBeNull();
+  });
+
   it("Preparing state shows friendly primary copy while preview status loads", async () => {
     getBuilderPreviewStatusMock.mockImplementation(() => new Promise(() => {}));
     listBuilderSourceSnapshotsMock.mockResolvedValue({
