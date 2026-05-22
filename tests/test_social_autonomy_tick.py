@@ -641,3 +641,131 @@ def test_run_missing_profile_does_not_create_file(
     assert result.blocked_reasons == [AUTONOMY_PROFILE_MISSING]
     assert social_autonomy_path(tmp_path) == target
     assert not target.exists()
+
+
+def test_tick_activity_clears_when_adapter_propagates_ready_connected(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """When _telegram_status_response returns ready/connected, the adapter
+    propagates those values and the activity lane no longer emits
+    telegram_readiness_not_ready or telegram_gateway_not_connected.
+
+    The reactive lane is pinned to fail (no transcript paths) so the activity
+    lane is the sole source of readiness/gateway blockers — making the assertion
+    deterministic regardless of the local filesystem state.
+
+    Other blockers (telegram_target_not_configured) may still appear — those are
+    independent of M1d scope.
+    """
+    from types import SimpleNamespace
+
+    import src.api.social as social_mod
+    from src.ham.social_autonomy.tick import run_social_autonomy_tick
+
+    # Pin the status helper to ready/connected.
+    monkeypatch.setattr(
+        social_mod,
+        "_telegram_status_response",
+        lambda: SimpleNamespace(
+            overall_readiness="ready",
+            hermes_gateway=SimpleNamespace(provider_runtime_state="connected"),
+        ),
+    )
+    # Unset transcript discovery env vars so the reactive lane is deterministically
+    # blocked (no transcript files reachable) regardless of local developer setup.
+    monkeypatch.delenv("HAM_TELEGRAM_INBOUND_TRANSCRIPT_PATH", raising=False)
+    monkeypatch.delenv("HAM_HERMES_HOME", raising=False)
+    monkeypatch.delenv("HERMES_HOME", raising=False)
+
+    telegram_profile = _profile(
+        channels={
+            "telegram": {"enabled": True, "available": True},
+            "x": {"enabled": False, "available": True},
+            "discord": {"enabled": False, "available": False},
+        },
+        actions_allowed_per_channel={
+            "telegram": ["message", "activity"],
+            "x": [],
+            "discord": [],
+        },
+        daily_caps={"telegram": 3, "x": 0, "discord": 0},
+        cadence="manual",
+    )
+    _seed_profile(monkeypatch, tmp_path, telegram_profile)
+
+    result = run_social_autonomy_tick(
+        store_path=tmp_path,
+        now=_NOW,
+        dry_run=True,
+        usage_counter=_zero_usage,
+        content_guard=_allowing_content_guard,
+        run_once=True,
+    )
+
+    # The key assertions: activity-lane readiness/gateway blockers must be gone.
+    assert "telegram_readiness_not_ready" not in result.blocked_reasons
+    assert "telegram_gateway_not_connected" not in result.blocked_reasons
+
+
+def test_tick_activity_still_blocks_when_status_setup_required(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """When _telegram_status_response returns setup_required/unknown, the adapter
+    propagates those pessimistic values and the activity lane STILL emits
+    telegram_readiness_not_ready and telegram_gateway_not_connected (fail-closed
+    preserved).
+
+    The reactive lane is pinned to fail (no transcript paths) so the activity-lane
+    readiness/gateway blockers are deterministically visible in the merged
+    blocked_reasons, regardless of local filesystem state.
+    """
+    from types import SimpleNamespace
+
+    import src.api.social as social_mod
+    from src.ham.social_autonomy.tick import run_social_autonomy_tick
+
+    # Pin the status helper to setup_required/unknown.
+    monkeypatch.setattr(
+        social_mod,
+        "_telegram_status_response",
+        lambda: SimpleNamespace(
+            overall_readiness="setup_required",
+            hermes_gateway=SimpleNamespace(provider_runtime_state="unknown"),
+        ),
+    )
+    # Unset transcript discovery env vars so the reactive lane is deterministically
+    # blocked (no transcript files reachable) regardless of local developer setup.
+    monkeypatch.delenv("HAM_TELEGRAM_INBOUND_TRANSCRIPT_PATH", raising=False)
+    monkeypatch.delenv("HAM_HERMES_HOME", raising=False)
+    monkeypatch.delenv("HERMES_HOME", raising=False)
+
+    telegram_profile = _profile(
+        channels={
+            "telegram": {"enabled": True, "available": True},
+            "x": {"enabled": False, "available": True},
+            "discord": {"enabled": False, "available": False},
+        },
+        actions_allowed_per_channel={
+            "telegram": ["message", "activity"],
+            "x": [],
+            "discord": [],
+        },
+        daily_caps={"telegram": 3, "x": 0, "discord": 0},
+        cadence="manual",
+    )
+    _seed_profile(monkeypatch, tmp_path, telegram_profile)
+
+    result = run_social_autonomy_tick(
+        store_path=tmp_path,
+        now=_NOW,
+        dry_run=True,
+        usage_counter=_zero_usage,
+        content_guard=_allowing_content_guard,
+        run_once=True,
+    )
+
+    # Fail-closed: both blockers must still appear when status is pessimistic.
+    assert "telegram_readiness_not_ready" in result.blocked_reasons
+    assert "telegram_gateway_not_connected" in result.blocked_reasons

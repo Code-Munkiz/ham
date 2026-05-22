@@ -47,9 +47,37 @@ class SocialAutonomyTelegramAdapter:
             raise AdapterUnavailable("Telegram autopilot live dispatch is unavailable")
 
         action_name = str(action.get("action") or "").strip()
+
+        # Propagate real Telegram readiness + gateway state into the autopilot
+        # config so the activity lane can observe actual env conditions rather
+        # than bare pessimistic defaults.  Any failure in the status helper
+        # (exception, None, or missing fields) falls back to safe defaults so
+        # a broken status path does NOT crash dispatch.
+        readiness: str = "setup_required"
+        gateway_runtime_state: str = "unknown"
+        try:
+            from src.api.social import _telegram_status_response  # noqa: PLC0415
+
+            _status = _telegram_status_response()
+            if _status is not None:
+                _r = getattr(_status, "overall_readiness", None)
+                if _r is not None:
+                    readiness = str(_r)
+                _hg = getattr(_status, "hermes_gateway", None)
+                if _hg is not None:
+                    _g = getattr(_hg, "provider_runtime_state", None)
+                    if _g is not None:
+                        gateway_runtime_state = str(_g)
+        except Exception:  # noqa: BLE001,S110 - fall back to safe defaults on any error.
+            pass
+
         try:
             result = social_telegram_autopilot.run_hamgomoon_autopilot_once(
-                HamgomoonAutopilotConfig(dry_run=True),
+                HamgomoonAutopilotConfig(
+                    dry_run=True,
+                    readiness=readiness,
+                    gateway_runtime_state=gateway_runtime_state,
+                ),
             )
         except AssertionError:
             raise
