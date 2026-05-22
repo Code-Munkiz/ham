@@ -63,6 +63,13 @@ class TelegramOffsetStoreProtocol(Protocol):
     def read_offset(self, bot_digest: str) -> int | None: ...
     def write_offset(self, bot_digest: str, update_offset: int) -> None: ...
     def read_poller_metadata(self, bot_digest: str) -> PollerMetadata: ...
+    def write_poller_metadata(
+        self,
+        bot_digest: str,
+        *,
+        last_run_at: str | None = None,
+        last_error: str | None = None,
+    ) -> None: ...
 
 
 # ---------------------------------------------------------------------------
@@ -151,6 +158,58 @@ class TelegramOffsetFileStore:
             last_run_at=str(raw_run_at) if raw_run_at is not None else None,
             last_error=str(raw_error) if raw_error is not None else None,
         )
+
+    def write_poller_metadata(
+        self,
+        bot_digest: str,
+        *,
+        last_run_at: str | None = None,
+        last_error: str | None = None,
+    ) -> None:
+        """Merge poller metadata into the existing JSON document.
+
+        Merges only the fields whose values are not ``None`` into the same JSON
+        file used by :meth:`read_offset` / :meth:`write_offset`, so the stored
+        ``update_offset`` (and any previously written metadata fields) are
+        preserved.
+
+        Passing ``last_run_at=None`` (the default) leaves the existing
+        ``last_run_at`` field unchanged.  The same applies to ``last_error``.
+
+        Args:
+            bot_digest:  Short hex digest of the bot token (``sha256(token)[:16]``).
+            last_run_at: ISO-8601 timestamp of the most recent successful poll run.
+                         ``None`` means "do not update this field".
+            last_error:  Bounded, redacted error message from the most recent
+                         failed poll run.  ``None`` means "do not update this field".
+        """
+        path = self._resolve_path(bot_digest)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Read existing data to preserve update_offset and other metadata fields.
+        existing: dict[str, Any] = {}
+        if path.is_file():
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(raw, dict):
+                    existing = raw
+            except (OSError, json.JSONDecodeError):
+                existing = {}
+        # Only update fields that were explicitly provided (non-None default).
+        if last_run_at is not None:
+            existing["last_run_at"] = last_run_at
+        if last_error is not None:
+            existing["last_error"] = last_error
+        # Atomically write back.
+        payload = json.dumps(existing, sort_keys=True)
+        tmp = path.with_suffix(".json.tmp")
+        try:
+            tmp.write_text(payload, encoding="utf-8")
+            os.replace(tmp, path)
+        finally:
+            try:
+                tmp.unlink()
+            except FileNotFoundError:
+                pass
 
 
 # ---------------------------------------------------------------------------

@@ -218,6 +218,51 @@ class FirestoreTelegramOffsetStore:
             last_error=str(raw_error) if raw_error is not None else None,
         )
 
+    def write_poller_metadata(
+        self,
+        bot_digest: str,
+        *,
+        last_run_at: str | None = None,
+        last_error: str | None = None,
+    ) -> None:
+        """Merge poller metadata into the Firestore document without losing the stored offset.
+
+        Uses ``set(merge=True)`` to merge only the provided fields into the
+        existing document, so ``update_offset`` (and any other existing fields)
+        are preserved.  Only fields with non-``None`` values are merged.
+
+        Passing ``last_run_at=None`` (the default) leaves the existing
+        ``last_run_at`` field in Firestore unchanged.  Same for ``last_error``.
+
+        Args:
+            bot_digest:  Short hex digest of the bot token (``sha256(token)[:16]``).
+            last_run_at: ISO-8601 timestamp of the most recent successful poll run.
+                         ``None`` means "do not update this field".
+            last_error:  Bounded, redacted error message from the most recent
+                         failed poll run.  ``None`` means "do not update this field".
+
+        Raises:
+            FirestoreTelegramOffsetStoreError: On any Firestore SDK error.
+        """
+        payload: dict[str, Any] = {}
+        if last_run_at is not None:
+            payload["last_run_at"] = last_run_at
+        if last_error is not None:
+            payload["last_error"] = last_error
+        if not payload:
+            # Nothing to update — avoid an unnecessary Firestore round-trip.
+            return
+        db = self._db()
+        key = str(bot_digest).strip()
+        try:
+            db.collection(self._coll_name).document(key).set(payload, merge=True)
+        except FirestoreTelegramOffsetStoreError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise FirestoreTelegramOffsetStoreError(
+                f"Firestore write_poller_metadata failed: {exc}"
+            ) from exc
+
 
 __all__ = [
     "FirestoreTelegramOffsetStore",

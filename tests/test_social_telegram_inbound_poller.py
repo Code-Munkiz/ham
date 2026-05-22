@@ -24,12 +24,29 @@ import pytest
 class InMemoryOffsetStore:
     def __init__(self, initial: int | None = None) -> None:
         self._offset = initial
+        self._last_run_at: str | None = None
+        self._last_error: str | None = None
 
     def read_offset(self, bot_digest: str) -> int | None:
         return self._offset
 
     def write_offset(self, bot_digest: str, update_offset: int) -> None:
         self._offset = update_offset
+
+    def read_poller_metadata(self, bot_digest: str) -> dict[str, Any]:
+        return {"last_run_at": self._last_run_at, "last_error": self._last_error}
+
+    def write_poller_metadata(
+        self,
+        bot_digest: str,
+        *,
+        last_run_at: str | None = None,
+        last_error: str | None = None,
+    ) -> None:
+        if last_run_at is not None:
+            self._last_run_at = last_run_at
+        if last_error is not None:
+            self._last_error = last_error
 
 
 class InMemoryTranscriptStore:
