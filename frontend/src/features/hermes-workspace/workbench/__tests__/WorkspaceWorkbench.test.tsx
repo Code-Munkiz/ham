@@ -2007,7 +2007,7 @@ describe("WorkspaceWorkbench", () => {
 
     expect(screen.queryByTestId("hww-preview-iframe")).toBeNull();
     expect(screen.getByTestId("hww-preview-primary-subtitle")).toHaveTextContent(
-      /Preview gateway is warming up/i,
+      /Preview is still warming up/i,
     );
 
     vi.useFakeTimers();
@@ -2569,5 +2569,157 @@ describe("WorkspaceWorkbench", () => {
     expect(dom).not.toMatch(/\bargv\b/i);
     expect(dom).not.toMatch(/runner url/i);
     expect(dom).not.toMatch(/builder-artifact/i);
+  });
+
+  it("Preparing state shows friendly primary copy while preview status loads", async () => {
+    getBuilderPreviewStatusMock.mockImplementation(() => new Promise(() => {}));
+    listBuilderSourceSnapshotsMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      source_snapshots: [],
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-primary-title")).toHaveTextContent(
+        "HAM is preparing your preview.",
+      );
+    });
+    expect(screen.getByTestId("hww-preview-primary-subtitle")).toHaveTextContent(
+      /sets up your project files/i,
+    );
+    expect(screen.getByTestId("hww-preview-status-pills")).toHaveTextContent("Preparing");
+  });
+
+  it("Almost-ready state shows friendly copy when source exists but preview is waiting", async () => {
+    mockProjectWithActiveSnapshot();
+    getBuilderPreviewStatusMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      mode: "cloud",
+      status: "waiting",
+      health: "unknown",
+      preview_url: null,
+      message: "PREVIEW_PROXY_UPSTREAM_UNAVAILABLE pod gcs://builder-artifact",
+      updated_at: "2026-01-01T00:00:00Z",
+      source_snapshot_id: "ssnp_1",
+      runtime_session_id: "rtms_1",
+      preview_endpoint_id: null,
+      logs_hint: null,
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-primary-title")).toHaveTextContent(
+        "Preview is almost ready.",
+      );
+    });
+    expect(screen.getByTestId("hww-preview-status-pills")).toHaveTextContent("Almost ready");
+    const previewText =
+      screen.getByTestId("hww-preview-placeholder").textContent ||
+      screen.getByTestId("hww-preview-canvas").textContent ||
+      "";
+    expect(previewText).not.toMatch(/PREVIEW_PROXY/i);
+    expect(previewText).not.toMatch(/builder-artifact/i);
+    expect(previewText).not.toMatch(/\bpod\b/i);
+  });
+
+  it("Starting preview state exposes Try again retry action", async () => {
+    mockProjectWithActiveSnapshot();
+    getBuilderPreviewStatusMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      mode: "local",
+      status: "waiting",
+      health: "unknown",
+      preview_url: null,
+      message: "Waiting for preview URL.",
+      updated_at: "2026-01-01T00:00:00Z",
+      source_snapshot_id: "ssnp_1",
+      runtime_session_id: "rtms_1",
+      preview_endpoint_id: null,
+      logs_hint: null,
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-retry")).toBeInTheDocument();
+    });
+    const before = getBuilderPreviewStatusMock.mock.calls.length;
+    fireEvent.click(screen.getByTestId("hww-preview-retry"));
+    await waitFor(() => {
+      expect(getBuilderPreviewStatusMock.mock.calls.length).toBeGreaterThan(before);
+    });
+  });
+
+  it("Open details expands diagnostics without leaking raw API tokens", async () => {
+    getBuilderPreviewStatusMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      mode: "cloud",
+      status: "waiting",
+      health: "unknown",
+      preview_url: null,
+      message: "PREVIEW_PROXY_TIMEOUT kubernetes pod ControlPlaneRun",
+      updated_at: "2026-01-01T00:00:00Z",
+      source_snapshot_id: "ssnp_1",
+      runtime_session_id: "rtms_1",
+      preview_endpoint_id: null,
+      logs_hint: "runner url safe_edit_low",
+    });
+    mockProjectWithActiveSnapshot();
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-open-details")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId("hww-preview-open-details"));
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-api-message")).toBeInTheDocument();
+    });
+    const detailsDom = screen.getByTestId("hww-preview-advanced").textContent || "";
+    expect(detailsDom).not.toMatch(/PREVIEW_PROXY/i);
+    expect(detailsDom).not.toMatch(/ControlPlaneRun/i);
+    expect(detailsDom).not.toMatch(/safe_edit_low/i);
+    expect(detailsDom).not.toMatch(/runner url/i);
+    expect(detailsDom).toMatch(/project files linked/i);
+  });
+
+  it("Preview error DOM scan hides forbidden internal infrastructure strings", async () => {
+    getBuilderPreviewStatusMock.mockRejectedValue(
+      new Error("PREVIEW_PROXY_FAILED gcs kubernetes pod ControlPlaneRun safe_edit_low runner url"),
+    );
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-state-error")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("hww-preview-primary-title")).toHaveTextContent(
+      "Preview could not start.",
+    );
+    const dom =
+      screen.getByTestId("hww-preview-canvas").textContent || document.body.textContent || "";
+    expect(dom).not.toMatch(/PREVIEW_PROXY/i);
+    expect(dom).not.toMatch(/ControlPlaneRun/i);
+    expect(dom).not.toMatch(/safe_edit_low/i);
+    expect(dom).not.toMatch(/runner url/i);
+    expect(dom).not.toMatch(/\bgcs\b/i);
+    expect(dom).not.toMatch(/\bpod\b/i);
+    expect(screen.getByTestId("hww-preview-retry")).toBeInTheDocument();
   });
 });
