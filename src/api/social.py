@@ -21,6 +21,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 from dataclasses import replace
 from datetime import UTC, datetime, timezone
 from pathlib import Path
@@ -49,7 +50,7 @@ from src.ham.ham_x.reactive_governor import (
     evaluate_reactive_governor,
 )
 from src.ham.ham_x.reactive_policy import evaluate_reactive_policy
-from src.ham.ham_x.redaction import redact
+from src.ham.ham_x.redaction import redact, redact_text
 from src.ham.ham_x.review_queue import read_recent_review_records
 from src.ham.hamgomoon_learning import (
     LearningRecord,
@@ -103,6 +104,7 @@ from src.ham.social_telegram_activity_runner import (
     run_telegram_activity_once,
 )
 from src.ham.social_telegram_inbound import discover_telegram_inbound_once
+from src.ham.social_telegram_offset_store import get_telegram_offset_store
 from src.ham.social_telegram_reactive import (
     TELEGRAM_REACTIVE_REPLY_ACTION_TYPE,
     TELEGRAM_REACTIVE_REPLY_EXECUTION_KIND,
@@ -114,6 +116,7 @@ from src.ham.social_telegram_send import (
     TelegramSendRequest,
     send_confirmed_telegram_message,
 )
+from src.ham.social_telegram_transcript_store import get_telegram_transcript_store
 
 router = APIRouter(prefix="/api/social", tags=["social"])
 
@@ -723,18 +726,16 @@ class SocialAutonomySettingsPatchRequest(BaseModel):
     # M2 new fields
     goal: Annotated[str, Field(min_length=1, max_length=2_000)] | None = None
     cadence: Literal["manual", "hourly", "daily"] | None = None
-    actions_allowed_per_channel: (
-        dict[SocialAutonomyChannel, list[SocialAutonomyAction]] | None
-    ) = None
+    actions_allowed_per_channel: dict[SocialAutonomyChannel, list[SocialAutonomyAction]] | None = (
+        None
+    )
     forbidden_topics: Annotated[list[str], Field(max_length=64)] | None = None
     safety_rules: Annotated[list[str], Field(max_length=64)] | None = None
     learning_enabled: bool | None = None
 
     @field_validator("safety_rules")
     @classmethod
-    def _validate_safety_rules_canonical(
-        cls, value: list[str] | None
-    ) -> list[str] | None:
+    def _validate_safety_rules_canonical(cls, value: list[str] | None) -> list[str] | None:
         """Reject any safety_rule name not in the canonical six from content_guards.py."""
         if value is None:
             return None
@@ -3503,10 +3504,15 @@ def update_social_autonomy_settings(
         field_updates["goal"] = body.goal
     if "cadence" in body.model_fields_set:
         field_updates["cadence"] = body.cadence
-    if "actions_allowed_per_channel" in body.model_fields_set and body.actions_allowed_per_channel is not None:
+    if (
+        "actions_allowed_per_channel" in body.model_fields_set
+        and body.actions_allowed_per_channel is not None
+    ):
         # Per-channel replace semantics: replace the action list for each supplied channel;
         # other channels' settings are preserved unchanged (merge across channels).
-        current_actions: dict[str, Any] = profile_to_safe_dict(current)["actions_allowed_per_channel"]
+        current_actions: dict[str, Any] = profile_to_safe_dict(current)[
+            "actions_allowed_per_channel"
+        ]
         for ch_key, actions in body.actions_allowed_per_channel.items():
             current_actions[str(ch_key)] = [str(a) for a in actions]
         field_updates["actions_allowed_per_channel"] = current_actions
@@ -3671,6 +3677,106 @@ def telegram_capabilities(
     _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
 ) -> TelegramCapabilitiesResponse:
     return _build_telegram_capabilities_response(fresh_probe=True)
+
+
+# ---------------------------------------------------------------------------
+# Telegram poller status (M4 F17)
+# ---------------------------------------------------------------------------
+
+# Regex to strip ≥6-digit numeric sequences (chat IDs, phone-number-like IDs).
+# Mirrors _RAW_NUMERIC_ID_RE in social_telegram_inbound_collector.py.
+_POLLER_NUMERIC_ID_RE = re.compile(r"(?<![A-Za-z])-?\d{6,}(?![A-Za-z])")
+
+# Maximum length for last_error_code in the response (bounded for safety).
+_POLLER_ERROR_MAX_LEN = 280
+
+
+class TelegramPollerStatusResponse(BaseModel):
+    """Response shape for GET /api/social/providers/telegram/poller/status.
+
+    Presence-only fields — no secrets, no chat IDs, no raw IDs, no token values.
+    All fields are nullable (None when not yet set by the poller).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    last_run_at: str | None = None
+    """ISO-8601 timestamp of the last successful poller run, or null."""
+
+    last_offset: int | None = None
+    """The persisted getUpdates offset (next expected update_id), or null when never set."""
+
+    transcript_count_today: int = 0
+    """Number of inbound transcript rows with a created_at timestamp from today (UTC)."""
+
+    last_error_code: str | None = None
+    """Bounded (≤ 280 chars), redacted last poller error message, or null."""
+
+
+def _poller_status_response() -> TelegramPollerStatusResponse:
+    """Build the poller status response from the M1 offset and transcript stores.
+
+    Reads only from the configured stores — never issues a live Telegram API call.
+    All string fields are redacted and bounded before being surfaced.
+    """
+    offset_store = get_telegram_offset_store()
+    transcript_store = get_telegram_transcript_store()
+
+    # Derive bot_digest from TELEGRAM_BOT_TOKEN if available; fall back to a
+    # fixed sentinel so the endpoint always returns a valid (mostly-null) shape
+    # when the token is not configured on this API instance.
+    token = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
+    if token:
+        bot_digest = hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
+    else:
+        bot_digest = "00000000000000000"  # sentinel — reads will return None
+
+    # --- last_offset ---
+    last_offset = offset_store.read_offset(bot_digest)
+
+    # --- last_run_at and last_error from poller metadata ---
+    metadata = offset_store.read_poller_metadata(bot_digest)
+    last_run_at = metadata.get("last_run_at")
+    raw_error = metadata.get("last_error")
+
+    # --- last_error_code: bounded and redacted ---
+    last_error_code: str | None = None
+    if raw_error is not None:
+        cleaned = redact_text(str(raw_error))
+        cleaned = _POLLER_NUMERIC_ID_RE.sub("", cleaned)
+        last_error_code = cleaned[:_POLLER_ERROR_MAX_LEN] or None
+
+    # --- transcript_count_today ---
+    today_utc = datetime.now(UTC).date().isoformat()  # "YYYY-MM-DD"
+    transcript_count_today = 0
+    for row in transcript_store.iter_rows():
+        created_at = row.get("created_at") or ""
+        if isinstance(created_at, str) and created_at.startswith(today_utc):
+            transcript_count_today += 1
+
+    return TelegramPollerStatusResponse(
+        last_run_at=last_run_at,
+        last_offset=last_offset,
+        transcript_count_today=transcript_count_today,
+        last_error_code=last_error_code,
+    )
+
+
+@router.get(
+    "/providers/telegram/poller/status",
+    response_model=TelegramPollerStatusResponse,
+)
+def telegram_poller_status(
+    _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
+) -> TelegramPollerStatusResponse:
+    """Return read-only Telegram inbound poller status.
+
+    Reads from the M1 offset store (last_offset, last_run_at, last_error_code)
+    and the M1 transcript store (transcript_count_today).  Never issues a live
+    Telegram API call.  Response contains presence-only data — no secrets, no
+    chat IDs, no raw IDs, no token values.
+    """
+    return _poller_status_response()
 
 
 @router.get(

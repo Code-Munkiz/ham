@@ -15,7 +15,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, TypedDict, runtime_checkable
 
 _LOG = logging.getLogger(__name__)
 
@@ -34,6 +34,19 @@ def _default_offsets_dir() -> Path:
 # ---------------------------------------------------------------------------
 
 
+class PollerMetadata(TypedDict, total=False):
+    """Optional metadata stored alongside the getUpdates offset.
+
+    ``last_run_at`` is an ISO-8601 timestamp reflecting when the poller last
+    wrote a successful offset (set by ``write_poller_metadata``). ``last_error``
+    is the most recent collector failure message (bounded, redacted by the API
+    layer before being surfaced).  Both default to ``None`` when absent.
+    """
+
+    last_run_at: str | None
+    last_error: str | None
+
+
 @runtime_checkable
 class TelegramOffsetStoreProtocol(Protocol):
     """Backend-agnostic Telegram getUpdates offset store contract.
@@ -41,10 +54,15 @@ class TelegramOffsetStoreProtocol(Protocol):
     ``read_offset(bot_digest)`` returns the last-persisted offset (or ``None``
     when absent). ``write_offset(bot_digest, update_offset)`` persists the
     value atomically so a restart picks up where the poller left off.
+
+    ``read_poller_metadata(bot_digest)`` returns optional metadata stored
+    alongside the offset (``last_run_at`` and ``last_error``).  Both fields
+    default to ``None`` when absent from the underlying storage.
     """
 
     def read_offset(self, bot_digest: str) -> int | None: ...
     def write_offset(self, bot_digest: str, update_offset: int) -> None: ...
+    def read_poller_metadata(self, bot_digest: str) -> PollerMetadata: ...
 
 
 # ---------------------------------------------------------------------------
@@ -83,10 +101,24 @@ class TelegramOffsetFileStore:
         return None
 
     def write_offset(self, bot_digest: str, update_offset: int) -> None:
-        """Atomically persist ``update_offset`` for ``bot_digest``."""
+        """Atomically persist ``update_offset`` for ``bot_digest``.
+
+        Preserves any existing ``last_run_at`` / ``last_error`` fields stored
+        in the same JSON file (written via :meth:`write_poller_metadata`).
+        """
         path = self._resolve_path(bot_digest)
         path.parent.mkdir(parents=True, exist_ok=True)
-        payload = json.dumps({"update_offset": int(update_offset)}, sort_keys=True)
+        # Preserve existing metadata fields while updating the offset.
+        existing: dict[str, Any] = {}
+        if path.is_file():
+            try:
+                existing = json.loads(path.read_text(encoding="utf-8")) or {}
+                if not isinstance(existing, dict):
+                    existing = {}
+            except (OSError, json.JSONDecodeError):
+                existing = {}
+        existing["update_offset"] = int(update_offset)
+        payload = json.dumps(existing, sort_keys=True)
         tmp = path.with_suffix(".json.tmp")
         try:
             tmp.write_text(payload, encoding="utf-8")
@@ -96,6 +128,29 @@ class TelegramOffsetFileStore:
                 tmp.unlink()
             except FileNotFoundError:
                 pass
+
+    def read_poller_metadata(self, bot_digest: str) -> PollerMetadata:
+        """Return optional metadata stored alongside the offset.
+
+        Reads ``last_run_at`` and ``last_error`` from the same JSON file used
+        by :meth:`read_offset` / :meth:`write_offset`.  Both fields default to
+        ``None`` when absent.
+        """
+        path = self._resolve_path(bot_digest)
+        if not path.is_file():
+            return PollerMetadata(last_run_at=None, last_error=None)
+        try:
+            data: Any = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                return PollerMetadata(last_run_at=None, last_error=None)
+        except (OSError, json.JSONDecodeError):
+            return PollerMetadata(last_run_at=None, last_error=None)
+        raw_run_at = data.get("last_run_at")
+        raw_error = data.get("last_error")
+        return PollerMetadata(
+            last_run_at=str(raw_run_at) if raw_run_at is not None else None,
+            last_error=str(raw_error) if raw_error is not None else None,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +200,7 @@ def set_telegram_offset_store_for_tests(
 
 
 __all__ = [
+    "PollerMetadata",
     "TelegramOffsetStoreProtocol",
     "TelegramOffsetFileStore",
     "build_telegram_offset_store",

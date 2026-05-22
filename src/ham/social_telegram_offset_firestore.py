@@ -41,6 +41,8 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from src.ham.social_telegram_offset_store import PollerMetadata
+
 _FS_PROJECT_ENV = "HAM_TELEGRAM_OFFSET_FIRESTORE_PROJECT_ID"
 _FS_DATABASE_ENV = "HAM_TELEGRAM_OFFSET_FIRESTORE_DATABASE"
 _FS_COLLECTION_ENV = "HAM_TELEGRAM_OFFSET_FIRESTORE_COLLECTION"
@@ -178,6 +180,43 @@ class FirestoreTelegramOffsetStore:
             raise FirestoreTelegramOffsetStoreError(
                 f"Firestore write_offset failed: {exc}"
             ) from exc
+
+    def read_poller_metadata(self, bot_digest: str) -> PollerMetadata:
+        """Return optional metadata stored alongside the offset.
+
+        Reads ``last_run_at`` and ``last_error`` from the Firestore document.
+        Both fields default to ``None`` when absent from the document.
+
+        Args:
+            bot_digest: Short hex digest of the bot token (``sha256(token)[:16]``).
+
+        Returns:
+            :class:`~src.ham.social_telegram_offset_store.PollerMetadata` with
+            ``last_run_at`` and ``last_error`` (each ``None`` when not stored).
+
+        Raises:
+            FirestoreTelegramOffsetStoreError: On any Firestore SDK error.
+        """
+        db = self._db()
+        key = str(bot_digest).strip()
+        try:
+            snap = db.collection(self._coll_name).document(key).get()
+        except FirestoreTelegramOffsetStoreError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise FirestoreTelegramOffsetStoreError(
+                f"Firestore read_poller_metadata failed: {exc}"
+            ) from exc
+
+        if not snap.exists:
+            return PollerMetadata(last_run_at=None, last_error=None)
+        data = snap.to_dict() or {}
+        raw_run_at = data.get("last_run_at")
+        raw_error = data.get("last_error")
+        return PollerMetadata(
+            last_run_at=str(raw_run_at) if raw_run_at is not None else None,
+            last_error=str(raw_error) if raw_error is not None else None,
+        )
 
 
 __all__ = [
