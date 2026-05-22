@@ -2005,12 +2005,21 @@ def _autonomy_apply_reasons(
     channel: SocialAutonomyChannel,
     action: SocialAutonomyAction,
 ) -> list[str]:
-    """Return route-level autonomy apply blockers when a profile is configured."""
+    """Return route-level autonomy apply blockers when a profile is configured.
+
+    Uses ``store.read()`` + ``profile.status`` to determine whether a profile
+    has been configured, so the check works correctly for both the file backend
+    (where a missing file returns a default draft) and the Firestore backend
+    (where ``store.path().exists()`` always returns False because there is no
+    local file).  A ``status == "draft"`` profile — whether it comes from a
+    default-constructed file store or a Firestore store that has no document
+    yet — is treated as "not yet configured" and returns no blockers.
+    """
     root = _project_root()
     store = get_social_autonomy_store()
-    if not store.path(root).exists():
-        return []
     profile = store.read(root)
+    if profile.status == "draft":
+        return []
     return autonomy_reasons_for_apply(profile, channel=channel, action=action)
 
 
