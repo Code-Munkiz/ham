@@ -1,13 +1,19 @@
 """JSONL store for HAMgomoon learning records (bounded, redacted, append-only)."""
+
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from src.ham.hamgomoon_learning.models import LearningRecord
 from src.ham.hamgomoon_learning.redaction import redact_learning_record
+
+_LOG = logging.getLogger(__name__)
+
+_HAMGOMOON_LEARNING_BACKEND_ENV = "HAM_HAMGOMOON_LEARNING_BACKEND"
 
 _ENV_PATH_KEY = "HAM_HAMGOMOON_LEARNING_PATH"
 _DEFAULT_REL = Path(".ham") / "hamgomoon_learning.jsonl"
@@ -177,4 +183,133 @@ __all__ = [
     "append_learning_record",
     "list_recent_learning_records",
     "summarize_learning_hints",
+    "HamgomoonLearningStoreProtocol",
+    "HamgomoonLearningFileStore",
+    "build_hamgomoon_learning_store",
+    "get_hamgomoon_learning_store",
+    "set_hamgomoon_learning_store_for_tests",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Protocol + file-backend wrapper + factory
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class HamgomoonLearningStoreProtocol(Protocol):
+    """Backend-agnostic HAMgomoon learning records store contract."""
+
+    def append_learning_record(
+        self,
+        record: LearningRecord,
+        *,
+        path: Path | None = None,
+    ) -> LearningRecord: ...
+
+    def list_recent_learning_records(
+        self,
+        *,
+        workspace_id: str | None = None,
+        project_id: str | None = None,
+        channel: str | None = None,
+        limit: int = 50,
+        path: Path | None = None,
+    ) -> list[LearningRecord]: ...
+
+    def summarize_learning_hints(
+        self,
+        *,
+        workspace_id: str | None = None,
+        project_id: str | None = None,
+        channel: str | None = None,
+        limit: int = 50,
+        path: Path | None = None,
+    ) -> dict[str, list[str]]: ...
+
+
+class HamgomoonLearningFileStore:
+    """File-backed HAMgomoon learning records store (wraps module-level functions)."""
+
+    def append_learning_record(
+        self,
+        record: LearningRecord,
+        *,
+        path: Path | None = None,
+    ) -> LearningRecord:
+        return append_learning_record(record, path=path)
+
+    def list_recent_learning_records(
+        self,
+        *,
+        workspace_id: str | None = None,
+        project_id: str | None = None,
+        channel: str | None = None,
+        limit: int = 50,
+        path: Path | None = None,
+    ) -> list[LearningRecord]:
+        return list_recent_learning_records(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            channel=channel,
+            limit=limit,
+            path=path,
+        )
+
+    def summarize_learning_hints(
+        self,
+        *,
+        workspace_id: str | None = None,
+        project_id: str | None = None,
+        channel: str | None = None,
+        limit: int = 50,
+        path: Path | None = None,
+    ) -> dict[str, list[str]]:
+        return summarize_learning_hints(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            channel=channel,
+            limit=limit,
+            path=path,
+        )
+
+
+def build_hamgomoon_learning_store() -> HamgomoonLearningStoreProtocol:
+    """Pick a HAMgomoon learning store backend based on env.
+
+    Defaults to :class:`HamgomoonLearningFileStore`. ``HAM_HAMGOMOON_LEARNING_BACKEND
+    =firestore`` selects the Firestore backend (lazy-imported).
+    """
+    backend = (os.environ.get(_HAMGOMOON_LEARNING_BACKEND_ENV) or "").strip().lower()
+    if backend == "firestore":
+        from src.ham.hamgomoon_learning.firestore_store import (  # noqa: PLC0415
+            FirestoreHamgomoonLearningStore,
+        )
+
+        return FirestoreHamgomoonLearningStore()
+    if backend not in ("", "file"):
+        _LOG.warning(
+            "Unknown %s=%r; falling back to file backend.",
+            _HAMGOMOON_LEARNING_BACKEND_ENV,
+            backend,
+        )
+    return HamgomoonLearningFileStore()
+
+
+_hamgomoon_learning_store_singleton: HamgomoonLearningStoreProtocol | None = None
+
+
+def get_hamgomoon_learning_store() -> HamgomoonLearningStoreProtocol:
+    """Lazy singleton accessor for the configured HAMgomoon learning store."""
+    global _hamgomoon_learning_store_singleton
+    if _hamgomoon_learning_store_singleton is None:
+        _hamgomoon_learning_store_singleton = build_hamgomoon_learning_store()
+    return _hamgomoon_learning_store_singleton
+
+
+def set_hamgomoon_learning_store_for_tests(
+    store: HamgomoonLearningStoreProtocol | None,
+) -> None:
+    """Replace the global learning store (``None`` restores lazy default)."""
+    global _hamgomoon_learning_store_singleton
+    _hamgomoon_learning_store_singleton = store

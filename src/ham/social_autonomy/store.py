@@ -9,15 +9,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from src.ham.social_autonomy.schema import GoHamSocialProfile, profile_to_safe_dict
+
+_LOG = logging.getLogger(__name__)
+
+_SOCIAL_AUTONOMY_STORE_BACKEND_ENV = "HAM_SOCIAL_AUTONOMY_STORE_BACKEND"
 
 SOCIAL_AUTONOMY_REL_PATH = Path(".ham") / "social_autonomy.json"
 
@@ -434,3 +439,142 @@ def rollback_social_autonomy_profile(
 def social_autonomy_writes_enabled() -> bool:
     """Return whether the autonomy write token env var is configured."""
     return bool((os.environ.get("HAM_SOCIAL_AUTONOMY_WRITE_TOKEN") or "").strip())
+
+
+# ---------------------------------------------------------------------------
+# Protocol + file-backend wrapper + factory
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class SocialAutonomyStoreProtocol(Protocol):
+    """Backend-agnostic social autonomy profile store contract.
+
+    Both :class:`SocialAutonomyFileStore` (file-backed) and
+    ``FirestoreSocialAutonomyStore`` satisfy this Protocol. Callers should
+    treat :func:`get_social_autonomy_store` as returning this Protocol type.
+    """
+
+    def read(self, root: Path | None = None) -> GoHamSocialProfile: ...
+    def preview(
+        self,
+        root: Path | None,
+        candidate: GoHamSocialProfile | dict[str, Any],
+    ) -> dict[str, Any]: ...
+    def apply(
+        self,
+        root: Path | None,
+        candidate: GoHamSocialProfile | dict[str, Any],
+        *,
+        token: str | None,
+        actor: str = "system",
+    ) -> ApplyResult: ...
+    def save(
+        self,
+        root: Path | None,
+        profile: GoHamSocialProfile,
+        *,
+        actor: str = "system",
+    ) -> ApplyResult: ...
+    def rollback(
+        self,
+        root: Path | None,
+        backup_id: str,
+        *,
+        token: str | None,
+        actor: str = "system",
+    ) -> RollbackResult: ...
+    def writes_enabled(self) -> bool: ...
+    def path(self, root: Path | None = None) -> Path: ...
+
+
+class SocialAutonomyFileStore:
+    """File-backed social autonomy profile store (wraps module-level functions)."""
+
+    def read(self, root: Path | None = None) -> GoHamSocialProfile:
+        return read_social_autonomy_profile(root)
+
+    def preview(
+        self,
+        root: Path | None,
+        candidate: GoHamSocialProfile | dict[str, Any],
+    ) -> dict[str, Any]:
+        return preview_social_autonomy_profile(root, candidate)
+
+    def apply(
+        self,
+        root: Path | None,
+        candidate: GoHamSocialProfile | dict[str, Any],
+        *,
+        token: str | None,
+        actor: str = "system",
+    ) -> ApplyResult:
+        return apply_social_autonomy_profile(root, candidate, token=token, actor=actor)
+
+    def save(
+        self,
+        root: Path | None,
+        profile: GoHamSocialProfile,
+        *,
+        actor: str = "system",
+    ) -> ApplyResult:
+        return save_profile(root, profile, actor=actor)
+
+    def rollback(
+        self,
+        root: Path | None,
+        backup_id: str,
+        *,
+        token: str | None,
+        actor: str = "system",
+    ) -> RollbackResult:
+        return rollback_social_autonomy_profile(root, backup_id, token=token, actor=actor)
+
+    def writes_enabled(self) -> bool:
+        return social_autonomy_writes_enabled()
+
+    def path(self, root: Path | None = None) -> Path:
+        return social_autonomy_path(root)
+
+
+def build_social_autonomy_store() -> SocialAutonomyStoreProtocol:
+    """Pick a social autonomy profile store backend based on env.
+
+    Defaults to :class:`SocialAutonomyFileStore` so local dev keeps working
+    without any env vars. ``HAM_SOCIAL_AUTONOMY_STORE_BACKEND=firestore``
+    selects the Firestore backend (lazy-imported so the SDK is not required
+    for local dev).
+    """
+    backend = (os.environ.get(_SOCIAL_AUTONOMY_STORE_BACKEND_ENV) or "").strip().lower()
+    if backend == "firestore":
+        from src.ham.social_autonomy.firestore_store import (  # noqa: PLC0415
+            FirestoreSocialAutonomyStore,
+        )
+
+        return FirestoreSocialAutonomyStore()
+    if backend not in ("", "file"):
+        _LOG.warning(
+            "Unknown %s=%r; falling back to file backend.",
+            _SOCIAL_AUTONOMY_STORE_BACKEND_ENV,
+            backend,
+        )
+    return SocialAutonomyFileStore()
+
+
+_social_autonomy_store_singleton: SocialAutonomyStoreProtocol | None = None
+
+
+def get_social_autonomy_store() -> SocialAutonomyStoreProtocol:
+    """Lazy singleton accessor for the configured social autonomy profile store."""
+    global _social_autonomy_store_singleton
+    if _social_autonomy_store_singleton is None:
+        _social_autonomy_store_singleton = build_social_autonomy_store()
+    return _social_autonomy_store_singleton
+
+
+def set_social_autonomy_store_for_tests(
+    store: SocialAutonomyStoreProtocol | None,
+) -> None:
+    """Replace the global social autonomy store (``None`` restores lazy default)."""
+    global _social_autonomy_store_singleton
+    _social_autonomy_store_singleton = store

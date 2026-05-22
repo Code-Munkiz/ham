@@ -14,6 +14,7 @@ Safety rules enforced by this module:
 - Journal and audit summaries are bounded and redacted.
 - Live apply is **not** available in Phase 1 (``live_apply_available=False``).
 """
+
 from __future__ import annotations
 
 import json
@@ -53,10 +54,13 @@ from src.ham.ham_x.review_queue import read_recent_review_records
 from src.ham.hamgomoon_learning import (
     LearningRecord,
     SocialDraftRecord,
-    append_learning_record,
     render_hamgomoon_learning_hints,
 )
-from src.ham.social_autonomy.enforcement import autonomy_reasons_for_apply, preview_autonomy_runner_tick
+from src.ham.hamgomoon_learning.store import get_hamgomoon_learning_store
+from src.ham.social_autonomy.enforcement import (
+    autonomy_reasons_for_apply,
+    preview_autonomy_runner_tick,
+)
 from src.ham.social_autonomy.schema import (
     GoHamSocialProfile,
     QuietHours,
@@ -70,13 +74,7 @@ from src.ham.social_autonomy.state import (
     transition_to_running,
     transition_to_stopped,
 )
-from src.ham.social_autonomy.store import (
-    apply_social_autonomy_profile,
-    preview_social_autonomy_profile,
-    read_social_autonomy_profile,
-    social_autonomy_path,
-    social_autonomy_writes_enabled,
-)
+from src.ham.social_autonomy.store import get_social_autonomy_store
 from src.ham.social_persona import load_social_persona, persona_digest
 from src.ham.social_policy import (
     DEFAULT_SOCIAL_POLICY,
@@ -92,7 +90,10 @@ from src.ham.social_telegram_activity import (
     TelegramActivityKind,
     plan_telegram_activity_once,
 )
-from src.ham.social_telegram_activity_runner import TelegramActivityRunConfig, run_telegram_activity_once
+from src.ham.social_telegram_activity_runner import (
+    TelegramActivityRunConfig,
+    run_telegram_activity_once,
+)
 from src.ham.social_telegram_inbound import discover_telegram_inbound_once
 from src.ham.social_telegram_reactive import (
     TELEGRAM_REACTIVE_REPLY_ACTION_TYPE,
@@ -572,7 +573,9 @@ class TelegramReactiveRepliesPreviewResponse(BaseModel):
 class TelegramReactiveReplyApplyRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    proposal_digest: str | None = Field(default=None, min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$")
+    proposal_digest: str | None = Field(
+        default=None, min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$"
+    )
     confirmation_phrase: str = Field(default="", max_length=64)
     inbound_id: str = Field(default="", max_length=128)
     client_request_id: str | None = Field(default=None, max_length=128)
@@ -601,7 +604,9 @@ class TelegramReactiveReplyApplyResponse(BaseModel):
 class TelegramActivityApplyRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    proposal_digest: str | None = Field(default=None, min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$")
+    proposal_digest: str | None = Field(
+        default=None, min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$"
+    )
     confirmation_phrase: str = Field(default="", max_length=64)
     activity_kind: TelegramActivityKind = "test_activity"
     client_request_id: str | None = Field(default=None, max_length=128)
@@ -629,7 +634,9 @@ class TelegramActivityApplyResponse(BaseModel):
 class TelegramMessageApplyRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    proposal_digest: str | None = Field(default=None, min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$")
+    proposal_digest: str | None = Field(
+        default=None, min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$"
+    )
     confirmation_phrase: str = Field(default="", max_length=64)
     message_intent: TelegramMessageIntent = "test_message"
     client_request_id: str | None = Field(default=None, max_length=128)
@@ -698,7 +705,9 @@ class SocialAutonomyTickRequest(BaseModel):
 class SocialReactiveReplyApplyRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    proposal_digest: str | None = Field(default=None, min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$")
+    proposal_digest: str | None = Field(
+        default=None, min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$"
+    )
     confirmation_phrase: str = Field(min_length=1, max_length=64)
     client_request_id: str | None = Field(default=None, max_length=128)
 
@@ -729,7 +738,9 @@ class SocialReactiveReplyApplyResponse(BaseModel):
 class SocialReactiveBatchApplyRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    proposal_digest: str | None = Field(default=None, min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$")
+    proposal_digest: str | None = Field(
+        default=None, min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$"
+    )
     confirmation_phrase: str = Field(min_length=1, max_length=64)
     client_request_id: str | None = Field(default=None, max_length=128)
 
@@ -763,7 +774,9 @@ class SocialReactiveBatchApplyResponse(BaseModel):
 class SocialBroadcastApplyRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    proposal_digest: str | None = Field(default=None, min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$")
+    proposal_digest: str | None = Field(
+        default=None, min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$"
+    )
     confirmation_phrase: str = Field(min_length=1, max_length=64)
     client_request_id: str | None = Field(default=None, max_length=128)
 
@@ -815,7 +828,9 @@ class XSetupSummaryResponse(BaseModel):
 SocialMessagingProviderId = Literal["telegram", "discord"]
 HermesRuntimeState = Literal["connected", "connecting", "retrying", "fatal", "stopped", "unknown"]
 TelegramMode = Literal["polling", "polling_default", "webhook", "unset"]
-TelegramPlatformState = Literal["connected", "retrying", "fatal", "stopped", "unknown", "not_reported"]
+TelegramPlatformState = Literal[
+    "connected", "retrying", "fatal", "stopped", "unknown", "not_reported"
+]
 
 
 class HermesGatewayRuntimeStatusDto(BaseModel):
@@ -1018,7 +1033,9 @@ def _safe_payload(value: Any) -> dict[str, Any]:
     return _safe_dict(value)
 
 
-def _bounded_string_list(items: list[Any], *, max_items: int = 12, max_chars: int = 240) -> list[str]:
+def _bounded_string_list(
+    items: list[Any], *, max_items: int = 12, max_chars: int = 240
+) -> list[str]:
     out: list[str] = []
     for item in items[:max_items]:
         text = str(redact(str(item or "").strip()))
@@ -1070,7 +1087,9 @@ def _social_persona_response() -> SocialPersonaResponse:
         prohibited_content=_bounded_string_list(persona.prohibited_content),
         safety_boundaries=_bounded_string_list(persona.safety_boundaries),
         example_replies=_bounded_examples(persona.example_replies),
-        example_announcements=_bounded_string_list(persona.example_announcements, max_items=3, max_chars=500),
+        example_announcements=_bounded_string_list(
+            persona.example_announcements, max_items=3, max_chars=500
+        ),
         refusal_examples=_bounded_examples(persona.refusal_examples),
         persona_digest=persona_digest(persona),
     )
@@ -1152,11 +1171,15 @@ def _telegram_mode() -> TelegramMode:
     if _env_present("TELEGRAM_WEBHOOK_URL", "TELEGRAM_WEBHOOK_BASE_URL"):
         return "webhook"
     explicit = (
-        os.environ.get("TELEGRAM_MODE")
-        or os.environ.get("HERMES_TELEGRAM_MODE")
-        or os.environ.get("TELEGRAM_GATEWAY_MODE")
-        or ""
-    ).strip().lower()
+        (
+            os.environ.get("TELEGRAM_MODE")
+            or os.environ.get("HERMES_TELEGRAM_MODE")
+            or os.environ.get("TELEGRAM_GATEWAY_MODE")
+            or ""
+        )
+        .strip()
+        .lower()
+    )
     if explicit in {"polling", "polling_default", "webhook"}:
         return explicit  # type: ignore[return-value]
     if _env_present("TELEGRAM_BOT_TOKEN"):
@@ -1198,9 +1221,15 @@ def _hermes_runtime_status(provider_id: SocialMessagingProviderId) -> HermesGate
             source="status_file",
             gateway_state=str(payload.get("gateway_state") or "unknown")[:64],
             provider_runtime_state=_runtime_state(provider_payload.get("state")),
-            active_agents=int(payload["active_agents"]) if isinstance(payload.get("active_agents"), int) else None,
-            error_code=str(provider_payload.get("error_code"))[:128] if provider_payload.get("error_code") else None,
-            error_message="Provider error [REDACTED]." if provider_payload.get("error_message") else None,
+            active_agents=int(payload["active_agents"])
+            if isinstance(payload.get("active_agents"), int)
+            else None,
+            error_code=str(provider_payload.get("error_code"))[:128]
+            if provider_payload.get("error_code")
+            else None,
+            error_message="Provider error [REDACTED]."
+            if provider_payload.get("error_message")
+            else None,
         )
     return HermesGatewayRuntimeStatusDto(
         configured=base_url_configured,
@@ -1264,8 +1293,14 @@ def _messaging_readiness(
         reasons.append("home_channel_not_configured")
     if runtime.provider_runtime_state == "connected":
         return ("ready" if not reasons else "limited"), reasons
-    reasons.append("hermes_gateway_runtime_unknown" if runtime.provider_runtime_state == "unknown" else "hermes_gateway_not_connected")
-    return ("limited" if connections.get("bot_token_present") else "setup_required"), _dedupe(reasons)
+    reasons.append(
+        "hermes_gateway_runtime_unknown"
+        if runtime.provider_runtime_state == "unknown"
+        else "hermes_gateway_not_connected"
+    )
+    return ("limited" if connections.get("bot_token_present") else "setup_required"), _dedupe(
+        reasons
+    )
 
 
 def _telegram_status_response() -> SocialMessagingProviderStatusResponse:
@@ -1339,7 +1374,9 @@ def _discord_status_response() -> SocialMessagingProviderStatusResponse:
 
 
 def _messaging_provider_dto(provider_id: SocialMessagingProviderId) -> SocialProviderDto:
-    status_response = _telegram_status_response() if provider_id == "telegram" else _discord_status_response()
+    status_response = (
+        _telegram_status_response() if provider_id == "telegram" else _discord_status_response()
+    )
     if status_response.overall_readiness == "blocked":
         status: ProviderStatus = "blocked"
     elif status_response.overall_readiness == "ready":
@@ -1347,7 +1384,10 @@ def _messaging_provider_dto(provider_id: SocialMessagingProviderId) -> SocialPro
     else:
         status = "setup_required"
     enabled_lanes = ["readiness"]
-    if provider_id == "telegram" and status_response.hermes_gateway.provider_runtime_state == "connected":
+    if (
+        provider_id == "telegram"
+        and status_response.hermes_gateway.provider_runtime_state == "connected"
+    ):
         enabled_lanes.append("preview")
     return SocialProviderDto(
         id=provider_id,
@@ -1359,28 +1399,40 @@ def _messaging_provider_dto(provider_id: SocialMessagingProviderId) -> SocialPro
     )
 
 
-def _telegram_setup_steps(connections: dict[str, bool], runtime: HermesGatewayRuntimeStatusDto) -> list[str]:
+def _telegram_setup_steps(
+    connections: dict[str, bool], runtime: HermesGatewayRuntimeStatusDto
+) -> list[str]:
     steps: list[str] = []
     if not connections["bot_token_present"]:
         steps.append("Store the Telegram bot token securely on the Hermes runtime host.")
     if not connections["allowed_users_configured"]:
         steps.append("Configure allowed Telegram users or chats before enabling Telegram access.")
     if not connections["home_channel_configured"]:
-        steps.append("Configure the Telegram home channel for proactive delivery after runtime validation.")
+        steps.append(
+            "Configure the Telegram home channel for proactive delivery after runtime validation."
+        )
     if not connections.get("test_group_configured", False):
         steps.append("Configure a private Telegram test group before dry-run preview work begins.")
     if _telegram_mode() == "unset":
         steps.append("Choose Telegram gateway mode: polling or webhook.")
     if not runtime.base_url_configured and not runtime.status_path_configured:
-        steps.append("Configure Hermes gateway status discovery through HERMES_GATEWAY_BASE_URL or a safe status file path.")
+        steps.append(
+            "Configure Hermes gateway status discovery through HERMES_GATEWAY_BASE_URL or a safe status file path."
+        )
     if runtime.provider_runtime_state != "connected":
-        steps.append("Validate the Hermes gateway outside HAM; this Social surface does not start or stop it.")
+        steps.append(
+            "Validate the Hermes gateway outside HAM; this Social surface does not start or stop it."
+        )
     if not steps:
-        steps.append("Telegram readiness looks configured. Keep using this panel as read-only status until Social live controls are added.")
+        steps.append(
+            "Telegram readiness looks configured. Keep using this panel as read-only status until Social live controls are added."
+        )
     return steps
 
 
-def _telegram_activity_run_once_steps(*, reasons: list[str], governor: dict[str, object], status: str) -> list[str]:
+def _telegram_activity_run_once_steps(
+    *, reasons: list[str], governor: dict[str, object], status: str
+) -> list[str]:
     if status == "completed" and not reasons:
         return [
             "Dry-run run_once preview generated. No Telegram message was sent.",
@@ -1388,18 +1440,24 @@ def _telegram_activity_run_once_steps(*, reasons: list[str], governor: dict[str,
         ]
     steps: list[str] = []
     if "telegram_activity_daily_cap_reached" in reasons:
-        steps.append("Daily Telegram activity cap is already reached for the current delivery-log window.")
+        steps.append(
+            "Daily Telegram activity cap is already reached for the current delivery-log window."
+        )
     next_allowed = str(governor.get("next_allowed_send_time") or "").strip()
     if next_allowed:
         steps.append(f"Next allowed time: {next_allowed}")
     if "telegram_gateway_not_connected" in reasons or "telegram_readiness_not_ready" in reasons:
-        steps.append("Restore Telegram readiness and Hermes gateway connectivity before a run_once candidate can be generated.")
+        steps.append(
+            "Restore Telegram readiness and Hermes gateway connectivity before a run_once candidate can be generated."
+        )
     if not steps:
         steps.append("Resolve run_once readiness or governor blockers, then preview again.")
     return steps[:5]
 
 
-def _telegram_missing_requirements(connections: dict[str, bool], runtime: HermesGatewayRuntimeStatusDto) -> list[str]:
+def _telegram_missing_requirements(
+    connections: dict[str, bool], runtime: HermesGatewayRuntimeStatusDto
+) -> list[str]:
     missing: list[str] = []
     if not connections["bot_token_present"]:
         missing.append("telegram_bot_token")
@@ -1420,18 +1478,30 @@ def _telegram_missing_requirements(connections: dict[str, bool], runtime: Hermes
     return _dedupe(missing)
 
 
-def _discord_setup_steps(connections: dict[str, bool], runtime: HermesGatewayRuntimeStatusDto) -> list[str]:
+def _discord_setup_steps(
+    connections: dict[str, bool], runtime: HermesGatewayRuntimeStatusDto
+) -> list[str]:
     steps: list[str] = []
     if not connections["bot_token_present"]:
-        steps.append("Configure DISCORD_BOT_TOKEN on the Hermes gateway host using `hermes gateway setup`.")
+        steps.append(
+            "Configure DISCORD_BOT_TOKEN on the Hermes gateway host using `hermes gateway setup`."
+        )
     if not connections["allowed_users_or_roles_configured"]:
-        steps.append("Configure DISCORD_ALLOWED_USERS or DISCORD_ALLOWED_ROLES before enabling Discord access.")
+        steps.append(
+            "Configure DISCORD_ALLOWED_USERS or DISCORD_ALLOWED_ROLES before enabling Discord access."
+        )
     if not connections["guild_or_channel_configured"]:
-        steps.append("Configure a Discord home, allowed, or free-response channel for controlled routing.")
+        steps.append(
+            "Configure a Discord home, allowed, or free-response channel for controlled routing."
+        )
     if runtime.provider_runtime_state != "connected":
-        steps.append("Verify the Hermes gateway service outside HAM; this Social surface does not start or stop it.")
+        steps.append(
+            "Verify the Hermes gateway service outside HAM; this Social surface does not start or stop it."
+        )
     if not steps:
-        steps.append("Discord readiness looks configured. Keep using this panel as read-only status until Social live controls are added.")
+        steps.append(
+            "Discord readiness looks configured. Keep using this panel as read-only status until Social live controls are added."
+        )
     return steps
 
 
@@ -1500,7 +1570,9 @@ def _telegram_preview_text(intent: TelegramMessageIntent) -> str:
     return str(redact(text)).strip()[:700]
 
 
-def _telegram_preview_response(body: TelegramMessagePreviewRequest) -> TelegramMessagePreviewResponse:
+def _telegram_preview_response(
+    body: TelegramMessagePreviewRequest,
+) -> TelegramMessagePreviewResponse:
     runtime = _hermes_runtime_status("telegram")
     connections = _telegram_connections()
     readiness, readiness_reasons = _messaging_readiness("telegram", connections, runtime)
@@ -1543,7 +1615,9 @@ def _telegram_preview_response(body: TelegramMessagePreviewRequest) -> TelegramM
                 "live_apply_available": False,
             },
         }
-        proposal_digest = _proposal_digest("telegram_message", _proposal_payload_with_persona(payload) or payload)
+        proposal_digest = _proposal_digest(
+            "telegram_message", _proposal_payload_with_persona(payload) or payload
+        )
 
     return TelegramMessagePreviewResponse(
         status=status,
@@ -1552,19 +1626,25 @@ def _telegram_preview_response(body: TelegramMessagePreviewRequest) -> TelegramM
         persona_digest=str(persona["persona_digest"]),
         proposal_digest=proposal_digest,
         target=target,
-        message_preview=TelegramMessagePreviewDto(text=text if not reasons else "", char_count=len(text) if not reasons else 0),
+        message_preview=TelegramMessagePreviewDto(
+            text=text if not reasons else "", char_count=len(text) if not reasons else 0
+        ),
         reasons=_dedupe(reasons),
         warnings=_dedupe(warnings),
         policy_advisory_reasons=_advisory_reasons_for_provider_lane("telegram", "broadcast"),
         recommended_next_steps=(
-            ["Preview generated only. No Telegram message was sent. Keep this digest for a future confirmed send flow."]
+            [
+                "Preview generated only. No Telegram message was sent. Keep this digest for a future confirmed send flow."
+            ]
             if status == "completed"
             else _telegram_setup_steps(connections, runtime)
         ),
     )
 
 
-def _telegram_activity_preview_response(body: TelegramActivityPreviewRequest) -> TelegramActivityPreviewResponse:
+def _telegram_activity_preview_response(
+    body: TelegramActivityPreviewRequest,
+) -> TelegramActivityPreviewResponse:
     status = _telegram_status_response()
     emergency_stop = False
     try:
@@ -1580,9 +1660,7 @@ def _telegram_activity_preview_response(body: TelegramActivityPreviewRequest) ->
     response = TelegramActivityPreviewResponse.model_validate(planned.model_dump(mode="json"))
     return response.model_copy(
         update={
-            "policy_advisory_reasons": _advisory_reasons_for_provider_lane(
-                "telegram", "broadcast"
-            ),
+            "policy_advisory_reasons": _advisory_reasons_for_provider_lane("telegram", "broadcast"),
         }
     )
 
@@ -1635,9 +1713,7 @@ def _telegram_inbound_preview_response() -> TelegramInboundPreviewResponse:
         {
             **result.model_dump(mode="json"),
             "read_only": True,
-            "policy_advisory_reasons": _advisory_reasons_for_provider_lane(
-                "telegram", "reactive"
-            ),
+            "policy_advisory_reasons": _advisory_reasons_for_provider_lane("telegram", "reactive"),
         }
     )
 
@@ -1648,26 +1724,36 @@ def _telegram_reactive_replies_preview_response() -> TelegramReactiveRepliesPrev
         {
             **result.model_dump(mode="json"),
             "read_only": True,
-            "policy_advisory_reasons": _advisory_reasons_for_provider_lane(
-                "telegram", "reactive"
-            ),
+            "policy_advisory_reasons": _advisory_reasons_for_provider_lane("telegram", "reactive"),
         }
     )
 
 
 def _telegram_live_apply_available() -> bool:
     status = _telegram_status_response()
-    return status.overall_readiness == "ready" and status.hermes_gateway.provider_runtime_state == "connected" and _social_live_token_enabled()
+    return (
+        status.overall_readiness == "ready"
+        and status.hermes_gateway.provider_runtime_state == "connected"
+        and _social_live_token_enabled()
+    )
 
 
 def _telegram_activity_live_apply_available() -> bool:
     status = _telegram_status_response()
-    return status.overall_readiness == "ready" and status.hermes_gateway.provider_runtime_state == "connected" and _social_live_token_enabled()
+    return (
+        status.overall_readiness == "ready"
+        and status.hermes_gateway.provider_runtime_state == "connected"
+        and _social_live_token_enabled()
+    )
 
 
 def _telegram_reactive_reply_live_apply_available() -> bool:
     status = _telegram_status_response()
-    return status.overall_readiness == "ready" and status.hermes_gateway.provider_runtime_state == "connected" and _social_live_token_enabled()
+    return (
+        status.overall_readiness == "ready"
+        and status.hermes_gateway.provider_runtime_state == "connected"
+        and _social_live_token_enabled()
+    )
 
 
 def _telegram_apply_blocked_response(
@@ -1698,7 +1784,11 @@ def _telegram_activity_apply_blocked_response(
     warnings: list[str] | None = None,
     result: dict[str, Any] | None = None,
 ) -> TelegramActivityApplyResponse:
-    fallback_target = preview.target if preview else TelegramPreviewTargetDto(kind="test_group", configured=False, masked_id="")
+    fallback_target = (
+        preview.target
+        if preview
+        else TelegramPreviewTargetDto(kind="test_group", configured=False, masked_id="")
+    )
     return TelegramActivityApplyResponse(
         **_persona_ref_fields(),
         status="blocked",
@@ -1743,7 +1833,9 @@ def _telegram_activity_apply_idempotency_key(proposal_digest: str) -> str:
 
 
 def _telegram_reactive_reply_apply_idempotency_key(*, proposal_digest: str, inbound_id: str) -> str:
-    return hashlib.sha256(f"telegram_reactive_reply:{inbound_id}:{proposal_digest}".encode("utf-8")).hexdigest()
+    return hashlib.sha256(
+        f"telegram_reactive_reply:{inbound_id}:{proposal_digest}".encode("utf-8")
+    ).hexdigest()
 
 
 def _telegram_readiness_apply_reasons() -> list[str]:
@@ -1769,7 +1861,11 @@ def _persona_digest_mismatch_response(
     config: HamXConfig,
     reasons: list[str] | None = None,
     result: dict[str, Any] | None = None,
-) -> SocialReactiveReplyApplyResponse | SocialReactiveBatchApplyResponse | SocialBroadcastApplyResponse:
+) -> (
+    SocialReactiveReplyApplyResponse
+    | SocialReactiveBatchApplyResponse
+    | SocialBroadcastApplyResponse
+):
     detail = _safe_dict({"persona": _persona_ref_fields(), **(result or {})})
     final_reasons = _dedupe([*(reasons or []), "persona_digest_mismatch"])
     if kind == "reply":
@@ -1895,7 +1991,7 @@ def _persist_social_autonomy_profile(
     token: str,
     actor: HamActor | None,
 ) -> dict[str, Any]:
-    result = apply_social_autonomy_profile(
+    result = get_social_autonomy_store().apply(
         _project_root(),
         profile,
         token=token,
@@ -1911,9 +2007,10 @@ def _autonomy_apply_reasons(
 ) -> list[str]:
     """Return route-level autonomy apply blockers when a profile is configured."""
     root = _project_root()
-    if not social_autonomy_path(root).exists():
+    store = get_social_autonomy_store()
+    if not store.path(root).exists():
         return []
-    profile = read_social_autonomy_profile(root)
+    profile = store.read(root)
     return autonomy_reasons_for_apply(profile, channel=channel, action=action)
 
 
@@ -1960,10 +2057,7 @@ def _x_read_credential_present(cfg: HamXConfig) -> bool:
 
 def _x_write_credential_present(cfg: HamXConfig) -> bool:
     return bool(
-        cfg.x_api_key
-        and cfg.x_api_secret
-        and cfg.x_access_token
-        and cfg.x_access_token_secret
+        cfg.x_api_key and cfg.x_api_secret and cfg.x_access_token and cfg.x_access_token_secret
     )
 
 
@@ -1976,7 +2070,9 @@ def _reactive_handle_configured(cfg: HamXConfig) -> bool:
 
 
 def _x_configured(cfg: HamXConfig) -> bool:
-    return _x_read_credential_present(cfg) or _x_write_credential_present(cfg) or _xai_key_present(cfg)
+    return (
+        _x_read_credential_present(cfg) or _x_write_credential_present(cfg) or _xai_key_present(cfg)
+    )
 
 
 def _broadcast_dry_run_available(cfg: HamXConfig) -> bool:
@@ -2088,7 +2184,9 @@ def _broadcast_apply_reasons(cfg: HamXConfig) -> list[str]:
         reasons.append("goham_live_max_actions_per_run_must_equal_one")
     if not cfg.goham_block_links:
         reasons.append("goham_link_blocking_required")
-    if "post" not in {item.strip() for item in (cfg.goham_allowed_actions or "").split(",") if item.strip()}:
+    if "post" not in {
+        item.strip() for item in (cfg.goham_allowed_actions or "").split(",") if item.strip()
+    }:
         reasons.append("original_post_disabled")
     if not _x_write_credential_present(cfg):
         reasons.append("x_write_credential_missing")
@@ -2137,7 +2235,7 @@ def _social_policy_snapshot_disabled() -> bool:
 
 
 def _deprecated_social_policy_autonomy_field() -> str:
-    return "live_" "autonomy_armed"
+    return "live_autonomy_armed"
 
 
 def _load_social_policy_for_advisory() -> tuple[SocialPolicy | None, dict[str, Any]]:
@@ -2228,7 +2326,10 @@ def _advisory_reasons_for_provider_lane(
         return []
     policy, _doc = _load_social_policy_for_advisory()
     return policy_advisory_reasons_for_lane(
-        policy, provider_id=provider_id, lane=lane, target_label=target_label,
+        policy,
+        provider_id=provider_id,
+        lane=lane,
+        target_label=target_label,
     )
 
 
@@ -2302,7 +2403,11 @@ def _broadcast_apply_available(config: HamXConfig) -> bool:
 
 
 def _apply_available(config: HamXConfig) -> bool:
-    return _reply_apply_available(config) or _batch_apply_available(config) or _broadcast_apply_available(config)
+    return (
+        _reply_apply_available(config)
+        or _batch_apply_available(config)
+        or _broadcast_apply_available(config)
+    )
 
 
 def _blocked_apply_response(
@@ -2493,7 +2598,9 @@ def _inbox_proposal_payload(discovery: Any, config: HamXConfig) -> dict[str, Any
                 "enable_goham_reactive": bool(config.enable_goham_reactive),
                 "goham_reactive_dry_run": bool(config.goham_reactive_dry_run),
                 "goham_reactive_live_canary": bool(config.goham_reactive_live_canary),
-                "goham_reactive_max_replies_per_run": int(config.goham_reactive_max_replies_per_run),
+                "goham_reactive_max_replies_per_run": int(
+                    config.goham_reactive_max_replies_per_run
+                ),
                 "goham_reactive_block_links": bool(config.goham_reactive_block_links),
             },
         }
@@ -2510,7 +2617,9 @@ def _discover_for_reactive_apply(config: HamXConfig) -> Any:
     return discover_reactive_inbox_once(config=_preview_config(config))
 
 
-def _discover_batch_candidates(config: HamXConfig) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+def _discover_batch_candidates(
+    config: HamXConfig,
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     discovery = discover_reactive_inbox_once(config=_preview_config(config))
     candidates: list[dict[str, Any]] = []
     for candidate in list(getattr(discovery, "candidates", []) or []):
@@ -2534,14 +2643,20 @@ def _discover_batch_candidates(config: HamXConfig) -> tuple[list[dict[str, Any]]
 
 def _batch_proposal_payload(result: dict[str, Any], config: HamXConfig) -> dict[str, Any] | None:
     items = list(result.get("items") or [])
-    dry_items = [item for item in items if isinstance(item, dict) and item.get("status") == "dry_run"]
+    dry_items = [
+        item for item in items if isinstance(item, dict) and item.get("status") == "dry_run"
+    ]
     if not dry_items:
         return None
     canonical_items: list[dict[str, Any]] = []
     for item in dry_items[: config.goham_reactive_batch_max_replies_per_run]:
         inbound = item.get("inbound") if isinstance(item.get("inbound"), dict) else {}
-        policy = item.get("policy_decision") if isinstance(item.get("policy_decision"), dict) else {}
-        governor = item.get("governor_decision") if isinstance(item.get("governor_decision"), dict) else {}
+        policy = (
+            item.get("policy_decision") if isinstance(item.get("policy_decision"), dict) else {}
+        )
+        governor = (
+            item.get("governor_decision") if isinstance(item.get("governor_decision"), dict) else {}
+        )
         canonical_items.append(
             _safe_dict(
                 {
@@ -2569,9 +2684,15 @@ def _batch_proposal_payload(result: dict[str, Any], config: HamXConfig) -> dict[
                 "enable_goham_reactive": bool(config.enable_goham_reactive),
                 "enable_goham_reactive_batch": bool(config.enable_goham_reactive_batch),
                 "goham_reactive_block_links": bool(config.goham_reactive_block_links),
-                "goham_reactive_max_replies_per_15m": int(config.goham_reactive_max_replies_per_15m),
-                "goham_reactive_max_replies_per_hour": int(config.goham_reactive_max_replies_per_hour),
-                "goham_reactive_min_seconds_between_replies": int(config.goham_reactive_min_seconds_between_replies),
+                "goham_reactive_max_replies_per_15m": int(
+                    config.goham_reactive_max_replies_per_15m
+                ),
+                "goham_reactive_max_replies_per_hour": int(
+                    config.goham_reactive_max_replies_per_hour
+                ),
+                "goham_reactive_min_seconds_between_replies": int(
+                    config.goham_reactive_min_seconds_between_replies
+                ),
             },
         }
     )
@@ -2620,7 +2741,9 @@ def _record_preview_reactive_state(
     state.per_thread_last_reply_at[thread_key] = stamp
     state.recent_reply_times.append(stamp)
     state.user_reply_counts_today[user_key] = state.user_reply_counts_today.get(user_key, 0) + 1
-    state.thread_reply_counts_today[thread_key] = state.thread_reply_counts_today.get(thread_key, 0) + 1
+    state.thread_reply_counts_today[thread_key] = (
+        state.thread_reply_counts_today.get(thread_key, 0) + 1
+    )
 
 
 def _reactive_batch_preview(
@@ -2722,10 +2845,16 @@ def _reactive_batch_preview(
 
 def _preflight_request_from_body(body: SocialPreviewRequest, config: HamXConfig) -> SimpleNamespace:
     raw = dict(body.preflight_candidate or {})
-    text = str(raw.get("text") or "Ham preview-only broadcast preflight: governed autonomy stays capped, audited, and dry-run by default.")
+    text = str(
+        raw.get("text")
+        or "Ham preview-only broadcast preflight: governed autonomy stays capped, audited, and dry-run by default."
+    )
     action_id = str(raw.get("action_id") or "social-preview-broadcast-preflight")
     source_action_id = str(raw.get("source_action_id") or action_id)
-    idem = str(raw.get("idempotency_key") or f"social-preview-{hashlib.sha256(text.encode('utf-8')).hexdigest()[:24]}")
+    idem = str(
+        raw.get("idempotency_key")
+        or f"social-preview-{hashlib.sha256(text.encode('utf-8')).hexdigest()[:24]}"
+    )
     return SimpleNamespace(
         tenant_id=config.tenant_id,
         agent_id=config.agent_id,
@@ -2757,7 +2886,9 @@ def _server_broadcast_candidate(config: HamXConfig) -> GohamGovernorCandidate:
     )
 
 
-def _server_broadcast_preflight(config: HamXConfig) -> tuple[dict[str, Any], GohamGovernorCandidate, list[str]]:
+def _server_broadcast_preflight(
+    config: HamXConfig,
+) -> tuple[dict[str, Any], GohamGovernorCandidate, list[str]]:
     cfg = _preview_config(config)
     journal = ExecutionJournal(config=cfg)
     candidate = _server_broadcast_candidate(cfg)
@@ -2792,9 +2923,13 @@ def _server_broadcast_preflight(config: HamXConfig) -> tuple[dict[str, Any], Goh
     return result, candidate, reasons
 
 
-def _broadcast_proposal_payload(result: dict[str, Any], config: HamXConfig) -> dict[str, Any] | None:
+def _broadcast_proposal_payload(
+    result: dict[str, Any], config: HamXConfig
+) -> dict[str, Any] | None:
     candidate = result.get("candidate") if isinstance(result.get("candidate"), dict) else {}
-    governor = result.get("governor_decision") if isinstance(result.get("governor_decision"), dict) else {}
+    governor = (
+        result.get("governor_decision") if isinstance(result.get("governor_decision"), dict) else {}
+    )
     eligibility = result.get("eligibility") if isinstance(result.get("eligibility"), dict) else {}
     if candidate.get("action_type") != "post":
         return None
@@ -2881,17 +3016,29 @@ def _setup_next_steps(cfg: HamXConfig, missing: list[str]) -> list[str]:
     if "x_read_credential" in missing:
         steps.append("Configure the X Bearer token on the API host to enable read-only discovery.")
     if "x_write_credential" in missing:
-        steps.append("Configure X OAuth write credentials on the API host before confirmed live controls can run.")
+        steps.append(
+            "Configure X OAuth write credentials on the API host before confirmed live controls can run."
+        )
     if "xai_key" in missing:
-        steps.append("Configure the xAI key on the API host to enable model-backed broadcast dry-runs.")
+        steps.append(
+            "Configure the xAI key on the API host to enable model-backed broadcast dry-runs."
+        )
     if "reactive_handle" in missing:
-        steps.append("Set a reactive handle or inbox query so X inbox discovery can find inbound items.")
+        steps.append(
+            "Set a reactive handle or inbox query so X inbox discovery can find inbound items."
+        )
     if "social_live_apply_token" in missing:
-        steps.append("Set HAM_SOCIAL_LIVE_APPLY_TOKEN on the API host to enable confirmed live controls.")
+        steps.append(
+            "Set HAM_SOCIAL_LIVE_APPLY_TOKEN on the API host to enable confirmed live controls."
+        )
     if cfg.emergency_stop:
-        steps.append("Emergency stop is enabled; live controls will remain blocked until it is disabled server-side.")
+        steps.append(
+            "Emergency stop is enabled; live controls will remain blocked until it is disabled server-side."
+        )
     if not steps:
-        steps.append("Readiness checks look healthy. Use previews before any confirmed live action.")
+        steps.append(
+            "Readiness checks look healthy. Use previews before any confirmed live action."
+        )
     return steps
 
 
@@ -3024,7 +3171,7 @@ def get_social_autonomy_profile(
     _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
 ) -> dict[str, Any]:
     del _actor
-    return profile_to_safe_dict(read_social_autonomy_profile(_project_root()))
+    return profile_to_safe_dict(get_social_autonomy_store().read(_project_root()))
 
 
 @router.get("/autonomy/write-status")
@@ -3032,7 +3179,7 @@ def get_social_autonomy_write_status() -> dict[str, Any]:
     """Whether autonomy writes are enabled; does not reveal the token."""
     return {
         "kind": "ham_social_autonomy_write_status",
-        "writes_enabled": social_autonomy_writes_enabled(),
+        "writes_enabled": get_social_autonomy_store().writes_enabled(),
     }
 
 
@@ -3042,7 +3189,7 @@ def preview_social_autonomy(
     _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
 ) -> dict[str, Any]:
     del _actor
-    return preview_social_autonomy_profile(_project_root(), body)
+    return get_social_autonomy_store().preview(_project_root(), body)
 
 
 @router.post("/autonomy/launch", response_model=GoHamSocialProfile)
@@ -3056,7 +3203,7 @@ def launch_social_autonomy(
         x_ham_operator_authorization=x_ham_operator_authorization,
     )
     token = _require_social_autonomy_write_token(ham_bearer)
-    current = read_social_autonomy_profile(_project_root())
+    current = get_social_autonomy_store().read(_project_root())
     if current.status == "running":
         return profile_to_safe_dict(current)
     transition = transition_to_running(current.status)
@@ -3077,7 +3224,7 @@ def pause_social_autonomy(
         x_ham_operator_authorization=x_ham_operator_authorization,
     )
     token = _require_social_autonomy_write_token(ham_bearer)
-    current = read_social_autonomy_profile(_project_root())
+    current = get_social_autonomy_store().read(_project_root())
     if current.status == "paused":
         return profile_to_safe_dict(current)
     transition = transition_to_paused(current.status)
@@ -3100,7 +3247,7 @@ def stop_social_autonomy(
         x_ham_operator_authorization=x_ham_operator_authorization,
     )
     token = _require_social_autonomy_write_token(ham_bearer)
-    current = read_social_autonomy_profile(_project_root())
+    current = get_social_autonomy_store().read(_project_root())
     if current.status == "stopped" and current.emergency_stop == stop_request.emergency_stop:
         return profile_to_safe_dict(current)
     transition = transition_to_stopped(current.status, emergency_stop=stop_request.emergency_stop)
@@ -3127,7 +3274,7 @@ def update_social_autonomy_settings(
         x_ham_operator_authorization=x_ham_operator_authorization,
     )
     token = _require_social_autonomy_write_token(ham_bearer)
-    current = read_social_autonomy_profile(_project_root())
+    current = get_social_autonomy_store().read(_project_root())
     updates: dict[str, Any] = {"updated_at": _utc_now()}
     if "channels" in body.model_fields_set and body.channels is not None:
         # Merge: update only the ``enabled`` flag per channel; ``available`` is
@@ -3147,7 +3294,9 @@ def update_social_autonomy_settings(
     if "daily_caps" in body.model_fields_set:
         updates["daily_caps"] = body.daily_caps
     if "quiet_hours" in body.model_fields_set:
-        updates["quiet_hours"] = body.quiet_hours.model_dump(mode="json") if body.quiet_hours else None
+        updates["quiet_hours"] = (
+            body.quiet_hours.model_dump(mode="json") if body.quiet_hours else None
+        )
     updated = _profile_with_updates(current, **updates)
     return _persist_social_autonomy_profile(updated, token=token, actor=_actor)
 
@@ -3158,7 +3307,7 @@ def preview_social_autonomy_tick(
     _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
 ) -> dict[str, object]:
     del _actor
-    profile = read_social_autonomy_profile(_project_root())
+    profile = get_social_autonomy_store().read(_project_root())
     return preview_autonomy_runner_tick(profile, channel=body.channel, action=body.action)
 
 
@@ -3272,7 +3421,9 @@ def telegram_capabilities(
     )
 
 
-@router.get("/providers/telegram/setup/checklist", response_model=SocialMessagingSetupChecklistResponse)
+@router.get(
+    "/providers/telegram/setup/checklist", response_model=SocialMessagingSetupChecklistResponse
+)
 def telegram_setup_checklist(
     _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
 ) -> SocialMessagingSetupChecklistResponse:
@@ -3337,7 +3488,10 @@ def telegram_activity_preview(
     return _telegram_activity_preview_response(body or TelegramActivityPreviewRequest())
 
 
-@router.post("/providers/telegram/activity/run-once/preview", response_model=TelegramActivityRunOncePreviewResponse)
+@router.post(
+    "/providers/telegram/activity/run-once/preview",
+    response_model=TelegramActivityRunOncePreviewResponse,
+)
 def telegram_activity_run_once_preview(
     body: TelegramActivityPreviewRequest | None = None,
     _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
@@ -3352,14 +3506,19 @@ def telegram_inbound_preview(
     return _telegram_inbound_preview_response()
 
 
-@router.post("/providers/telegram/reactive/replies/preview", response_model=TelegramReactiveRepliesPreviewResponse)
+@router.post(
+    "/providers/telegram/reactive/replies/preview",
+    response_model=TelegramReactiveRepliesPreviewResponse,
+)
 def telegram_reactive_replies_preview(
     _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
 ) -> TelegramReactiveRepliesPreviewResponse:
     return _telegram_reactive_replies_preview_response()
 
 
-@router.post("/providers/telegram/reactive/replies/apply", response_model=TelegramReactiveReplyApplyResponse)
+@router.post(
+    "/providers/telegram/reactive/replies/apply", response_model=TelegramReactiveReplyApplyResponse
+)
 def telegram_reactive_reply_apply(
     body: TelegramReactiveReplyApplyRequest,
     _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)] = None,
@@ -3369,11 +3528,17 @@ def telegram_reactive_reply_apply(
     del _actor
     target = _telegram_preview_target()
     if not body.proposal_digest:
-        return _telegram_reactive_reply_apply_blocked_response(reasons=["proposal_digest_required"], inbound_id=body.inbound_id, target=target)
+        return _telegram_reactive_reply_apply_blocked_response(
+            reasons=["proposal_digest_required"], inbound_id=body.inbound_id, target=target
+        )
     if not body.inbound_id.strip():
-        return _telegram_reactive_reply_apply_blocked_response(reasons=["inbound_id_required"], target=target)
+        return _telegram_reactive_reply_apply_blocked_response(
+            reasons=["inbound_id_required"], target=target
+        )
     if body.confirmation_phrase.strip() != LIVE_TELEGRAM_REACTIVE_REPLY_CONFIRMATION_PHRASE:
-        return _telegram_reactive_reply_apply_blocked_response(reasons=["confirmation_phrase_required"], inbound_id=body.inbound_id, target=target)
+        return _telegram_reactive_reply_apply_blocked_response(
+            reasons=["confirmation_phrase_required"], inbound_id=body.inbound_id, target=target
+        )
 
     ham_bearer = resolve_ham_operator_authorization_header(
         authorization=authorization,
@@ -3391,7 +3556,9 @@ def telegram_reactive_reply_apply(
         )
     candidate = next((item for item in preview.items if item.inbound_id == body.inbound_id), None)
     if candidate is None:
-        return _telegram_reactive_reply_apply_blocked_response(reasons=["inbound_id_not_found"], inbound_id=body.inbound_id, target=target)
+        return _telegram_reactive_reply_apply_blocked_response(
+            reasons=["inbound_id_not_found"], inbound_id=body.inbound_id, target=target
+        )
 
     current_persona = _persona_ref_fields()
     if preview.persona_digest != str(current_persona.get("persona_digest") or ""):
@@ -3408,7 +3575,9 @@ def telegram_reactive_reply_apply(
         legacy_reasons=_telegram_readiness_apply_reasons(),
     )
     if readiness_reasons:
-        return _telegram_reactive_reply_apply_blocked_response(reasons=readiness_reasons, inbound_id=body.inbound_id, target=target)
+        return _telegram_reactive_reply_apply_blocked_response(
+            reasons=readiness_reasons, inbound_id=body.inbound_id, target=target
+        )
     if not candidate.repliable:
         return _telegram_reactive_reply_apply_blocked_response(
             reasons=["telegram_reactive_candidate_not_repliable", *candidate.reasons],
@@ -3416,10 +3585,16 @@ def telegram_reactive_reply_apply(
             target=target,
         )
     if candidate.already_answered:
-        return _telegram_reactive_reply_apply_blocked_response(reasons=["telegram_inbound_already_answered"], inbound_id=body.inbound_id, target=target)
+        return _telegram_reactive_reply_apply_blocked_response(
+            reasons=["telegram_inbound_already_answered"], inbound_id=body.inbound_id, target=target
+        )
     if not bool(candidate.policy.allowed):
         return _telegram_reactive_reply_apply_blocked_response(
-            reasons=["telegram_reactive_policy_blocked", *candidate.policy.reasons, *candidate.reasons],
+            reasons=[
+                "telegram_reactive_policy_blocked",
+                *candidate.policy.reasons,
+                *candidate.reasons,
+            ],
             inbound_id=body.inbound_id,
             target=target,
         )
@@ -3430,7 +3605,11 @@ def telegram_reactive_reply_apply(
             target=target,
         )
     if not candidate.reply_candidate_text.strip():
-        return _telegram_reactive_reply_apply_blocked_response(reasons=["telegram_reactive_candidate_text_missing"], inbound_id=body.inbound_id, target=target)
+        return _telegram_reactive_reply_apply_blocked_response(
+            reasons=["telegram_reactive_candidate_text_missing"],
+            inbound_id=body.inbound_id,
+            target=target,
+        )
     if not candidate.proposal_digest or body.proposal_digest != candidate.proposal_digest:
         return _telegram_reactive_reply_apply_blocked_response(
             reasons=["proposal_digest_mismatch"],
@@ -3496,7 +3675,9 @@ def telegram_activity_apply(
     )
     _require_social_live_token(ham_bearer)
 
-    preview = _telegram_activity_preview_response(TelegramActivityPreviewRequest(activity_kind=body.activity_kind))
+    preview = _telegram_activity_preview_response(
+        TelegramActivityPreviewRequest(activity_kind=body.activity_kind)
+    )
     if preview.status != "completed" or not preview.proposal_digest:
         preview_reasons = list(preview.reasons)
         if not bool(preview.governor.allowed):
@@ -3587,7 +3768,9 @@ def telegram_message_apply(
     )
     _require_social_live_token(ham_bearer)
 
-    preview = _telegram_preview_response(TelegramMessagePreviewRequest(message_intent=body.message_intent))
+    preview = _telegram_preview_response(
+        TelegramMessagePreviewRequest(message_intent=body.message_intent)
+    )
     if preview.status != "completed" or not preview.proposal_digest:
         return _telegram_apply_blocked_response(
             reasons=["telegram_preview_not_available", *preview.reasons],
@@ -3659,7 +3842,9 @@ def discord_capabilities(
     )
 
 
-@router.get("/providers/discord/setup/checklist", response_model=SocialMessagingSetupChecklistResponse)
+@router.get(
+    "/providers/discord/setup/checklist", response_model=SocialMessagingSetupChecklistResponse
+)
 def discord_setup_checklist(
     _actor: Annotated[HamActor | None, Depends(get_ham_clerk_actor)],
 ) -> SocialMessagingSetupChecklistResponse:
@@ -3701,7 +3886,11 @@ def x_provider_status(
     readiness, readiness_reasons = _overall_readiness(cfg)
     cap, used, remaining, exec_allowed = _broadcast_status_from_ops(cfg)
     broadcast = BroadcastLaneStatusDto(
-        enabled=bool(cfg.enable_goham_execution or cfg.enable_goham_controller or cfg.enable_goham_live_controller),
+        enabled=bool(
+            cfg.enable_goham_execution
+            or cfg.enable_goham_controller
+            or cfg.enable_goham_live_controller
+        ),
         controller_enabled=cfg.enable_goham_controller,
         live_controller_enabled=cfg.enable_goham_live_controller,
         dry_run_available=_broadcast_dry_run_available(cfg),
@@ -3736,7 +3925,9 @@ def x_provider_status(
         reactive_max_replies_per_15m=int(cfg.goham_reactive_max_replies_per_15m),
         reactive_max_replies_per_hour=int(cfg.goham_reactive_max_replies_per_hour),
         reactive_max_replies_per_user_per_day=int(cfg.goham_reactive_max_replies_per_user_per_day),
-        reactive_max_replies_per_thread_per_day=int(cfg.goham_reactive_max_replies_per_thread_per_day),
+        reactive_max_replies_per_thread_per_day=int(
+            cfg.goham_reactive_max_replies_per_thread_per_day
+        ),
         reactive_min_seconds_between_replies=int(cfg.goham_reactive_min_seconds_between_replies),
         reactive_batch_max_replies_per_run=int(cfg.goham_reactive_batch_max_replies_per_run),
     )
@@ -3852,19 +4043,45 @@ def x_setup_summary(
             "dry_run_available": _broadcast_dry_run_available(cfg),
             "live_configured": _broadcast_live_configured(cfg),
             "confirmed_live_available": _broadcast_apply_available(cfg),
-            "missing": [item for item in missing if item in {"x_write_credential", "social_live_apply_token", "goham_controller_enabled", "goham_live_controller_enabled", "emergency_stop_disabled"}],
+            "missing": [
+                item
+                for item in missing
+                if item
+                in {
+                    "x_write_credential",
+                    "social_live_apply_token",
+                    "goham_controller_enabled",
+                    "goham_live_controller_enabled",
+                    "emergency_stop_disabled",
+                }
+            ],
         },
         "reactive": {
             "inbox_discovery_available": _reactive_inbox_discovery_available(cfg),
             "dry_run_available": bool(cfg.enable_goham_reactive and cfg.goham_reactive_dry_run),
             "reply_apply_available": _reply_apply_available(cfg),
             "batch_apply_available": _batch_apply_available(cfg),
-            "missing": [item for item in missing if item in {"x_read_credential", "x_write_credential", "reactive_handle", "reactive_enabled", "reactive_batch_enabled", "social_live_apply_token", "emergency_stop_disabled"}],
+            "missing": [
+                item
+                for item in missing
+                if item
+                in {
+                    "x_read_credential",
+                    "x_write_credential",
+                    "reactive_handle",
+                    "reactive_enabled",
+                    "reactive_batch_enabled",
+                    "social_live_apply_token",
+                    "emergency_stop_disabled",
+                }
+            ],
         },
         "preview": {
             "status_refresh_available": True,
             "inbox_preview_available": _reactive_inbox_discovery_available(cfg),
-            "batch_dry_run_available": bool(cfg.enable_goham_reactive and cfg.enable_goham_reactive_batch),
+            "batch_dry_run_available": bool(
+                cfg.enable_goham_reactive and cfg.enable_goham_reactive_batch
+            ),
             "broadcast_preflight_available": _broadcast_dry_run_available(cfg),
         },
         "confirmed_live": {
@@ -3888,8 +4105,12 @@ def x_setup_summary(
         "broadcast_min_spacing_minutes": int(cfg.goham_min_spacing_minutes),
         "reactive_max_replies_per_15m": int(cfg.goham_reactive_max_replies_per_15m),
         "reactive_max_replies_per_hour": int(cfg.goham_reactive_max_replies_per_hour),
-        "reactive_max_replies_per_user_per_day": int(cfg.goham_reactive_max_replies_per_user_per_day),
-        "reactive_max_replies_per_thread_per_day": int(cfg.goham_reactive_max_replies_per_thread_per_day),
+        "reactive_max_replies_per_user_per_day": int(
+            cfg.goham_reactive_max_replies_per_user_per_day
+        ),
+        "reactive_max_replies_per_thread_per_day": int(
+            cfg.goham_reactive_max_replies_per_thread_per_day
+        ),
         "reactive_min_seconds_between_replies": int(cfg.goham_reactive_min_seconds_between_replies),
         "reactive_batch_max_replies_per_run": int(cfg.goham_reactive_batch_max_replies_per_run),
     }
@@ -3911,7 +4132,8 @@ def x_setup_summary(
         provider_configured=_x_configured(cfg),
         overall_readiness=readiness,
         missing_requirement_ids=missing,
-        ready_for_dry_run=_broadcast_dry_run_available(cfg) or _reactive_inbox_discovery_available(cfg),
+        ready_for_dry_run=_broadcast_dry_run_available(cfg)
+        or _reactive_inbox_discovery_available(cfg),
         ready_for_confirmed_live_reply=_reply_apply_available(cfg),
         ready_for_reactive_batch=_batch_apply_available(cfg),
         ready_for_broadcast=_broadcast_apply_available(cfg),
@@ -3939,10 +4161,14 @@ def x_journal_summary(
         executed_at = str(row.get("executed_at") or "")
         if row.get("status") == "executed":
             if kind == GOHAM_EXECUTION_KIND:
-                if latest_broadcast is None or executed_at > str(latest_broadcast.get("executed_at", "")):
+                if latest_broadcast is None or executed_at > str(
+                    latest_broadcast.get("executed_at", "")
+                ):
                     latest_broadcast = row
             elif kind == GOHAM_REACTIVE_EXECUTION_KIND:
-                if latest_reactive is None or executed_at > str(latest_reactive.get("executed_at", "")):
+                if latest_reactive is None or executed_at > str(
+                    latest_reactive.get("executed_at", "")
+                ):
                     latest_reactive = row
     recent = [_safe_journal_item(row) for row in rows[-MAX_RECENT_ITEMS:]]
     return XJournalSummaryResponse(
@@ -4030,7 +4256,7 @@ def _append_draft_record_from_preview(
             workspace_id=None,
             project_id=None,
         )
-        append_learning_record(rec)
+        get_hamgomoon_learning_store().append_learning_record(rec)
     except Exception:  # noqa: BLE001 — must never break preview routes
         _LOG.warning("hamgomoon_learning append failed (preview)", exc_info=True)
 
@@ -4054,7 +4280,9 @@ def x_reactive_inbox_preview(
         if selected is not None:
             reply_text = str(getattr(selected, "reply_candidate_text", "") or "")
         persona_fields = _persona_ref_fields()
-        persona_id_value = persona_fields.get("persona_id") if isinstance(persona_fields, dict) else None
+        persona_id_value = (
+            persona_fields.get("persona_id") if isinstance(persona_fields, dict) else None
+        )
         _append_draft_record_from_preview(
             channel="x",
             proposed_action="reply",
@@ -4112,7 +4340,9 @@ def x_broadcast_preflight(
         journal = ExecutionJournal(config=cfg)
         preflight_request = _preflight_request_from_body(request, cfg)
         decision = _preflight_decision(preflight_request, cfg)
-        result = dry_preflight_goham_candidate(preflight_request, decision, config=cfg, journal=journal)
+        result = dry_preflight_goham_candidate(
+            preflight_request, decision, config=cfg, journal=journal
+        )
         payload = _force_preview_flags(
             {
                 "request": _safe_preflight_request(preflight_request),
@@ -4194,7 +4424,9 @@ def x_reactive_reply_apply(
     result_payload = _safe_payload(live_result)
     provider_status_code = getattr(live_result.execution_result, "provider_status_code", None)
     provider_post_id = getattr(live_result.execution_result, "provider_post_id", None)
-    safe_provider_post_id = redact(provider_post_id) if isinstance(provider_post_id, str) else provider_post_id
+    safe_provider_post_id = (
+        redact(provider_post_id) if isinstance(provider_post_id, str) else provider_post_id
+    )
     return SocialReactiveReplyApplyResponse(
         **_persona_ref_fields(),
         status=live_result.status,
@@ -4204,7 +4436,9 @@ def x_reactive_reply_apply(
         provider_status_code=provider_status_code,
         provider_post_id=safe_provider_post_id,
         audit_ids=list(getattr(live_result, "audit_ids", []) or []),
-        journal_path=_display_path(getattr(live_result, "journal_path", cfg.execution_journal_path)),
+        journal_path=_display_path(
+            getattr(live_result, "journal_path", cfg.execution_journal_path)
+        ),
         audit_path=_display_path(getattr(live_result, "audit_path", cfg.audit_log_path)),
         reasons=_dedupe(list(getattr(live_result, "reasons", []) or [])),
         warnings=[],
@@ -4261,7 +4495,9 @@ def x_reactive_batch_apply(
     candidates = [
         item.get("inbound")
         for item in list(dry_result.get("items") or [])
-        if isinstance(item, dict) and item.get("status") == "dry_run" and isinstance(item.get("inbound"), dict)
+        if isinstance(item, dict)
+        and item.get("status") == "dry_run"
+        and isinstance(item.get("inbound"), dict)
     ]
     if not candidates:
         return _blocked_batch_apply_response(
@@ -4279,7 +4515,9 @@ def x_reactive_batch_apply(
         execution_result = getattr(item, "execution_result", None)
         provider_post_id = getattr(execution_result, "provider_post_id", None)
         if provider_post_id:
-            safe_id = redact(provider_post_id) if isinstance(provider_post_id, str) else provider_post_id
+            safe_id = (
+                redact(provider_post_id) if isinstance(provider_post_id, str) else provider_post_id
+            )
             if isinstance(safe_id, str):
                 provider_post_ids.append(safe_id)
     return SocialReactiveBatchApplyResponse(
@@ -4294,7 +4532,9 @@ def x_reactive_batch_apply(
         blocked_count=int(getattr(live_result, "blocked_count", 0) or 0),
         provider_post_ids=provider_post_ids,
         audit_ids=list(getattr(live_result, "audit_ids", []) or []),
-        journal_path=_display_path(getattr(live_result, "journal_path", cfg.execution_journal_path)),
+        journal_path=_display_path(
+            getattr(live_result, "journal_path", cfg.execution_journal_path)
+        ),
         audit_path=_display_path(getattr(live_result, "audit_path", cfg.audit_log_path)),
         reasons=_dedupe(list(getattr(live_result, "reasons", []) or [])),
         warnings=dry_warnings,
@@ -4348,7 +4588,9 @@ def x_broadcast_apply(
     live_result = run_live_controller_once([candidate], config=cfg)
     result_payload = _safe_payload(live_result)
     provider_post_id = getattr(live_result, "provider_post_id", None)
-    safe_provider_post_id = redact(provider_post_id) if isinstance(provider_post_id, str) else provider_post_id
+    safe_provider_post_id = (
+        redact(provider_post_id) if isinstance(provider_post_id, str) else provider_post_id
+    )
     return SocialBroadcastApplyResponse(
         **_persona_ref_fields(),
         status=live_result.status,
@@ -4358,7 +4600,9 @@ def x_broadcast_apply(
         provider_status_code=getattr(live_result, "provider_status_code", None),
         provider_post_id=safe_provider_post_id,
         audit_ids=list(getattr(live_result, "audit_ids", []) or []),
-        journal_path=_display_path(getattr(live_result, "journal_path", cfg.execution_journal_path)),
+        journal_path=_display_path(
+            getattr(live_result, "journal_path", cfg.execution_journal_path)
+        ),
         audit_path=_display_path(getattr(live_result, "audit_path", cfg.audit_log_path)),
         reasons=_dedupe(list(getattr(live_result, "reasons", []) or [])),
         warnings=[],
