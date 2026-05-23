@@ -373,10 +373,7 @@ function SocialStatusPanel({
             <dt className="text-xs font-semibold uppercase tracking-[0.1em] text-white/45">
               Storage backend
             </dt>
-            <dd
-              data-testid="social-status-storage-backend"
-              className="mt-1 text-sm text-white/80"
-            >
+            <dd data-testid="social-status-storage-backend" className="mt-1 text-sm text-white/80">
               {profile.storage.backend}
             </dd>
           </div>
@@ -403,10 +400,7 @@ function SocialStatusPanel({
             <dt className="text-xs font-semibold uppercase tracking-[0.1em] text-white/45">
               Hermes critique
             </dt>
-            <dd
-              data-testid="social-status-hermes-critique"
-              className="mt-1 text-sm text-white/80"
-            >
+            <dd data-testid="social-status-hermes-critique" className="mt-1 text-sm text-white/80">
               {telegramCaps.social_critic.status}
             </dd>
           </div>
@@ -418,14 +412,14 @@ function SocialStatusPanel({
             <dt className="text-xs font-semibold uppercase tracking-[0.1em] text-white/45">
               Poller status
             </dt>
-            <dd
-              data-testid="social-status-poller"
-              className="mt-1 text-sm text-white/80"
-            >
+            <dd data-testid="social-status-poller" className="mt-1 text-sm text-white/80">
               <span data-testid="social-status-poller-last-run" className="block">
                 last run: {pollerLastRunTime ?? "—"}
               </span>
-              <span data-testid="social-status-poller-offset" className="block text-xs text-white/55">
+              <span
+                data-testid="social-status-poller-offset"
+                className="block text-xs text-white/55"
+              >
                 offset: {pollerStatus.last_offset ?? "—"}
               </span>
               <span
@@ -444,10 +438,7 @@ function SocialStatusPanel({
             <dt className="text-xs font-semibold uppercase tracking-[0.1em] text-white/45">
               Scheduler route
             </dt>
-            <dd
-              data-testid="social-status-scheduler-route"
-              className="mt-1 text-sm text-white/80"
-            >
+            <dd data-testid="social-status-scheduler-route" className="mt-1 text-sm text-white/80">
               {profile.scheduler_route.state}
             </dd>
           </div>
@@ -459,10 +450,7 @@ function SocialStatusPanel({
             <dt className="text-xs font-semibold uppercase tracking-[0.1em] text-white/45">
               Cap usage today
             </dt>
-            <dd
-              data-testid="social-status-cap-usage"
-              className="mt-1 text-sm text-white/80"
-            >
+            <dd data-testid="social-status-cap-usage" className="mt-1 text-sm text-white/80">
               {Object.entries(profile.usage_today).map(([channel, usage]) => (
                 <span key={channel} className="block">
                   {channel}:{" "}
@@ -482,10 +470,7 @@ function SocialStatusPanel({
           <dt className="text-xs font-semibold uppercase tracking-[0.1em] text-white/45">
             Emergency stop
           </dt>
-          <dd
-            data-testid="social-status-emergency-stop"
-            className="mt-1 text-sm text-white/80"
-          >
+          <dd data-testid="social-status-emergency-stop" className="mt-1 text-sm text-white/80">
             {profile.emergency_stop ? "active" : "inactive"}
           </dd>
         </div>
@@ -599,16 +584,28 @@ export function WorkspaceSocialScreen() {
     // Never surface supplementary errors as page-level errors.
     void socialAdapter
       .getLearningHints({ channel: "x", limit: 5 })
-      .then((res) => { setLearningText(redactPlainText(res.hints?.hints)); })
-      .catch(() => { /* learning summary row hides gracefully */ });
+      .then((res) => {
+        setLearningText(redactPlainText(res.hints?.hints));
+      })
+      .catch(() => {
+        /* learning summary row hides gracefully */
+      });
     void socialAdapter
       .getPollerStatus()
-      .then((res) => { setPollerStatus(res.pollerStatus); })
-      .catch(() => { /* poller row hides gracefully */ });
+      .then((res) => {
+        setPollerStatus(res.pollerStatus);
+      })
+      .catch(() => {
+        /* poller row hides gracefully */
+      });
     void socialAdapter
       .getTelegramCapabilitiesPanel()
-      .then((res) => { setTelegramCaps(res.caps); })
-      .catch(() => { /* telegram readiness / hermes critique rows hide gracefully */ });
+      .then((res) => {
+        setTelegramCaps(res.caps);
+      })
+      .catch(() => {
+        /* telegram readiness / hermes critique rows hide gracefully */
+      });
   }, [applyProfile]);
 
   React.useEffect(() => {

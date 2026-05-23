@@ -986,9 +986,7 @@ export const socialAdapter = {
   }> {
     try {
       return {
-        pollerStatus: await requestJson<PollerStatus>(
-          `${BASE}/providers/telegram/poller/status`,
-        ),
+        pollerStatus: await requestJson<PollerStatus>(`${BASE}/providers/telegram/poller/status`),
         bridge: { status: "ready" },
       };
     } catch (e) {

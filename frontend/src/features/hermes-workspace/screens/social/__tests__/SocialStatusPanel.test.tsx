@@ -440,7 +440,11 @@ describe("SocialStatusPanel", () => {
 
   it("VAL-M15-M4-UI-002: renders Telegram readiness as setup_required", async () => {
     adapterMock.getTelegramCapabilitiesPanel.mockResolvedValue({
-      caps: { telegram_readiness: "setup_required", hermes_gateway_readiness: null, social_critic: null },
+      caps: {
+        telegram_readiness: "setup_required",
+        hermes_gateway_readiness: null,
+        social_critic: null,
+      },
       bridge: { status: "ready" },
     });
     renderSocial();
@@ -535,9 +539,7 @@ describe("SocialStatusPanel", () => {
     adapterMock.getPollerStatus.mockRejectedValue(new Error("HTTP 500 workspace_id draft_id"));
     renderSocial();
     const panel = await statusPanel();
-    await waitFor(() =>
-      expect(within(panel).queryByTestId("social-status-poller")).toBeNull(),
-    );
+    await waitFor(() => expect(within(panel).queryByTestId("social-status-poller")).toBeNull());
     expect(panel).not.toHaveTextContent("workspace_id");
     expect(panel).not.toHaveTextContent("draft_id");
   });
@@ -545,9 +547,7 @@ describe("SocialStatusPanel", () => {
   // ── M4 VAL-M15-M4-UI-005: Scheduler-route state row ───────────────────────
 
   it("VAL-M15-M4-UI-005: renders scheduler route row as disabled", async () => {
-    mockLoad(
-      profile({ scheduler_route: { state: "disabled" } } as Partial<GoHamSocialProfile>),
-    );
+    mockLoad(profile({ scheduler_route: { state: "disabled" } } as Partial<GoHamSocialProfile>));
     renderSocial();
     const panel = await statusPanel();
     await waitFor(() =>
@@ -600,9 +600,7 @@ describe("SocialStatusPanel", () => {
     mockLoad(profile());
     renderSocial();
     const panel = await statusPanel();
-    await waitFor(() =>
-      expect(within(panel).queryByTestId("social-status-cap-usage")).toBeNull(),
-    );
+    await waitFor(() => expect(within(panel).queryByTestId("social-status-cap-usage")).toBeNull());
   });
 
   // ── M4 VAL-M15-M4-UI-007: Last tick summary (existing row preserved) ───────
@@ -699,9 +697,7 @@ describe("SocialStatusPanel", () => {
     renderSocial();
     const panel = await statusPanel();
     await waitFor(() =>
-      expect(within(panel).getByTestId("social-status-emergency-stop")).toHaveTextContent(
-        "active",
-      ),
+      expect(within(panel).getByTestId("social-status-emergency-stop")).toHaveTextContent("active"),
     );
   });
 
@@ -737,9 +733,7 @@ describe("SocialStatusPanel", () => {
     adapterMock.getLearningHints.mockRejectedValue(new Error("network error"));
     renderSocial();
     const panel = await statusPanel();
-    await waitFor(() =>
-      expect(within(panel).queryByTestId("social-status-learning")).toBeNull(),
-    );
+    await waitFor(() => expect(within(panel).queryByTestId("social-status-learning")).toBeNull());
   });
 
   // ── M4 VAL-M15-M4-UI-NEGATIVE: Negative pins (extended / re-confirmed) ──────
