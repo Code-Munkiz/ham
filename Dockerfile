@@ -61,6 +61,9 @@ COPY models/ models/
 
 COPY src/ src/
 
+# Cloud Run Job entrypoint for Telegram inbound poller (Mission 15/19).
+COPY scripts/social_telegram_inbound_poll.py scripts/social_telegram_inbound_poll.py
+
 # Repo instruction files optional but improve context-engine text if present in image.
 COPY AGENTS.md SWARM.md VISION.md ./
 

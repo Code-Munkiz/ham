@@ -18,9 +18,11 @@ that runs on a schedule.  It calls the bounded `getUpdates` collector once,
 persists transcript rows and the updated offset to Firestore, then exits.
 
 The poller reuses the existing `ham-api` container image (`Dockerfile` at the
-repo root).  No new Dockerfile or image is created.  The operator overrides
-the default `uvicorn` entrypoint at job-creation time by passing `--command`
-and `--args` to `gcloud run jobs create`.
+repo root).  No new Dockerfile or image is created.  The root `Dockerfile`
+must `COPY scripts/social_telegram_inbound_poll.py` into the image (Mission
+19 M1 packaging fix).  The operator overrides the default `uvicorn` entrypoint
+at job-creation time by passing `--command` and `--args` to
+`gcloud run jobs create`.
 
 ---
 

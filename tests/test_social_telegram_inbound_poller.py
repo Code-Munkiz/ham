@@ -149,6 +149,14 @@ def test_no_new_poller_dockerfile() -> None:
     )
 
 
+def test_dockerfile_copies_poller_entrypoint_script() -> None:
+    """Mission 19 M1: ham-api image must ship the Cloud Run Job poller entrypoint."""
+    dockerfile = (_REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    assert "scripts/social_telegram_inbound_poll.py" in dockerfile, (
+        "Dockerfile must COPY scripts/social_telegram_inbound_poll.py into the image"
+    )
+
+
 # ===========================================================================
 # VAL-M15-M3-POLLER-002
 # Job entrypoint refuses to run without TELEGRAM_BOT_TOKEN.
