@@ -9,7 +9,6 @@ available, persists tick state, and optionally appends deterministic learning.
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
@@ -25,12 +24,7 @@ from src.ham.social_autonomy.schema import (
     SocialAutonomyStatus,
     SocialAutonomyTickSummary,
 )
-from src.ham.social_autonomy.store import (
-    SocialAutonomyStoreError,
-    read_social_autonomy_profile,
-    save_profile,
-    social_autonomy_path,
-)
+from src.ham.social_autonomy.store import load_social_autonomy_profile_for_tick
 
 AUTONOMY_PROFILE_MISSING: Final = "autonomy_profile_missing"
 AUTONOMY_PROFILE_NOT_RUNNING: Final = "autonomy_profile_not_running"
@@ -255,11 +249,12 @@ def run_social_autonomy_tick(
     critic: Any = None,
     actor: str = "social-autonomy-tick",
 ) -> SocialAutonomyTickResult:
-    """Run one bounded autonomy tick from the file-backed profile store."""
+    """Run one bounded autonomy tick using the configured profile store backend."""
 
     _require_aware_datetime(now, field_name="now")
     root = Path(store_path)
-    if not social_autonomy_path(root).is_file():
+    profile, store = load_social_autonomy_profile_for_tick(root)
+    if profile is None:
         return _result(
             ran=False,
             dry_run=dry_run,
@@ -269,13 +264,6 @@ def run_social_autonomy_tick(
             next_run_summary=None,
             profile_status="stopped",
         )
-
-    try:
-        profile = read_social_autonomy_profile(root)
-    except SocialAutonomyStoreError as exc:
-        if isinstance(exc.__cause__, json.JSONDecodeError):
-            raise exc.__cause__ from exc
-        raise
 
     result = plan_social_autonomy_tick(
         profile,
@@ -322,7 +310,7 @@ def run_social_autonomy_tick(
             "last_tick_summary": summary,
         }
     )
-    save_profile(root, updated, actor=actor)
+    store.save(root, updated, actor=actor)
 
     if updated.learning_enabled:
         from src.ham.social_autonomy.learning_hook import append_tick_learning

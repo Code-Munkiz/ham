@@ -191,6 +191,22 @@ class FirestoreSocialAutonomyStore:
     # Protocol implementation
     # ------------------------------------------------------------------
 
+    def profile_document_exists(self, root: Path | None = None) -> bool:
+        """Return whether the singleton autonomy profile document exists in Firestore.
+
+        Args:
+            root: Ignored for the Firestore backend (kept for Protocol compat).
+        """
+        del root
+        db = self._db()
+        try:
+            snap = db.collection(self._coll_name).document(_SINGLETON_DOC_ID).get()
+        except Exception as exc:  # noqa: BLE001
+            raise FirestoreSocialAutonomyStoreError(
+                f"Firestore profile existence check failed: {exc}"
+            ) from exc
+        return bool(getattr(snap, "exists", False))
+
     def read(self, root: Path | None = None) -> GoHamSocialProfile:
         """Read the persisted profile from Firestore, or return a default draft.
 

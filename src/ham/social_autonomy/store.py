@@ -572,6 +572,43 @@ def get_social_autonomy_store() -> SocialAutonomyStoreProtocol:
     return _social_autonomy_store_singleton
 
 
+def social_autonomy_profile_persisted(
+    store: SocialAutonomyStoreProtocol,
+    root: Path | None = None,
+) -> bool:
+    """Return whether a persisted autonomy profile exists for the configured backend."""
+    backend = (os.environ.get(_SOCIAL_AUTONOMY_STORE_BACKEND_ENV) or "").strip().lower()
+    if backend == "firestore":
+        from src.ham.social_autonomy.firestore_store import FirestoreSocialAutonomyStore
+
+        if isinstance(store, FirestoreSocialAutonomyStore):
+            return store.profile_document_exists(root)
+        return False
+    return social_autonomy_path(root).is_file()
+
+
+def load_social_autonomy_profile_for_tick(
+    root: Path | str | None = None,
+) -> tuple[GoHamSocialProfile | None, SocialAutonomyStoreProtocol]:
+    """Load the autonomy profile for tick execution via the configured store backend.
+
+    Returns ``(None, store)`` when no profile is persisted in the active backend.
+    Firestore SDK failures propagate as :class:`FirestoreSocialAutonomyStoreError`
+    without falling back to the file backend.
+    """
+    store = get_social_autonomy_store()
+    resolved = Path(root) if root is not None else Path.cwd()
+    if not social_autonomy_profile_persisted(store, resolved):
+        return None, store
+    try:
+        profile = store.read(resolved)
+    except SocialAutonomyStoreError as exc:
+        if isinstance(exc.__cause__, json.JSONDecodeError):
+            raise exc.__cause__ from exc
+        raise
+    return profile, store
+
+
 def set_social_autonomy_store_for_tests(
     store: SocialAutonomyStoreProtocol | None,
 ) -> None:

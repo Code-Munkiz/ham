@@ -813,7 +813,10 @@ def test_interlock_audit_actor_is_scheduled_tick(
 
     save_spy = Mock(wraps=save_profile)
 
-    with patch("src.ham.social_autonomy.tick.save_profile", save_spy):
+    with patch(
+        "src.ham.social_autonomy.store.SocialAutonomyFileStore.save",
+        save_spy,
+    ):
         resp = client.post(
             "/api/social/autonomy/scheduled-tick",
             json={},
