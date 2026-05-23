@@ -1,7 +1,7 @@
 """Tests for readiness and gateway_runtime_state propagation through the Telegram adapter.
 
 These tests verify that ``SocialAutonomyTelegramAdapter.dispatch`` correctly
-reads the canonical Telegram status via ``_telegram_status_response()`` and
+reads the canonical Telegram status via ``_telegram_status_for_autonomy_tick()`` and
 propagates the real ``readiness`` and ``gateway_runtime_state`` values into the
 ``HamgomoonAutopilotConfig`` it constructs, rather than hard-coding pessimistic
 defaults.  They also verify the graceful failure-tolerant path (exception, None,
@@ -47,7 +47,7 @@ def _make_status(overall_readiness: str, provider_runtime_state: str) -> SimpleN
 def test_happy_path_ready_connected_propagates_to_config(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When _telegram_status_response returns ready/connected, those exact values
+    """When _telegram_status_for_autonomy_tick returns ready/connected, those exact values
     must be passed to HamgomoonAutopilotConfig (not the bare defaults)."""
     import src.api.social as social_mod
     from src.ham import social_telegram_autopilot
@@ -60,7 +60,7 @@ def test_happy_path_ready_connected_propagates_to_config(
         return _blocked_autopilot_result()
 
     monkeypatch.setattr(
-        social_mod, "_telegram_status_response", lambda: _make_status("ready", "connected")
+        social_mod, "_telegram_status_for_autonomy_tick", lambda: _make_status("ready", "connected")
     )
     monkeypatch.setattr(social_telegram_autopilot, "run_hamgomoon_autopilot_once", spy)
 
@@ -74,7 +74,7 @@ def test_happy_path_ready_connected_propagates_to_config(
 def test_setup_required_path_preserves_pessimistic_values(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When _telegram_status_response returns setup_required/unknown, those values
+    """When _telegram_status_for_autonomy_tick returns setup_required/unknown, those values
     must be forwarded verbatim — no silent rewriting to 'ready'."""
     import src.api.social as social_mod
     from src.ham import social_telegram_autopilot
@@ -88,7 +88,7 @@ def test_setup_required_path_preserves_pessimistic_values(
 
     monkeypatch.setattr(
         social_mod,
-        "_telegram_status_response",
+        "_telegram_status_for_autonomy_tick",
         lambda: _make_status("setup_required", "unknown"),
     )
     monkeypatch.setattr(social_telegram_autopilot, "run_hamgomoon_autopilot_once", spy)
@@ -103,7 +103,7 @@ def test_setup_required_path_preserves_pessimistic_values(
 def test_status_helper_raises_falls_back_to_defaults_without_crash(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When _telegram_status_response raises, dispatch must NOT propagate the
+    """When _telegram_status_for_autonomy_tick raises, dispatch must NOT propagate the
     exception and must fall back to safe defaults (setup_required / unknown)."""
     import src.api.social as social_mod
     from src.ham import social_telegram_autopilot
@@ -118,7 +118,7 @@ def test_status_helper_raises_falls_back_to_defaults_without_crash(
     def raise_on_call() -> None:
         raise RuntimeError("status helper unavailable")
 
-    monkeypatch.setattr(social_mod, "_telegram_status_response", raise_on_call)
+    monkeypatch.setattr(social_mod, "_telegram_status_for_autonomy_tick", raise_on_call)
     monkeypatch.setattr(social_telegram_autopilot, "run_hamgomoon_autopilot_once", spy)
 
     # Must not raise
@@ -132,7 +132,7 @@ def test_status_helper_raises_falls_back_to_defaults_without_crash(
 def test_status_helper_returns_none_preserves_defaults(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When _telegram_status_response returns None, defaults must be preserved."""
+    """When _telegram_status_for_autonomy_tick returns None, defaults must be preserved."""
     import src.api.social as social_mod
     from src.ham import social_telegram_autopilot
     from src.ham.social_autonomy.telegram_adapter import SocialAutonomyTelegramAdapter
@@ -143,7 +143,7 @@ def test_status_helper_returns_none_preserves_defaults(
         captured.append(config)
         return _blocked_autopilot_result()
 
-    monkeypatch.setattr(social_mod, "_telegram_status_response", lambda: None)
+    monkeypatch.setattr(social_mod, "_telegram_status_for_autonomy_tick", lambda: None)
     monkeypatch.setattr(social_telegram_autopilot, "run_hamgomoon_autopilot_once", spy)
 
     SocialAutonomyTelegramAdapter().dispatch({"action": "message"}, dry_run=True)
@@ -156,7 +156,7 @@ def test_status_helper_returns_none_preserves_defaults(
 def test_status_helper_returns_partial_uses_real_value_for_present_field(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When _telegram_status_response returns a partial object (hermes_gateway
+    """When _telegram_status_for_autonomy_tick returns a partial object (hermes_gateway
     exists but has no provider_runtime_state attribute), the present field must
     be propagated and the missing field must fall back to its default."""
     import src.api.social as social_mod
@@ -175,7 +175,7 @@ def test_status_helper_returns_partial_uses_real_value_for_present_field(
         overall_readiness="ready",
         hermes_gateway=SimpleNamespace(),  # no provider_runtime_state attribute
     )
-    monkeypatch.setattr(social_mod, "_telegram_status_response", lambda: partial_status)
+    monkeypatch.setattr(social_mod, "_telegram_status_for_autonomy_tick", lambda: partial_status)
     monkeypatch.setattr(social_telegram_autopilot, "run_hamgomoon_autopilot_once", spy)
 
     SocialAutonomyTelegramAdapter().dispatch({"action": "message"}, dry_run=True)

@@ -29,6 +29,7 @@ from src.ham.social_autonomy.tick import (
     AUTONOMY_CADENCE_NOT_DUE,
     AUTONOMY_CAP_EXCEEDED,
     AUTONOMY_CAP_TRACKING_UNAVAILABLE,
+    AUTONOMY_CHANNEL_DISABLED,
     AUTONOMY_CHANNEL_UNAVAILABLE,
     AUTONOMY_EMERGENCY_STOP,
     AUTONOMY_FORBIDDEN_TOPIC_MATCHED,
@@ -453,7 +454,7 @@ def test_telegram_adapter_is_composed_on_successful_tick(
     assert calls["telegram"] == ["autopilot", "autopilot"]
 
 
-def test_discord_only_profile_blocks_without_discord_transport(
+def test_discord_only_profile_is_schema_disabled_without_channel_blockers(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -474,7 +475,9 @@ def test_discord_only_profile_blocks_without_discord_transport(
 
     assert tick.status_code == 200, tick.text
     assert tick.json()["ran"] is False
-    assert tick.json()["blocked_reasons"] == [AUTONOMY_CHANNEL_UNAVAILABLE]
+    assert tick.json()["blocked_reasons"] == []
+    assert AUTONOMY_CHANNEL_UNAVAILABLE not in tick.json()["blocked_reasons"]
+    assert AUTONOMY_CHANNEL_DISABLED not in tick.json()["blocked_reasons"]
 
 
 def test_learning_enabled_appends_one_record_and_disabled_keeps_file_unchanged(

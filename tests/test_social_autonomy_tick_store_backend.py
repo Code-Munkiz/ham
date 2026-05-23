@@ -211,7 +211,7 @@ def test_firestore_backend_dry_run_reaches_telegram_dispatch_path(
 
     monkeypatch.setattr(
         social_mod,
-        "_telegram_status_response",
+        "_telegram_status_for_autonomy_tick",
         lambda: SimpleNamespace(
             overall_readiness="ready",
             hermes_gateway=SimpleNamespace(provider_runtime_state="connected"),

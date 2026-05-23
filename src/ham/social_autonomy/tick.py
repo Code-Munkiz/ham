@@ -371,11 +371,11 @@ def _evaluate_actions(
     for channel, config in profile.channels.items():
         channel_name = str(channel)
         actions_considered.extend(_candidate_ids_for_channel(channel_name))
+        if not bool(config.enabled):
+            # Operator-intentional off (e.g. X/Discord during Telegram-only activation).
+            continue
         if channel_name == "discord" or not bool(config.available):
             blocked_reasons.append(AUTONOMY_CHANNEL_UNAVAILABLE)
-            continue
-        if not bool(config.enabled):
-            blocked_reasons.append(AUTONOMY_CHANNEL_DISABLED)
             continue
 
         allowed_actions = {

@@ -57,9 +57,9 @@ class SocialAutonomyTelegramAdapter:
         gateway_runtime_state: str = "unknown"
         telegram_self_probe_state: str = "unknown"
         try:
-            from src.api.social import _telegram_status_response  # noqa: PLC0415
+            from src.api.social import _telegram_status_for_autonomy_tick  # noqa: PLC0415
 
-            _status = _telegram_status_response()
+            _status = _telegram_status_for_autonomy_tick()
             if _status is not None:
                 _r = getattr(_status, "overall_readiness", None)
                 if _r is not None:

@@ -207,7 +207,7 @@ def test_adapter_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_short_circuit_disabled(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    from src.ham.social_autonomy.tick import AUTONOMY_CHANNEL_DISABLED, run_social_autonomy_tick
+    from src.ham.social_autonomy.tick import run_social_autonomy_tick
 
     calls: list[dict[str, Any]] = []
 
@@ -235,7 +235,7 @@ def test_short_circuit_disabled(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
         telegram_adapter=AdapterSpy(),
     )
 
-    assert result.blocked_reasons == [AUTONOMY_CHANNEL_DISABLED]
+    assert result.blocked_reasons == []
     assert calls == []
 
 

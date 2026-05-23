@@ -1482,14 +1482,33 @@ def _hermes_gateway_readiness(
     return "limited"
 
 
-def _telegram_status_response() -> SocialMessagingProviderStatusResponse:
+def _telegram_self_probe_state_for_autonomy_tick() -> Literal["ok", "not_ok", "unknown"]:
+    """Resolve Telegram self-probe state for autonomy tick dispatch.
+
+    Uses the TTL cache when populated; on cache miss performs the same fresh
+    getMe probe as ``GET /api/social/providers/telegram/capabilities`` so tick
+    readiness matches capabilities after cold start.
+    """
+    cached = _get_telegram_self_probe_state_cached_only()
+    if cached != "unknown":
+        return cached
+    return _get_telegram_self_probe_state()
+
+
+def _telegram_status_response(
+    *,
+    refresh_self_probe_on_cache_miss: bool = False,
+) -> SocialMessagingProviderStatusResponse:
     runtime = _hermes_runtime_status("telegram")
     connections = _telegram_connections()
     # M2: Telegram readiness based on self-probe (cached only — no network call
     # here so that aggregate endpoints like GET /api/social don't make outbound
     # requests).  The dedicated /status and /capabilities endpoints call
     # _get_telegram_self_probe_state() which refreshes the cache.
-    self_probe_state = _get_telegram_self_probe_state_cached_only()
+    if refresh_self_probe_on_cache_miss:
+        self_probe_state = _telegram_self_probe_state_for_autonomy_tick()
+    else:
+        self_probe_state = _get_telegram_self_probe_state_cached_only()
     readiness, reasons = _telegram_readiness_without_hermes(connections, self_probe_state)
     missing = _telegram_missing_requirements(connections, runtime)
     next_steps = _telegram_setup_steps(connections, runtime)
@@ -1531,6 +1550,11 @@ def _telegram_status_response() -> SocialMessagingProviderStatusResponse:
         policy_advisory_reasons=advisory,
         telegram_self_probe_state=self_probe_state,
     )
+
+
+def _telegram_status_for_autonomy_tick() -> SocialMessagingProviderStatusResponse:
+    """Telegram status for autonomy tick dispatch (fresh self-probe on cache miss)."""
+    return _telegram_status_response(refresh_self_probe_on_cache_miss=True)
 
 
 def _discord_status_response() -> SocialMessagingProviderStatusResponse:

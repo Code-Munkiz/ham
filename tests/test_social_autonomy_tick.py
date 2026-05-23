@@ -193,7 +193,7 @@ def test_emergency_stop_preempts_status_gate() -> None:
     assert result.profile_status == "stopped"
 
 
-def test_channel_disabled_blocks_without_usage_call() -> None:
+def test_intentionally_disabled_channel_skipped_without_blockers() -> None:
     from src.ham.social_autonomy.tick import (
         AUTONOMY_CHANNEL_DISABLED,
         plan_social_autonomy_tick,
@@ -214,33 +214,49 @@ def test_channel_disabled_blocks_without_usage_call() -> None:
     )
 
     assert result.ran is False
-    assert result.blocked_reasons == [AUTONOMY_CHANNEL_DISABLED]
+    assert result.blocked_reasons == []
+    assert AUTONOMY_CHANNEL_DISABLED not in result.blocked_reasons
     assert calls == []
 
 
-def test_discord_channel_unavailable_is_distinct_from_disabled() -> None:
+def test_channel_unavailable_is_distinct_from_intentionally_disabled() -> None:
     from src.ham.social_autonomy.tick import (
         AUTONOMY_CHANNEL_DISABLED,
         AUTONOMY_CHANNEL_UNAVAILABLE,
         plan_social_autonomy_tick,
     )
 
-    profile = _profile(
-        channels={"discord": {"enabled": True, "available": True}},
-        actions_allowed_per_channel={"discord": ["message"]},
-        daily_caps={"discord": 1},
-    )
-
-    result = plan_social_autonomy_tick(
-        profile,
+    unavailable = plan_social_autonomy_tick(
+        _profile(
+            channels={"telegram": {"enabled": True, "available": False}},
+            actions_allowed_per_channel={"telegram": ["message"]},
+            daily_caps={"telegram": 1},
+            cadence="manual",
+        ),
         now=_NOW,
         usage_counter=_zero_usage,
         content_guard=_allowing_content_guard,
+        run_once=True,
     )
 
-    assert result.ran is False
-    assert result.blocked_reasons == [AUTONOMY_CHANNEL_UNAVAILABLE]
-    assert AUTONOMY_CHANNEL_DISABLED not in result.blocked_reasons
+    disabled = plan_social_autonomy_tick(
+        _profile(
+            channels={"telegram": {"enabled": False, "available": True}},
+            actions_allowed_per_channel={"telegram": ["message"]},
+            daily_caps={"telegram": 1},
+            cadence="manual",
+        ),
+        now=_NOW,
+        usage_counter=_zero_usage,
+        content_guard=_allowing_content_guard,
+        run_once=True,
+    )
+
+    assert unavailable.ran is False
+    assert unavailable.blocked_reasons == [AUTONOMY_CHANNEL_UNAVAILABLE]
+    assert disabled.ran is False
+    assert disabled.blocked_reasons == []
+    assert AUTONOMY_CHANNEL_DISABLED not in disabled.blocked_reasons
 
 
 def test_action_not_allowed_blocks_candidate_actions() -> None:
@@ -618,9 +634,8 @@ def test_tick_succeeds_for_telegram_when_delivery_log_missing(
     assert result.ran is True
     assert any(a.startswith("telegram:") for a in result.actions_taken)
     assert AUTONOMY_CAP_TRACKING_UNAVAILABLE not in result.blocked_reasons
-    # These two are BY DESIGN for the canary channel config:
-    assert AUTONOMY_CHANNEL_UNAVAILABLE in result.blocked_reasons  # discord
-    assert AUTONOMY_CHANNEL_DISABLED in result.blocked_reasons  # x
+    assert AUTONOMY_CHANNEL_UNAVAILABLE not in result.blocked_reasons
+    assert AUTONOMY_CHANNEL_DISABLED not in result.blocked_reasons
 
 
 def test_run_missing_profile_does_not_create_file(
@@ -647,7 +662,7 @@ def test_tick_activity_clears_when_adapter_propagates_ready_connected(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """When _telegram_status_response returns ready/connected, the adapter
+    """When _telegram_status_for_autonomy_tick returns ready/connected, the adapter
     propagates those values and the activity lane no longer emits
     telegram_readiness_not_ready or telegram_gateway_not_connected.
 
@@ -666,10 +681,11 @@ def test_tick_activity_clears_when_adapter_propagates_ready_connected(
     # Pin the status helper to ready/connected.
     monkeypatch.setattr(
         social_mod,
-        "_telegram_status_response",
+        "_telegram_status_for_autonomy_tick",
         lambda: SimpleNamespace(
             overall_readiness="ready",
             hermes_gateway=SimpleNamespace(provider_runtime_state="connected"),
+            telegram_self_probe_state="ok",
         ),
     )
     # Unset transcript discovery env vars so the reactive lane is deterministically
@@ -712,7 +728,7 @@ def test_tick_activity_still_blocks_when_status_setup_required(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """When _telegram_status_response returns setup_required/unknown, the adapter
+    """When _telegram_status_for_autonomy_tick returns setup_required/unknown, the adapter
     propagates those pessimistic values and the activity lane STILL emits
     telegram_readiness_not_ready (fail-closed preserved).
 
@@ -735,7 +751,7 @@ def test_tick_activity_still_blocks_when_status_setup_required(
     # No telegram_self_probe_state attribute → adapter falls back to "unknown".
     monkeypatch.setattr(
         social_mod,
-        "_telegram_status_response",
+        "_telegram_status_for_autonomy_tick",
         lambda: SimpleNamespace(
             overall_readiness="setup_required",
             hermes_gateway=SimpleNamespace(provider_runtime_state="unknown"),
@@ -801,7 +817,7 @@ def test_hermes_critic_failure_does_not_block_dispatch(
     # Pin Telegram status to ready/connected so dispatch proceeds.
     monkeypatch.setattr(
         social_mod,
-        "_telegram_status_response",
+        "_telegram_status_for_autonomy_tick",
         lambda: SimpleNamespace(
             overall_readiness="ready",
             hermes_gateway=SimpleNamespace(provider_runtime_state="connected"),

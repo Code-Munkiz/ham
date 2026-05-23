@@ -216,7 +216,7 @@ def test_activity_lane_runs_without_hermes_when_self_probe_ok(
     # Mock status response: self-probe ok, Hermes absent
     monkeypatch.setattr(
         social_mod,
-        "_telegram_status_response",
+        "_telegram_status_for_autonomy_tick",
         lambda: SimpleNamespace(
             overall_readiness="ready",
             hermes_gateway=SimpleNamespace(provider_runtime_state="unknown"),
@@ -558,7 +558,7 @@ def test_adapter_reads_probe_state_from_status_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """SocialAutonomyTelegramAdapter reads telegram_self_probe_state from
-    _telegram_status_response and passes it to HamgomoonAutopilotConfig.
+    _telegram_status_for_autonomy_tick and passes it to HamgomoonAutopilotConfig.
     """
     import src.api.social as social_mod
     from src.ham import social_telegram_autopilot
@@ -584,7 +584,7 @@ def test_adapter_reads_probe_state_from_status_response(
 
     monkeypatch.setattr(
         social_mod,
-        "_telegram_status_response",
+        "_telegram_status_for_autonomy_tick",
         lambda: SimpleNamespace(
             overall_readiness="ready",
             hermes_gateway=SimpleNamespace(provider_runtime_state="unknown"),
@@ -638,7 +638,7 @@ def test_m14_m1d_propagation_adapter_still_passes_readiness_and_gateway_state(
 
     monkeypatch.setattr(
         social_mod,
-        "_telegram_status_response",
+        "_telegram_status_for_autonomy_tick",
         lambda: SimpleNamespace(
             overall_readiness="ready",
             hermes_gateway=SimpleNamespace(provider_runtime_state="connected"),
