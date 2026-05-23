@@ -327,6 +327,17 @@ class TestFirestoreBackendWritePollerMetadata:
             "write_poller_metadata must not clear last_error when only last_run_at is provided"
         )
 
+    def test_write_offset_preserves_existing_metadata(self) -> None:
+        """write_offset does not clear existing last_run_at / last_error fields in Firestore."""
+        store, _ = self._make_store()
+        store.write_poller_metadata(_BOT_DIGEST, last_run_at="2026-05-22T10:00:00+00:00")
+        store.write_offset(_BOT_DIGEST, 99)
+        meta = store.read_poller_metadata(_BOT_DIGEST)
+        assert meta["last_run_at"] == "2026-05-22T10:00:00+00:00", (
+            "write_offset must not clear existing last_run_at in Firestore"
+        )
+        assert store.read_offset(_BOT_DIGEST) == 99
+
     def test_write_poller_metadata_raises_on_sdk_error(self) -> None:
         """write_poller_metadata raises FirestoreTelegramOffsetStoreError on SDK failure."""
         from src.ham.social_telegram_offset_firestore import (

@@ -42,8 +42,12 @@ class _FakeDocRef:
     root: _FakeFirestoreClient
     path: str
 
-    def set(self, data: dict[str, Any]) -> None:
-        self.root.docs[self.path] = dict(data)
+    def set(self, data: dict[str, Any], merge: bool = False) -> None:
+        if merge:
+            existing = self.root.docs.get(self.path, {})
+            self.root.docs[self.path] = {**existing, **data}
+        else:
+            self.root.docs[self.path] = dict(data)
 
     def get(self) -> _FakeDocSnap:
         data = self.root.docs.get(self.path)

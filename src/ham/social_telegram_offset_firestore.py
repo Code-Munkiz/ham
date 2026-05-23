@@ -14,10 +14,12 @@ the ``bot_digest`` (``sha256(token)[:16]``) so each bot token has exactly one
 document, and writes are idempotent at the document level.
 
 Atomicity:
-    ``write_offset`` uses Firestore ``set()`` (full document replace), which is
-    atomic at the document level — either the full payload is written or nothing
-    is.  No explicit transaction is needed for a single-field single-document
-    write.
+    ``write_offset`` uses Firestore ``set(merge=True)`` to merge only the
+    ``update_offset`` field into the existing document.  This preserves any
+    ``last_run_at`` / ``last_error`` metadata previously written by
+    ``write_poller_metadata``, and is atomic at the document level — either the
+    full merged payload is written or nothing is.  No explicit transaction is
+    needed for a single-field single-document write.
 
 Idempotency:
     Writing the same offset twice simply overwrites the document with the same
@@ -158,9 +160,11 @@ class FirestoreTelegramOffsetStore:
     def write_offset(self, bot_digest: str, update_offset: int) -> None:
         """Atomically persist ``update_offset`` for ``bot_digest``.
 
-        Uses Firestore ``set()`` (full document replace), which is atomic at the
-        document level.  Writing the same offset twice is a no-op in terms of
-        observable state — the document simply retains the same value.
+        Uses Firestore ``set(merge=True)`` to merge only the ``update_offset``
+        field into the existing document, preserving any ``last_run_at`` /
+        ``last_error`` metadata previously written by :meth:`write_poller_metadata`.
+        Writing the same offset twice is a no-op in terms of observable state —
+        the document simply retains the same value.
 
         Args:
             bot_digest:    Short hex digest of the bot token.
@@ -173,7 +177,7 @@ class FirestoreTelegramOffsetStore:
         key = str(bot_digest).strip()
         payload: dict[str, Any] = {"update_offset": int(update_offset)}
         try:
-            db.collection(self._coll_name).document(key).set(payload)
+            db.collection(self._coll_name).document(key).set(payload, merge=True)
         except FirestoreTelegramOffsetStoreError:
             raise
         except Exception as exc:  # noqa: BLE001
