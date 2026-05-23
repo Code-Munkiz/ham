@@ -2070,6 +2070,49 @@ def _telegram_readiness_apply_reasons() -> list[str]:
     return _dedupe(reasons)
 
 
+def _activity_requires_hermes_gateway_for_apply() -> bool:
+    """Return whether Telegram activity live apply requires Hermes gateway."""
+    try:
+        profile = get_social_autonomy_store().read(_project_root())
+    except Exception:  # noqa: BLE001
+        return False
+    if profile.status == "draft":
+        return False
+    return bool(profile.activity_requires_hermes_gateway)
+
+
+def _telegram_activity_readiness_apply_reasons(
+    *,
+    activity_requires_hermes_gateway: bool | None = None,
+) -> list[str]:
+    """Telegram activity apply readiness aligned with dry-run/activity preview.
+
+    When ``activity_requires_hermes_gateway`` is false (default), readiness is
+    based on env connections plus Telegram self-probe (same basis as autonomy
+    tick and activity preview). Hermes gateway/platform connected states are not
+    required. When true, the legacy Hermes-inclusive readiness gate applies.
+    """
+    requires_hermes = (
+        activity_requires_hermes_gateway
+        if activity_requires_hermes_gateway is not None
+        else _activity_requires_hermes_gateway_for_apply()
+    )
+    if requires_hermes:
+        return _telegram_readiness_apply_reasons()
+
+    connections = _telegram_connections()
+    reasons: list[str] = []
+    if not connections["bot_token_present"]:
+        reasons.append("telegram_bot_token_missing")
+    if not connections["allowed_users_configured"]:
+        reasons.append("telegram_allowed_users_missing")
+    if not _telegram_preview_target().configured:
+        reasons.append("telegram_target_not_configured")
+    if _telegram_self_probe_state_for_autonomy_tick() != "ok":
+        reasons.append("telegram_self_probe_not_ok")
+    return _dedupe(reasons)
+
+
 def _persona_digest_mismatch_response(
     *,
     kind: Literal["reply", "batch", "broadcast"],
@@ -4087,7 +4130,7 @@ def telegram_activity_apply(
     readiness_reasons = _prepend_autonomy_apply_reasons(
         channel="telegram",
         action="activity",
-        legacy_reasons=_telegram_readiness_apply_reasons(),
+        legacy_reasons=_telegram_activity_readiness_apply_reasons(),
     )
     if readiness_reasons:
         return _telegram_activity_apply_blocked_response(reasons=readiness_reasons, preview=preview)
