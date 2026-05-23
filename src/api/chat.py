@@ -1,4 +1,5 @@
 """HAM-native interactive chat. Proxies to server-side gateway adapter; optional NDJSON streaming."""
+
 from __future__ import annotations
 
 import json
@@ -484,7 +485,9 @@ def _record_operator_audit(
         {
             **actor_attribution_dict(ham_actor),
             "required_permission": req,
-            "permission_granted": actor_has_permission(ham_actor, req) if (ham_actor and req) else None,
+            "permission_granted": actor_has_permission(ham_actor, req)
+            if (ham_actor and req)
+            else None,
             "intent": op.intent,
             "operator_phase": body.operator.phase if body.operator else None,
             "operator_ok": op.ok,
@@ -729,16 +732,16 @@ _BUILDER_TURN_SYSTEM_INJECTION = (
     "- Prefer outlining the UX and offering a concise build plan instead of pretending code exists.\n"
     "- Outline what will happen next with plain phrases (workspace build, builder run, build plan).\n"
     "- Never mimic the legacy staged hyphenated routing label historically used around gated snapshots.\n"
-    '- Avoid steering users toward Coding Plan escapes, Cursor cloud launchpads, stray agent sessions, '
+    "- Avoid steering users toward Coding Plan escapes, Cursor cloud launchpads, stray agent sessions, "
     '"Plan with coding agents" chatter, Cloud Agent narration, '
-    "\"I can't build directly from chat,\" or anything that skips approval.\n"
+    '"I can\'t build directly from chat," or anything that skips approval.\n'
     "- Keep Builder approval gates intact — never autosubmit plans or approvals.\n"
-    "- Do NOT promise iterative or staged ongoing build work (e.g. \"I'll keep adding…\", "
-    "\"as the build progresses…\", \"I'll then add…\", \"next I'll…\", \"I'll iterate on…\") "
+    '- Do NOT promise iterative or staged ongoing build work (e.g. "I\'ll keep adding…", '
+    '"as the build progresses…", "I\'ll then add…", "next I\'ll…", "I\'ll iterate on…") '
     "or imply a multi-step agent is building in the background.\n"
     "- Ground every claim in this workspace's builder records only. NEVER invent local filesystem "
     "paths, games/apps on the user's machine, or offers to open something in their browser.\n"
-    "- NEVER refer to \"this machine\", \"your computer\", pre-existing local projects, or off-workspace files.\n"
+    '- NEVER refer to "this machine", "your computer", pre-existing local projects, or off-workspace files.\n'
 )
 
 _BUILDER_GROUNDING_SYSTEM_INJECTION = (
@@ -746,8 +749,8 @@ _BUILDER_GROUNDING_SYSTEM_INJECTION = (
     "You MUST ground every factual claim in Workbench/builder records for this project only.\n"
     "- NEVER invent local files, paths, games/apps on the user's machine, or runtime state not backed "
     "by workspace builder records.\n"
-    "- NEVER say \"on this machine\", \"your computer\", \"game files actually went\", or offer to "
-    "\"open it in your browser\" unless the Workbench already shows that artifact.\n"
+    '- NEVER say "on this machine", "your computer", "game files actually went", or offer to '
+    '"open it in your browser" unless the Workbench already shows that artifact.\n'
     "- If preview/source/job state is unknown, say so honestly and offer to build or retry in the "
     "Workbench — do not guess or narrate a local environment.\n"
 )
@@ -799,7 +802,9 @@ def _resolve_chat_openrouter_route(
     gw = (os.environ.get("HERMES_GATEWAY_MODE") or "").strip().lower()
     hinted_key = ""
     if ham_actor is not None:
-        hinted_key = (resolve_connected_tool_secret_plaintext(ham_actor, "openrouter") or "").strip()
+        hinted_key = (
+            resolve_connected_tool_secret_plaintext(ham_actor, "openrouter") or ""
+        ).strip()
 
     user_key_ready = bool(hinted_key and openrouter_api_key_is_plausible(hinted_key))
     mid_raw = body.model_id
@@ -978,7 +983,9 @@ def _execution_mode_payload(body: ChatRequest, *, last_user_plain: str) -> dict[
         "environment": decision.environment,
         "browser_available": decision.browser_available,
         "local_machine_available": decision.local_machine_available,
-        "browser_adapter": _resolve_browser_adapter(body.project_id) if decision.selected_mode == "browser" else None,
+        "browser_adapter": _resolve_browser_adapter(body.project_id)
+        if decision.selected_mode == "browser"
+        else None,
         "reason": decision.reason,
     }
 
@@ -1042,7 +1049,9 @@ def _build_browser_intent_for_turn(
 
 def _build_browser_assembly_for_turn(body: ChatRequest) -> Any:
     _policy_spec, adapter = _build_browser_policy_spec(body.project_id)
-    return SimpleNamespace(browser_executor=build_browser_executor(adapter), browser_adapter=adapter)
+    return SimpleNamespace(
+        browser_executor=build_browser_executor(adapter), browser_adapter=adapter
+    )
 
 
 def _apply_browser_bridge_for_turn(
@@ -1079,17 +1088,13 @@ def _apply_browser_bridge_for_turn(
             "project_id": body.project_id,
         },
     )
-    if (
-        result.status
-        in {
-            BrowserRunStatus.BLOCKED,
-            BrowserRunStatus.REJECTED,
-            BrowserRunStatus.FAILED,
-            BrowserRunStatus.TIMED_OUT,
-            BrowserRunStatus.PARTIAL,
-        }
-        and bool(execution_mode.get("local_machine_available"))
-    ):
+    if result.status in {
+        BrowserRunStatus.BLOCKED,
+        BrowserRunStatus.REJECTED,
+        BrowserRunStatus.FAILED,
+        BrowserRunStatus.TIMED_OUT,
+        BrowserRunStatus.PARTIAL,
+    } and bool(execution_mode.get("local_machine_available")):
         execution_mode["selected_mode"] = "machine"
         execution_mode["auto_selected"] = True
         execution_mode["reason"] = (
@@ -1184,9 +1189,7 @@ def _prepare_chat_session(
 
     incoming = _finalize_incoming_for_store(body.messages, attachment_user_id=attachment_user_id)
     last_user_plain = (
-        plain_text_for_operator(incoming[-1]["content"])
-        if incoming[-1]["role"] == "user"
-        else ""
+        plain_text_for_operator(incoming[-1]["content"]) if incoming[-1]["role"] == "user" else ""
     )
     try:
         store.append_turns(sid, incoming)
@@ -1277,7 +1280,9 @@ def _with_interrupted_note(content: str) -> str:
     return f"{base}{_STREAM_PARTIAL_NOTE}"
 
 
-def _builder_stream_should_handoff_early(builder_intent: str, builder_meta: dict[str, Any] | None) -> bool:
+def _builder_stream_should_handoff_early(
+    builder_intent: str, builder_meta: dict[str, Any] | None
+) -> bool:
     if builder_intent != "build_or_create":
         return False
     meta = builder_meta or {}
@@ -1403,8 +1408,12 @@ def _builder_verification_failure_assistant_text(
         from src.ham.builder_chat_hooks import _llm_scaffold_failure_message
         from src.ham.builder_error_codes import STEP_MODEL_UNAVAILABLE
 
-        failed_model = str((builder_meta or {}).get("llm_scaffold_failed_model") or "").strip() or None
-        error_code = str((builder_meta or {}).get("llm_scaffold_error_code") or STEP_MODEL_UNAVAILABLE).strip()
+        failed_model = (
+            str((builder_meta or {}).get("llm_scaffold_failed_model") or "").strip() or None
+        )
+        error_code = str(
+            (builder_meta or {}).get("llm_scaffold_error_code") or STEP_MODEL_UNAVAILABLE
+        ).strip()
         operation = "build_or_create" if intent == "build_or_create" else "update_existing_project"
         return _llm_scaffold_failure_message(
             operation=operation,
@@ -1443,7 +1452,9 @@ def _builder_stream_handoff_suffix(builder_meta: dict[str, Any] | None) -> str:
     if meta.get("cloud_runtime_job_id") or meta.get("cloud_runtime_job_deduplicated"):
         lines.append(_BUILDER_STREAM_PREVIEW_STARTING_LINE)
     else:
-        from src.ham.builder_chat_cloud_runtime import builder_chat_cloud_runtime_auto_enqueue_eligible
+        from src.ham.builder_chat_cloud_runtime import (
+            builder_chat_cloud_runtime_auto_enqueue_eligible,
+        )
 
         if builder_chat_cloud_runtime_auto_enqueue_eligible():
             lines.append(_BUILDER_STREAM_PREVIEW_STARTING_LINE)
@@ -1485,7 +1496,9 @@ def get_chat_context_meters(
     authorization: str | None = Header(None, alias="Authorization"),
 ) -> dict[str, Any]:
     """Safe context pressure meters (no message contents in the response)."""
-    ham_actor = enforce_clerk_session_and_email_for_request(authorization, route="get_chat_context_meters")
+    ham_actor = enforce_clerk_session_and_email_for_request(
+        authorization, route="get_chat_context_meters"
+    )
     if not context_meters_feature_enabled():
         return {"enabled": False, "this_turn": None, "workspace": None, "thread": None}
 
@@ -1571,13 +1584,13 @@ async def list_chat_sessions(
     authorization: str | None = Header(None, alias="Authorization"),
 ) -> dict:
     """List chat sessions with previews (newest first)."""
-    ham_actor = enforce_clerk_session_and_email_for_request(authorization, route="list_chat_sessions")
+    ham_actor = enforce_clerk_session_and_email_for_request(
+        authorization, route="list_chat_sessions"
+    )
     workspace_scope = _normalized_workspace_id(workspace_id)
     user_scope = _scoped_user_id(ham_actor, workspace_scope)
     unscoped_actor_user_id = (
-        ham_actor.user_id
-        if ham_actor is not None and workspace_scope is None
-        else None
+        ham_actor.user_id if ham_actor is not None and workspace_scope is None else None
     )
     clamped_limit = max(1, min(limit, 100))
     clamped_offset = max(0, offset)
@@ -1630,7 +1643,9 @@ async def delete_chat_session(
     authorization: str | None = Header(None, alias="Authorization"),
 ) -> Response:
     """Delete a chat session and its turns from HAM-backed persistence (SQLite/Firestore/memory)."""
-    ham_actor = enforce_clerk_session_and_email_for_request(authorization, route="delete_chat_session")
+    ham_actor = enforce_clerk_session_and_email_for_request(
+        authorization, route="delete_chat_session"
+    )
     workspace_scope = _normalized_workspace_id(workspace_id)
     _get_session_for_scope(
         session_id,
@@ -1662,7 +1677,9 @@ async def export_chat_session_pdf(
     from src.ham.chat_pdf_export import render_chat_transcript_pdf_bytes
     from src.ham.pdf_export_sanitizer import safe_export_filename_fragment
 
-    ham_actor = enforce_clerk_session_and_email_for_request(authorization, route="export_chat_session_pdf")
+    ham_actor = enforce_clerk_session_and_email_for_request(
+        authorization, route="export_chat_session_pdf"
+    )
     workspace_scope = _normalized_workspace_id(workspace_id)
     rec = _get_session_for_scope(
         session_id,
@@ -1694,7 +1711,9 @@ async def create_chat_session(
     authorization: str | None = Header(None, alias="Authorization"),
 ) -> dict:
     """Create an empty chat session for explicit persistence flows (desktop local-control turns)."""
-    ham_actor = enforce_clerk_session_and_email_for_request(authorization, route="create_chat_session")
+    ham_actor = enforce_clerk_session_and_email_for_request(
+        authorization, route="create_chat_session"
+    )
     workspace_scope = _normalized_workspace_id(workspace_id)
     sid = _chat_store.create_session(
         user_id=_scoped_user_id(ham_actor, workspace_scope),
@@ -1733,12 +1752,22 @@ async def append_chat_session_turns(
         if not content.strip():
             raise HTTPException(
                 status_code=422,
-                detail={"error": {"code": "INVALID_MESSAGE", "message": "Turn content must be non-empty."}},
+                detail={
+                    "error": {
+                        "code": "INVALID_MESSAGE",
+                        "message": "Turn content must be non-empty.",
+                    }
+                },
             )
         if len(content) > 100_000:
             raise HTTPException(
                 status_code=422,
-                detail={"error": {"code": "MESSAGE_TOO_LONG", "message": "Message exceeds maximum length."}},
+                detail={
+                    "error": {
+                        "code": "MESSAGE_TOO_LONG",
+                        "message": "Message exceeds maximum length.",
+                    }
+                },
             )
         if t.role == "user" and content.strip().startswith("{"):
             try:
@@ -1826,10 +1855,12 @@ async def post_chat(
         and "acknowledgement_template" not in builder_meta
     ):
         builder_meta["acknowledgement_template"] = builder_prefix
-    or_override, litellm_hint_key, litellm_http_bypass, http_override = _resolve_chat_openrouter_route(
-        body=body,
-        ham_actor=ham_actor,
-        allow_conversational_default=builder_intent != "build_or_create",
+    or_override, litellm_hint_key, litellm_http_bypass, http_override = (
+        _resolve_chat_openrouter_route(
+            body=body,
+            ham_actor=ham_actor,
+            allow_conversational_default=builder_intent != "build_or_create",
+        )
     )
     execution_mode = _execution_mode_payload(body_eff, last_user_plain=last_user_plain)
     execution_mode = _apply_browser_bridge_for_turn(
@@ -1915,7 +1946,9 @@ async def post_chat(
                 session_id=sid,
                 messages=store.list_messages(sid),
                 actions=[],
-                active_agent=ChatActiveAgentMeta.model_validate(active_meta) if active_meta else None,
+                active_agent=ChatActiveAgentMeta.model_validate(active_meta)
+                if active_meta
+                else None,
                 operator_result=op.model_dump(mode="json"),
                 execution_mode=execution_mode,
                 builder=builder_meta,
@@ -1960,9 +1993,7 @@ async def post_chat(
         ) from exc
 
     assistant_visible, actions = (
-        split_assistant_ui_actions(assistant_raw)
-        if body.enable_ui_actions
-        else (assistant_raw, [])
+        split_assistant_ui_actions(assistant_raw) if body.enable_ui_actions else (assistant_raw, [])
     )
     if builder_prefix and builder_intent != "build_or_create":
         assistant_visible = f"{builder_prefix}{assistant_visible}"
@@ -2037,10 +2068,12 @@ def post_chat_stream(
         and "acknowledgement_template" not in builder_meta
     ):
         builder_meta["acknowledgement_template"] = builder_prefix
-    or_override, litellm_hint_key, litellm_http_bypass, http_override = _resolve_chat_openrouter_route(
-        body=body,
-        ham_actor=ham_actor,
-        allow_conversational_default=builder_intent != "build_or_create",
+    or_override, litellm_hint_key, litellm_http_bypass, http_override = (
+        _resolve_chat_openrouter_route(
+            body=body,
+            ham_actor=ham_actor,
+            allow_conversational_default=builder_intent != "build_or_create",
+        )
     )
     lock_claim = _claim_stream_session(sid)
     if not lock_claim.claimed:
@@ -2094,7 +2127,9 @@ def post_chat_stream(
                         plan_mode=body.plan_mode,
                         conversation_history=store.list_messages(sid)[:-1],
                     )
-                    builder_intent = str((builder_meta or {}).get("builder_intent") or "").strip().lower()
+                    builder_intent = (
+                        str((builder_meta or {}).get("builder_intent") or "").strip().lower()
+                    )
                     if (
                         builder_prefix
                         and builder_meta is not None
@@ -2204,7 +2239,9 @@ def post_chat_stream(
                         _chat_payload_attach_artifact_verification(payload, builder_meta)
                         yield json.dumps(payload) + "\n"
                         return
-                    fallback = _builder_verification_failure_assistant_text(builder_prefix, builder_meta)
+                    fallback = _builder_verification_failure_assistant_text(
+                        builder_prefix, builder_meta
+                    )
                     store.append_turns(sid, [ChatTurn(role="assistant", content=fallback)])
                     msgs = store.list_messages(sid)
                     yield json.dumps({"type": "delta", "text": fallback}) + "\n"
@@ -2391,7 +2428,9 @@ def post_chat_stream(
                 )
             )
             if op is not None and op.handled:
-                _record_operator_audit(body=body, op=op, ham_actor=ham_actor, route="post_chat_stream")
+                _record_operator_audit(
+                    body=body, op=op, ham_actor=ham_actor, route="post_chat_stream"
+                )
                 msg = format_operator_assistant_message(op)
                 if builder_prefix:
                     msg = f"{builder_prefix}{msg}"
@@ -2539,7 +2578,10 @@ def post_chat_stream(
                             model_override=_planner_model_override,
                         )
                         if plan is not None:
-                            yield json.dumps({"type": "plan_proposed", "plan_id": plan.plan_id}) + "\n"
+                            yield (
+                                json.dumps({"type": "plan_proposed", "plan_id": plan.plan_id})
+                                + "\n"
+                            )
                             _ack = (
                                 f"Here's what I'll do ({len(plan.steps)} step"
                                 f"{'' if len(plan.steps) == 1 else 's'}). "
@@ -2568,17 +2610,18 @@ def post_chat_stream(
                                 "workspace_id": _planner_workspace_id,
                             },
                         )
-                        _invalid_msg = (
-                            "Planner couldn't produce a valid Plan; please rephrase.\n\n"
-                        )
+                        _invalid_msg = "Planner couldn't produce a valid Plan; please rephrase.\n\n"
                         store.upsert_assistant_turn(sid, _planner_turn_id, _invalid_msg)
-                        yield json.dumps(
-                            {
-                                "type": "error",
-                                "code": "PLANNER_INVALID_OUTPUT",
-                                "message": "Planner couldn't produce a valid Plan; please rephrase",
-                            }
-                        ) + "\n"
+                        yield (
+                            json.dumps(
+                                {
+                                    "type": "error",
+                                    "code": "PLANNER_INVALID_OUTPUT",
+                                    "message": "Planner couldn't produce a valid Plan; please rephrase",
+                                }
+                            )
+                            + "\n"
+                        )
                         _invalid_done: dict[str, Any] = {
                             "type": "done",
                             "session_id": sid,
@@ -2611,20 +2654,21 @@ def post_chat_stream(
                             builder_meta,
                         )
                         if not str(_fail_msg or "").strip():
-                            _fail_msg = (
-                                "Plan generation failed. Try again or pick a different chat model.\n\n"
-                            )
+                            _fail_msg = "Plan generation failed. Try again or pick a different chat model.\n\n"
                         store.upsert_assistant_turn(sid, _planner_turn_id, _fail_msg)
                         yield json.dumps({"type": "delta", "text": _fail_msg}) + "\n"
-                        yield json.dumps(
-                            {
-                                "type": "error",
-                                "code": "PLANNER_FAILED",
-                                "message": (
-                                    "Plan generation failed; try again or pick a different model."
-                                ),
-                            }
-                        ) + "\n"
+                        yield (
+                            json.dumps(
+                                {
+                                    "type": "error",
+                                    "code": "PLANNER_FAILED",
+                                    "message": (
+                                        "Plan generation failed; try again or pick a different model."
+                                    ),
+                                }
+                            )
+                            + "\n"
+                        )
                         _fail_done: dict[str, Any] = {
                             "type": "done",
                             "session_id": sid,
@@ -2656,13 +2700,13 @@ def post_chat_stream(
 
         assistant_turn_id = str(uuid4())
         llm_messages = _inject_builder_turn_system(
-        llm_messages,
-        builder_intent,
-        in_builder_workspace=_chat_in_builder_workspace(
-            workspace_id=body.workspace_id,
-            project_id=(body_eff.project_id or "").strip() or None,
-        ),
-    )
+            llm_messages,
+            builder_intent,
+            in_builder_workspace=_chat_in_builder_workspace(
+                workspace_id=body.workspace_id,
+                project_id=(body_eff.project_id or "").strip() or None,
+            ),
+        )
 
         def ndjson_gen():
             # Session + optional prefix yields must live inside the same ``try`` as
@@ -2682,9 +2726,7 @@ def post_chat_stream(
                 if not partial.strip():
                     return
                 visible, _ = (
-                    split_assistant_ui_actions(partial)
-                    if body.enable_ui_actions
-                    else (partial, [])
+                    split_assistant_ui_actions(partial) if body.enable_ui_actions else (partial, [])
                 )
                 payload = _with_interrupted_note(visible) if interrupted else visible
                 store.upsert_assistant_turn(sid, assistant_turn_id, payload)
@@ -2775,13 +2817,16 @@ def post_chat_stream(
                             payload_err["hermes_http_context_budget"] = dict(budget_diag_stream)
                         yield json.dumps(payload_err) + "\n"
                     except KeyError:
-                        yield json.dumps(
-                            {
-                                "type": "error",
-                                "code": exc.code,
-                                "message": assistant_visible_err,
-                            },
-                        ) + "\n"
+                        yield (
+                            json.dumps(
+                                {
+                                    "type": "error",
+                                    "code": exc.code,
+                                    "message": assistant_visible_err,
+                                },
+                            )
+                            + "\n"
+                        )
                     return
 
                 stream_completed = True
@@ -2810,13 +2855,16 @@ def post_chat_stream(
                         payload["hermes_http_context_budget"] = dict(budget_diag_stream)
                     yield json.dumps(payload) + "\n"
                 except KeyError:
-                    yield json.dumps(
-                        {
-                            "type": "error",
-                            "code": "SESSION_NOT_FOUND",
-                            "message": "Session disappeared during stream.",
-                        },
-                    ) + "\n"
+                    yield (
+                        json.dumps(
+                            {
+                                "type": "error",
+                                "code": "SESSION_NOT_FOUND",
+                                "message": "Session disappeared during stream.",
+                            },
+                        )
+                        + "\n"
+                    )
             except Exception as ndjson_exc:  # noqa: BLE001
                 _LOG.warning(
                     "ndjson_gen aborted with unhandled exception; yielding terminal done",

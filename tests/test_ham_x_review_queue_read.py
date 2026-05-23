@@ -1,4 +1,5 @@
 """Unit tests for review_queue read path (no FastAPI / sentry imports)."""
+
 from __future__ import annotations
 
 import json

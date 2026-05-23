@@ -1,4 +1,5 @@
 """POST /api/chat/stream NDJSON streaming."""
+
 from __future__ import annotations
 
 import json
@@ -241,7 +242,9 @@ def test_chat_stream_non_cursor_turn_persists_streamed_assistant_when_operator_d
     assert "Blocked:" not in msgs[-1]["content"]
 
 
-def test_chat_stream_build_intent_bypasses_operator_fallback(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chat_stream_build_intent_bypasses_operator_fallback(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     def _builder_hook(**_kwargs):  # type: ignore[no-untyped-def]
         return (
             "I'll create the initial project source and prepare the Workbench.\n\n",
@@ -257,7 +260,10 @@ def test_chat_stream_build_intent_bypasses_operator_fallback(mock_mode: None, mo
 
     res = client.post(
         "/api/chat/stream",
-        json={"messages": [{"role": "user", "content": "build me a game like Tetris"}], "enable_operator": True},
+        json={
+            "messages": [{"role": "user", "content": "build me a game like Tetris"}],
+            "enable_operator": True,
+        },
     )
     assert res.status_code == 200, res.text
     events = _parse_ndjson(res.text)
@@ -269,7 +275,9 @@ def test_chat_stream_build_intent_bypasses_operator_fallback(mock_mode: None, mo
 
 @pytest.mark.parametrize("conv_env", [None, "openrouter/sentinel-conv:free"])
 def test_chat_stream_build_intent_handoffs_without_long_llm_stream(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch, conv_env: str | None,
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
+    conv_env: str | None,
 ) -> None:
     """VAL-LANE-002 — early-handoff lane never invokes stream_chat_turn under env set/unset."""
     if conv_env is None:
@@ -391,7 +399,9 @@ def test_chat_stream_deferred_net_new_build_surfaces_scaffold_failure(
 
 @pytest.mark.parametrize("conv_env", [None, "openrouter/sentinel-conv:free"])
 def test_chat_stream_artifact_verification_failure_skips_llm_stream(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch, conv_env: str | None,
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
+    conv_env: str | None,
 ) -> None:
     """VAL-LANE-004 — verification-failure lane skips LLM under env set/unset."""
     if conv_env is None:
@@ -438,7 +448,9 @@ def test_chat_stream_artifact_verification_failure_skips_llm_stream(
 
 @pytest.mark.parametrize("conv_env", [None, "openrouter/sentinel-conv:free"])
 def test_chat_stream_builder_edit_worker_blocked_skips_llm_stream(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch, conv_env: str | None,
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
+    conv_env: str | None,
 ) -> None:
     """VAL-LANE-005 — edit-worker-blocked lane skips LLM under env set/unset."""
     if conv_env is None:
@@ -457,7 +469,10 @@ def test_chat_stream_builder_edit_worker_blocked_skips_llm_stream(
                 "builder_intent": "build_or_create",
                 "scaffolded": False,
                 "builder_edit_worker_blocked": True,
-                "builder_edit_worker": {"worker": "hermes_gateway", "blocked_reason": "gateway_mock_or_unconfigured"},
+                "builder_edit_worker": {
+                    "worker": "hermes_gateway",
+                    "blocked_reason": "gateway_mock_or_unconfigured",
+                },
                 "source_snapshot_id": "ssnp_existing",
             },
         )
@@ -479,7 +494,9 @@ def test_chat_stream_builder_edit_worker_blocked_skips_llm_stream(
     assert done["messages"][-1]["content"] == honest
     b = done.get("builder") or {}
     assert b.get("builder_edit_worker_blocked") is True
-    assert (b.get("builder_edit_worker") or {}).get("blocked_reason") == "gateway_mock_or_unconfigured"
+    assert (b.get("builder_edit_worker") or {}).get(
+        "blocked_reason"
+    ) == "gateway_mock_or_unconfigured"
     low = done["messages"][-1]["content"].lower()
     assert "updated" not in low
     assert "preview refreshed" not in low
@@ -495,7 +512,9 @@ def test_chat_stream_builder_edit_worker_blocked_skips_llm_stream(
 
 @pytest.mark.parametrize("conv_env", [None, "openrouter/sentinel-conv:free"])
 def test_chat_stream_builder_clarification_skips_llm_stream(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch, conv_env: str | None,
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
+    conv_env: str | None,
 ) -> None:
     """VAL-LANE-003 — builder clarification lane skips LLM under env set/unset."""
     if conv_env is None:
@@ -510,7 +529,10 @@ def test_chat_stream_builder_clarification_skips_llm_stream(
             {
                 "builder_intent": "answer_question",
                 "builder_clarification": True,
-                "builder_action_decision": {"kind": "ask_clarification", "reason": "vague_improvement"},
+                "builder_action_decision": {
+                    "kind": "ask_clarification",
+                    "reason": "vague_improvement",
+                },
             },
         )
 
@@ -561,7 +583,8 @@ def test_chat_stream_local_repo_ops_not_forced_into_mission_route_when_operator_
 
 
 def test_chat_stream_gateway_failure_done_with_safe_assistant_and_signal(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def failing_stream(*_a, **_k):
         raise GatewayCallError(
@@ -592,7 +615,8 @@ def test_chat_stream_gateway_failure_done_with_safe_assistant_and_signal(
 
 
 def test_chat_stream_openrouter_model_rejected_done_with_safe_assistant_and_signal(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def failing_stream(*_a, **_k):
         raise GatewayCallError(
@@ -611,7 +635,10 @@ def test_chat_stream_openrouter_model_rejected_done_with_safe_assistant_and_sign
     events = _parse_ndjson(res.text)
     assert events[-1]["type"] == "done"
     done = events[-1]
-    assert done.get("gateway_error") == {"code": "OPENROUTER_MODEL_REJECTED", "upstream_http_status": 400}
+    assert done.get("gateway_error") == {
+        "code": "OPENROUTER_MODEL_REJECTED",
+        "upstream_http_status": 400,
+    }
     msgs = done["messages"]
     assistants = [m for m in msgs if m["role"] == "assistant"]
     assert len(assistants) == 1
@@ -627,7 +654,10 @@ def test_chat_stream_vision_text_fallback_preserves_conversational_model_overrid
 
     monkeypatch.setattr(chat_mod, "_chat_conversational_model_notice_emitted", False, raising=True)
     monkeypatch.setattr(
-        chat_mod, "_CHAT_CONVERSATIONAL_MODEL_NOTICE_LOCK", threading.Lock(), raising=True,
+        chat_mod,
+        "_CHAT_CONVERSATIONAL_MODEL_NOTICE_LOCK",
+        threading.Lock(),
+        raising=True,
     )
 
     monkeypatch.setenv("HERMES_GATEWAY_MODE", "openrouter")
@@ -680,14 +710,18 @@ def test_chat_stream_vision_text_fallback_preserves_conversational_model_overrid
 
 
 def test_chat_stream_conversational_model_rejected_done_with_safe_assistant_and_signal(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """VAL-FALLBACK-007 — env-derived slug rejected by LiteLLM → safe assistant + gateway_error signal."""
     from src.api import chat as chat_mod
 
     monkeypatch.setattr(chat_mod, "_chat_conversational_model_notice_emitted", False, raising=True)
     monkeypatch.setattr(
-        chat_mod, "_CHAT_CONVERSATIONAL_MODEL_NOTICE_LOCK", threading.Lock(), raising=True,
+        chat_mod,
+        "_CHAT_CONVERSATIONAL_MODEL_NOTICE_LOCK",
+        threading.Lock(),
+        raising=True,
     )
     monkeypatch.setenv("HAM_CHAT_CONVERSATIONAL_MODEL", "openrouter/never-resolves:bad")
 
@@ -722,7 +756,9 @@ def test_chat_stream_conversational_model_rejected_done_with_safe_assistant_and_
 
 
 def test_chat_stream_done_includes_active_agent_meta(
-    mock_mode: None, isolated_home: Path, tmp_path: Path,
+    mock_mode: None,
+    isolated_home: Path,
+    tmp_path: Path,
 ) -> None:
     root = tmp_path / "proj_stream"
     root.mkdir()
@@ -785,7 +821,9 @@ def test_chat_stream_custom_chunks(mock_mode: None, monkeypatch: pytest.MonkeyPa
     assert assistants == ["ab"]
 
 
-def test_chat_stream_disconnect_checkpoint_persists_partial(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chat_stream_disconnect_checkpoint_persists_partial(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     def slow_stream(_msgs: list, **_kwargs):
         yield "partial "
         yield "more"
@@ -819,7 +857,8 @@ def test_chat_stream_disconnect_checkpoint_persists_partial(mock_mode: None, mon
 
 
 def test_chat_stream_pretoken_abort_persists_safe_assistant_message(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def _immediate_abort(_msgs: list, **_kwargs):
         raise GeneratorExit()
@@ -849,7 +888,9 @@ def test_chat_stream_pretoken_abort_persists_safe_assistant_message(
     assert "handoff" not in low
 
 
-def test_chat_stream_after_disconnect_allows_new_stream(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chat_stream_after_disconnect_allows_new_stream(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Closing the client mid-stream must release the per-session lock (no stuck 409)."""
 
     def slow_stream(_msgs: list, **_kwargs):
@@ -881,7 +922,8 @@ def test_chat_stream_after_disconnect_allows_new_stream(mock_mode: None, monkeyp
 
 
 def test_chat_stream_lock_releases_when_client_disconnects_after_session_only(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """If the first NDJSON line is yielded then the client closes, the per-session lock must clear.
 
@@ -1179,7 +1221,9 @@ def test_transcribe_upload_too_large(mock_mode: None, monkeypatch: pytest.Monkey
     assert r.status_code == 413
 
 
-def test_transcribe_content_length_rejected(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_transcribe_content_length_rejected(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "openai")
     monkeypatch.setenv("HAM_TRANSCRIPTION_API_KEY", "sk-live-demo-key-12345")
     r = client.post(
@@ -1244,7 +1288,9 @@ def test_transcribe_upstream_auth_error_sanitized(
     assert "PLACEHOL" not in j["detail"]["error"]["message"]
 
 
-def test_transcribe_clerk_required_without_session(mock_mode: None, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_transcribe_clerk_required_without_session(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("HAM_CLERK_REQUIRE_AUTH", "true")
     monkeypatch.setenv("CLERK_JWT_ISSUER", "https://clerk.example.com")
     monkeypatch.setenv("HAM_TRANSCRIPTION_PROVIDER", "openai")
@@ -1283,7 +1329,10 @@ def test_chat_stream_accepts_ham_chat_user_v1(mock_mode: None) -> None:
     done = [e for e in events if e["type"] == "done"][0]
     user_msgs = [m for m in done["messages"] if m["role"] == "user"]
     assert user_msgs, "user turn should be persisted"
-    assert '"h":"ham_chat_user_v1"' in user_msgs[-1]["content"] or "ham_chat_user_v1" in user_msgs[-1]["content"]
+    assert (
+        '"h":"ham_chat_user_v1"' in user_msgs[-1]["content"]
+        or "ham_chat_user_v1" in user_msgs[-1]["content"]
+    )
 
 
 def test_chat_stream_rejects_bad_image_mime(mock_mode: None) -> None:
@@ -1312,7 +1361,8 @@ def test_chat_stream_rejects_bad_image_mime(mock_mode: None) -> None:
 
 
 def test_chat_stream_rejects_oversized_image_data_url(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Server enforces HAM_CHAT_IMAGE_MAX_BYTES on embedded data URLs."""
     monkeypatch.setenv("HAM_CHAT_IMAGE_MAX_BYTES", "20")
@@ -1338,7 +1388,11 @@ def test_chat_stream_rejects_oversized_image_data_url(
         },
     )
     assert res.status_code == 422
-    detail = res.json().get("detail") if res.headers.get("content-type", "").startswith("application/json") else {}
+    detail = (
+        res.json().get("detail")
+        if res.headers.get("content-type", "").startswith("application/json")
+        else {}
+    )
     msg = str(detail).lower()
     assert "too large" in msg or "image" in msg
 
@@ -1356,9 +1410,14 @@ def test_chat_stream_text_only_unchanged(mock_mode: None) -> None:
 
 
 def test_chat_stream_accepts_ham_chat_user_v2(
-    mock_mode: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    mock_mode: None,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from src.ham.chat_attachment_store import LocalDiskAttachmentStore, set_chat_attachment_store_for_tests
+    from src.ham.chat_attachment_store import (
+        LocalDiskAttachmentStore,
+        set_chat_attachment_store_for_tests,
+    )
 
     monkeypatch.setenv("HAM_CHAT_ATTACHMENT_DIR", str(tmp_path))
     set_chat_attachment_store_for_tests(LocalDiskAttachmentStore(tmp_path))
@@ -1410,7 +1469,9 @@ def test_chat_stream_accepts_ham_chat_user_v2(
 
 @pytest.mark.parametrize("conv_env", [None, "openrouter/sentinel-conv:free"])
 def test_chat_stream_operator_handled_skips_llm_under_conversational_env(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch, conv_env: str | None,
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
+    conv_env: str | None,
 ) -> None:
     """VAL-LANE-006 — stream operator-handled lane never calls stream_chat_turn under env set/unset."""
     from src.ham.chat_operator import OperatorTurnResult
@@ -1498,7 +1559,8 @@ def _capture_stream(monkeypatch: pytest.MonkeyPatch, captured: dict) -> None:
 
 
 def test_stream_casual_space_monkey_identity_prompt_includes_brand_canon(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """VAL-BRAND-005 — stream casual identity prompt includes HAM brand canon + no-denial guidance."""
     captured: dict = {}
@@ -1507,12 +1569,15 @@ def test_stream_casual_space_monkey_identity_prompt_includes_brand_canon(
         "/api/chat/stream",
         json={
             "messages": [
-                {"role": "user", "content": "Are you really the first code monkey launched into space?"},
+                {
+                    "role": "user",
+                    "content": "Are you really the first code monkey launched into space?",
+                },
             ],
         },
     )
     assert res.status_code == 200, res.text
-    sys_content = (captured["messages"][0].get("content") or "")
+    sys_content = captured["messages"][0].get("content") or ""
     low = sys_content.lower()
     assert "first code monkey launched into space" in low
     assert "never deny" in low
@@ -1520,7 +1585,8 @@ def test_stream_casual_space_monkey_identity_prompt_includes_brand_canon(
 
 
 def test_stream_casual_checkin_omits_internal_tool_inventory(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """VAL-CASUAL-002 / VAL-CROSS-001 — stream casual check-in suppresses inventory context."""
     captured: dict = {}
@@ -1543,7 +1609,8 @@ def test_stream_casual_checkin_omits_internal_tool_inventory(
 
 
 def test_stream_explicit_tool_inventory_prompt_allows_friendly_capability_context(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """VAL-CASUAL-005 — stream explicit tool-inventory prompts unlock friendly capability context."""
     captured: dict = {}
@@ -1581,9 +1648,11 @@ def test_stream_explicit_tool_inventory_prompt_allows_friendly_capability_contex
 
 
 def test_chat_stream_gateway_error_omits_internal_tokens(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """VAL-SAFETY-002 — stream gateway error copy must not leak forbidden internal tokens."""
+
     def _boom(*_a: object, **_k: object):
         raise GatewayCallError("UPSTREAM_REJECTED", "raw upstream detail kept in logs")
 
@@ -1616,7 +1685,8 @@ def test_chat_stream_gateway_error_omits_internal_tokens(
 
 
 def test_chat_stream_operator_handled_assistant_text_quarantines_internal_tokens(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """VAL-OPERATOR-008 — streamed operator-handled assistant text scrubs internal tokens.
 
@@ -1684,7 +1754,8 @@ def test_chat_stream_operator_handled_assistant_text_quarantines_internal_tokens
 
 
 def test_chat_stream_operator_handled_full_event_stream_has_no_visible_leaks(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """VAL-OPERATOR-014 — every event emitted by the operator-handled stream
     lane is scanned recursively. Visible strings (deltas, ``done.messages``,
@@ -1743,7 +1814,8 @@ def test_chat_stream_operator_handled_full_event_stream_has_no_visible_leaks(
 
 
 def test_chat_stream_gateway_error_event_payload_scan(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """VAL-OPERATOR-014 — stream error and final payloads scan ``error.message``
     and adjacent visible strings recursively. ``error.code`` is treated as
@@ -1774,7 +1846,8 @@ def test_chat_stream_gateway_error_event_payload_scan(
 
 
 def test_chat_stream_operator_handled_session_history_replay_is_sanitized(
-    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """VAL-OPERATOR-015 — stream operator-handled turns persist sanitized copy
     and remain sanitized when replayed via ``GET /api/chat/sessions/{sid}``.
@@ -1893,4 +1966,3 @@ def test_chat_stream_builder_success_meta_carries_kit_metadata(
     assert builder.get("scaffold_path") == "llm"
     assert builder.get("kit_id") == "landing-page"
     assert builder.get("scaffolded") is True
-

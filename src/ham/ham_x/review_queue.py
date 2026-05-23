@@ -6,6 +6,7 @@ stays local to HAM-on-X for Phase 1A so the social action schema can settle;
 future phases should consolidate shared proposal-store primitives where that
 does not blur Browser Operator and social-agent semantics.
 """
+
 from __future__ import annotations
 
 import hashlib
