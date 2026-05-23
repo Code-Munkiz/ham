@@ -2665,11 +2665,10 @@ def post_chat_stream(
     )
 
         def ndjson_gen():
-            yield json.dumps({"type": "session", "session_id": sid}) + "\n"
+            # Session + optional prefix yields must live inside the same ``try`` as
+            # ``finally: release_stream_lock()`` so a client disconnect on the first
+            # NDJSON line still runs cleanup (otherwise the lock leaks until TTL).
             pieces: list[str] = []
-            if builder_prefix and builder_intent != "build_or_create":
-                pieces.append(builder_prefix)
-                yield json.dumps({"type": "delta", "text": builder_prefix}) + "\n"
             stream_completed = False
             chars_since_checkpoint = 0
             checkpoint_started = False
@@ -2694,6 +2693,10 @@ def post_chat_stream(
                 last_checkpoint_at = time.monotonic()
 
             try:
+                yield json.dumps({"type": "session", "session_id": sid}) + "\n"
+                if builder_prefix and builder_intent != "build_or_create":
+                    pieces.append(builder_prefix)
+                    yield json.dumps({"type": "delta", "text": builder_prefix}) + "\n"
                 stream_msgs: list[dict[str, Any]] = llm_messages
                 budget_diag_stream: dict[str, Any] = {}
                 terminal_exc: GatewayCallError | None = None

@@ -880,6 +880,57 @@ def test_chat_stream_after_disconnect_allows_new_stream(mock_mode: None, monkeyp
     assert any(e.get("type") == "done" for e in events)
 
 
+def test_chat_stream_lock_releases_when_client_disconnects_after_session_only(
+    mock_mode: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If the first NDJSON line is yielded then the client closes, the per-session lock must clear.
+
+    Regression: when the session ``yield`` sat outside the ``try``/``finally`` that calls
+    ``release_stream_lock``, ``GeneratorExit`` on that first suspend point skipped cleanup,
+    blocking new streams until the TTL reclaimed the lease.
+    """
+    from src.api import chat as chat_mod
+
+    chat_mod._reset_active_stream_sessions_for_testing()
+    monkeypatch.setattr(chat_mod, "_stream_lock_ttl_sec", lambda: 3600.0)
+
+    def delayed_first_token(_msgs: list, **_kwargs):
+        # TestClient may not propagate GeneratorExit through an infinite busy-loop in
+        # ``stream_chat_turn``; a bounded sleep still gives the client time to close
+        # right after the ``session`` line while the handler is mid-turn.
+        time.sleep(0.8)
+        yield "x"
+
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", delayed_first_token)
+
+    create = client.post("/api/chat/sessions")
+    assert create.status_code == 200
+    sid = create.json()["session_id"]
+
+    tolerant_client = TestClient(app, raise_server_exceptions=False)
+    with tolerant_client.stream(
+        "POST",
+        "/api/chat/stream",
+        json={"session_id": sid, "messages": [{"role": "user", "content": "first"}]},
+    ) as res:
+        assert res.status_code == 200
+        first = next(res.iter_lines())
+        line = first.decode("utf-8") if isinstance(first, (bytes, bytearray)) else str(first)
+        obj = json.loads(line)
+        assert obj.get("type") == "session"
+        assert obj.get("session_id") == sid
+
+    time.sleep(0.05)
+    follow = client.post(
+        "/api/chat/stream",
+        json={"session_id": sid, "messages": [{"role": "user", "content": "second"}]},
+    )
+    assert follow.status_code == 200, follow.text
+
+    events = _parse_ndjson(follow.text)
+    assert any(e.get("type") == "done" for e in events)
+
+
 def test_chat_stream_rejects_concurrent_same_session_streams(
     mock_mode: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
