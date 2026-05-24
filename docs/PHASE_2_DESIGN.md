@@ -2,7 +2,7 @@
 
 **Status:** Locked 2026-05-19 via `/grill-with-docs`. Builds on Phase 0 contracts ([`docs/PHASE_0_CONTRACTS.md`](PHASE_0_CONTRACTS.md)) and Phase 1 infrastructure (PRs #347–#353 plus catalog patch).
 **Scope:** Six remaining Tier 1 items from [`docs/MANUS_PARITY_ROADMAP.md`](MANUS_PARITY_ROADMAP.md) — the items that touch the hot files (`chat.py`, `builder_sources.py`, `WorkspaceWorkbench.tsx`) and must serialize per the roadmap's "Phase 2" section.
-**Glossary:** [`CONTEXT.md`](../CONTEXT.md). **Rationale archive:** ADRs [`0001`](adr/0001-plan-is-unit-of-work.md) through [`0011`](adr/0011-llm-scaffold-staged-by-template-kind.md). New ADRs from this design pass: [`0009`](adr/0009-planner-byo-openrouter-with-regex-fallback.md), [`0010`](adr/0010-sse-migration-hard-cut.md), [`0011`](adr/0011-llm-scaffold-staged-by-template-kind.md).
+**Glossary:** [`CONTEXT.md`](../CONTEXT.md). **Rationale archive:** ADRs [`0001`](adr/0001-plan-is-unit-of-work.md) through [`0016`](adr/0016-generative-build-kit-registry-v2.md). Phase 2 design ADRs: [`0009`](adr/0009-planner-byo-openrouter-with-regex-fallback.md), [`0010`](adr/0010-sse-migration-hard-cut.md), [`0011`](adr/0011-llm-scaffold-staged-by-template-kind.md) (partially superseded — see its status block). **Proposed (not implemented):** [`0016`](adr/0016-generative-build-kit-registry-v2.md) — composable generative Build Kit Registry v2.
 
 This is a design specification, not an implementation. The output of Phase 2 design is the spec; the work of writing it as code happens across multiple sequential PRs (per the roadmap's "serialize, review each PR" framing).
 
@@ -244,12 +244,13 @@ Phase 0 Contract 4 and ADR-0002 define `GET /api/jobs/<job_id>/stream`, but the 
 - **Error code visibility:** the badge with `error_code` is always shown next to the expanded error. This makes audit / postmortem grep'ing trivial — users and developers see the same string the catalog (`src/ham/builder_error_codes.py`) defines.
 - **No separate error panel:** errors live in the chat surface, not in a workbench devtools-like panel. Aligns with the "everything is a chat conversation" UX premise.
 
-### Subsystem 9 — LLM-generated scaffolds (staged migration per ADR-0011)
+### Subsystem 9 — LLM-generated scaffolds (Builder Kit–guided; deterministic path retired)
 
 #### Decisions
 
-- **Strategy:** the legacy deterministic scaffold runtime path was **retired** in `refactor(builder): retire legacy deterministic scaffolds`. Every template kind — including `calculator` and `tetris` — now routes through the LLM scaffold with its matching Builder Kit. ADR-0011 is superseded by this retirement commit.
-- **Routing:** every template kind (calculator, tetris, todo, dashboard, landing-page, anything new) → `src/ham/builder_llm_scaffold.py`. `select_scaffold_path` always returns `"llm"`.
+- **Strategy:** the legacy deterministic scaffold runtime path was **retired** in `refactor(builder): retire legacy deterministic scaffolds`. Every app archetype — including `calculator` and `tetris` — now routes through the **LLM scaffold** with matching **Builder Kit metadata** (`src/ham/data/builder_kits/*.json`). ADR-0011's staged migration is **complete** for all kinds; see ADR-0011 status block and [`docs/adr/0016-generative-build-kit-registry-v2.md`](adr/0016-generative-build-kit-registry-v2.md) for the **proposed** composable registry v2 (not implemented).
+- **Builder Kits (v1):** declarative **generative playbook metadata** (stack/design recipes, validation checklists, safety constraints) rendered into the LLM prompt via `render_kit_context()`. Kits are **not** checked-in starter file trees and **not** runtime template clones.
+- **Routing:** every archetype id (`template_kind` in Plan metadata — naming debt; e.g. `calculator`, `tetris`, `todo`, `dashboard`, `landing-page`) → `src/ham/builder_llm_scaffold.py`. `select_scaffold_path` always returns `"llm"`.
 - **`builder_llm_scaffold` contract:**
   - Public API: `generate_scaffold(plan: Plan, project_id: str, workspace_id: str) -> ScaffoldResult`
   - Internally: one LLM call (via `complete_chat_messages_openrouter`, BYO key) with the Plan + Step list as input; produces a set of file changes (path → content); applies via the existing `BuilderSourceStore` pattern
@@ -262,7 +263,7 @@ Phase 0 Contract 4 and ADR-0002 define `GET /api/jobs/<job_id>/stream`, but the 
 
 - Module: `src/ham/builder_llm_scaffold.py`.
 - Routing helper: `select_scaffold_path(template_kind: str) -> Literal["legacy_deterministic", "llm"]`. Input is normalized (`strip().lower()`); always returns `"llm"` post-retirement.
-- Worker integration: in Subsystem 3's Step execution loop, when a Step's intent is "scaffold a new project from template kind X", the Worker calls `select_scaffold_path(X)` (always `"llm"`) and dispatches to the LLM scaffold path.
+- Worker integration: in Subsystem 3's Step execution loop, when a Step's intent is "scaffold a new project from archetype X" (`template_kind` in plan metadata), the Worker calls `select_scaffold_path(X)` (always `"llm"`) and dispatches to the LLM scaffold path with the matching Builder Kit.
 
 ---
 
@@ -276,7 +277,7 @@ Per the roadmap's "Phase 2 — serialize, review each PR" framing, the implement
 4. **Approval card UI:** `ApprovalCard` component + chat-stream integration to render it on `plan_proposed`.
 5. **In-flight card + Cancel UX:** transform-in-place + cancel button + SSE-driven status. Subsystems 6 + 7 together (they share the same component).
 6. **Runtime errors in chat:** inline error rendering + terminal-failure assistant message.
-7. **LLM-scaffold path:** new `builder_llm_scaffold` module + routing registry. Calculator/Tetris stay on deterministic.
+7. **LLM-scaffold path:** `builder_llm_scaffold` module + empty template registry (all kinds → LLM). **Shipped;** deterministic calculator/Tetris generators subsequently **retired at runtime** (see Subsystem 9).
 8. **Verifier integration at Worker end-of-Plan:** wire `builder_verifier` into the Worker's terminal-step path.
 
 Each PR is independently reviewable; subsequent PRs depend on prior ones merging.

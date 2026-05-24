@@ -1,6 +1,9 @@
 # Manus Parity Roadmap
 
 **Status:** Tier 1 shipped 2026-05-19; Tier 2 design pending.
+
+**Scaffold terminology (updated 2026-05):** Lane A scaffolds are **LLM-generative**, guided by **Builder Kit metadata** (`src/ham/data/builder_kits/`). Legacy **deterministic** calculator/Tetris generators in `builder_chat_scaffold.py` are **retired at runtime**. Builder Kits are **not** checked-in starter file clones. See [`docs/PHASE_2_DESIGN.md`](PHASE_2_DESIGN.md) § Subsystem 9 and [`docs/adr/0016-generative-build-kit-registry-v2.md`](adr/0016-generative-build-kit-registry-v2.md) (proposed registry v2 — not implemented).
+
 **Scope:** What needs to be true for HAM to operate like Manus 1.6 / Replit Agent 3-4 / Base44 as an end-to-end chat-to-app builder, sized for a 3-5 person team.
 **Related:**
 [BUILDER_PLATFORM_NORTH_STAR.md](BUILDER_PLATFORM_NORTH_STAR.md) ·
@@ -13,10 +16,10 @@
 
 ## TL;DR
 
-HAM has the skeleton (chat → intent → build → preview → activity stream) and a working GCP GKE preview runtime. What's missing for Manus parity is mostly the **orchestration brain** and **streaming polish**, not the plumbing. The two largest gaps are:
+HAM has the skeleton (chat → intent → build → preview → activity stream) and a working GCP GKE preview runtime. Tier 1 shipped LLM-generated scaffolds (item #2 below). Remaining Manus-parity gaps are mostly **orchestration depth** (planner always on hot path, composable build playbooks per [ADR-0016](adr/0016-generative-build-kit-registry-v2.md)) and **streaming polish**, not basic scaffold plumbing. Notable gaps today:
 
-1. HAM's scaffolds are deterministic templates ([src/ham/builder_chat_scaffold.py](../src/ham/builder_chat_scaffold.py), ~1400 LoC) rather than LLM-generated.
-2. There is no Planner → Executor → Verifier loop, which is the de facto pattern across Manus and Replit (independently converged).
+1. **Planner → Executor → Verifier** is partially wired — chat happy path can still bypass full phased Plans for net-new builds; verifier depth varies by path.
+2. **Build Kit registry v2** (composable mechanics/features/validators/recovery) is **proposed only** — v1 kits are one-layer archetype metadata, not a full cookbook.
 
 The third critical item — **unrestricted network egress** from preview pods — is a security gap, not a UX gap, but blocks any responsible production rollout.
 
@@ -43,7 +46,7 @@ The third critical item — **unrestricted network egress** from preview pods �
 | # | Item | Why | Shipped |
 |---|---|---|---|
 | 1 | Planner / todo-list step with human approval gate | Universal pattern across all three platforms; today HAM has only regex intent classification | PRs #366 #367 #368 (refs #356 #358 #359) |
-| 2 | LLM-generated scaffolds | [src/ham/builder_chat_scaffold.py](../src/ham/builder_chat_scaffold.py) is deterministic templates only — works for calculator/tetris, fails for anything else | PR #364 (refs #361) |
+| 2 | LLM-generated scaffolds | **Shipped:** `src/ham/builder_llm_scaffold.py` generates source per prompt; **Builder Kit** JSON (`src/ham/data/builder_kits/`) guides the LLM. Legacy deterministic calculator/Tetris generators in `builder_chat_scaffold.py` are **retired at runtime** (module retains snapshot/ZIP helpers). | PR #364 (refs #361); deterministic path retired in follow-up |
 | 3 | SSE / WebSocket streaming (replace polling) | Activity feed is polled; Manus/Replit stream curated events | PR #365 (refs #357) |
 | 4 | Cancel button with cooperative interrupt | Runaway agent runs are unrecoverable except by killing the pod | PR #368 (refs #359) |
 | 5 | Runtime errors from preview pod → chat | Today the preview is a black box — crashes show a blank screen, not a chat message | PR #369 (refs #360) |
@@ -90,7 +93,8 @@ Billing infra · tiered rate limits · real-time collab (CRDTs/OT) · GDPR data 
 | Layer | File |
 |---|---|
 | Chat → intent classification | [src/ham/agent_router.py](../src/ham/agent_router.py), [src/ham/builder_mutation_router.py](../src/ham/builder_mutation_router.py) |
-| Scaffold (template-driven, ~1400 LoC) | [src/ham/builder_chat_scaffold.py](../src/ham/builder_chat_scaffold.py) |
+| LLM scaffold + Builder Kit metadata | [src/ham/builder_llm_scaffold.py](../src/ham/builder_llm_scaffold.py), [src/ham/builder_kits.py](../src/ham/builder_kits.py), [src/ham/data/builder_kits/](../src/ham/data/builder_kits/) |
+| Chat scaffold orchestration (snapshot/ZIP; deterministic gens retired) | [src/ham/builder_chat_scaffold.py](../src/ham/builder_chat_scaffold.py) |
 | Edit worker (Hermes-wired) | [src/ham/builder_edit_worker.py](../src/ham/builder_edit_worker.py) |
 | Job model (`CloudRuntimeJob`) | [src/persistence/builder_runtime_job_store.py](../src/persistence/builder_runtime_job_store.py) |
 | GCP preview pods | [src/ham/gcp_preview_runtime_client.py](../src/ham/gcp_preview_runtime_client.py), [src/ham/gcp_preview_worker_manifest.py](../src/ham/gcp_preview_worker_manifest.py) |
@@ -152,7 +156,7 @@ These edit the hot files and need end-to-end integration testing:
 - SSE replacing polling (#3)
 - Cancel button + signal handling (#4)
 - Runtime errors → chat (#5)
-- LLM-generated scaffolds replacing template generation (#2)
+- LLM-generated scaffolds with Builder Kit metadata (#2 — shipped; deterministic template generators retired post-Phase 2)
 
 ### Standing instructions for every Factory prompt
 
