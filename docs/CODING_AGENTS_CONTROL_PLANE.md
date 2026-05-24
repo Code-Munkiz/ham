@@ -186,7 +186,7 @@ The cockpit names existing gates; it does not invent new ones.
 | HAM launch bearer | `HAM_CURSOR_AGENT_LAUNCH_TOKEN` (Cursor operator path) | "Launch token" |
 | Mutating workflow bearer | `HAM_DROID_EXEC_TOKEN` (Droid `safe_edit_low`) | "Mutating-scope token" |
 | Deploy approval mode | `mission_deploy_approval_mode` snapshot on `ManagedMission` create | "Deploy approval policy" |
-| Optional PR-merge gating | Operator-only today; `gh pr merge --auto` is **not** allowed for social/autonomy/secrets/deploy/branch-protection per [`AGENTS.md`](../AGENTS.md) | "PR-merge gate" |
+| Optional PR-merge gating | Operator-only today; `gh pr merge --auto` is **not** allowed for Luv Social / autonomy / secrets / deploy / branch-protection per [`AGENTS.md`](../AGENTS.md) | "PR-merge gate" |
 
 **Rules**
 
@@ -218,7 +218,7 @@ introduce a new audit store.
   **bounded** excerpts (capped per `CONTROL_PLANE_RUN.md` §6) and
   **pointers** (`audit_ref`).
 - Redaction stays at the existing layers: `redact()` in
-  `src/ham/social_delivery_log.py`-style sinks, gitleaks `--redact` in
+  server audit sinks, gitleaks `--redact` in CI
   CI, runner-side "no secrets / no argv / no prompt" rule.
 - `audit_id` correlation between operator audit and `ControlPlaneRun`
   remains optional and best-effort, as today.
@@ -322,11 +322,12 @@ the implementation PRs that follow it will be **scoped per provider**:
   edits.
 - Branch protection edits, Dependabot rule edits, CI promotion from
   warning-only to blocking.
-- PR auto-merge for any social / autonomy / secrets / deploy /
+- PR auto-merge for any Luv Social / autonomy / secrets / deploy /
   branch-protection PR.
 - New autonomy modes. High-autonomy framing remains **GoHAM** per
   [`VISION.md`](../VISION.md).
-- Live social actions (HAMgomoon / Telegram / X publish paths).
+- Live social actions (Telegram / X publish paths) — **Luv Social** repo
+  only; not HAM.
 - Frontend cockpit screen — implementation PR sequenced after this
   vocabulary lands.
 - OpenAPI regeneration, ESLint adoption, strict-typing flag-flips,

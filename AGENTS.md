@@ -342,8 +342,8 @@ What's covered today:
   facing copy for MediaRecorder / getUserMedia error mapping.
 - `frontend/src/lib/ham/__tests__/desktopDownloadsManifest.test.ts` — happy /
   sad paths for the manifest parser (trust boundary on fetched JSON).
-- `frontend/src/features/hermes-workspace/screens/social/lib/__tests__/socialViewModel.test.ts`
-  — pins product-truth helpers (mode/readiness/frequency/volume mapping).
+- `frontend/src/features/hermes-workspace/__tests__/workspaceNavConfig.test.ts`
+  — workspace nav IA after Luv Social extraction (empty primary rail, moved titles).
 
 CI status:
 

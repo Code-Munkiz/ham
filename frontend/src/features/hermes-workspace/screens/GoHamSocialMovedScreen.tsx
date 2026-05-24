@@ -1,7 +1,7 @@
 import * as React from "react";
 import { ExternalLink } from "lucide-react";
 
-const GOHAM_SOCIAL_REPO = "https://github.com/luv-protocol/goham-social";
+const LUV_SOCIAL_REPO = "https://github.com/luv-protocol/luv-social";
 
 /** Minimal landing when legacy /workspace/social bookmarks hit HAM after Mission 20 extraction. */
 export function GoHamSocialMovedScreen() {
@@ -14,12 +14,12 @@ export function GoHamSocialMovedScreen() {
         platform.
       </p>
       <a
-        href={GOHAM_SOCIAL_REPO}
+        href={LUV_SOCIAL_REPO}
         target="_blank"
         rel="noopener noreferrer"
         className="inline-flex w-fit items-center gap-2 rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm font-medium text-[#ffb27a] hover:bg-white/10"
       >
-        luv-protocol/goham-social
+        luv-protocol/luv-social
         <ExternalLink className="h-4 w-4" aria-hidden />
       </a>
     </div>

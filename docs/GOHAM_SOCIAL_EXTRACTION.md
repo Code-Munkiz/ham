@@ -2,7 +2,7 @@
 
 GoHAM Social — autonomous Telegram/X/Discord social-agent ops — was extracted from this monorepo.
 
-**New home:** [luv-protocol/goham-social](https://github.com/luv-protocol/goham-social)
+**New home:** [luv-protocol/luv-social](https://github.com/luv-protocol/luv-social)
 
 HAM keeps:
 

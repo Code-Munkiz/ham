@@ -1,8 +1,8 @@
 # HAM product roadmap (workspace, attachments, export)
 
-Durable planning doc for **dashboard / workspace chat**, **attachments**, **export**, and closely related capabilities. It complements subsystem-specific roadmaps (for example [`ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`](ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md), [`ham-x-agent/`](ham-x-agent/) Phase 2A/2B/2C).
+Durable planning doc for **dashboard / workspace chat**, **attachments**, **export**, and closely related capabilities. It complements subsystem-specific roadmaps (for example [`ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`](ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md), [`GOHAM_SOCIAL_EXTRACTION.md`](GOHAM_SOCIAL_EXTRACTION.md) for the extracted [luv-protocol/luv-social](https://github.com/luv-protocol/luv-social) repo).
 
-**Naming note:** **Phase 2B–2G** below cover **attachment parity, export, media ingestion, creative generation, and RAG** sequencing for the Hermes workspace. Other areas (HAM-on-X, Browser Operator) use different phase labels in their own docs—see grep hits for `Phase 2B` elsewhere.
+**Naming note:** **Phase 2B–2G** below cover **attachment parity, export, media ingestion, creative generation, and RAG** sequencing for the Hermes workspace. Autonomous social-agent ops (formerly HAM-on-X / GoHAM Social) live in **Luv Social**, not this monorepo.
 
 This file is **documentation only**; it does not imply shipped code unless a line explicitly says shipped.
 

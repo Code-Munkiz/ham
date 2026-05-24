@@ -16,6 +16,7 @@ Open-source multi-agent autonomous developer swarm: Hermes supervisory orchestra
 - **HAM product roadmap** (attachments Phase 2A+, Export-to-PDF Phase 2B, media/RAG): [docs/HAM_ROADMAP.md](docs/HAM_ROADMAP.md)
 - **Deploy (Cloud Run)**: [docs/DEPLOY_CLOUD_RUN.md](docs/DEPLOY_CLOUD_RUN.md) | **Handoff**: [docs/DEPLOY_HANDOFF.md](docs/DEPLOY_HANDOFF.md)
 - **Control plane runs**: [docs/CONTROL_PLANE_RUN.md](docs/CONTROL_PLANE_RUN.md)
+- **Luv Social (extracted):** autonomous Telegram/X/Discord social-agent ops live in the standalone [luv-protocol/luv-social](https://github.com/luv-protocol/luv-social) repo. HAM keeps builder/workspace/agent platform only. Legacy `/workspace/social` shows a moved pointer; see [docs/GOHAM_SOCIAL_EXTRACTION.md](docs/GOHAM_SOCIAL_EXTRACTION.md).
 - **Documentation index**: [docs/README.md](docs/README.md)
 
 ## Quick start

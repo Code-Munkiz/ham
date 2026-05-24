@@ -10,7 +10,7 @@ It is **not** a re-architecture. It does not redraw boundaries, rename modes, or
 
 - **In scope:** product-truth checklists per lane, cross-lane boundary risks, human-gated vs agent-safe distinction, "do not build yet" list, suggested order of work.
 - **Out of scope:** code changes, new APIs, new flags, hosted-config changes, secrets rotation, branch-protection edits, npm audit / auto-merge / strict-typing toggles, Sentry / analytics / DAST adoption.
-- **Hard non-goals:** touching live social actions, autonomy execution paths, or anything in the GoHAM permission model beyond *documenting* what already exists.
+- **Hard non-goals:** touching live social actions or autonomy execution paths inside HAM (those live in [luv-protocol/luv-social](https://github.com/luv-protocol/luv-social)); anything in the GoHAM permission model beyond *documenting* what already exists in HAM.
 
 ### Definition of done (DoD) shorthand used below
 
@@ -27,7 +27,7 @@ It is **not** a re-architecture. It does not redraw boundaries, rename modes, or
 
 ### Positioning recap
 
-Hosted browser command center on Vercel, talking to Cloud Run API. Primary navigation under `/workspace/*` (chat, files, terminal, settings, social cockpit + policy, operations / conductor / missions, skills, profiles, memory). Auth via Clerk when configured; workspace/session state lives in cloud, not the browser.
+Hosted browser command center on Vercel, talking to Cloud Run API. Primary navigation under `/workspace/*` (chat, files, terminal, settings, operations / conductor / missions, skills, profiles, memory). Auth via Clerk when configured; workspace/session state lives in cloud, not the browser. Legacy `/workspace/social` shows a moved pointer to Luv Social.
 
 ### Finish-line checklist
 
@@ -37,7 +37,7 @@ Hosted browser command center on Vercel, talking to Cloud Run API. Primary navig
 | Workspace management | ✅ | `/workspace/*` routes; chat / files / terminal / settings panes wired |
 | Chat / session UX | ✅ | `POST /api/chat`, `POST /api/chat/stream` (server-side adapter; browser never calls Hermes directly) — see [`HERMES_GATEWAY_CONTRACT.md`](HERMES_GATEWAY_CONTRACT.md) |
 | Settings ↔ local-runtime messaging | 🟡 | Settings UI exists; copy still occasionally implies "browser sees laptop" without naming the bridge. Finish-line PR: copy audit on settings + Hermes operator strip |
-| Social cockpit / HAMgomoon UI | ✅ | `frontend/src/features/hermes-workspace/screens/social/*` with social view-model tests pinning product truth (mode / readiness / frequency / volume) |
+| Legacy Social moved pointer | ✅ | `/workspace/social` → `GoHamSocialMovedScreen` linking to [luv-protocol/luv-social](https://github.com/luv-protocol/luv-social); no Social product UI in HAM |
 | Operations / conductor / missions | 🟡 | Mission feed + controls scoped by `mission_registry_id` ([`MISSION_AWARE_FEED_CONTROLS.md`](MISSION_AWARE_FEED_CONTROLS.md)); follow-up: visual three-lane diagram and clearer empty-state copy |
 | Formatter & lint baseline | ✅ | `frontend/.prettierrc.json` + CI `format:check` blocking (PR #199 / #200 / #201); knip + jscpd warning-only |
 | Vitest baseline | ✅ | `frontend/src/**/__tests__/*.test.{ts,tsx}` runnable via `npm test`; CI warning-only |
@@ -45,7 +45,7 @@ Hosted browser command center on Vercel, talking to Cloud Run API. Primary navig
 ### Evidence of readiness
 
 - `npm run lint`, `npm run format:check`, `npm test`, `npm run build` all pass on `main`.
-- 30+ Vitest cases pin product-truth helpers (social view-model, voice-recording errors, desktop-downloads manifest).
+- 30+ Vitest cases pin product-truth helpers (voice-recording errors, desktop-downloads manifest, workspace nav after Social extraction).
 - Hosted deploy path (Vercel + Cloud Run) is documented end-to-end in [`DEPLOY_HANDOFF.md`](DEPLOY_HANDOFF.md).
 
 ### Remaining gaps
@@ -104,7 +104,7 @@ Electron, Windows-first today. `desktop/` ships local-control modules (browser-r
 
 ### Positioning recap
 
-Cloud Run API (`src/api/server.py`, FastAPI) serves the Vercel frontend. Hermes gateway (server-side adapter) handles model traffic. Cursor / Factory / Droid execution runs as subprocess CLI muscle behind durable launch records (`ControlPlaneRun`). Managed missions / jobs / review queues persist in Firestore (or local SQLite in dev). Audit, secrets, and social/autonomy safety gates are server-side.
+Cloud Run API (`src/api/server.py`, FastAPI) serves the Vercel frontend. Hermes gateway (server-side adapter) handles model traffic. Cursor / Factory / Droid execution runs as subprocess CLI muscle behind durable launch records (`ControlPlaneRun`). Managed missions / jobs / review queues persist in Firestore (or local SQLite in dev). Audit and secrets boundaries are server-side. Autonomous social/autonomy ops are **not** in HAM — see [luv-protocol/luv-social](https://github.com/luv-protocol/luv-social).
 
 ### Finish-line checklist
 
@@ -115,9 +115,9 @@ Cloud Run API (`src/api/server.py`, FastAPI) serves the Vercel frontend. Hermes 
 | Hermes gateway | ✅ | `src/integrations/nous_gateway_client.py` + [`HERMES_GATEWAY_CONTRACT.md`](HERMES_GATEWAY_CONTRACT.md) (`HERMES_GATEWAY_MODE` / `HERMES_GATEWAY_API_KEY`); browser never calls directly |
 | Cursor / Factory / Droid execution | ✅ | `src/tools/droid_executor.py`, `src/integrations/cursor_sdk_bridge_client.py`, `bridge.mjs`; `HAM_CURSOR_SDK_BRIDGE_ENABLED` toggles bridge vs REST projection ([`ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`](ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md)) |
 | Managed missions / jobs / review queues | 🟡 | `ManagedMission` shipped with feed/audit; honest E2E scope and correlation gaps tracked in [`ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`](ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md). Finish-line PR per phase |
-| Audit / logging / secrets boundaries | ✅ | `src/ham/social_delivery_log.py` (redact), GCP Secret Manager (`ham-cursor-api-key`), `.env.example` template; **no** secret values in git |
-| Social / autonomy safety gates | 🟡 | HAMgomoon Telegram automation + `HAM_X` redaction utilities exist; consolidated **operator-readable** safety doc would help. Finish-line PR: `docs/ham-x-agent/safety_gates.md` index of what is gated, by whom, with what default |
-| OpenAPI snapshot | ✅ | `docs/api/openapi.json` (3.1.0, 198 paths, 163 schemas) committed; regenerated via `scripts/export_openapi.py` (PR #198) |
+| Audit / logging / secrets boundaries | ✅ | GCP Secret Manager (`ham-cursor-api-key`), `.env.example` template; **no** secret values in git |
+| Luv Social (extracted) | — | Autonomous social/autonomy runtime moved to [luv-protocol/luv-social](https://github.com/luv-protocol/luv-social); safety gates documented there |
+| OpenAPI snapshot | ✅ | `docs/api/openapi.json` committed; regenerated via `scripts/export_openapi.py` (no `/api/social*` paths after Mission 20 extraction) |
 
 ### Evidence of readiness
 
@@ -128,14 +128,12 @@ Cloud Run API (`src/api/server.py`, FastAPI) serves the Vercel frontend. Hermes 
 ### Remaining gaps
 
 - **Mission UX parity**: managed-mission phases A–D have curl examples ([`examples/managed_cloud_agent_phases/README.md`](examples/managed_cloud_agent_phases/README.md)), but the operator UI is not yet at parity for every phase — tracked, not this PR.
-- **Audit boundary doc**: which sinks exist (server logs, social-delivery log JSONL, audit JSONL) and which are *truth* vs *advisory*.
-- **Safety-gate index**: a single page that names every "must stay human-gated" surface (see [What must stay human-gated](#what-must-stay-human-gated) below).
+- **Audit boundary doc**: which sinks exist (server logs, audit JSONL) and which are *truth* vs *advisory*.
 
 ### PR-sized next steps (cloud lane)
 
 1. `docs(cloud): audit boundary one-pager` — list each log sink and mark canonical vs advisory.
-2. `docs(cloud): safety-gate index for social/autonomy` — one page that points at every approval surface; no behavior change.
-3. `docs(cloud): mission phase UX parity table` — extend [`ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`](ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md) with a "where the UI stands per phase" column.
+2. `docs(cloud): mission phase UX parity table` — extend [`ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`](ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md) with a "where the UI stands per phase" column.
 
 ---
 
@@ -151,8 +149,8 @@ These are the places where lanes touch and where wrong copy or wrong default fla
 | **GoHAM autonomy without consent UI** | High-autonomy local/browser flows | Today gated by desktop kill-switch + audit hooks; user-facing permission summary doc is the next step |
 | **Cursor Cloud Agent overwriting `main`** | VM force-push incident (2026-04) | `MAIN_PUSH_REQUIRES_OWNER_LOCAL_CONTEXT` policy in [`AGENTS.md`](../AGENTS.md); branch protection still pending |
 | **Linux installer rumours** | Old README paragraphs, screenshots | **[`SUPPORT_MATRIX.md`](desktop/SUPPORT_MATRIX.md)** + Windows-first architecture copy; spot-check **repo root** if new installer claims appear |
-| **Social posts shipped without operator approval** | HAMgomoon / `HAM_X` paths | All live social actions stay behind explicit operator approvals; safety-gate index pending |
-| **Secrets leaked via OpenAPI / docs / logs** | Generated OpenAPI snapshots, log dumps | OpenAPI exporter sets safe mock env defaults; gitleaks runs on every PR + push; redact() applied in social delivery log |
+| **Social posts shipped without operator approval** | Luv Social (extracted repo) | Live social actions are **not** in HAM; operator approvals and safety gates live in [luv-protocol/luv-social](https://github.com/luv-protocol/luv-social) |
+| **Secrets leaked via OpenAPI / docs / logs** | Generated OpenAPI snapshots, log dumps | OpenAPI exporter sets safe mock env defaults; gitleaks runs on every PR + push |
 
 ---
 
@@ -160,7 +158,7 @@ These are the places where lanes touch and where wrong copy or wrong default fla
 
 These are non-negotiable approval surfaces. Agents and droids may **draft / propose / explain**, but a human operator presses the button.
 
-- **Live social posts** (any HAMgomoon / Telegram / X publish path).
+- **Live social posts** (Telegram / X / Discord publish paths) — **Luv Social** repo only, not HAM.
 - **High-autonomy GoHAM mode** transitions (entering / leaving, scope expansion).
 - **Desktop local-control elevation** (browser-real CDP attach, web-bridge pairing token issuance, kill-switch override).
 - **Production deploys** to Cloud Run or Vercel (CI builds; promotion is operator-gated).
@@ -178,7 +176,7 @@ These are the "yes, please" lanes — agentic work with low blast radius and rev
 
 - **Docs PRs** that follow the [`AGENTS.md`](../AGENTS.md) Cloud Agent Git policy (`branch → push → PR into main`).
 - **Tooling-only scaffolds** (e.g. add a formatter config + scripts; do **not** mass-format source in the same PR).
-- **Test-only PRs** that pin existing behavior (e.g. social view-model assertions).
+- **Test-only PRs** that pin existing behavior (e.g. workspace nav after Social extraction).
 - **OpenAPI / generated artifact regeneration** via committed scripts (`scripts/export_openapi.py`, `scripts/build_cursor_export.py`, `scripts/build_hermes_skills_catalog.py`).
 - **Dependabot / Renovate dependency PRs** within the configured grouping rules in `.github/dependabot.yml`.
 - **CI hardening PRs** that add a new check as **warning-only** first; promotion to blocking is a separate PR.
@@ -194,7 +192,7 @@ Avoid premature commitments — these are explicit "wait" items.
 - **macOS / Linux desktop installers** — Windows-first stays the product path until packaging budget is real.
 - **Re-embedding Cursor / Droid HTTP stacks in the browser** — execution stays subprocess CLI muscle; supervision stays HAM-side.
 - **Generic "HAM Agent Mode"** marketing — use **GoHAM mode** for high-autonomy. Reserve "agent mode" wording so it does not conflict with IDE marketing.
-- **Cross-tenant social autonomy** — single-operator, single-workspace gates first.
+- **Cross-tenant social autonomy** — out of HAM scope; Luv Social handles social ops separately.
 - **DAST / Sentry / product-analytics adoption** — tracked in readiness, but **not** part of finish-line scope.
 - **Strict typing flag-flip** (mypy strict, tsc strict) — productive when ratcheted module-by-module, not flipped repo-wide.
 - **Branch-protection auto-enable from CI** — must be operator-applied; documented in [`docs/BRANCH_PROTECTION_SETUP.md`](BRANCH_PROTECTION_SETUP.md) where present.
@@ -208,9 +206,9 @@ The order below is intentionally **docs-first**. Every step is small, reversible
 
 1. **Web lane UX / product-truth cleanup** — settings + Hermes operator-strip copy audit; ensure no surface implies "the browser sees the laptop" without naming the bridge. *(Docs only.)*
 2. **Desktop support matrix** — landed as [`desktop/SUPPORT_MATRIX.md`](desktop/SUPPORT_MATRIX.md). **GoHAM local-control permission docs** — consolidated summary still pending. *(Docs only.)*
-3. **Cloud agent execution / audit boundary docs** — one-pager mapping each log sink to canonical-vs-advisory, plus the safety-gate index for social / autonomy approval surfaces. *(Docs only.)*
+3. **Cloud agent execution / audit boundary docs** — one-pager mapping each log sink to canonical-vs-advisory. *(Docs only.)*
 4. **GoHAM permission model doc** — ties web + desktop + cloud copy together so high-autonomy flows have one canonical operator page. *(Docs only.)*
-5. **Implementation PRs per lane** — only after the four docs land. Each lane gets its own scoped PRs (e.g. frontend ESLint, desktop type checker baseline, cloud audit boundary helpers). No omnibus PRs.
+5. **Implementation PRs per lane** — only after the docs land. Each lane gets its own scoped PRs (e.g. frontend ESLint, desktop type checker baseline, cloud audit boundary helpers). No omnibus PRs.
 
 Each numbered step above is intended to be **one PR**, not a milestone.
 

@@ -7,9 +7,9 @@ Generated snapshot of `.cursor/` rules and skills, plus first-class context docu
 | Category | Count |
 |----------|-------|
 | Rules (`.mdc`) | 16 |
-| Skills (`SKILL.md`) | 8 |
+| Skills (`SKILL.md`) | 19 |
 | First-class context | 4 |
-| **Total embedded files** | **28** |
+| **Total embedded files** | **39** |
 
 **Subagents** (4): `subagent-*.mdc`. **Commands**: embedded in `commands.mdc`.
 
@@ -1070,6 +1070,107 @@ description: >-
 
 ---
 
+## `.cursor/skills/ham-qa-prompt-gate/SKILL.md`
+
+```
+---
+name: ham-qa-prompt-gate
+description: Review executor prompts for red flags, alignment issues, blockers, scope drift, and evidence gaps before any non-trivial execution.
+---
+
+# HAM QA Prompt Gate
+
+Use this skill before non-trivial implementation/deploy/debug/refactor/test/migration/cleanup prompts, and whenever the user asks to review or rewrite a prompt for safety.
+
+## Purpose
+
+Act as a Senior QA Engineer and Security Auditor for prompts:
+
+- review prompt risk and scope
+- rewrite unsafe or vague prompts when fixable
+- proceed only when no blocker remains
+- stop when a blocker requires human decision
+
+## Required output (before execution)
+
+1. Prompt review
+ - Red flags:
+ - Alignment:
+ - Blockers:
+ - Scope drift:
+ - Evidence gaps:
+2. Decision
+ - `PROCEED AS-WRITTEN` | `PROCEED WITH REWRITE` | `STOP-BLOCKED`
+3. Rewritten executor prompt (only when rewrite is needed)
+4. Execution plan (only approved scope)
+5. Validation/reporting requirements
+
+## Classification rules
+
+- Red flag: risky but fixable; rewrite and proceed only if blocker-free.
+- Alignment issue: conflicts with current repo lane/policy; rewrite to align.
+- Blocker: unsafe or missing decision; stop and request minimum human decision.
+- Scope drift: unrelated expansion; remove from rewritten prompt.
+- Evidence gap: overclaim risk; add proof/reporting requirements.
+
+## Hard blockers
+
+Stop immediately (`STOP-BLOCKED`) for any of the following:
+
+- use of `git add -A`
+- unapproved `--set-env-vars`
+- env-file redeploys
+- instructions to disable diagnostics
+- requests to print/expose secrets or sensitive internal network/runtime details
+- claims that unit tests alone prove live signed-in acceptance
+- missing Clerk session treated as PASS instead of `MANUAL SESSION REQUIRED`
+- persistent `CLERK_SESSION_INVALID` treated as PASS instead of `AUTH SESSION BLOCKER`
+- move to export ZIP/GitHub push before Builder iteration, preview lifecycle, and workspace cleanup are stable
+- broad architecture cleanup mixed into focused bugfix scope
+- destructive cleanup/delete/migration without explicit target, rollback, and verification path
+
+## HAM guardrails (must be enforced)
+
+- Missing Clerk session -> `MANUAL SESSION REQUIRED`, never PASS.
+- Persistent `CLERK_SESSION_INVALID` after refresh/sign-in -> `AUTH SESSION BLOCKER`; report endpoint/status/error code only.
+- Unit tests alone never prove live signed-in acceptance.
+- Preview 502 must be classified as bounded or unbounded.
+- No export ZIP/GitHub push before Builder iteration, preview lifecycle, and workspace cleanup are stable.
+
+## Rewrite rules
+
+When rewrite is needed:
+
+- preserve user intent
+- narrow scope to approved lane
+- remove unsafe commands and vague "fix everything" wording
+- add preflight commands, validation commands, reporting requirements, and stop conditions
+- split optional follow-up work from immediate scope
+- do not invent unverifiable acceptance claims
+
+## Proceed rules
+
+- If `PROCEED AS-WRITTEN`, execute as written.
+- If `PROCEED WITH REWRITE`, execute only the rewritten prompt.
+- If `STOP-BLOCKED`, do not execute; report the blocker and minimum needed decision.
+- If user says `review-only`, do not execute.
+- If user says `rewrite-only`, do not execute.
+
+## Usage example
+
+User prompt:
+"Fix the preview issue, deploy, and then start GitHub export."
+
+Expected gate result:
+
+- Red flag: mixed bugfix + deploy + export scope
+- Scope drift: export blocked until Builder lifecycle acceptance
+- Decision: `PROCEED WITH REWRITE`
+- Rewritten prompt: fix preview lifecycle only, run targeted validation, report evidence, no export
+```
+
+---
+
 ## `.cursor/skills/hermes-review-loop-validation/SKILL.md`
 
 ```
@@ -1121,6 +1222,291 @@ FTS5 DB (persist learning signals)
 
 `HermesReviewer.evaluate()` is implemented with a stable schema and conservative
 fallback behavior. Durable FTS5 learning persistence remains deferred.
+```
+
+---
+
+## `.cursor/skills/mattpocock-diagnose/SKILL.md`
+
+```
+---
+name: diagnose
+description: Structured diagnosis loop: reproduce, minimize, hypothesize, instrument, fix, and regression-test.
+---
+
+# Diagnose (HAM Local)
+
+Follow a disciplined debug loop:
+
+1. Build a deterministic feedback loop first.
+2. Reproduce the exact reported issue.
+3. Rank 3-5 falsifiable hypotheses.
+4. Instrument minimally with tagged debug output.
+5. Add regression coverage at the correct seam, then fix.
+6. Re-run original repro and clean temporary debug scaffolding.
+
+Always read and follow `docs/agents/ham-safety.md`.
+
+## Attribution
+
+Adapted from [`mattpocock/skills`](https://github.com/mattpocock/skills), `skills/engineering/diagnose/SKILL.md` (MIT License).
+```
+
+---
+
+## `.cursor/skills/mattpocock-grill-with-docs/SKILL.md`
+
+```
+---
+name: grill-with-docs
+description: Grilling session for plan alignment against domain language and ADRs, with inline doc updates when decisions are finalized.
+---
+
+# Grill With Docs (HAM Local)
+
+Interview the user one question at a time to clarify scope and trade-offs.
+
+## Workflow
+
+1. Read `docs/agents/ham-safety.md` first and apply it throughout.
+2. Explore relevant code paths before asking questions that code can answer.
+3. Use domain language from `CONTEXT.md` if present.
+4. Use ADRs in `docs/adr/` if present.
+5. Update docs only when decisions are final:
+ - `CONTEXT.md` for glossary/language
+ - `docs/adr/` for hard-to-reverse trade-offs
+
+Create docs lazily. If `CONTEXT.md` or `docs/adr/` is absent, create only when needed by a confirmed decision.
+
+## Attribution
+
+Adapted from [`mattpocock/skills`](https://github.com/mattpocock/skills), `skills/engineering/grill-with-docs/SKILL.md` (MIT License).
+```
+
+---
+
+## `.cursor/skills/mattpocock-handoff/SKILL.md`
+
+```
+---
+name: handoff
+description: Summarize the current thread into a compact handoff artifact for a fresh agent session.
+argument-hint: "What will the next session focus on?"
+---
+
+# Handoff (HAM Local)
+
+Create a concise handoff document for the next session:
+
+- Capture current objective, status, decisions, blockers, and next actions.
+- Reference existing artifacts by path/URL instead of duplicating long content.
+- Recommend relevant skills for next session.
+- Preserve `docs/agents/ham-safety.md` constraints in the next-step checklist.
+
+## Attribution
+
+Adapted from [`mattpocock/skills`](https://github.com/mattpocock/skills), `skills/productivity/handoff/SKILL.md` (MIT License).
+```
+
+---
+
+## `.cursor/skills/mattpocock-improve-codebase-architecture-parked/SKILL.md`
+
+```
+---
+name: improve-codebase-architecture
+description: PARKED/MANUAL ONLY: Identify architecture deepening opportunities and refactor candidates.
+---
+
+# Improve Codebase Architecture (Parked, Manual Only)
+
+This skill is installed but parked by default. Use only on explicit architecture cleanup tasks, not during active Builder stabilization loops.
+
+Before use:
+
+1. Read `docs/agents/domain.md`
+2. Read `docs/agents/ham-safety.md`
+3. Confirm scope and approval for architecture-level changes
+
+## Attribution
+
+Adapted from [`mattpocock/skills`](https://github.com/mattpocock/skills), `skills/engineering/improve-codebase-architecture/SKILL.md` (MIT License).
+```
+
+---
+
+## `.cursor/skills/mattpocock-setup-matt-pocock-skills/SKILL.md`
+
+```
+---
+name: setup-matt-pocock-skills
+description: Repo-local setup for Matt Pocock engineering skills in HAM. Configures issue tracker, triage labels, and domain doc locations without touching runtime or deploy settings.
+disable-model-invocation: true
+---
+
+# Setup Matt Pocock Skills (HAM Local)
+
+This repository is preconfigured for local skill workflow docs:
+
+- Issue tracker: GitHub
+- Domain docs: `CONTEXT.md` (if/when needed) and `docs/adr/`
+- Skill wiring docs: `docs/agents/`
+
+## Steps
+
+1. Read:
+ - `docs/agents/issue-tracker.md`
+ - `docs/agents/triage-labels.md`
+ - `docs/agents/domain.md`
+ - `docs/agents/ham-safety.md`
+2. If any of those files are missing, recreate them using current HAM policy.
+3. Do not modify runtime code, deploy config, env vars, hooks, or package behavior as part of this setup.
+
+## Attribution
+
+Adapted from [`mattpocock/skills`](https://github.com/mattpocock/skills), `skills/engineering/setup-matt-pocock-skills/SKILL.md` (MIT License).
+```
+
+---
+
+## `.cursor/skills/mattpocock-tdd/SKILL.md`
+
+```
+---
+name: tdd
+description: Red-green-refactor loop using vertical slices and behavior-focused tests through public interfaces.
+---
+
+# TDD (HAM Local)
+
+## Rules
+
+- Test behavior through public interfaces, not implementation details.
+- Use vertical slices (one failing test -> minimal fix -> pass), not horizontal batching.
+- Refactor only after green.
+- Keep scope focused; avoid speculative additions.
+
+## Process
+
+1. Confirm target interface and highest-value behaviors.
+2. Write one failing test.
+3. Implement minimal code to pass.
+4. Repeat for next behavior.
+5. Refactor safely with tests green.
+
+Read `docs/agents/ham-safety.md` first and preserve its release/validation constraints.
+
+## Attribution
+
+Adapted from [`mattpocock/skills`](https://github.com/mattpocock/skills), `skills/engineering/tdd/SKILL.md` (MIT License).
+```
+
+---
+
+## `.cursor/skills/mattpocock-to-issues/SKILL.md`
+
+```
+---
+name: to-issues
+description: Convert accepted plans/specs into independent vertical-slice GitHub issues with explicit dependencies.
+---
+
+# To Issues (HAM Local)
+
+Break approved work into thin vertical slices (not horizontal layer splits).
+
+## Workflow
+
+1. Read `docs/agents/issue-tracker.md` and `docs/agents/triage-labels.md`.
+2. Draft slice list with type (`AFK` or `HITL`) and dependencies.
+3. Confirm granularity and order with the user.
+4. Publish GitHub issues in dependency order.
+5. Apply configured triage labels only when requested/appropriate.
+
+Apply `docs/agents/ham-safety.md` constraints in any acceptance criteria touching auth, preview, or validation.
+
+## Attribution
+
+Adapted from [`mattpocock/skills`](https://github.com/mattpocock/skills), `skills/engineering/to-issues/SKILL.md` (MIT License).
+```
+
+---
+
+## `.cursor/skills/mattpocock-to-prd/SKILL.md`
+
+```
+---
+name: to-prd
+description: Turn current conversation context into a PRD-style implementation issue with explicit module and testing decisions.
+---
+
+# To PRD (HAM Local)
+
+Synthesize current context into a PRD without re-interviewing by default.
+
+## Workflow
+
+1. Review current codebase and domain docs if present.
+2. Draft problem, solution, user stories, implementation decisions, testing decisions, and out-of-scope.
+3. Validate module assumptions with user when uncertainty is material.
+4. Publish to GitHub issue tracker per `docs/agents/issue-tracker.md`.
+
+Respect `docs/agents/ham-safety.md` when describing acceptance and validation.
+
+## Attribution
+
+Adapted from [`mattpocock/skills`](https://github.com/mattpocock/skills), `skills/engineering/to-prd/SKILL.md` (MIT License).
+```
+
+---
+
+## `.cursor/skills/mattpocock-triage-parked/SKILL.md`
+
+```
+---
+name: triage
+description: PARKED/MANUAL ONLY: Triage issue workflow through category/state labels when explicitly requested.
+---
+
+# Triage (Parked, Manual Only)
+
+This skill is installed for optional issue hygiene and is not an active default for builder stabilization work.
+
+Before use:
+
+1. Read `docs/agents/issue-tracker.md`
+2. Read `docs/agents/triage-labels.md`
+3. Read `docs/agents/ham-safety.md`
+
+Then triage issue state transitions explicitly and conservatively.
+
+## Attribution
+
+Adapted from [`mattpocock/skills`](https://github.com/mattpocock/skills), `skills/engineering/triage/SKILL.md` (MIT License).
+```
+
+---
+
+## `.cursor/skills/mattpocock-zoom-out/SKILL.md`
+
+```
+---
+name: zoom-out
+description: Explain a subsystem at a higher abstraction level and map related modules/callers before editing.
+disable-model-invocation: true
+---
+
+# Zoom Out (HAM Local)
+
+Provide a subsystem map before implementation:
+
+- Identify key modules, callers, and data flow.
+- Describe boundaries and responsibilities in domain language.
+- Call out known ADR constraints and safety constraints from `docs/agents/ham-safety.md`.
+
+## Attribution
+
+Adapted from [`mattpocock/skills`](https://github.com/mattpocock/skills), `skills/engineering/zoom-out/SKILL.md` (MIT License).
 ```
 
 ---
@@ -1580,8 +1966,8 @@ What's covered today:
   facing copy for MediaRecorder / getUserMedia error mapping.
 - `frontend/src/lib/ham/__tests__/desktopDownloadsManifest.test.ts` — happy /
   sad paths for the manifest parser (trust boundary on fetched JSON).
-- `frontend/src/features/hermes-workspace/screens/social/lib/__tests__/socialViewModel.test.ts`
-  — pins product-truth helpers (mode/readiness/frequency/volume mapping).
+- `frontend/src/features/hermes-workspace/__tests__/workspaceNavConfig.test.ts`
+  — workspace nav IA after Luv Social extraction (empty primary rail, moved titles).
 
 CI status:
 
@@ -1700,7 +2086,12 @@ Five orthogonal dimensions plus one operational tag:
 - **`severity:critical`/high/medium/low** — impact ladder (orthogonal to
   priority; e.g. a `severity:high` regression can still be `priority:P2`
   if a workaround exists).
-- **`status:needs-triage`/blocked** — workflow state.
+- **`status:*`** — workflow state:
+  - `status:needs-triage` — new issue awaiting classification
+  - `status:blocked` — cannot proceed until an external dependency clears
+  - `status:needs-info` — waiting on reporter for more information
+  - `status:ready-for-agent` — fully specified; AFK agent (Factory/Cursor) can pick up
+  - `status:ready-for-human` — requires human implementation
 - **`area:frontend`/backend/desktop/ci/docs** — codebase surface (matches
   the labels used in `.github/dependabot.yml`).
 - **`type:bug`/feature/agent-run** — issue category. `type:agent-run`
@@ -1730,6 +2121,20 @@ Out of scope (deferred):
 - Deleting GitHub's default labels — kept for compatibility with external
   tools that expect them.
 - Wiring labels into branch protection or required-status checks.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on Code-Munkiz/ham via the `gh` CLI. See [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md).
+
+### Triage labels
+
+Five canonical triage roles mapped onto this repo's prefixed `status:*` taxonomy (see also the broader `## Issue label taxonomy` section above). Three new labels (`status:needs-info`, `status:ready-for-agent`, `status:ready-for-human`) were added to `scripts/sync_github_labels.sh` during the Phase 1 setup; the triage skill can now consume them. See [docs/agents/triage-labels.md](docs/agents/triage-labels.md).
+
+### Domain docs
+
+Single-context layout: `CONTEXT.md` and `docs/adr/` at the repo root. `CONTEXT.md` is created lazily by `/grill-with-docs` as terms get resolved; ADRs are added for hard-to-reverse decisions. See [docs/agents/domain.md](docs/agents/domain.md).
 ```
 
 ---
@@ -1890,9 +2295,9 @@ User Prompt
 | Workspace Connected Tools (Claude Agent SDK) | `src/api/workspace_tools.py`, `src/ham/worker_adapters/claude_agent_adapter.py` | **`GET /api/workspace/tools`** exposes a **claude_agent_sdk** entry (SDK import + Anthropic / Bedrock / Vertex auth **presence** only — see adapter). Optional **`POST /api/workspace/tools/claude_agent_sdk/smoke`**: feature-flagged (`HAM_CLAUDE_AGENT_SMOKE_ENABLED`), Clerk session or `HAM_CLAUDE_AGENT_SMOKE_TOKEN`, bounded `query()` smoke — **not** Hermes-led orchestration or dashboard chat; dependency pinned in `requirements.txt` for image readiness |
 | Capability library (My library) | `src/ham/capability_library/`, `src/api/capability_library.py` | **Phase 1:** per-project **saved** Hermes + capability-directory **refs** in `.ham/capability-library/v1/index.json` (separate from settings); `GET` library + aggregate; **mutations** save/remove/reorder with `HAM_CAPABILITY_LIBRARY_WRITE_TOKEN` and audit under `.ham/_audit/capability-library/`; **no** auto-install, **no** shell; dashboard **Capabilities** page **My library** tab + **Skills** “Save to My Library” (requires `?project_id=`) — installed/active truth remains Hermes/inventory, not the library file |
 | Hermes gateway broker (dashboard) | `src/ham/hermes_gateway/`, `src/api/hermes_gateway.py`, `docs/HERMES_GATEWAY_BROKER.md` | **Path B:** `GET /api/hermes-gateway/snapshot` (+ capabilities, optional SSE stream) aggregates hub, allowlisted CLI inventory, skills overlay, Hermes HTTP `/health` probe, run-store + control-plane summaries, external-runner cards; snapshot includes **operator_connection** (derived CLI + HTTP + chat `gateway_mode` + freshness guidance; no new `hermes` argv); **Path C** placeholders for JSON-RPC/WebSocket/live-menu REST until upstream exists; raw CLI captures redacted; UI: `/command-center` + desktop **Settings → HAM + Hermes setup** strip; team operator story: `docs/TEAM_HERMES_STATUS.md` |
-| Workspace UI | `frontend/` (Vite + React), `desktop/` (Electron shell) | Extracted workspace; TypeScript types aligned with persisted run / bridge shapes; optional **Clerk** for chat JWT; **execution mode** routing + Bridge browser adapters (`src/ham/execution_mode.py`, `src/bridge/browser_*.py`). **Desktop** (`desktop/README.md`): **Windows** installers via `npm run pack:win*`; **Linux `.deb`/AppImage packaging targets were removed** (dev: `npm start`). `window.hamDesktop.localControl` exposes Local Control policy/audit/kill-switch, sidecar lifecycle, and **main-process** managed-browser IPC (MVP/real CDP) where enabled — separate from Ham API **`/api/browser*`.** **Workspace chat** does not run the removed **GoHAM-mode** managed-browser/chat loop (`POST /api/goham/planner` stays API-only). See `docs/desktop/local_control_v1.md`; `docs/goham/browser_smoke.md` for historical/future notes. |
+| Workspace UI | `frontend/` (Vite + React), `desktop/` (Electron shell) | Extracted workspace; TypeScript types aligned with persisted run / bridge shapes; optional **Clerk** for chat JWT; **execution mode** routing + Bridge browser adapters (`src/ham/execution_mode.py`, `src/bridge/browser_*.py`). **Workbench builder**: chat scaffold → **ZIP artifact** (`builder-artifact://`) + **auto cloud runtime job** (idempotent) when experiments/provider gates pass. **Builder Project Workspace MVP** now exposes snapshot-backed file-tree/code-viewer + file-scoped chat (explain/edit) with edit-mode snapshot rollover and preview-refresh request wiring. Builder **hosted preview runtime** has **retired third-party sandbox SDK paths** (E2B decommissioned); active direction is **`gcp_gke_sandbox`** with **live-client Wave D wiring in repo** (explicit live gates, real GKE pod/service lifecycle client, source bundle package/upload abstraction, bounded diagnostics) toward GKE Autopilot + GKE Sandbox/gVisor — see `docs/BUILDER_PLATFORM_GCP_RUNTIME_PLAN.md`. Provider-neutral **`CloudRuntimeJob` / `RuntimeSession` / `PreviewEndpoint`** persist; diagnostics are **`runtime_diagnostics`**; upstream hosts for HAM-controlled paths are constrained (e.g. `*.run.app` for control-plane helpers). **Preview** remains **HAM proxy–only** in the browser (no raw upstream/token/query-string leaks). **Preview-status** remains cloud-oriented when source exists (localhost/local run profile remain **Advanced** only). **Desktop** (`desktop/README.md`): **Windows** installers via `npm run pack:win*`; **Linux `.deb`/AppImage packaging targets were removed** (dev: `npm start`). `window.hamDesktop.localControl` exposes Local Control policy/audit/kill-switch, sidecar lifecycle, and **main-process** managed-browser IPC (MVP/real CDP) where enabled — separate from Ham API **`/api/browser*`.** **Workspace chat** does not run the removed **GoHAM-mode** managed-browser/chat loop (`POST /api/goham/planner` stays API-only). See `docs/desktop/local_control_v1.md`; `docs/goham/browser_smoke.md` for historical/future notes. |
 | Chat operator + identity gate | `src/api/chat.py`, `src/ham/chat_operator.py`, `src/ham/clerk_auth.py`, `src/ham/clerk_policy.py`, `src/ham/clerk_email_access.py`, `src/ham/operator_audit.py` | Server-side operator before LLM; optional Clerk JWT (`HAM_CLERK_REQUIRE_AUTH` or `HAM_CLERK_ENFORCE_EMAIL_RESTRICTIONS`, `CLERK_JWT_ISSUER`), `ham:*` permission checks, optional HAM allowlist email/domain defense-in-depth; append-only audit in HAM JSONL — **not** Clerk metadata; Cursor API key unchanged; chat sessions persist via **`HAM_CHAT_SESSION_STORE`** (default **sqlite**, optional **firestore** / **memory**) and, when **`workspace_id`** is supplied, list/get/export paths scope rows to that workspace and the resolved user id |
-| HAM-on-X social agent | `src/ham/ham_x/`, `docs/ham-x-agent/`, `src/api/social.py`, `src/ham/social_persona/`, `frontend/src/features/hermes-workspace/screens/social/` | **Phase 4C Reactive Batch Mode + Social TD-1/SP-3/TD-3A:** Phase 2B remains execution-disconnected, Phase 3A `goham_controller.py` remains dry-run-only, and Phase 3B `goham_live_controller.py` remains original-post-only. Phase 4A `goham_reactive.py` still classifies prepared/read-only inbound mentions/comments into dry-run review/exception records. Phase 4B `reactive_reply_executor.py` / `goham_reactive_live.py` remain a separate one-shot reply canary. Phase 4B.1 `goham_reactive_inbox.py` discovers mentions/comments and returns automatic reply targets without executing. Phase 4C adds opt-in, dry-run-first `goham_reactive_batch.py` for bounded multi-candidate processing with per-item policy/governor rechecks, existing reactive rolling caps/cooldowns, per-reply journal rows, provider failure stops, and no retries. Social TD-1 adds read-only Telegram/Discord readiness, capabilities, and setup checklist endpoints backed by safe Hermes gateway env/status-file signals, plus read-only workspace panels. Social SP-1/SP-3 adds the read-only `ham-canonical` persona registry, deterministic digest, bounded persona API, docs, Persona panel, and persona id/version/digest protection in X preview/apply digests. Social TD-2A strengthens Telegram readiness with safe token/allowlist/home/test-group/mode presence booleans plus bounded Hermes gateway runtime/platform-state validation. Social TD-2B adds `POST /api/social/providers/telegram/messages/preview` for deterministic, persona-protected, masked-target Telegram dry-run message previews with proposal digests. Social TD-3A adds a narrow HAM-owned Telegram Bot API one-shot sender (`src/ham/social_telegram_send.py`), redacted delivery log (`src/ham/social_delivery_log.py`), and confirmed `POST /api/social/providers/telegram/messages/apply` gated by operator token, exact confirmation, recomputed preview digest, persona digest, server-side target resolution, and connected Hermes/Telegram readiness; no Telegram batch/reactive route, arbitrary target/text, broad Hermes `send_message` tool, gateway process controls, credential inputs, raw IDs, Hermes/Eliza export, or persona editing. Reactive budgets remain separate from broadcast caps; no scheduler, daemon, infinite loop, original posts, quotes, DMs, likes/follows, xurl mutation, manual canary, broadcast executor, or Phase 2B execution |
+| Luv Social (extracted) | [luv-protocol/luv-social](https://github.com/luv-protocol/luv-social) — was `src/ham/ham_x/`, `src/api/social.py`, workspace Social UI | **Extracted (Mission 20):** autonomous Telegram/X/Discord social ops moved out of HAM; HAM keeps builder/workspace/agent platform only. Legacy `/workspace/social` shows moved pointer; see `docs/GOHAM_SOCIAL_EXTRACTION.md`. Telegram autonomy continues in the standalone repo |
 | Control plane runs (v1) | `src/persistence/control_plane_run.py`, `src/ham/cursor_agent_workflow.py`, `src/ham/droid_workflows/preview_launch.py`, `src/api/control_plane_runs.py` | **Durable** JSON per `ham_run_id` under `HAM_CONTROL_PLANE_RUNS_DIR` (default `~/.ham/control_plane_runs`): committed Cursor Cloud Agent + Factory Droid launches and Cursor status updates; **read** list/detail API (`/api/control-plane-runs*`) is factual only; **not** a mission graph, queue, or bridge `RunStore` |
 | Managed Cloud Agent + mission record | `src/persistence/managed_mission.py`, `src/ham/managed_mission_wiring.py`, `src/ham/managed_mission_truth.py`, `src/api/cursor_settings.py`, `src/api/cursor_managed_*.py`, `src/ham/cursor_agent_workflow.py`, `src/ham/chat_operator.py`, Hermes Workspace (`WorkspaceManagedMissionsLivePanel`), `src/integrations/cursor_sdk_bridge_client.py` | Durable per-agent mission JSON + API read (observed lifecycle, deploy/Vercel last-seen); optional `project_id` on HAM launch for create-time `mission_deploy_approval_mode` snapshot; **Chat operator** can preview/launch Cursor Cloud Agent with `cursor_mission_handling: managed` — same managed prompt for digest/launch, `ManagedMission` row on successful API launch; mission **feed** projection: `HAM_CURSOR_SDK_BRIDGE_ENABLED=true` uses the live Cursor SDK bridge (`bridge.mjs`); unset/false falls back to REST projection (same route, honest `provider_projection.mode`); **Roadmap phases A–D (v1 slices):** `GET .../truth` observability table; `GET .../correlation` + optional embedded `ControlPlaneRun`; token-gated `POST .../hermes-advisory` (`HAM_MANAGED_MISSION_WRITE_TOKEN`) for capped `HermesReviewer` advisory fields only; token-gated `PATCH .../board` for operator `mission_board_state` lanes (`backlog`/`active`/`archive`, not a graph) with automatic active→archive on terminal lifecycle; Workspace detail surfaces truth + correlation + token field; **not** a mission queue or Hermes-to-Cursor action loop — see `docs/ROADMAP_CLOUD_AGENT_MANAGED_MISSIONS.md`, `docs/examples/managed_cloud_agent_phases/README.md` |
 | Context engine | `src/memory_heist.py` | Hardened + tested (Phase 1/3 guardrails complete) |
@@ -1913,7 +2318,7 @@ Completed runs are now persisted as structured JSON at `.ham/runs/<timestamp>-<r
 
 **Tests**: full `pytest` suite including registry, bridge, main loop, droid registry, API/CORS, control-plane catalog (skills + subagents + Hermes runtime skills Phase 1/2a) + UI action parsing, chat streaming + SQLite session store, project settings preview/apply/rollback (including **HAM agent profiles** / `agents` in `.ham/settings.json`), and persistence tests — run `pytest` for current counts (`pytest.ini` sets `pythonpath = .`; GitHub Actions runs `pytest` + frontend `tsc`).
 
-**Next milestone**: stronger **UI-actions** marker recovery; continue Bridge-profile hardening. **Capability library** Phase 1 is shipped (saved `hermes:` / `capdir:` refs, token + audit, **Capabilities → My library** + **Skills** save — no install). Optional follow-on: **Phase 2** wire save UI to **Hermes skills** install (delegate to existing preview/apply). **Hermes gateway broker** Path B is shipped (`/command-center`, broker docs); optional follow-on: consume official Hermes **run** SSE from HAM-orchestrated runs only, and widen HTTP probes when `/health/detailed` is verified on target Hermes builds. **HAM agent builder** Slices 1–2 (persisted profiles) and **Slice 3** (compact **active agent guidance** injected into `/api/chat` / stream when `project_id` is sent — catalog descriptors only, no install/execution) are shipped. Expand allowlisted settings keys only with explicit review. (Context & Memory **settings preview/apply** UI is shipped; **`GET /api/cursor-subagents`** + chat prompt injection for review charters is shipped; **Hermes runtime skills** Phase 2a shared local install is shipped — profile-target install and broader topologies deferred.)
+**Next milestone**: **GCP-native Builder preview worker Wave C proxy-readiness closure** — with chat/live routing fixed and staging now proving snapshot → GCS bundle → GKE pod/service + gVisor, finish the remaining live-preview gap by validating proxy reachability from HAM to provider-owned GKE upstream targets and promoting `PreviewEndpoint`/`preview_status` to ready in staging while keeping browser payloads HAM-proxy-only and secret-safe. In parallel: stronger **UI-actions** marker recovery; continue Bridge-profile hardening. **Capability library** Phase 1 is shipped (saved `hermes:` / `capdir:` refs, token + audit, **Capabilities → My library** + **Skills** save — no install). Optional follow-on: **Phase 2** wire save UI to **Hermes skills** install (delegate to existing preview/apply). **Hermes gateway broker** Path B is shipped (`/command-center`, broker docs); optional follow-on: consume official Hermes **run** SSE from HAM-orchestrated runs only, and widen HTTP probes when `/health/detailed` is verified on target Hermes builds. **HAM agent builder** Slices 1–2 (persisted profiles) and **Slice 3** (compact **active agent guidance** injected into `/api/chat` / stream when `project_id` is sent — catalog descriptors only, no install/execution) are shipped. Expand allowlisted settings keys only with explicit review. (Context & Memory **settings preview/apply** UI is shipped; **`GET /api/cursor-subagents`** + chat prompt injection for review charters is shipped; **Hermes runtime skills** Phase 2a shared local install is shipped — profile-target install and broader topologies deferred.)
 
 **Deferred:** FTS5 durable learning persistence, second orchestration harness,
 architecture sprawl.

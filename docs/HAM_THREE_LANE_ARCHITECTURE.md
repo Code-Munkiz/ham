@@ -17,7 +17,7 @@ No single lane replaces the others. Mis-aligning expectations (for example “th
 ### Positioning
 
 - **Hosted browser command center** (for example Vercel-built frontend talking to a hosted API, often **Cloud Run**).
-- Primary navigation under **`/workspace/*`**: chat, files, terminal, settings, social cockpit (including policy), operations, missions/conductor, skills, profiles, memory, and related workspace chrome.
+- Primary navigation under **`/workspace/*`**: chat, files, terminal, settings, operations, missions/conductor, skills, profiles, memory, and related workspace chrome. Legacy **`/workspace/social`** shows a moved pointer to [luv-protocol/luv-social](https://github.com/luv-protocol/luv-social) (autonomous social ops extracted from HAM).
 - **Auth** (for example Clerk when configured), **workspace/session** management, and operator **visibility**: steering, approvals, review, configuration.
 
 ### Truth
@@ -70,7 +70,7 @@ Capability-centric view. Cells are **who leads** for that concern; **—** means
 | **Workspace tenancy** | ● | ○ | ● | **Cloud** APIs and stores enforce workspace RBAC; **web** is the management UX. |
 | **Browser / computer control** | ○ | ● | ○ | **Desktop** owns **local** browser-real → machine escalation per product policy. **Cloud** may expose **hosted** `/api/browser*` automation—**separate** trust boundary. **Web** does not directly drive the user’s OS without a bridge. |
 | **Local files** | ○ | ● | ○ | **Desktop** has native file context; **web** reaches disk only via **configured local/API bridge** and workspace root policy—not “cloud disk = my laptop.” |
-| **Social cockpit / HAMgomoon** | ● | ○ | ● | **Web**: settings-first **social cockpit** and policy UI. **Cloud**: Telegram/social automation and **HAMgomoon**-related server modules where enabled. Treat **live** social/autonomy as **explicitly scoped** operator features. |
+| **Luv Social (extracted)** | ○ | ○ | — | **Not in HAM.** Autonomous Telegram/X/Discord social-agent ops live in [luv-protocol/luv-social](https://github.com/luv-protocol/luv-social). HAM **`/workspace/social`** is a moved pointer only. |
 | **Agent proposal / review queues** | ● | ○ | ● | **Web** surfaces operator queues; **cloud** implements managed missions, approvals, and feed persistence. |
 | **Droid / Factory execution** | ○ | ○ | ● | Heavy execution is **subprocess/CLI/hosted** muscle; **web** steers and reviews outcomes **through HAM**, not by re-embedding vendor stacks in the browser. |
 | **Hermes model gateway** | ○ | ○ | ● | Browser **never** calls Hermes directly; **cloud** adapts gateway modes (`HERMES_GATEWAY_*`) and routes. |
@@ -88,8 +88,7 @@ Capability-centric view. Cells are **who leads** for that concern; **—** means
 
 - Use **“GoHAM mode”** for **high-autonomy** behavior in product language.
 - **Do not** use **“HAM Agent Mode”** for that concept—reserve clearer terminology to avoid mixing IDE marketing with HAM’s autonomy lanes.
-- **HAMgomoon** names the **Telegram / social persona and automation lane** in code and ops where relevant; it is **not** a generic synonym for the whole web app.
-- **“Social cockpit”** can refer to the **broader product section** (settings-first social UX) as well as server-side social features—disambiguate in runbooks when debugging.
+- **Luv Social** names the **extracted** autonomous social-agent project ([luv-protocol/luv-social](https://github.com/luv-protocol/luv-social)); it is **not** part of the HAM monorepo runtime.
 - **Do not** claim **browser/local computer control from the hosted web app alone** without naming the **bridge**, **local runtime**, or **desktop** piece.
 - **Do not** imply **Linux desktop app support** or **Linux installers** as a current shipping path unless docs and packaging explicitly say otherwise.
 
