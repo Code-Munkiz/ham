@@ -3,6 +3,7 @@ id: validator.passive-income-tick
 kind: validator
 name: Passive income tick sanity
 status: proposed
+schema_version: "0.1"
 version: "0.1.0-pilot"
 
 description: >
@@ -14,7 +15,18 @@ non_template_statement: >
 
 applies_to:
   - game.idle-incremental
-  - mechanic.economy with passiveRatePerSecond > 0
+  - tag:local-resource-loop
+
+depends_on:
+  - mechanic.economy
+
+validates_modules:
+  - mechanic.economy
+  - mechanic.score
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
 
 inputs:
   - passive_rate: number
@@ -30,14 +42,13 @@ guidance:
 
 validation_notes:
   - Pairs with recovery.stale-interval-or-bad-tick-loop on fail
+  - Does not execute at runtime today
 
 risk_notes:
   - Timer throttling in background tabs may skew rates — document as acceptable
 
 validation_goal: >
   Idle games feel broken if passive income does not tick or ticks explosively.
-
-check_type: conceptual
 
 pass_conditions:
   - "After wait window, currency increased when passiveRatePerSecond > 0"

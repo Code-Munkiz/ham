@@ -3,6 +3,7 @@ id: recovery.invalid-local-storage-json
 kind: recovery_playbook
 name: Fix invalid localStorage JSON on load
 status: proposed
+schema_version: "0.1"
 version: "0.1.0-pilot"
 
 description: >
@@ -12,10 +13,18 @@ description: >
 non_template_statement: >
   Recovery playbook spec only. Not wired to chat or edit worker today.
 
+max_attempts: 2
+
 applies_to:
   - game.idle-incremental
+  - tag:local-persistence
+
+depends_on:
   - mechanic.save-load
-  - validator.local-storage-roundtrip failures on corrupt path
+  - validator.local-storage-roundtrip
+
+repairs_validators:
+  - validator.local-storage-roundtrip
 
 inputs:
   - storage_key: string
@@ -48,6 +57,23 @@ diagnosis_steps:
   - "Check for uncaught JSON.parse"
   - "Verify schemaVersion handling"
   - "Confirm save-status UI path on error"
+
+steps:
+  - id: step.try_catch_parse
+    action: try_catch_parse
+    detail: "Parse inside try/catch; on error branch to defaultState()"
+  - id: step.validate_shape
+    action: validate_shape
+    detail: "Reject payload missing primaryCurrency or wrong types"
+  - id: step.quarantine_bad_key
+    action: quarantine_bad_key
+    detail: "localStorage.removeItem(key) after failed parse to prevent repeat crash"
+  - id: step.set_save_status
+    action: set_save_status
+    detail: "Emit error_reset via component.save-status contract"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.local-storage-roundtrip after patch"
 
 repair_strategy:
   - action: try_catch_parse

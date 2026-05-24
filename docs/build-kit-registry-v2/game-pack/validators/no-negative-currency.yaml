@@ -3,6 +3,7 @@ id: validator.no-negative-currency
 kind: validator
 name: No negative currency invariant
 status: proposed
+schema_version: "0.1"
 version: "0.1.0-pilot"
 
 description: >
@@ -14,7 +15,20 @@ non_template_statement: >
 
 applies_to:
   - game.idle-incremental
-  - any economy using mechanic.score + mechanic.economy
+  - tag:local-resource-loop
+
+depends_on:
+  - mechanic.score
+  - mechanic.economy
+
+validates_modules:
+  - mechanic.score
+  - mechanic.economy
+  - component.resource-counter
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
 
 inputs:
   - generated_source: conceptual — App and economy modules
@@ -29,14 +43,13 @@ guidance:
 
 validation_notes:
   - Run after initial scaffold and after economy-related edits
+  - Does not execute at runtime today
 
 risk_notes:
   - Floating-point edge cases near zero
 
 validation_goal: >
   Protect player trust — negative currency reads as a bug in idle games.
-
-check_type: conceptual
 
 pass_conditions:
   - "primaryCurrency >= 0 after click earn"

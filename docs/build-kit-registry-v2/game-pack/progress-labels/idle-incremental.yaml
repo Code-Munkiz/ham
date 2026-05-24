@@ -3,20 +3,24 @@ id: progress.idle-incremental
 kind: progress_label
 name: Idle incremental build progress
 status: proposed
+schema_version: "0.1"
 version: "0.1.0-pilot"
 
 description: >
   Normie-friendly phase labels for chat and Workbench activity stream during an
-  idle/incremental Game Pack build. Maps to app_type build_phases conceptually.
+  idle/incremental Game Pack build. Maps app_type build_phase ids to user-facing
+  copy — does not define phase structure independently.
 
 non_template_statement: >
   Progress copy module only. Not emitted by runtime today.
+
+source_phase_owner: game.idle-incremental
 
 applies_to:
   - game.idle-incremental
 
 inputs:
-  - current_phase_id: from build_phases
+  - current_phase_id: from game.idle-incremental build_phases
   - recovery_active: boolean
 
 outputs:
@@ -26,29 +30,16 @@ outputs:
 guidance:
   - "Avoid internal words: scaffold, template_kind, OpenRouter, kit_id"
   - "Use game-flavored plain language"
+  - "Phase ids and order come from source_phase_owner build_phases only"
 
 validation_notes:
+  - Each mapped phase id exists on source_phase_owner build_phases
   - Each phase has a unique normie message
 
 risk_notes:
   - Over-long messages clutter activity stream
 
-phases:
-  - id: phase.understand
-    order: 1
-  - id: phase.compose
-    order: 2
-  - id: phase.generate
-    order: 3
-  - id: phase.validate
-    order: 4
-  - id: phase.preview
-    order: 5
-  - id: phase.recover
-    order: 6
-    optional: true
-
-normie_friendly_messages:
+phase_message_map:
   phase.understand:
     title: "Getting your game idea"
     message: "I'm turning your description into a simple idle game plan."
@@ -71,5 +62,5 @@ normie_friendly_messages:
 technical_internal_notes:
   - "Map phase.generate to LLM scaffold step internally when wired"
   - "phase.compose corresponds to BuildRecipe assembly — not user-visible"
-  - "phase.recover triggers recovery playbook runner — cap attempts per ADR-0016"
+  - "phase.recover triggers recovery playbook runner — cap attempts per pack.game recovery_policy"
   - "Do not expose module ids (mechanic.economy) in normie messages"

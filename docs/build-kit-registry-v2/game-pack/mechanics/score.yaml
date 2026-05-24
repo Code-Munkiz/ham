@@ -3,6 +3,7 @@ id: mechanic.score
 kind: mechanic
 name: Score / primary currency display
 status: proposed
+schema_version: "0.1"
 version: "0.1.0-pilot"
 
 description: >
@@ -14,7 +15,15 @@ non_template_statement: >
 
 applies_to:
   - game.idle-incremental
-  - any DOM game with a single primary currency HUD
+  - tag:dom-hud-primary-currency
+
+depends_on: []
+
+provides:
+  - score_state
+
+binds_components:
+  - component.resource-counter
 
 inputs:
   - currency_label: display name (Coins, Points, Energy)
@@ -61,5 +70,4 @@ test_ideas:
 
 reusable_across:
   - game.idle-incremental
-  - casual arcade score HUD (future)
-  - dashboard stat primary KPI (non-game, different contract)
+  - tag:dom-casual-game

@@ -3,6 +3,7 @@ id: recovery.stale-interval-or-bad-tick-loop
 kind: recovery_playbook
 name: Fix stale interval or bad tick loop
 status: proposed
+schema_version: "0.1"
 version: "0.1.0-pilot"
 
 description: >
@@ -13,10 +14,19 @@ description: >
 non_template_statement: >
   Executable recovery strategy spec for a future runner. Not auto-applied today.
 
+max_attempts: 2
+
 applies_to:
   - game.idle-incremental
-  - validator.passive-income-tick failures
-  - validator.no-negative-currency failures tied to tick bugs
+  - tag:local-resource-loop
+
+depends_on:
+  - mechanic.economy
+  - validator.passive-income-tick
+
+repairs_validators:
+  - validator.passive-income-tick
+  - validator.no-negative-currency
 
 inputs:
   - failure_context: validator result or preview freeze report
@@ -49,6 +59,20 @@ diagnosis_steps:
   - "Check useEffect dependency array — interval recreated every render?"
   - "Verify cleanup function clears interval id"
   - "Confirm tick uses functional setState not stale closure variable"
+
+steps:
+  - id: step.isolate_tick_effect
+    action: isolate_tick_effect
+    detail: "Single useEffect; deps [passiveRatePerSecond]; return () => clearInterval(id)"
+  - id: step.functional_state_update
+    action: functional_state_update
+    detail: "Replace setCurrency(currency + delta) with functional form in tick"
+  - id: step.dedupe_intervals
+    action: dedupe_intervals
+    detail: "Remove duplicate tick loops if scaffold produced more than one"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.passive-income-tick after patch"
 
 repair_strategy:
   - action: isolate_tick_effect

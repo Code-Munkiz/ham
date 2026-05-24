@@ -3,6 +3,7 @@ id: learning.idle-incremental
 kind: learning_hook
 name: Idle incremental telemetry and learning hooks
 status: proposed
+schema_version: "0.1"
 version: "0.1.0-pilot"
 
 description: >

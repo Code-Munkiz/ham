@@ -3,6 +3,7 @@ id: mechanic.upgrades
 kind: mechanic
 name: Upgrades (purchasable improvements)
 status: proposed
+schema_version: "0.1"
 version: "0.1.0-pilot"
 
 description: >
@@ -15,6 +16,16 @@ non_template_statement: >
 
 applies_to:
   - game.idle-incremental
+  - tag:purchasable-progression
+
+depends_on:
+  - mechanic.economy
+
+provides:
+  - upgrade_state
+
+binds_components:
+  - component.upgrade-card
 
 inputs:
   - upgrade_definitions: list of { id, title, baseCost, effectSummary, effectApply }
@@ -56,5 +67,5 @@ test_ideas:
   - "Passive or click rate increases after relevant upgrade"
 
 reusable_across:
-  - idle/incremental games
-  - skill trees (future, different contract)
+  - game.idle-incremental
+  - tag:purchasable-progression

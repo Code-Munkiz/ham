@@ -3,6 +3,7 @@ id: component.resource-counter
 kind: component_contract
 name: Resource counter (HUD)
 status: proposed
+schema_version: "0.1"
 version: "0.1.0-pilot"
 
 description: >
@@ -14,7 +15,18 @@ non_template_statement: >
 
 applies_to:
   - game.idle-incremental
-  - any HUD showing a primary resource
+  - tag:dom-hud-primary-currency
+
+depends_on:
+  - mechanic.score
+  - mechanic.economy
+
+provides:
+  - hud_display
+
+binds_mechanics:
+  - mechanic.score
+  - mechanic.economy
 
 inputs:
   - label: string — Coins, Points, etc.

@@ -3,6 +3,7 @@ id: game.idle-incremental
 kind: app_type
 name: Idle / incremental clicker game
 status: proposed
+schema_version: "0.1"
 version: "0.1.0-pilot"
 
 description: >
@@ -16,10 +17,17 @@ non_template_statement: >
   This app type does not reference checked-in game source files, scene graphs, or
   clone baselines. It defines generative guidance only.
 
+legacy_v1_fallback: generic
+
+safety_constraints:
+  - no-network-egress-for-mvp
+  - no-eval
+  - local-storage-only-for-mvp
+  - no-real-money-economy
+
 applies_to:
-  - "User wants a clicker, idle, incremental, or cookie-style browser game"
-  - "User describes earning currency over time and buying upgrades"
-  - "User asks for offline-style progression with local save"
+  - tag:idle-incremental
+  - tag:dom-casual-game
 
 inputs:
   - user_prompt: natural language game idea
@@ -57,7 +65,7 @@ user_prompt_examples:
 intent_signals:
   - "\\b(idle|incremental|clicker|cookie\\s*clicker|passive\\s+income)\\b"
   - "\\b(earn|collect|generate)\\b.{0,40}\\b(coins?|points?|energy|resources?)\\b"
-  - "\\b(upgrades?|prestige|multiplier)\\b"
+  - "\\b(upgrades?|multiplier)\\b"
   - "\\b(save|persist|continue)\\b.{0,30}\\b(progress|game)\\b"
 
 clarifying_questions:
@@ -78,19 +86,12 @@ default_assumptions:
   - "DOM/React UI; no canvas engine unless user explicitly requests it"
   - "Mobile-friendly layout at 360px width"
 
-recommended_stack:
-  stack_kit_id: stack.dom-game-minimal
-  packages:
-    - vite
-    - react
-    - typescript
-    - tailwindcss
-  capabilities:
-    - local-state
-    - local-storage
-    - no-network
+stack_kit_id: stack.dom-game-minimal
+
+compose_order_ref: pack.game#compose_defaults.compose_order
 
 composed_modules:
+  stack_kit_id: stack.dom-game-minimal
   mechanics:
     - mechanic.score
     - mechanic.economy
@@ -114,21 +115,28 @@ composed_modules:
 build_phases:
   - id: phase.understand
     title: Understand the game idea
+    order: 1
     modules_used: [app_type]
   - id: phase.compose
     title: Compose mechanics and UI contracts
+    order: 2
     modules_used: [mechanics, component_contracts]
   - id: phase.generate
     title: Generate custom game code
-    modules_used: [recommended_stack, guidance]
+    order: 3
+    modules_used: [stack_kit_id, guidance]
   - id: phase.validate
     title: Check economy, ticks, and save/load
+    order: 4
     modules_used: [validators]
   - id: phase.preview
     title: Prepare Workbench preview
+    order: 5
     modules_used: []
   - id: phase.recover
     title: Fix known failure modes if needed
+    order: 6
+    optional: true
     modules_used: [recovery_playbooks]
 
 acceptance_criteria:
@@ -146,3 +154,4 @@ out_of_scope:
   - Sprite pipelines, tilemaps, or WebGL rendering
   - Cloud sync or account-based saves
   - Audio-heavy games (optional mute only if user asks)
+  - Prestige / reset-for-multiplier loops (post-MVP expansion; not in pilot mechanics)

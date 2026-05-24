@@ -3,6 +3,7 @@ id: stack.dom-game-minimal
 kind: stack_kit
 name: DOM-native minimal game stack
 status: proposed
+schema_version: "0.1"
 version: "0.1.0-pilot"
 
 description: >
@@ -17,7 +18,22 @@ non_template_statement: >
 
 applies_to:
   - game.idle-incremental
-  - future DOM-native casual games (quiz, trivia, simple board UI)
+  - tag:dom-casual-game
+
+provides:
+  - stack_guidance_block
+  - expected_artifact_targets
+
+capabilities:
+  - local-state
+  - local-storage
+  - no-network
+  - dom-rendering
+  - accessible-controls
+
+safety_constraints_inherited:
+  - no-network-egress-for-mvp
+  - no-eval
 
 inputs:
   - user_theme: optional visual tone

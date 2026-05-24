@@ -3,6 +3,7 @@ id: mechanic.economy
 kind: mechanic
 name: Economy (earn rates and costs)
 status: proposed
+schema_version: "0.1"
 version: "0.1.0-pilot"
 
 description: >
@@ -15,7 +16,15 @@ non_template_statement: >
 
 applies_to:
   - game.idle-incremental
-  - any local-only resource loop game
+  - tag:local-resource-loop
+
+depends_on:
+  - mechanic.score
+
+provides:
+  - economy_state
+
+binds_components: []
 
 inputs:
   - base_click_yield: number
@@ -45,7 +54,6 @@ state_model:
   fields:
     - clickPower: number
     - passiveRatePerSecond: number
-    - currency: number
   derived:
     - incomePerSecondDisplay: formatted passiveRatePerSecond
 
@@ -60,5 +68,5 @@ test_ideas:
   - "Buying upgrade changes click or passive rate"
 
 reusable_across:
-  - idle/incremental games
-  - simple shop loops in non-game apps (future feature_kit)
+  - game.idle-incremental
+  - tag:local-resource-loop

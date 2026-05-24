@@ -3,6 +3,7 @@ id: component.save-status
 kind: component_contract
 name: Save status indicator
 status: proposed
+schema_version: "0.1"
 version: "0.1.0-pilot"
 
 description: >
@@ -14,7 +15,16 @@ non_template_statement: >
 
 applies_to:
   - game.idle-incremental
-  - any app using mechanic.save-load
+  - tag:local-persistence
+
+depends_on:
+  - mechanic.save-load
+
+provides:
+  - save_status_display
+
+binds_mechanics:
+  - mechanic.save-load
 
 inputs:
   - status: saved | saving | restored | error | offline

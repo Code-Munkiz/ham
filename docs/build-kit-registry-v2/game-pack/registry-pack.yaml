@@ -1,0 +1,83 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: pack.game
+kind: registry_pack
+name: Game Pack
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Root manifest for the Build Kit Registry v2 Game Pack schema pilot. Indexes all
+  proposed modules for DOM-native casual games, starting with game.idle-incremental.
+  Used for cross-reference validation and future composer defaults — not loaded by HAM
+  at runtime today.
+
+non_template_statement: >
+  Registry index and compose defaults only. Does not ship starter game source,
+  cloned Vite projects, or executable validators. HAM generates custom code from
+  composed playbook context when wired — never from checked-in templates.
+
+module_index:
+  app_types:
+    - game.idle-incremental
+  stack_kits:
+    - stack.dom-game-minimal
+  mechanics:
+    - mechanic.score
+    - mechanic.economy
+    - mechanic.upgrades
+    - mechanic.save-load
+  component_contracts:
+    - component.game-shell
+    - component.resource-counter
+    - component.upgrade-card
+    - component.save-status
+  validators:
+    - validator.no-negative-currency
+    - validator.passive-income-tick
+    - validator.local-storage-roundtrip
+  recovery_playbooks:
+    - recovery.stale-interval-or-bad-tick-loop
+    - recovery.invalid-local-storage-json
+  progress_labels:
+    - progress.idle-incremental
+  learning_hooks:
+    - learning.idle-incremental
+
+compose_defaults:
+  compose_order:
+    - intent
+    - assumptions
+    - stack
+    - mechanics
+    - components
+    - phases
+    - validators
+    - recovery
+    - progress
+  max_modules: 20
+  default_stack_kit_id: stack.dom-game-minimal
+  validator_policy:
+    run_after: [scaffold, economy_edit]
+    severity_blocking_default: blocking
+    runner_default: conceptual
+    check_type_default: conceptual
+  recovery_policy:
+    max_attempts_default: 2
+    re_validate_after_repair: true
+    user_facing_on_exhausted: honest_failure
+
+render_sections:
+  - intent
+  - assumptions
+  - stack
+  - mechanics
+  - components
+  - phases
+  - validators
+  - recovery
+  - progress
+
+non_runtime_notice: >
+  This pack is documentation under docs/build-kit-registry-v2/. Registry v2
+  composition, validation execution, and recovery runners are proposed in ADR-0016
+  only. v1 builder kit JSON under src/ham/data/builder_kits/ is unchanged.

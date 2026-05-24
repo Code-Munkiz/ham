@@ -3,6 +3,7 @@ id: component.game-shell
 kind: component_contract
 name: Game shell layout
 status: proposed
+schema_version: "0.1"
 version: "0.1.0-pilot"
 
 description: >
@@ -14,6 +15,18 @@ non_template_statement: >
 
 applies_to:
   - game.idle-incremental
+  - tag:dom-game-layout
+
+depends_on: []
+
+provides:
+  - layout_regions
+
+binds_mechanics:
+  - mechanic.score
+  - mechanic.economy
+  - mechanic.upgrades
+  - mechanic.save-load
 
 inputs:
   - layout_variant: centered-column | split-hud (default centered-column)

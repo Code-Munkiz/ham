@@ -3,6 +3,7 @@ id: validator.local-storage-roundtrip
 kind: validator
 name: Local storage save/load roundtrip
 status: proposed
+schema_version: "0.1"
 version: "0.1.0-pilot"
 
 description: >
@@ -14,7 +15,18 @@ non_template_statement: >
 
 applies_to:
   - game.idle-incremental
+  - tag:local-persistence
+
+depends_on:
   - mechanic.save-load
+
+validates_modules:
+  - mechanic.save-load
+  - component.save-status
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
 
 inputs:
   - storage_key: string
@@ -29,14 +41,13 @@ guidance:
 
 validation_notes:
   - Critical for idle game retention expectations
+  - Does not execute at runtime today
 
 risk_notes:
   - Private browsing modes may block storage — out of pilot scope unless detected
 
 validation_goal: >
   Players expect idle progress to persist in the browser between sessions.
-
-check_type: conceptual
 
 pass_conditions:
   - "After earn action, reload restores currency within tolerance"

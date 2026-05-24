@@ -3,6 +3,7 @@ id: component.upgrade-card
 kind: component_contract
 name: Upgrade card
 status: proposed
+schema_version: "0.1"
 version: "0.1.0-pilot"
 
 description: >
@@ -14,6 +15,17 @@ non_template_statement: >
 
 applies_to:
   - game.idle-incremental
+  - tag:purchasable-progression
+
+depends_on:
+  - mechanic.upgrades
+  - mechanic.economy
+
+provides:
+  - upgrade_card_ui
+
+binds_mechanics:
+  - mechanic.upgrades
 
 inputs:
   - upgrade: { id, title, description, level, cost, effectSummary }

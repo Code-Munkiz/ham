@@ -3,6 +3,7 @@ id: mechanic.save-load
 kind: mechanic
 name: Save / load (local persistence)
 status: proposed
+schema_version: "0.1"
 version: "0.1.0-pilot"
 
 description: >
@@ -15,7 +16,18 @@ non_template_statement: >
 
 applies_to:
   - game.idle-incremental
-  - any local-only game requesting progress retention
+  - tag:local-persistence
+
+depends_on:
+  - mechanic.score
+  - mechanic.economy
+  - mechanic.upgrades
+
+provides:
+  - persistence_state
+
+binds_components:
+  - component.save-status
 
 inputs:
   - storage_key: namespaced key (e.g. ham-idle-save-v1)
@@ -60,5 +72,5 @@ test_ideas:
   - "Schema version bump → graceful reset or migration"
 
 reusable_across:
-  - idle/incremental games
-  - todo apps with local persistence (different app_type)
+  - game.idle-incremental
+  - tag:local-persistence
