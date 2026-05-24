@@ -104,6 +104,21 @@ jobs:
         continue-on-error: true
         run: python scripts/check_docs_freshness.py
 
+      # ---------- WARNING-ONLY: Build Kit Registry v2 Game Pack pilot -----
+      # Unwired loader/composer only — not chat/scaffold/API integration.
+      # Ratchet to blocking after one green main run if desired.
+      - name: Build registry tests (warning-only)
+        continue-on-error: true
+        run: python -m pytest tests/test_build_registry.py -q
+
+      - name: Game pack registry validation (warning-only)
+        continue-on-error: true
+        run: |
+          python scripts/validate_game_pack_registry.py \
+            --pack-root docs/build-kit-registry-v2/game-pack \
+            --app-type game.idle-incremental \
+            --check
+
   frontend:
     runs-on: ubuntu-latest
     steps:
