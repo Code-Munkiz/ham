@@ -1,0 +1,64 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.economy
+kind: mechanic
+name: Economy (earn rates and costs)
+status: proposed
+version: "0.1.0-pilot"
+
+description: >
+  Defines how currency enters and leaves the system: click yield, passive income per
+  second, upgrade costs, and affordability checks. Supports incremental pacing without
+  prescribing fixed numeric curves — numbers should match user prompt tone.
+
+non_template_statement: >
+  Playbook for economic loops only. Not a spreadsheet template or balanced preset file.
+
+applies_to:
+  - game.idle-incremental
+  - any local-only resource loop game
+
+inputs:
+  - base_click_yield: number
+  - base_passive_rate: per-second income
+  - cost_scaling: linear | exponential (default gentle exponential for pilot)
+  - max_simultaneous_upgrades: optional cap
+
+outputs:
+  - earn_functions: click + passive tick application
+  - affordability_checks: canAfford(cost)
+
+guidance:
+  - "Separate click power and passive rate; upgrades modify one or both"
+  - "Use functional state updates for ticks to avoid stale closures"
+  - "Clamp or guard against negative balances after spend"
+  - "Document rates in UI tooltips or upgrade descriptions when helpful"
+
+validation_notes:
+  - validator.no-negative-currency
+  - validator.passive-income-tick
+
+risk_notes:
+  - Uncleaned intervals cause duplicate passive grants
+  - Exponential curves without UI feedback feel broken to players
+
+state_model:
+  fields:
+    - clickPower: number
+    - passiveRatePerSecond: number
+    - currency: number
+  derived:
+    - incomePerSecondDisplay: formatted passiveRatePerSecond
+
+common_failure_modes:
+  - "Passive income applied every render instead of on interval"
+  - "Interval not cleared on unmount → runaway balance"
+  - "Spend allowed when balance < cost due to race"
+
+test_ideas:
+  - "Wait 2s passive tick → balance increases approximately 2 * rate"
+  - "Cannot buy upgrade when balance insufficient"
+  - "Buying upgrade changes click or passive rate"
+
+reusable_across:
+  - idle/incremental games
+  - simple shop loops in non-game apps (future feature_kit)

@@ -1,0 +1,102 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: stack.dom-game-minimal
+kind: stack_kit
+name: DOM-native minimal game stack
+status: proposed
+version: "0.1.0-pilot"
+
+description: >
+  Default technology stack for low-risk browser games built from React state, DOM UI,
+  and optional interval/requestAnimationFrame loops. Aligns with existing Lane A
+  Vite + React + TypeScript + Tailwind bootstrap patterns conceptually. Generated
+  output is always custom code guided by this stack module — not a cloned starter repo.
+
+non_template_statement: >
+  Stack playbook only. Does not ship a checked-in Vite project, package-lock snapshot,
+  or game boilerplate tree. HAM does not load or apply this file at runtime today.
+
+applies_to:
+  - game.idle-incremental
+  - future DOM-native casual games (quiz, trivia, simple board UI)
+
+inputs:
+  - user_theme: optional visual tone
+  - needs_persistence: boolean — default true for idle pilot
+  - needs_passive_tick: boolean — default true for idle pilot
+
+outputs:
+  - stack_guidance_block: text injected into future BuildRecipe context
+  - expected_artifacts: package.json, vite.config, index.html, src/App.tsx (generative targets)
+
+guidance:
+  - "DOM-first: render game UI with React components and Tailwind-style utilities"
+  - "State-driven logic: prefer useState/useReducer + small custom hooks over game engines"
+  - "Passive income: single interval or rAF loop with effect cleanup (see recovery playbooks)"
+  - "Persistence: localStorage with schemaVersion; no backend for MVP"
+  - "Avoid Canvas, Phaser, Kaplay, Pixi unless a composed recipe explicitly requires realtime motion/collision"
+  - "Avoid WebGL, physics engines, and multiplayer sockets in this stack"
+  - "Keep package.json minimal; respect future package allowlist policy when wired"
+
+validation_notes:
+  - Preview boots without console errors
+  - No undeclared network fetch to external APIs in default idle recipes
+  - Timers cleaned up on unmount when passive tick is used
+
+risk_notes:
+  - Adding canvas/engine deps increases bundle size and invalidates DOM-only validators
+  - Uncapped setInterval usage causes preview freezes — pair with recovery playbooks
+
+recommended_runtime:
+  frontend: "React (DOM UI; Vite-style SPA compatible with current Lane A bootstrap)"
+  language: "TypeScript preferred"
+  styling: "Tailwind-style utility classes"
+  persistence: "localStorage first; sessionStorage only if recipe requires ephemeral session"
+  backend: "none required for MVP"
+  game_loop: "setInterval or requestAnimationFrame only when needed; always with cleanup"
+
+use_when:
+  - "Idle, incremental, clicker, or menu-driven casual games"
+  - "Game logic fits in React state without per-frame physics"
+  - "User did not ask for platformer, shooter, or canvas sprite gameplay"
+  - "Lane A safety requires no-network client-only behavior"
+
+avoid_when:
+  - "User explicitly requests Phaser, Kaplay, Three.js, or canvas-heavy arcade action"
+  - "Realtime multiplayer or server-authoritative state"
+  - "Complex collision, tilemaps, or sprite animation pipelines"
+  - "3D or WebGL rendering is core to the request"
+
+default_dependencies:
+  runtime:
+    - react
+    - react-dom
+  dev:
+    - vite
+    - typescript
+    - "@vitejs/plugin-react"
+  optional:
+    - tailwindcss
+    - autoprefixer
+    - postcss
+
+package_policy:
+  - "Prefer dependencies already implied by Lane A preview bootstrap when wired"
+  - "Do not add game engines in dom-game-minimal recipes without stack upgrade"
+  - "No eval, no dynamic remote script tags"
+  - "Install surface should stay compatible with HAM npm allowlist (future enforcement)"
+
+accessibility_baseline:
+  - "Semantic landmarks (header, main) via game-shell contract"
+  - "Keyboard-focusable primary actions when implemented as buttons"
+  - "Visible focus states; contrast sufficient for HUD text"
+  - "aria-live polite for save-status and major gain milestones when implemented"
+
+mobile_baseline:
+  - "Layout usable at 360px width without horizontal scroll"
+  - "Primary tap target ≥ 44px where practical"
+  - "Readable typography without zoom"
+
+performance_baseline:
+  - "Single passive tick driver; no interval per component"
+  - "Avoid re-render storms from ticking entire tree — localize state"
+  - "Debounce localStorage writes if save frequency is high"

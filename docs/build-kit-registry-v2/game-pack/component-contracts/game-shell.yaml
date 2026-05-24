@@ -1,0 +1,60 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.game-shell
+kind: component_contract
+name: Game shell layout
+status: proposed
+version: "0.1.0-pilot"
+
+description: >
+  Top-level page structure for a DOM idle game: header/HUD, main play area, upgrade
+  section, and optional footer for controls (reset, save status).
+
+non_template_statement: >
+  Layout contract only. Does not provide a copy-paste React component file.
+
+applies_to:
+  - game.idle-incremental
+
+inputs:
+  - layout_variant: centered-column | split-hud (default centered-column)
+  - show_footer: boolean
+
+outputs:
+  - regions: header, main, upgradesPanel, footer
+
+guidance:
+  - "Single-column stack on mobile; comfortable spacing between regions"
+  - "Primary action (click target) in main region with large tap target"
+
+validation_notes:
+  - No horizontal overflow at 360px
+  - HUD visible without scroll on first paint
+
+risk_notes:
+  - Over-nested flex layouts causing scroll traps on mobile
+
+purpose: >
+  Establish predictable regions so mechanics (score, upgrades, save status) have
+  stable mount points in generated code.
+
+expected_props:
+  - title: string — game name from user prompt
+  - children: ReactNode — region content slots
+
+states:
+  - default: all regions visible
+  - loading: optional skeleton while hydrating save
+  - error: optional banner if save corrupt (pairs with save-status)
+
+accessibility_notes:
+  - "Use semantic main and header landmarks"
+  - "Primary click control must be keyboard-focusable if it is a button"
+  - "Sufficient color contrast for HUD text"
+
+responsive_notes:
+  - "Stack upgrade cards vertically on narrow viewports"
+  - "Minimum 44px tap targets for primary click control"
+
+styling_guidance:
+  - "Tailwind utility layout; cozy readable typography"
+  - "Avoid clutter — idle games benefit from clear hierarchy"

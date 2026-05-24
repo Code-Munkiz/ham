@@ -1,0 +1,56 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.save-status
+kind: component_contract
+name: Save status indicator
+status: proposed
+version: "0.1.0-pilot"
+
+description: >
+  Small footer or HUD hint showing save/load health: saved, saving, restored, or
+  reset due to corrupt data. Pairs with mechanic.save-load.
+
+non_template_statement: >
+  Status copy contract only. Not a persistence library.
+
+applies_to:
+  - game.idle-incremental
+  - any app using mechanic.save-load
+
+inputs:
+  - status: saved | saving | restored | error | offline
+
+outputs:
+  - user_visible_message: short normie-friendly string
+
+guidance:
+  - "Keep messages short; avoid technical jargon (no 'JSON parse error')"
+  - "On corrupt save: explain progress reset in friendly terms"
+
+validation_notes:
+  - Message appears when save/load events occur in happy path test
+
+risk_notes:
+  - Over-frequent 'Saving…' flicker if debounce too short
+
+purpose: >
+  Set player expectations about persistence without exposing storage internals.
+
+expected_props:
+  - status: enum
+  - lastSavedAt: Date | null
+
+states:
+  - idle
+  - saving
+  - saved
+  - restored
+  - error_reset
+
+accessibility_notes:
+  - "Use aria-live polite for error_reset and restored messages"
+
+responsive_notes:
+  - "Footer text wraps; does not obscure primary click area"
+
+styling_guidance:
+  - "Muted text size; non-blocking"

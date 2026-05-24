@@ -1,0 +1,59 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.resource-counter
+kind: component_contract
+name: Resource counter (HUD)
+status: proposed
+version: "0.1.0-pilot"
+
+description: >
+  Displays primary currency and optional passive income rate. Binds to mechanic.score
+  and economy passive rate fields.
+
+non_template_statement: >
+  UI contract for a counter pattern. Generated implementation varies per user theme.
+
+applies_to:
+  - game.idle-incremental
+  - any HUD showing a primary resource
+
+inputs:
+  - label: string — Coins, Points, etc.
+  - show_per_second: boolean — show +N/s under main value
+
+outputs:
+  - rendered_hud: accessible numeric display
+
+guidance:
+  - "Use tabular nums or monospace for stable width while ticking"
+  - "Format large values readably (1.2K) only if user asks for scale"
+
+validation_notes:
+  - Value updates on click and passive tick
+  - Never displays NaN
+
+risk_notes:
+  - Flickering layout if number width changes every tick
+
+purpose: >
+  Single authoritative HUD for primary currency so players always know balance and income.
+
+expected_props:
+  - value: number
+  - label: string
+  - perSecond: number | null
+  - formattedValue: string — optional preformatted display
+
+states:
+  - normal
+  - insufficient_funds_highlight: optional when purchase attempted
+  - animating_gain: optional brief pulse on large earn (subtle)
+
+accessibility_notes:
+  - "Announce large milestone gains via aria-live polite if implemented"
+  - "Label associated with value (not color alone)"
+
+responsive_notes:
+  - "Remain visible in header on mobile without truncation of label"
+
+styling_guidance:
+  - "Prominent but not overwhelming; pair with game-shell hierarchy"

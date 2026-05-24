@@ -1,0 +1,61 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.upgrade-card
+kind: component_contract
+name: Upgrade card
+status: proposed
+version: "0.1.0-pilot"
+
+description: >
+  Repeatable UI unit for one purchasable upgrade: title, description, level, cost,
+  and buy action. Used in a list/grid within the upgrades panel.
+
+non_template_statement: >
+  Contract for upgrade row/card structure. Not a library of prebuilt upgrade components.
+
+applies_to:
+  - game.idle-incremental
+
+inputs:
+  - upgrade: { id, title, description, level, cost, effectSummary }
+  - canAfford: boolean
+
+outputs:
+  - purchase_event: upgradeId emitted on successful buy
+
+guidance:
+  - "Disable buy when !canAfford; show cost clearly"
+  - "Show level or owned count"
+  - "Effect summary in plain language (+1 click, +0.5/s, etc.)"
+
+validation_notes:
+  - At least one card renders in default pilot
+  - Disabled state when unaffordable
+
+risk_notes:
+  - Double-submit on rapid clicks
+
+purpose: >
+  Consistent upgrade UX so mechanic.upgrades generates predictable, testable UI.
+
+expected_props:
+  - title: string
+  - description: string
+  - level: number
+  - cost: number
+  - canAfford: boolean
+  - onPurchase: () => void
+
+states:
+  - affordable
+  - unaffordable
+  - maxed: optional if upgrade has cap
+
+accessibility_notes:
+  - "Button has accessible name including upgrade title and cost"
+  - "Disabled state exposed to assistive tech"
+
+responsive_notes:
+  - "Full-width cards on mobile; grid on wider screens optional"
+
+styling_guidance:
+  - "Card border subtle; clear separation between title, stats, and action"

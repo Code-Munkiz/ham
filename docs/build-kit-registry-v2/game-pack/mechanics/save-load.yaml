@@ -1,0 +1,64 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.save-load
+kind: mechanic
+name: Save / load (local persistence)
+status: proposed
+version: "0.1.0-pilot"
+
+description: >
+  Persists game state to localStorage (or sessionStorage if user prefers ephemeral)
+  and restores on mount. Must handle missing keys, invalid JSON, and schema version
+  mismatches without crashing the app.
+
+non_template_statement: >
+  Persistence playbook only. Not a save-file template or exported game snapshot format on disk.
+
+applies_to:
+  - game.idle-incremental
+  - any local-only game requesting progress retention
+
+inputs:
+  - storage_key: namespaced key (e.g. ham-idle-save-v1)
+  - schema_version: integer for forward-compatible migrations
+  - fields_to_persist: currency, rates, upgrade levels, timestamps
+
+outputs:
+  - serialized_payload: JSON string in localStorage
+  - hydrate_on_mount: restored state or safe defaults
+
+guidance:
+  - "Namespace storage key by app id or project id conceptually"
+  - "Debounce or save on meaningful state change — not every render"
+  - "Try/catch JSON.parse; fall back to new game with user-visible save-status"
+  - "Never store secrets or PII in localStorage"
+  - "Include schema_version in payload for future migrations"
+
+validation_notes:
+  - validator.local-storage-roundtrip
+
+risk_notes:
+  - Corrupt JSON bricks game if unhandled
+  - Saving entire React tree or functions — invalid
+
+state_model:
+  persisted_shape:
+    schemaVersion: 1
+    primaryCurrency: number
+    clickPower: number
+    passiveRatePerSecond: number
+    upgrades: object
+    savedAt: ISO8601 string
+
+common_failure_modes:
+  - "Load runs before state initialized → overwrite with defaults"
+  - "Save never called → user loses progress"
+  - "Invalid JSON throws on mount"
+
+test_ideas:
+  - "Earn currency → reload page → balance restored"
+  - "Corrupt localStorage → app boots with fresh game + message"
+  - "Schema version bump → graceful reset or migration"
+
+reusable_across:
+  - idle/incremental games
+  - todo apps with local persistence (different app_type)

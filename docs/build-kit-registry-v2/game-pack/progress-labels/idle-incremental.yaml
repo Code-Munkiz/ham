@@ -1,0 +1,75 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: progress.idle-incremental
+kind: progress_label
+name: Idle incremental build progress
+status: proposed
+version: "0.1.0-pilot"
+
+description: >
+  Normie-friendly phase labels for chat and Workbench activity stream during an
+  idle/incremental Game Pack build. Maps to app_type build_phases conceptually.
+
+non_template_statement: >
+  Progress copy module only. Not emitted by runtime today.
+
+applies_to:
+  - game.idle-incremental
+
+inputs:
+  - current_phase_id: from build_phases
+  - recovery_active: boolean
+
+outputs:
+  - activity_title: short string for feed
+  - activity_message: one sentence for feed or chat ack
+
+guidance:
+  - "Avoid internal words: scaffold, template_kind, OpenRouter, kit_id"
+  - "Use game-flavored plain language"
+
+validation_notes:
+  - Each phase has a unique normie message
+
+risk_notes:
+  - Over-long messages clutter activity stream
+
+phases:
+  - id: phase.understand
+    order: 1
+  - id: phase.compose
+    order: 2
+  - id: phase.generate
+    order: 3
+  - id: phase.validate
+    order: 4
+  - id: phase.preview
+    order: 5
+  - id: phase.recover
+    order: 6
+    optional: true
+
+normie_friendly_messages:
+  phase.understand:
+    title: "Getting your game idea"
+    message: "I'm turning your description into a simple idle game plan."
+  phase.compose:
+    title: "Planning the game pieces"
+    message: "I'm lining up coins, upgrades, and save-game behavior for your clicker."
+  phase.generate:
+    title: "Building your game"
+    message: "I'm creating the custom code for your idle game preview."
+  phase.validate:
+    title: "Checking the game"
+    message: "I'm making sure coins tick correctly and saves work in the browser."
+  phase.preview:
+    title: "Opening preview"
+    message: "Your idle game preview is almost ready in the Workbench."
+  phase.recover:
+    title: "Polishing the game"
+    message: "I noticed a small issue and I'm fixing it before showing the preview."
+
+technical_internal_notes:
+  - "Map phase.generate to LLM scaffold step internally when wired"
+  - "phase.compose corresponds to BuildRecipe assembly — not user-visible"
+  - "phase.recover triggers recovery playbook runner — cap attempts per ADR-0016"
+  - "Do not expose module ids (mechanic.economy) in normie messages"

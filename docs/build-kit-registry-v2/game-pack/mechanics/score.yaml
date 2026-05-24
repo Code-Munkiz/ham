@@ -1,0 +1,65 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.score
+kind: mechanic
+name: Score / primary currency display
+status: proposed
+version: "0.1.0-pilot"
+
+description: >
+  Tracks and displays the player's primary spendable resource (score, coins, points).
+  The generator must wire display to authoritative React state and update on earn/spend events.
+
+non_template_statement: >
+  Describes behavioral recipe only. Does not ship a ScoreWidget source file to copy.
+
+applies_to:
+  - game.idle-incremental
+  - any DOM game with a single primary currency HUD
+
+inputs:
+  - currency_label: display name (Coins, Points, Energy)
+  - initial_value: starting balance (default 0)
+  - format: integer | abbreviated (1.2K) — default integer for pilot
+
+outputs:
+  - state_field: primaryCurrency (conceptual name)
+  - hud_binding: visible counter synced to state
+
+guidance:
+  - "Single source of truth in React state; avoid duplicate counters"
+  - "Format large numbers readably if user asks for idle scale"
+  - "Update display immediately on click earn, passive tick, and purchase"
+
+validation_notes:
+  - Counter visible without scrolling on 360px viewport
+  - Value changes when user clicks or when passive income applies
+
+risk_notes:
+  - Desync between displayed value and internal state if derived incorrectly
+
+state_model:
+  fields:
+    - name: primaryCurrency
+      type: number
+      constraints: ">= 0 at all times after validation"
+  events:
+    - earn_click
+    - earn_passive
+    - spend_upgrade
+    - load_from_storage
+    - reset_game
+
+common_failure_modes:
+  - "Display shows stale value after state update (missing re-render)"
+  - "Two counters bound to different state slices"
+  - "NaN displayed after bad arithmetic"
+
+test_ideas:
+  - "Click increases displayed currency"
+  - "Passive tick increases currency without click"
+  - "Purchase decreases currency by upgrade cost"
+
+reusable_across:
+  - game.idle-incremental
+  - casual arcade score HUD (future)
+  - dashboard stat primary KPI (non-game, different contract)

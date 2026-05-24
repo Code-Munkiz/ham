@@ -1,0 +1,60 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.upgrades
+kind: mechanic
+name: Upgrades (purchasable improvements)
+status: proposed
+version: "0.1.0-pilot"
+
+description: >
+  Purchasable improvements that increase click power, passive income, or other rates.
+  Each upgrade has a name, cost, effect description, and owned level/count. UI should
+  disable or dim unaffordable upgrades rather than failing silently.
+
+non_template_statement: >
+  Defines upgrade behavior and data shape guidance. Does not ship a fixed upgrade table file.
+
+applies_to:
+  - game.idle-incremental
+
+inputs:
+  - upgrade_definitions: list of { id, title, baseCost, effectSummary, effectApply }
+  - count: default 3–5 for pilot unless user specifies
+
+outputs:
+  - upgrade_state: levels or counts per upgrade id
+  - purchase_handler: atomic spend + apply effect
+
+guidance:
+  - "Show cost, current level, and effect on each upgrade card"
+  - "Disable purchase button when unaffordable; optional visual 'locked' state"
+  - "Apply effects immediately on successful purchase"
+  - "Escalate costs per level with predictable formula (e.g. cost * 1.15^level)"
+
+validation_notes:
+  - At least one upgrade purchasable in reasonable time in default assumptions
+  - Effect visible in rates or click power after purchase
+
+risk_notes:
+  - Double-purchase on rapid clicks if handler not idempotent
+  - Effect applied without deducting cost
+
+state_model:
+  fields:
+    - upgrades: "map upgradeId → { level, cost }"
+  events:
+    - purchase_upgrade
+    - reset_upgrades
+
+common_failure_modes:
+  - "Upgrade list empty — no progression path"
+  - "Cost shown does not match charged amount"
+  - "Effect not applied to economy state"
+
+test_ideas:
+  - "Buy cheapest upgrade → currency decreases by cost"
+  - "Second purchase costs more if scaling enabled"
+  - "Passive or click rate increases after relevant upgrade"
+
+reusable_across:
+  - idle/incremental games
+  - skill trees (future, different contract)

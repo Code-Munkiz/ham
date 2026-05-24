@@ -1,0 +1,148 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: game.idle-incremental
+kind: app_type
+name: Idle / incremental clicker game
+status: proposed
+version: "0.1.0-pilot"
+
+description: >
+  A browser-based idle or incremental game where the player accumulates a primary
+  resource (coins, points, energy) through clicks and/or passive income, spends it
+  on upgrades that increase rates, and expects progress to persist locally between
+  sessions. Output is always custom-generated from the user prompt plus composed
+  playbook modules — never cloned from a starter project.
+
+non_template_statement: >
+  This app type does not reference checked-in game source files, scene graphs, or
+  clone baselines. It defines generative guidance only.
+
+applies_to:
+  - "User wants a clicker, idle, incremental, or cookie-style browser game"
+  - "User describes earning currency over time and buying upgrades"
+  - "User asks for offline-style progression with local save"
+
+inputs:
+  - user_prompt: natural language game idea
+  - optional_theme: visual tone (cozy, sci-fi, minimalist)
+  - optional_pacing: fast / medium / slow progression curve
+  - optional_reset_policy: whether a reset/new game control is required
+
+outputs:
+  - runnable_vite_react_app: single-page DOM game
+  - composed_build_recipe: ids of mechanics, contracts, validators, recovery modules
+  - normie_plan_summary: phased build description for chat/activity stream
+
+guidance:
+  - "Prefer React state + effects; one primary currency unless user asks for multiple"
+  - "Passive income must use cleaned-up timers (see economy + recovery playbooks)"
+  - "Upgrades should have visible cost and effect; avoid hidden exponential curves without UI feedback"
+  - "Save on meaningful state changes; restore on mount with safe parse fallback"
+  - "Keep all logic client-side; no API keys or network calls"
+
+validation_notes:
+  - Run composed validators after scaffold and after edit passes
+  - Preview must boot without console errors before success copy
+
+risk_notes:
+  - Runaway setInterval/requestAnimationFrame loops are common failure mode
+  - localStorage corruption or schema drift breaks saves — recovery playbook applies
+  - Floating-point drift can produce negative displayed currency if unchecked
+
+user_prompt_examples:
+  - "Build a simple idle clicker where I earn coins and buy upgrades"
+  - "Make an incremental game with passive income and a reset button"
+  - "Create a cookie-clicker style game with three upgrade types"
+  - "Build a chill idle game that saves my progress in the browser"
+
+intent_signals:
+  - "\\b(idle|incremental|clicker|cookie\\s*clicker|passive\\s+income)\\b"
+  - "\\b(earn|collect|generate)\\b.{0,40}\\b(coins?|points?|energy|resources?)\\b"
+  - "\\b(upgrades?|prestige|multiplier)\\b"
+  - "\\b(save|persist|continue)\\b.{0,30}\\b(progress|game)\\b"
+
+clarifying_questions:
+  - when: intent_confidence_low
+    ask: "Do you want mostly clicking, mostly passive idle income, or a mix of both?"
+  - when: missing_upgrade_detail
+    ask: "How many upgrade types should there be to start — for example 3 simple upgrades?"
+  - when: theme_ambiguous
+    ask: "Any visual vibe you prefer — cozy, sci-fi, minimalist, or surprise me?"
+  - when: save_not_implied
+    ask: "Should your progress save automatically when you close the browser?"
+
+default_assumptions:
+  - "Single primary currency displayed as coins or points"
+  - "Mix of click income and passive income per second"
+  - "Three to five upgrades with escalating costs"
+  - "Auto-save to localStorage on state change"
+  - "DOM/React UI; no canvas engine unless user explicitly requests it"
+  - "Mobile-friendly layout at 360px width"
+
+recommended_stack:
+  stack_kit_id: stack.dom-game-minimal
+  packages:
+    - vite
+    - react
+    - typescript
+    - tailwindcss
+  capabilities:
+    - local-state
+    - local-storage
+    - no-network
+
+composed_modules:
+  mechanics:
+    - mechanic.score
+    - mechanic.economy
+    - mechanic.upgrades
+    - mechanic.save-load
+  component_contracts:
+    - component.game-shell
+    - component.resource-counter
+    - component.upgrade-card
+    - component.save-status
+  validators:
+    - validator.no-negative-currency
+    - validator.passive-income-tick
+    - validator.local-storage-roundtrip
+  recovery_playbooks:
+    - recovery.stale-interval-or-bad-tick-loop
+    - recovery.invalid-local-storage-json
+  progress_labels: progress.idle-incremental
+  learning_hooks: learning.idle-incremental
+
+build_phases:
+  - id: phase.understand
+    title: Understand the game idea
+    modules_used: [app_type]
+  - id: phase.compose
+    title: Compose mechanics and UI contracts
+    modules_used: [mechanics, component_contracts]
+  - id: phase.generate
+    title: Generate custom game code
+    modules_used: [recommended_stack, guidance]
+  - id: phase.validate
+    title: Check economy, ticks, and save/load
+    modules_used: [validators]
+  - id: phase.preview
+    title: Prepare Workbench preview
+    modules_used: []
+  - id: phase.recover
+    title: Fix known failure modes if needed
+    modules_used: [recovery_playbooks]
+
+acceptance_criteria:
+  - "Game loads in preview without runtime console errors"
+  - "Player can increase primary currency via click and/or passive tick"
+  - "At least one upgrade can be purchased and changes income or click power"
+  - "Currency display never shows negative values under normal play"
+  - "Progress restores after reload when save/load mechanic is included"
+  - "UI readable on mobile-width viewport"
+
+out_of_scope:
+  - Multiplayer or leaderboards
+  - Real-money purchases or ads
+  - Physics engines, platformers, or realtime action games
+  - Sprite pipelines, tilemaps, or WebGL rendering
+  - Cloud sync or account-based saves
+  - Audio-heavy games (optional mute only if user asks)

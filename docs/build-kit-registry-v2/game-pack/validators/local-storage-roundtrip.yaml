@@ -1,0 +1,56 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.local-storage-roundtrip
+kind: validator
+name: Local storage save/load roundtrip
+status: proposed
+version: "0.1.0-pilot"
+
+description: >
+  Verifies game state serializes to localStorage and restores after reload without
+  throwing. Corrupt data must fall back safely.
+
+non_template_statement: >
+  Validator spec only. Future implementation may use Playwright or preview harness.
+
+applies_to:
+  - game.idle-incremental
+  - mechanic.save-load
+
+inputs:
+  - storage_key: string
+  - actions_before_reload: earn currency, buy upgrade optional
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "Test happy path reload in harness when wired"
+  - "Test corrupt JSON triggers recovery playbook"
+
+validation_notes:
+  - Critical for idle game retention expectations
+
+risk_notes:
+  - Private browsing modes may block storage — out of pilot scope unless detected
+
+validation_goal: >
+  Players expect idle progress to persist in the browser between sessions.
+
+check_type: conceptual
+
+pass_conditions:
+  - "After earn action, reload restores currency within tolerance"
+  - "Upgrade levels persist if purchased before reload"
+  - "Invalid JSON does not crash app — falls back to new game"
+
+fail_conditions:
+  - "Reload loses all progress on happy path"
+  - "White screen or uncaught exception on corrupt JSON"
+  - "Saved payload omits schemaVersion or required fields without migration"
+
+suggested_failure_message: >
+  Your progress didn't restore after refresh. I'll fix save/load so the game
+  remembers your coins and upgrades.
+
+recovery_playbooks:
+  - recovery.invalid-local-storage-json

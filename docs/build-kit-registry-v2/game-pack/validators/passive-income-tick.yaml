@@ -1,0 +1,57 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.passive-income-tick
+kind: validator
+name: Passive income tick sanity
+status: proposed
+version: "0.1.0-pilot"
+
+description: >
+  Verifies passive income increases balance over time at approximately the configured
+  rate and that tick loops are bounded (no runaway intervals).
+
+non_template_statement: >
+  Conceptual check definition for future harness or static analysis. Not a live test file.
+
+applies_to:
+  - game.idle-incremental
+  - mechanic.economy with passiveRatePerSecond > 0
+
+inputs:
+  - passive_rate: number
+  - wait_duration_ms: e.g. 2000
+  - tolerance_fraction: e.g. 0.25 for pilot harness slack
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "Prefer single interval or rAF loop with cleanup"
+  - "Use functional setState in tick callback"
+
+validation_notes:
+  - Pairs with recovery.stale-interval-or-bad-tick-loop on fail
+
+risk_notes:
+  - Timer throttling in background tabs may skew rates — document as acceptable
+
+validation_goal: >
+  Idle games feel broken if passive income does not tick or ticks explosively.
+
+check_type: conceptual
+
+pass_conditions:
+  - "After wait window, currency increased when passiveRatePerSecond > 0"
+  - "Increase roughly matches rate * elapsed within tolerance"
+  - "Only one active passive tick driver (no duplicate intervals in source heuristics)"
+
+fail_conditions:
+  - "No change after wait despite positive passive rate"
+  - "Absurd increase suggesting multiple stacked intervals"
+  - "Preview CPU spike / frozen UI (manual observation flag)"
+
+suggested_failure_message: >
+  Passive income doesn't seem to be ticking correctly. I'll fix the timer so coins
+  earn steadily in the background.
+
+recovery_playbooks:
+  - recovery.stale-interval-or-bad-tick-loop

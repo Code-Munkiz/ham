@@ -1,0 +1,72 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.invalid-local-storage-json
+kind: recovery_playbook
+name: Fix invalid localStorage JSON on load
+status: proposed
+version: "0.1.0-pilot"
+
+description: >
+  Handles corrupt, truncated, or schema-incompatible save payloads. Game must boot
+  with safe defaults and inform the player without throwing.
+
+non_template_statement: >
+  Recovery playbook spec only. Not wired to chat or edit worker today.
+
+applies_to:
+  - game.idle-incremental
+  - mechanic.save-load
+  - validator.local-storage-roundtrip failures on corrupt path
+
+inputs:
+  - storage_key: string
+  - parse_error: optional error class/message for logs (not shown to user raw)
+
+outputs:
+  - safe_default_state
+  - save-status error_reset message
+
+guidance:
+  - "Wrap JSON.parse in try/catch"
+  - "Validate schemaVersion and required numeric fields"
+  - "On failure: remove or quarantine bad key; start fresh game"
+  - "Surface component.save-status friendly copy"
+
+validation_notes:
+  - Re-run local-storage-roundtrip happy path after fix
+  - Manual corrupt-key test in future harness
+
+risk_notes:
+  - Deleting key loses data — acceptable on corrupt payload only
+
+failure_signals:
+  - Uncaught exception on mount referencing JSON.parse
+  - Blank preview after reload with corrupt localStorage entry
+  - validator.local-storage-roundtrip fail on corrupt fixture
+
+diagnosis_steps:
+  - "Locate load effect on mount"
+  - "Check for uncaught JSON.parse"
+  - "Verify schemaVersion handling"
+  - "Confirm save-status UI path on error"
+
+repair_strategy:
+  - action: try_catch_parse
+    detail: "Parse inside try/catch; on error branch to defaultState()"
+  - action: validate_shape
+    detail: "Reject payload missing primaryCurrency or wrong types"
+  - action: quarantine_bad_key
+    detail: "localStorage.removeItem(key) after failed parse to prevent repeat crash"
+  - action: set_save_status
+    detail: "Emit error_reset via component.save-status contract"
+  - action: re_validate
+    target: validator.local-storage-roundtrip
+
+guardrails:
+  - max_attempts: 2
+  - do_not: "Store secrets in localStorage"
+  - do_not: "Show raw parse errors to normie users"
+  - preserve: "Happy-path save/load for valid payloads"
+
+user_facing_summary: >
+  Your previous save file couldn't be read, so I started a fresh game. New progress
+  will save automatically from here.

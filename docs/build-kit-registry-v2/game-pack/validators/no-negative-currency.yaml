@@ -1,0 +1,57 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.no-negative-currency
+kind: validator
+name: No negative currency invariant
+status: proposed
+version: "0.1.0-pilot"
+
+description: >
+  Ensures primary currency and displayed balance never go negative during normal
+  gameplay after clicks, ticks, and purchases.
+
+non_template_statement: >
+  Validation rule definition only. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.idle-incremental
+  - any economy using mechanic.score + mechanic.economy
+
+inputs:
+  - generated_source: conceptual — App and economy modules
+  - simulated_actions: click, tick, purchase
+
+outputs:
+  - pass | fail with reason code
+
+guidance:
+  - "Check state updates clamp or guard spend"
+  - "Check display formatting does not show minus from float error"
+
+validation_notes:
+  - Run after initial scaffold and after economy-related edits
+
+risk_notes:
+  - Floating-point edge cases near zero
+
+validation_goal: >
+  Protect player trust — negative currency reads as a bug in idle games.
+
+check_type: conceptual
+
+pass_conditions:
+  - "primaryCurrency >= 0 after click earn"
+  - "primaryCurrency >= 0 after passive tick"
+  - "Purchase rejected or clamped when cost > balance"
+  - "HUD never renders negative integer for currency"
+
+fail_conditions:
+  - "Balance negative in state after purchase sequence"
+  - "Display shows negative value"
+  - "Spend succeeds when balance < cost"
+
+suggested_failure_message: >
+  The game's coin balance went negative, which shouldn't happen. I'll fix the
+  economy logic so purchases only go through when you can afford them.
+
+recovery_playbooks:
+  - recovery.stale-interval-or-bad-tick-loop

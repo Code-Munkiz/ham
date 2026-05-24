@@ -1,0 +1,71 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.stale-interval-or-bad-tick-loop
+kind: recovery_playbook
+name: Fix stale interval or bad tick loop
+status: proposed
+version: "0.1.0-pilot"
+
+description: >
+  Repairs idle games where passive income uses broken timers: missing cleanup,
+  stale closures, duplicate intervals, or runaway ticks causing frozen preview or
+  explosive balance growth.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+applies_to:
+  - game.idle-incremental
+  - validator.passive-income-tick failures
+  - validator.no-negative-currency failures tied to tick bugs
+
+inputs:
+  - failure_context: validator result or preview freeze report
+  - current_source: generated App/economy files (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.passive-income-tick
+
+guidance:
+  - "Prefer one useEffect with interval + clearInterval on unmount"
+  - "Use functional updates: setCurrency(c => c + delta)"
+  - "Avoid creating new interval each render without deps guard"
+
+validation_notes:
+  - Re-run passive-income-tick after repair
+  - Max 2 repair attempts before user-facing honest failure
+
+risk_notes:
+  - Over-aggressive patch may remove passive income entirely
+
+failure_signals:
+  - validator.passive-income-tick fail
+  - Preview tab unresponsive / high CPU
+  - Balance jumps thousands per second without user action
+  - Multiple setInterval calls detected in generated source heuristics
+
+diagnosis_steps:
+  - "Search for setInterval / requestAnimationFrame in economy code"
+  - "Check useEffect dependency array — interval recreated every render?"
+  - "Verify cleanup function clears interval id"
+  - "Confirm tick uses functional setState not stale closure variable"
+
+repair_strategy:
+  - action: isolate_tick_effect
+    detail: "Single useEffect; deps [passiveRatePerSecond]; return () => clearInterval(id)"
+  - action: functional_state_update
+    detail: "Replace setCurrency(currency + delta) with functional form in tick"
+  - action: dedupe_intervals
+    detail: "Remove duplicate tick loops if scaffold produced more than one"
+  - action: re_validate
+    target: validator.passive-income-tick
+
+guardrails:
+  - max_attempts: 2
+  - do_not: "Introduce network calls or eval"
+  - do_not: "Disable passive income entirely without user request"
+  - preserve: "User-visible upgrade purchases and click earn"
+
+user_facing_summary: >
+  I fixed the background coin timer so earnings tick smoothly and the preview stays
+  responsive.
