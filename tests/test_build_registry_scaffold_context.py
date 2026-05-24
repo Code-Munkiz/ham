@@ -1,0 +1,128 @@
+"""Tests for build_registry scaffold context resolver (ADR-0017 Phase 2B)."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from unittest.mock import patch
+
+from src.ham.build_registry.scaffold_context import (
+    V1_HEADER,
+    V2_HEADER,
+    resolve_scaffold_context,
+)
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+class TestResolveScaffoldContextFlagDisabled:
+    def test_returns_v1_when_flag_disabled(self):
+        result = resolve_scaffold_context(
+            metadata={"registry_v2_app_type": "game.idle-incremental"},
+            template_kind="todo",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "false"},
+            repo_root=REPO_ROOT,
+        )
+        assert result.source == "v1"
+        assert result.fallback_reason == "registry_v2_disabled"
+        assert result.header == V1_HEADER
+        assert "Builder Kit: todo" in result.context
+        assert result.registry_v2_app_type is None
+
+
+class TestResolveScaffoldContextMetadataMissing:
+    def test_returns_v1_when_metadata_missing_app_type(self):
+        result = resolve_scaffold_context(
+            metadata={},
+            template_kind="landing-page",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+            repo_root=REPO_ROOT,
+        )
+        assert result.source == "v1"
+        assert result.fallback_reason == "registry_v2_metadata_missing"
+        assert "Builder Kit: landing-page" in result.context
+
+
+class TestResolveScaffoldContextV2Success:
+    def test_returns_v2_playbook_context(self):
+        result = resolve_scaffold_context(
+            metadata={"registry_v2_app_type": "game.idle-incremental"},
+            template_kind="generic",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "1"},
+            repo_root=REPO_ROOT,
+        )
+        assert result.source == "v2"
+        assert result.header == V2_HEADER
+        assert result.fallback_reason is None
+        assert result.registry_v2_app_type == "game.idle-incremental"
+        assert result.registry_v2_pack_id == "pack.game"
+        assert "Build Kit Registry v2 — BuildRecipe" in result.context
+        assert "game.idle-incremental" in result.context
+        assert "stack.dom-game-minimal" in result.context
+        assert "validator.no-negative-currency" in result.context
+        assert "Builder Kit:" not in result.context
+        assert len(result.context) <= 12_000
+
+
+class TestResolveScaffoldContextUnknownAppType:
+    def test_falls_back_to_v1_on_unknown_app_type(self):
+        result = resolve_scaffold_context(
+            metadata={"registry_v2_app_type": "game.does-not-exist"},
+            template_kind="todo",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "yes"},
+            repo_root=REPO_ROOT,
+        )
+        assert result.source == "v1"
+        assert result.fallback_reason is not None
+        assert result.fallback_reason.startswith("registry_v2_error:")
+        assert result.registry_v2_app_type == "game.does-not-exist"
+        assert result.fallback_template_kind in {"todo", "generic"}
+        assert "Builder Kit:" in result.context
+
+
+class TestResolveScaffoldContextBadPackRoot:
+    def test_falls_back_to_v1_on_bad_pack_root(self, tmp_path: Path):
+        result = resolve_scaffold_context(
+            metadata={
+                "registry_v2_app_type": "game.idle-incremental",
+                "registry_v2_pack_root": str(tmp_path / "missing-pack"),
+            },
+            template_kind="generic",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "on"},
+            repo_root=REPO_ROOT,
+        )
+        assert result.source == "v1"
+        assert result.fallback_reason is not None
+        assert result.fallback_reason.startswith("registry_v2_error:")
+        assert "Builder Kit: generic" in result.context
+
+
+class TestResolveScaffoldContextNoV1Fallback:
+    def test_returns_none_when_no_kit_resolves(self):
+        with (
+            patch("src.ham.builder_kits.get_kit", return_value=None),
+            patch("src.ham.builder_kits.get_kit_for_template_kind", return_value=None),
+        ):
+            result = resolve_scaffold_context(
+                metadata={},
+                template_kind="nonexistent-kind",
+                env={"HAM_BUILD_REGISTRY_V2_ENABLED": "false"},
+                repo_root=REPO_ROOT,
+            )
+        assert result.source == "none"
+        assert result.header == ""
+        assert result.context == ""
+        assert result.fallback_reason == "no_fallback_kit_resolved"
+
+
+class TestNoRuntimeWiring:
+    def test_builder_llm_scaffold_unchanged(self):
+        path = REPO_ROOT / "src/ham/builder_llm_scaffold.py"
+        source = path.read_text(encoding="utf-8")
+        assert "build_registry" not in source
+        assert "scaffold_context" not in source
+
+    def test_builder_chat_scaffold_unchanged(self):
+        path = REPO_ROOT / "src/ham/builder_chat_scaffold.py"
+        source = path.read_text(encoding="utf-8")
+        assert "build_registry" not in source
+        assert "scaffold_context" not in source

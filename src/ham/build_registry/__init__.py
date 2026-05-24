@@ -13,6 +13,10 @@ from src.ham.build_registry.models import (
     RegistryPack,
 )
 from src.ham.build_registry.render import render_playbook_context
+from src.ham.build_registry.scaffold_context import (
+    ScaffoldContextResult,
+    resolve_scaffold_context,
+)
 from src.ham.build_registry.validate import validate_registry_pack
 
 __all__ = [
@@ -21,8 +25,10 @@ __all__ = [
     "DEFAULT_RENDER_CHAR_BUDGET",
     "RegistryModule",
     "RegistryPack",
+    "ScaffoldContextResult",
     "compose_build_recipe",
     "load_registry_pack",
     "render_playbook_context",
+    "resolve_scaffold_context",
     "validate_registry_pack",
 ]
