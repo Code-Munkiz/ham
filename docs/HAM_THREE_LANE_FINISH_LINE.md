@@ -27,7 +27,7 @@ It is **not** a re-architecture. It does not redraw boundaries, rename modes, or
 
 ### Positioning recap
 
-Hosted browser command center on Vercel, talking to Cloud Run API. Primary navigation under `/workspace/*` (chat, files, terminal, settings, operations / conductor / missions, skills, profiles, memory). Auth via Clerk when configured; workspace/session state lives in cloud, not the browser. Legacy `/workspace/social` shows a moved pointer to Luv Social.
+Hosted browser command center on Vercel, talking to Cloud Run API. Primary navigation under `/workspace/*` (chat, files, terminal, settings, operations / conductor / missions, skills, profiles, memory). Auth via Clerk when configured; workspace/session state lives in cloud, not the browser. Social ops live in [luv-protocol/luv-social](https://github.com/luv-protocol/luv-social); HAM has no Social workspace route.
 
 ### Finish-line checklist
 
@@ -37,7 +37,7 @@ Hosted browser command center on Vercel, talking to Cloud Run API. Primary navig
 | Workspace management | ✅ | `/workspace/*` routes; chat / files / terminal / settings panes wired |
 | Chat / session UX | ✅ | `POST /api/chat`, `POST /api/chat/stream` (server-side adapter; browser never calls Hermes directly) — see [`HERMES_GATEWAY_CONTRACT.md`](HERMES_GATEWAY_CONTRACT.md) |
 | Settings ↔ local-runtime messaging | 🟡 | Settings UI exists; copy still occasionally implies "browser sees laptop" without naming the bridge. Finish-line PR: copy audit on settings + Hermes operator strip |
-| Legacy Social moved pointer | ✅ | `/workspace/social` → `GoHamSocialMovedScreen` linking to [luv-protocol/luv-social](https://github.com/luv-protocol/luv-social); no Social product UI in HAM |
+| Social frontend in HAM | ✅ (removed) | No `/workspace/social` or HAMgomoon routes; social ops in [luv-protocol/luv-social](https://github.com/luv-protocol/luv-social) only |
 | Operations / conductor / missions | 🟡 | Mission feed + controls scoped by `mission_registry_id` ([`MISSION_AWARE_FEED_CONTROLS.md`](MISSION_AWARE_FEED_CONTROLS.md)); follow-up: visual three-lane diagram and clearer empty-state copy |
 | Formatter & lint baseline | ✅ | `frontend/.prettierrc.json` + CI `format:check` blocking (PR #199 / #200 / #201); knip + jscpd warning-only |
 | Vitest baseline | ✅ | `frontend/src/**/__tests__/*.test.{ts,tsx}` runnable via `npm test`; CI warning-only |

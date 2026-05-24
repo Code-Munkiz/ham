@@ -4,7 +4,6 @@ import {
   knowledgeSettingsLinks,
   libraryNavItems,
   primaryRailItems,
-  workspacePathTitle,
 } from "../workspaceNavConfig";
 
 describe("workspaceNavConfig", () => {
@@ -13,7 +12,7 @@ describe("workspaceNavConfig", () => {
     expect(primaryRailItems.map((i) => i.label)).not.toContain("Chat");
   });
 
-  it("primary rail is empty after GoHAM Social extraction", () => {
+  it("primary rail is empty", () => {
     expect(primaryRailItems).toHaveLength(0);
   });
 
@@ -29,14 +28,11 @@ describe("workspaceNavConfig", () => {
     expect(libraryNavItems[0]?.to).toBe("/workspace/projects");
   });
 
-  it("titles legacy social routes as moved", () => {
-    expect(workspacePathTitle("/workspace/social")).toBe("Social (moved)");
-    expect(workspacePathTitle("/workspace/social/anything")).toBe("Social (moved)");
-  });
-
-  it("does not expose a HAMgomoon nav entry", () => {
+  it("does not expose legacy social or hamgomoon nav entries", () => {
     const allItems = [...primaryRailItems, ...libraryNavItems, ...knowledgeSettingsLinks];
+    expect(allItems.every((item) => item.label !== "Social")).toBe(true);
     expect(allItems.every((item) => item.label !== "HAMgomoon")).toBe(true);
+    expect(allItems.every((item) => !item.to.startsWith("/workspace/social"))).toBe(true);
     expect(allItems.every((item) => !item.to.startsWith("/workspace/hamgomoon"))).toBe(true);
   });
 });

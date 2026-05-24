@@ -17,7 +17,7 @@ No single lane replaces the others. Mis-aligning expectations (for example “th
 ### Positioning
 
 - **Hosted browser command center** (for example Vercel-built frontend talking to a hosted API, often **Cloud Run**).
-- Primary navigation under **`/workspace/*`**: chat, files, terminal, settings, operations, missions/conductor, skills, profiles, memory, and related workspace chrome. Legacy **`/workspace/social`** shows a moved pointer to [luv-protocol/luv-social](https://github.com/luv-protocol/luv-social) (autonomous social ops extracted from HAM).
+- Primary navigation under **`/workspace/*`**: chat, files, terminal, settings, operations, missions/conductor, skills, profiles, memory, and related workspace chrome. Autonomous social ops were extracted to [luv-protocol/luv-social](https://github.com/luv-protocol/luv-social); HAM has no Social workspace route.
 - **Auth** (for example Clerk when configured), **workspace/session** management, and operator **visibility**: steering, approvals, review, configuration.
 
 ### Truth
@@ -70,7 +70,7 @@ Capability-centric view. Cells are **who leads** for that concern; **—** means
 | **Workspace tenancy** | ● | ○ | ● | **Cloud** APIs and stores enforce workspace RBAC; **web** is the management UX. |
 | **Browser / computer control** | ○ | ● | ○ | **Desktop** owns **local** browser-real → machine escalation per product policy. **Cloud** may expose **hosted** `/api/browser*` automation—**separate** trust boundary. **Web** does not directly drive the user’s OS without a bridge. |
 | **Local files** | ○ | ● | ○ | **Desktop** has native file context; **web** reaches disk only via **configured local/API bridge** and workspace root policy—not “cloud disk = my laptop.” |
-| **Luv Social (extracted)** | ○ | ○ | — | **Not in HAM.** Autonomous Telegram/X/Discord social-agent ops live in [luv-protocol/luv-social](https://github.com/luv-protocol/luv-social). HAM **`/workspace/social`** is a moved pointer only. |
+| **Luv Social (extracted)** | ○ | ○ | — | **Not in HAM.** Autonomous Telegram/X/Discord social-agent ops live in [luv-protocol/luv-social](https://github.com/luv-protocol/luv-social). No Social frontend route or API in HAM. |
 | **Agent proposal / review queues** | ● | ○ | ● | **Web** surfaces operator queues; **cloud** implements managed missions, approvals, and feed persistence. |
 | **Droid / Factory execution** | ○ | ○ | ● | Heavy execution is **subprocess/CLI/hosted** muscle; **web** steers and reviews outcomes **through HAM**, not by re-embedding vendor stacks in the browser. |
 | **Hermes model gateway** | ○ | ○ | ● | Browser **never** calls Hermes directly; **cloud** adapts gateway modes (`HERMES_GATEWAY_*`) and routes. |

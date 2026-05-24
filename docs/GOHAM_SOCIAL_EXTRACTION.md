@@ -11,6 +11,8 @@ HAM keeps:
 - Hermes workspace developer experience
 - Chat, files, terminal, conductor, operations
 
+HAM has **no** `/workspace/social` route or Social frontend surface (removed after extraction).
+
 GoHAM Social owns:
 
 - Telegram activity and reactive lanes

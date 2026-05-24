@@ -86,7 +86,6 @@ const MOBILE_TITLE_RULES: { test: (p: string) => boolean; title: string }[] = [
     test: (p) => p === "/workspace/operations" || p.startsWith("/workspace/operations/"),
     title: "Operations",
   },
-  { test: (p) => p === "/workspace/social" || p.startsWith("/workspace/social/"), title: "Social (moved)" },
   { test: (p) => p === "/workspace/memory" || p.startsWith("/workspace/memory/"), title: "Memory" },
   { test: (p) => p === "/workspace/skills" || p.startsWith("/workspace/skills/"), title: "Skills" },
   {

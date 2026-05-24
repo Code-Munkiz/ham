@@ -13,7 +13,7 @@ vi.mock("../workspaceLibraryFlyoutContext", () => ({
 import { WorkspaceMobileTabBar } from "../WorkspaceMobileTabBar";
 
 describe("WorkspaceMobileTabBar", () => {
-  it("omits Chat and legacy Social from mobile primary links", () => {
+  it("omits Chat from mobile primary links and exposes library", () => {
     render(
       <MemoryRouter initialEntries={["/workspace/projects"]}>
         <WorkspaceMobileTabBar />
