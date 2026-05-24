@@ -1648,6 +1648,7 @@ def _maybe_llm_scaffold_replace(
     effective_model = _get_scaffold_model(model_override=resolved_model)
 
     from src.ham.builder_kit_router import select_kit_for_prompt  # noqa: PLC0415
+    from src.ham.build_registry.intent import enrich_plan_metadata_with_registry_v2  # noqa: PLC0415
 
     selected_kit_id = select_kit_for_prompt(user_message)
 
@@ -1663,10 +1664,13 @@ def _maybe_llm_scaffold_replace(
                 )
             ],
             planner_confidence="medium",
-            metadata={
-                "template_kind": selected_kit_id,
-                "originated_from": "builder_chat_scaffold",
-            },
+            metadata=enrich_plan_metadata_with_registry_v2(
+                {
+                    "template_kind": selected_kit_id,
+                    "originated_from": "builder_chat_scaffold",
+                },
+                user_message,
+            ),
         )
     except Exception:  # noqa: BLE001
         from src.ham.builder_error_codes import STEP_VERIFICATION_FAILED  # noqa: PLC0415
