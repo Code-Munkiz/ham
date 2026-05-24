@@ -32,11 +32,6 @@ from src.ham.builder_error_codes import (
     STEP_MODEL_UNAVAILABLE,
     STEP_VERIFICATION_FAILED,
 )
-from src.ham.builder_kits import (
-    BuilderKit,
-    get_kit_for_template_kind,
-    render_kit_context,
-)
 from src.ham.builder_plan import Plan
 from src.llm_client import (
     complete_chat_messages_openrouter,
@@ -265,11 +260,32 @@ def _get_scaffold_model(*, model_override: str | None = None) -> str:
     return resolve_openrouter_model_name()
 
 
+def _append_scaffold_context(
+    user_content: str,
+    plan: Plan,
+    *,
+    env: dict[str, str] | None = None,
+) -> str:
+    """Append v2 playbook or v1 Builder Kit context when resolved (ADR-0017)."""
+    from src.ham.build_registry.scaffold_context import resolve_scaffold_context
+
+    template_kind = (plan.metadata or {}).get("template_kind")
+    result = resolve_scaffold_context(
+        metadata=plan.metadata,
+        template_kind=template_kind if isinstance(template_kind, str) else None,
+        env=env,
+    )
+    if result.source == "none" or not result.context.strip():
+        return user_content
+    header = result.header.strip() or "Builder Kit context:"
+    return f"{user_content}\n\n{header}\n{result.context}"
+
+
 def _build_scaffold_messages(
     plan: Plan,
     *,
     system_prompt: str = _SCAFFOLD_SYSTEM_PROMPT,
-    kit: BuilderKit | None = None,
+    env: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """Assemble the LLM message list for a scaffold call."""
     template_kind = (plan.metadata or {}).get("template_kind", "unknown")
@@ -282,10 +298,7 @@ def _build_scaffold_messages(
         f"User request: {plan.user_message}\n"
         f"Steps:\n{steps_text}"
     )
-    if kit is not None:
-        user_content = (
-            f"{user_content}\n\nBuilder Kit context:\n{render_kit_context(kit)}"
-        )
+    user_content = _append_scaffold_context(user_content, plan, env=env)
     return [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_content},
@@ -335,14 +348,10 @@ def generate_scaffold(
         )
 
     model = _get_scaffold_model(model_override=model_override)
-    template_kind = (plan.metadata or {}).get("template_kind", "")
-    kit = get_kit_for_template_kind(template_kind)
     scaffold_timeout = scaffold_llm_timeout_sec()
 
     # --- Attempt 1 ---
-    messages = _build_scaffold_messages(
-        plan, system_prompt=_SCAFFOLD_SYSTEM_PROMPT, kit=kit
-    )
+    messages = _build_scaffold_messages(plan, system_prompt=_SCAFFOLD_SYSTEM_PROMPT)
     try:
         raw = complete_chat_messages_openrouter(
             messages,
@@ -373,7 +382,7 @@ def generate_scaffold(
 
     # --- Attempt 2 (stricter prompt) ---
     messages2 = _build_scaffold_messages(
-        plan, system_prompt=_SCAFFOLD_SYSTEM_PROMPT_STRICT, kit=kit
+        plan, system_prompt=_SCAFFOLD_SYSTEM_PROMPT_STRICT
     )
     try:
         raw2 = complete_chat_messages_openrouter(

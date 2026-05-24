@@ -115,11 +115,17 @@ class TestResolveScaffoldContextNoV1Fallback:
 
 
 class TestNoRuntimeWiring:
-    def test_builder_llm_scaffold_unchanged(self):
+    def test_builder_llm_scaffold_lazy_imports_scaffold_context(self):
         path = REPO_ROOT / "src/ham/builder_llm_scaffold.py"
         source = path.read_text(encoding="utf-8")
-        assert "build_registry" not in source
-        assert "scaffold_context" not in source
+        assert "resolve_scaffold_context" in source
+        assert "from src.ham.build_registry.scaffold_context import" in source
+        for line in source.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("from src.ham.build_registry") or stripped.startswith(
+                "import src.ham.build_registry"
+            ):
+                assert stripped.startswith("from src.ham.build_registry.scaffold_context import")
 
     def test_builder_chat_scaffold_unchanged(self):
         path = REPO_ROOT / "src/ham/builder_chat_scaffold.py"

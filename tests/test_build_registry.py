@@ -109,11 +109,20 @@ class TestBrokenFixtures:
 
 
 class TestNoRuntimeWiring:
-    def test_builder_llm_scaffold_does_not_import_build_registry(self):
+    def test_builder_llm_scaffold_lazy_imports_build_registry(self):
         import src.ham.builder_llm_scaffold as scaffold
 
         source = Path(scaffold.__file__).read_text(encoding="utf-8")
-        assert "build_registry" not in source
+        assert "resolve_scaffold_context" in source
+        assert "from src.ham.build_registry.scaffold_context import" in source
+        module_lines = source.splitlines()
+        for line in module_lines:
+            stripped = line.strip()
+            if stripped.startswith("from src.ham.build_registry") or stripped.startswith(
+                "import src.ham.build_registry"
+            ):
+                assert stripped.startswith("from src.ham.build_registry.scaffold_context import")
+                assert "resolve_scaffold_context" in stripped
 
     def test_builder_kits_does_not_import_build_registry(self):
         import src.ham.builder_kits as kits
