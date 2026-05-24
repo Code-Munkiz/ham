@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  knowledgeSettingsLinks,
-  libraryNavItems,
-  primaryRailItems,
-} from "../workspaceNavConfig";
+import { knowledgeSettingsLinks, libraryNavItems, primaryRailItems } from "../workspaceNavConfig";
 
 describe("workspaceNavConfig", () => {
   it("primary rail excludes Chat entry", () => {
