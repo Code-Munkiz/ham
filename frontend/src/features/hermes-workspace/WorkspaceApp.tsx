@@ -14,7 +14,7 @@ import { WorkspaceMemoryScreen } from "./screens/memory/WorkspaceMemoryScreen";
 import { WorkspaceOperationsScreen } from "./screens/operations/WorkspaceOperationsScreen";
 import { WorkspaceProfilesScreen } from "./screens/profiles/WorkspaceProfilesScreen";
 import { WorkspaceSkillsScreen } from "./screens/skills/WorkspaceSkillsScreen";
-import { WorkspaceSocialScreen } from "./screens/social/WorkspaceSocialScreen";
+import { GoHamSocialMovedScreen } from "./screens/GoHamSocialMovedScreen";
 import "./hermesWorkspace.css";
 import { VoiceWorkspaceSettingsProvider } from "./voice/VoiceWorkspaceSettingsContext";
 import { WorkspaceHamProjectProvider } from "./WorkspaceHamProjectContext";
@@ -52,7 +52,7 @@ export function WorkspaceRoutes() {
         path="builder-studio/:builderId"
         element={<Navigate to="/workspace/settings?section=builders" replace />}
       />
-      <Route path="social" element={<WorkspaceSocialScreen />} />
+      <Route path="social" element={<GoHamSocialMovedScreen />} />
       <Route path="hamgomoon" element={<Navigate to="/workspace/social" replace />} />
       <Route path="memory" element={<WorkspaceMemoryScreen />} />
       <Route path="skills" element={<WorkspaceSkillsScreen />} />

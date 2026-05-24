@@ -1,5 +1,5 @@
 /**
- * HAM “advanced” workspace surfaces (Memory, Skills, Profiles, Operations, Conductor, Jobs, Tasks, Social)
+ * HAM “advanced” workspace surfaces (Memory, Skills, Profiles, Operations, Conductor, Jobs, Tasks)
  * call the **main HAM API** via `hamApiFetch` / `VITE_HAM_API_BASE` — not the local Files/Terminal
  * runtime. User-facing copy here must not say “runtime bridge” or imply loopback `127.0.0.1` Files.
  */
@@ -11,8 +11,7 @@ export type WorkspaceHamApiSurface =
   | "operations"
   | "conductor"
   | "jobs"
-  | "tasks"
-  | "social";
+  | "tasks";
 
 const INTRO: Record<WorkspaceHamApiSurface, string> = {
   memory:
@@ -23,7 +22,6 @@ const INTRO: Record<WorkspaceHamApiSurface, string> = {
   conductor: "Conductor (missions) is served from the HAM API at /api/workspace/conductor.",
   jobs: "Jobs are served from the HAM API at /api/workspace/jobs.",
   tasks: "Tasks are served from the HAM API at /api/workspace/tasks.",
-  social: "Social provider status is served from the HAM API at /api/social.",
 };
 
 function httpSuffix(status: number): string {

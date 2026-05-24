@@ -13,18 +13,16 @@ vi.mock("../workspaceLibraryFlyoutContext", () => ({
 import { WorkspaceMobileTabBar } from "../WorkspaceMobileTabBar";
 
 describe("WorkspaceMobileTabBar", () => {
-  it("omits Chat from mobile primary links", () => {
+  it("omits Chat and legacy Social from mobile primary links", () => {
     render(
-      <MemoryRouter initialEntries={["/workspace/social"]}>
+      <MemoryRouter initialEntries={["/workspace/projects"]}>
         <WorkspaceMobileTabBar />
       </MemoryRouter>,
     );
 
     expect(screen.queryByRole("link", { name: "Chat" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Social" })).toHaveAttribute(
-      "href",
-      "/workspace/social",
-    );
+    expect(screen.queryByRole("link", { name: "Social" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /HAMgomoon/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open library" })).toBeInTheDocument();
   });
 });

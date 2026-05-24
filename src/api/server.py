@@ -45,9 +45,6 @@ from src.api.opencode_launch_proxy import router as opencode_launch_proxy_router
 from src.api.pna_middleware import private_network_access_middleware
 from src.api.project_settings import router as project_settings_router
 from src.api.project_snapshots import router as project_snapshots_router
-from src.api.social import router as social_router
-from src.api.social_policy import router as social_policy_router
-from src.api.social_scheduler import router as social_scheduler_router
 from src.api.tts_endpoint import router as tts_router
 from src.api.workspace_conductor import router as workspace_conductor_router
 from src.api.workspace_files import resolve_workspace_context_snapshot_root
@@ -71,7 +68,6 @@ from src.api.request_id_middleware import request_id_middleware
 from src.ham import sentry_wiring
 from src.ham.agent_profiles import agents_config_from_merged
 from src.ham.clerk_auth import HamActor, clerk_authorization_is_clerk_session
-from src.ham.social_autonomy.firestore_store import FirestoreSocialAutonomyStoreError
 from src.memory_heist import context_engine_dashboard_payload, discover_config
 from src.persistence.project_store import get_project_store
 from src.persistence.run_store import RunStore
@@ -82,33 +78,6 @@ sentry_wiring.init()
 
 app = FastAPI(title="HAM API", version="0.1.0")
 
-
-@app.exception_handler(FirestoreSocialAutonomyStoreError)
-async def _firestore_social_autonomy_503(
-    request: Request,
-    exc: FirestoreSocialAutonomyStoreError,
-) -> JSONResponse:
-    """Convert FirestoreSocialAutonomyStoreError to a structured 503 response.
-
-    Fail-closed: when ``HAM_SOCIAL_AUTONOMY_STORE_BACKEND=firestore`` is set
-    and the Firestore client errors at runtime, API routes that call
-    ``get_social_autonomy_store().*`` propagate a
-    ``FirestoreSocialAutonomyStoreError``. This handler converts it to HTTP 503
-    with a structured ``firestore_unavailable`` body so clients (and operators)
-    receive an explicit, unambiguous signal rather than a generic 500.
-    """
-    return JSONResponse(
-        status_code=503,
-        content={
-            "error": {
-                "code": "firestore_unavailable",
-                "message": (
-                    "The social autonomy store (Firestore) is temporarily unavailable. "
-                    "Check Firestore IAM and network access for the Cloud Run service account."
-                ),
-            }
-        },
-    )
 
 _DEFAULT_CORS = [
     "http://localhost:3000",
@@ -177,9 +146,6 @@ app.include_router(hermes_skills_router)
 app.include_router(goham_planner_router)
 app.include_router(project_settings_router)
 app.include_router(project_snapshots_router)
-app.include_router(social_router)
-app.include_router(social_policy_router)
-app.include_router(social_scheduler_router)
 app.include_router(coding_agents_router)
 app.include_router(control_plane_runs_router)
 app.include_router(droid_audit_router)

@@ -13,10 +13,8 @@ describe("workspaceNavConfig", () => {
     expect(primaryRailItems.map((i) => i.label)).not.toContain("Chat");
   });
 
-  it("primary rail contains only Social", () => {
-    expect(primaryRailItems).toHaveLength(1);
-    expect(primaryRailItems[0]?.label).toBe("Social");
-    expect(primaryRailItems[0]?.to).toBe("/workspace/social");
+  it("primary rail is empty after GoHAM Social extraction", () => {
+    expect(primaryRailItems).toHaveLength(0);
   });
 
   it("primary rail does not list Builder Studio", () => {
@@ -31,9 +29,9 @@ describe("workspaceNavConfig", () => {
     expect(libraryNavItems[0]?.to).toBe("/workspace/projects");
   });
 
-  it("titles social routes as Social", () => {
-    expect(workspacePathTitle("/workspace/social")).toBe("Social");
-    expect(workspacePathTitle("/workspace/social/anything")).toBe("Social");
+  it("titles legacy social routes as moved", () => {
+    expect(workspacePathTitle("/workspace/social")).toBe("Social (moved)");
+    expect(workspacePathTitle("/workspace/social/anything")).toBe("Social (moved)");
   });
 
   it("does not expose a HAMgomoon nav entry", () => {

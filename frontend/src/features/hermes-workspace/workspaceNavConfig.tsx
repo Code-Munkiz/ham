@@ -5,7 +5,6 @@ import {
   LayoutDashboard,
   Library,
   Network,
-  Share2,
   FolderOpen,
   Settings,
   Waypoints,
@@ -18,12 +17,10 @@ import {
 export type MainNavItem = { to: string; label: string; icon: LucideIcon; end?: boolean };
 
 /**
- * Hermes Workspace IA: persistent primary rail (Social) + Library flyout.
+ * Hermes Workspace IA: Library flyout primary + settings rail.
  * `/workspace` index redirects to `/workspace/chat`. `/workspace/projects` lives under Library (first item).
  */
-export const primaryRailItems: MainNavItem[] = [
-  { to: "/workspace/social", label: "Social", icon: Share2 },
-];
+export const primaryRailItems: MainNavItem[] = [];
 
 export const settingsRailItem: MainNavItem = {
   to: "/workspace/settings",
@@ -89,7 +86,7 @@ const MOBILE_TITLE_RULES: { test: (p: string) => boolean; title: string }[] = [
     test: (p) => p === "/workspace/operations" || p.startsWith("/workspace/operations/"),
     title: "Operations",
   },
-  { test: (p) => p === "/workspace/social" || p.startsWith("/workspace/social/"), title: "Social" },
+  { test: (p) => p === "/workspace/social" || p.startsWith("/workspace/social/"), title: "Social (moved)" },
   { test: (p) => p === "/workspace/memory" || p.startsWith("/workspace/memory/"), title: "Memory" },
   { test: (p) => p === "/workspace/skills" || p.startsWith("/workspace/skills/"), title: "Skills" },
   {
