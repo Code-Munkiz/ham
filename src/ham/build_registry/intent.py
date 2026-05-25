@@ -15,6 +15,19 @@ BRANCHING_NARRATIVE_APP_TYPE = "game.branching-narrative"
 MEMORY_MATCH_APP_TYPE = "game.memory-match"
 WORD_DAILY_APP_TYPE = "game.word-daily"
 DAILY_PUZZLE_GRID_APP_TYPE = "game.daily-puzzle-grid"
+RESOURCE_MANAGEMENT_SIM_APP_TYPE = "game.resource-management-sim"
+
+_RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES: tuple[str, ...] = (
+    r"\bresource\s+management\b.{0,80}\b(sim|simulation|game)\b",
+    r"\b(sim|simulation|game)\b.{0,80}\bresource\s+management\b",
+    r"\bcolony\s+management\b.{0,80}\bgame\b",
+    r"\bgame\b.{0,80}\bcolony\s+management\b",
+    r"\bproduction\s+chain\b.{0,80}\b(sim|simulation|game)\b",
+    r"\b(sim|simulation|game)\b.{0,80}\bproduction\s+chain\b",
+    r"\bresource\s+allocation\b.{0,80}\bgame\b",
+    r"\bfarm\s+management\b.{0,80}\bsim\b",
+    r"\bturn[-\s]?based\b.{0,80}\bresource\s+management\b",
+)
 
 _GLOBAL_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(dashboard|landing\s*page|saas|calculator|todo|to[-\s]?do|crm)\b",
@@ -32,7 +45,7 @@ _IDLE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-)
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES
 
 _TRIVIA_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(idle|incremental|clicker|tycoon)\b",
@@ -51,7 +64,7 @@ _TRIVIA_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-)
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES
 
 _IDLE_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\b(idle|incremental|clicker|tycoon)\b",
@@ -97,7 +110,7 @@ _BRANCHING_NARRATIVE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-)
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES
 
 _BRANCHING_NARRATIVE_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bbranching\s+story\b.{0,80}\bgame\b",
@@ -131,7 +144,7 @@ _MEMORY_MATCH_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-)
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES
 
 _MEMORY_MATCH_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bmemory\s+(card|match)\b",
@@ -168,7 +181,7 @@ _WORD_DAILY_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
     r"\bfill\s+cells\b.{0,80}\b(clue|row|column|constraint)\b",
-)
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES
 
 _WORD_DAILY_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bwordle(-style)?\b",
@@ -212,7 +225,7 @@ _DAILY_PUZZLE_GRID_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\beducation\s+website\b",
     r"\b(blog|chatbot)\b",
     r"\bwriting\s+app\b",
-)
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES
 
 _DAILY_PUZZLE_GRID_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bdaily\s+puzzle\s+grid\b",
@@ -232,6 +245,55 @@ _DAILY_PUZZLE_GRID_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\b(row|column)\b.{0,80}\b(rule|constraint|clue)\b.{0,80}\b(grid|puzzle|cell)\b",
     r"\bgrid\s+puzzle\b.{0,100}\b(hint|completion|constraint|rule|clue|cell)\b",
     r"\b(hint|completion)\b.{0,100}\bgrid\s+puzzle\b",
+)
+
+_RESOURCE_MANAGEMENT_SIM_NEGATIVE_PATTERNS: tuple[str, ...] = (
+    r"\b(idle|incremental|clicker|tycoon)\b",
+    r"\bcookie\s+clicker\b",
+    r"\bpassive\s+income\b",
+    r"\b(trivia|quiz)\b",
+    r"\bmemory\s+(card|match)\b",
+    r"\bbranching\s+story\b",
+    r"\bchoose\s+your\s+own\s+adventure\b",
+    r"\binteractive\s+fiction\b",
+    r"\b(wordle|daily\s+word|word\s+guess)\b",
+    r"\b(nonogram|picross|sudoku|minesweeper)\b",
+    r"\blogic\s+grid\s+puzzle\b",
+    r"\bdaily\s+puzzle\s+grid\b",
+    r"\b(inventory\s+management\s+app|inventory\s+management\s+system)\b",
+    r"\b(finance|financial)\s+dashboard\b",
+    r"\btrading\s+app\b",
+    r"\blive\s+market\b",
+    r"\bmultiplayer\s+economy\b",
+    r"\bresource\s+allocation\s+spreadsheet\b",
+    r"\bspreadsheet\b",
+    r"\b(data\s+table|erp)\b",
+    r"\binventory\s+management\b(?!.{0,60}\bgame\b)",
+    r"\bmanagement\s+app\b",
+    r"\breal[-\s]?time\s+combat\b",
+    r"\bcity\s+builder\b.{0,100}\bcombat\b",
+    r"\bgeneric\s+dashboard\b",
+)
+
+_RESOURCE_MANAGEMENT_SIM_POSITIVE_PATTERNS: tuple[str, ...] = (
+    r"\bresource\s+management\b.{0,80}\b(sim|simulation|game)\b",
+    r"\b(sim|simulation|game)\b.{0,80}\bresource\s+management\b",
+    r"\bcolony\s+management\b.{0,80}\bgame\b",
+    r"\bgame\b.{0,80}\bcolony\s+management\b",
+    r"\bfactory\b.{0,100}\bresource\s+allocation\b.{0,80}\bgame\b",
+    r"\bresource\s+allocation\b.{0,80}\bgame\b",
+    r"\bgame\b.{0,120}\b(manage|managing)\b.{0,80}\b(food|energy|workers?|wood|stone|resources?)\b",
+    r"\b(manage|managing)\b.{0,80}\b(food|energy|workers?|wood|stone|resources?)\b.{0,80}\bgame\b",
+    r"\bturn[-\s]?based\b.{0,80}\bresource\s+management\b",
+    r"\bresource\s+management\b.{0,80}\bturn[-\s]?based\b",
+    r"\bturn[-\s]?based\b.{0,80}\bresource\s+management\b.{0,80}\bgame\b",
+    r"\bproduction\s+chain\b.{0,80}\b(sim|simulation|game)\b",
+    r"\b(sim|simulation|game)\b.{0,80}\bproduction\s+chain\b",
+    r"\bgame\b.{0,120}\b(resources?|capacity\s+limits?|upgrades?|goals?)\b",
+    r"\b(resources?|capacity\s+limits?|upgrades?)\b.{0,120}\bgame\b",
+    r"\bfarm\s+management\b.{0,80}\bsim\b",
+    r"\btiny\s+farm\s+management\s+sim\b",
+    r"\bsmall\b.{0,40}\bcolony\s+management\b.{0,80}\bgame\b",
 )
 
 
@@ -289,6 +351,14 @@ def _matches_daily_puzzle_grid(text: str) -> bool:
     )
 
 
+def _matches_resource_management_sim(text: str) -> bool:
+    return _matches_recipe(
+        text,
+        negatives=_RESOURCE_MANAGEMENT_SIM_NEGATIVE_PATTERNS,
+        positives=_RESOURCE_MANAGEMENT_SIM_POSITIVE_PATTERNS,
+    )
+
+
 def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
     """Return a Game Pack app type id for clear prompt matches, else ``None``."""
     text = _normalized_prompt(prompt)
@@ -296,7 +366,8 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
         return None
     if _matches_any(text, _GLOBAL_NEGATIVE_PATTERNS):
         return None
-    # Precedence: trivia → idle → branching narrative → memory match → word daily → daily puzzle grid.
+    # Precedence: trivia → idle → branching narrative → memory match → word daily
+    # → daily puzzle grid → resource management sim.
     if _matches_trivia(text):
         return TRIVIA_TIMER_APP_TYPE
     if _matches_idle(text):
@@ -309,6 +380,8 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
         return WORD_DAILY_APP_TYPE
     if _matches_daily_puzzle_grid(text):
         return DAILY_PUZZLE_GRID_APP_TYPE
+    if _matches_resource_management_sim(text):
+        return RESOURCE_MANAGEMENT_SIM_APP_TYPE
     return None
 
 

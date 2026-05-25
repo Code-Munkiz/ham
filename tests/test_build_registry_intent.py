@@ -14,6 +14,7 @@ from src.ham.build_registry.intent import (
     DAILY_PUZZLE_GRID_APP_TYPE,
     IDLE_INCREMENTAL_APP_TYPE,
     MEMORY_MATCH_APP_TYPE,
+    RESOURCE_MANAGEMENT_SIM_APP_TYPE,
     TRIVIA_TIMER_APP_TYPE,
     WORD_DAILY_APP_TYPE,
     enrich_plan_metadata_with_registry_v2,
@@ -151,6 +152,38 @@ _DAILY_PUZZLE_GRID_CROSS_RECIPE_NEGATIVE_PROMPTS = (
     "Build a branching story game",
 )
 
+_RESOURCE_MGMT_POSITIVE_PROMPTS = (
+    "Build me a resource management sim",
+    "Make a small colony management game",
+    "Create a factory resource allocation game",
+    "Build a game where I manage food, energy, and workers",
+    "Make a turn-based resource management game",
+    "Create a production chain simulation",
+    "Build a game with resources, capacity limits, upgrades, and goals",
+    "Make a tiny farm management sim",
+)
+
+_RESOURCE_MGMT_NEGATIVE_PROMPTS = (
+    "Build a SaaS dashboard",
+    "Create an inventory management app",
+    "Make a finance dashboard",
+    "Build a trading app",
+    "Create a live market simulator",
+    "Build a multiplayer economy game",
+    "Make a resource allocation spreadsheet",
+    "Build a city builder with real-time combat",
+    "Create a generic dashboard",
+)
+
+_RESOURCE_MGMT_CROSS_RECIPE_NEGATIVE_PROMPTS = (
+    "Build a memory card game",
+    "Build a Wordle-style game",
+    "Build a trivia quiz with timer",
+    "Build an idle clicker game",
+    "Build a branching story game",
+    "Build me a daily puzzle grid game",
+)
+
 _CROSS_EXCLUSION_PROMPTS = (
     ("build me an idle clicker game", IDLE_INCREMENTAL_APP_TYPE),
     ("Build me a trivia quiz with a timer", TRIVIA_TIMER_APP_TYPE),
@@ -164,6 +197,8 @@ _CROSS_EXCLUSION_PROMPTS = (
     ("Make a Wordle-style game", WORD_DAILY_APP_TYPE),
     ("Build me a daily puzzle grid game", DAILY_PUZZLE_GRID_APP_TYPE),
     ("Make a logic grid puzzle", DAILY_PUZZLE_GRID_APP_TYPE),
+    ("Build me a resource management sim", RESOURCE_MANAGEMENT_SIM_APP_TYPE),
+    ("Make a turn-based resource management game", RESOURCE_MANAGEMENT_SIM_APP_TYPE),
 )
 
 
@@ -219,6 +254,20 @@ class TestSelectRegistryV2AppTypeForPrompt:
     @pytest.mark.parametrize("prompt", _DAILY_PUZZLE_GRID_CROSS_RECIPE_NEGATIVE_PROMPTS)
     def test_other_recipe_prompts_do_not_route_to_daily_puzzle_grid_param(self, prompt: str):
         assert select_registry_v2_app_type_for_prompt(prompt) != DAILY_PUZZLE_GRID_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _RESOURCE_MGMT_POSITIVE_PROMPTS)
+    def test_matches_resource_management_sim_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) == RESOURCE_MANAGEMENT_SIM_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _RESOURCE_MGMT_NEGATIVE_PROMPTS)
+    def test_rejects_non_resource_management_sim_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != RESOURCE_MANAGEMENT_SIM_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVE_PROMPTS)
+    def test_other_recipe_prompts_do_not_route_to_resource_management_sim_param(
+        self, prompt: str
+    ):
+        assert select_registry_v2_app_type_for_prompt(prompt) != RESOURCE_MANAGEMENT_SIM_APP_TYPE
 
     @pytest.mark.parametrize("prompt,expected", _CROSS_EXCLUSION_PROMPTS)
     def test_recipes_do_not_steal_each_other(self, prompt: str, expected: str):
@@ -328,6 +377,42 @@ class TestSelectRegistryV2AppTypeForPrompt:
             != DAILY_PUZZLE_GRID_APP_TYPE
         )
 
+    def test_resource_management_sim_prompt_does_not_route_to_other_recipes(self):
+        prompt = "Build me a resource management sim"
+        assert select_registry_v2_app_type_for_prompt(prompt) == RESOURCE_MANAGEMENT_SIM_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != IDLE_INCREMENTAL_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != TRIVIA_TIMER_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != BRANCHING_NARRATIVE_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != MEMORY_MATCH_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != WORD_DAILY_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != DAILY_PUZZLE_GRID_APP_TYPE
+
+    def test_other_recipe_prompts_do_not_route_to_resource_management_sim(self):
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a trivia quiz with a timer")
+            != RESOURCE_MANAGEMENT_SIM_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("build me an idle clicker game")
+            != RESOURCE_MANAGEMENT_SIM_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a branching story game")
+            != RESOURCE_MANAGEMENT_SIM_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a memory card matching game")
+            != RESOURCE_MANAGEMENT_SIM_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a daily word guessing game")
+            != RESOURCE_MANAGEMENT_SIM_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a daily puzzle grid game")
+            != RESOURCE_MANAGEMENT_SIM_APP_TYPE
+        )
+
 
 class TestEnrichPlanMetadataWithRegistryV2:
     def test_flag_disabled_does_not_add_registry_metadata(self, monkeypatch):
@@ -382,6 +467,17 @@ class TestEnrichPlanMetadataWithRegistryV2:
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "generic"},
             "Build me a daily puzzle grid game",
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
+
+    def test_flag_disabled_resource_management_sim_prompt_does_not_add_registry_metadata(
+        self, monkeypatch
+    ):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            "Build me a resource management sim",
         )
         assert "registry_v2_app_type" not in metadata
         assert metadata["template_kind"] == "generic"
@@ -446,6 +542,16 @@ class TestEnrichPlanMetadataWithRegistryV2:
         assert metadata["template_kind"] == "generic"
         assert metadata["originated_from"] == "builder_chat_scaffold"
 
+    def test_flag_enabled_resource_management_sim_prompt_adds_registry_metadata(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic", "originated_from": "builder_chat_scaffold"},
+            "Build me a resource management sim",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        assert metadata["registry_v2_app_type"] == RESOURCE_MANAGEMENT_SIM_APP_TYPE
+        assert metadata["template_kind"] == "generic"
+        assert metadata["originated_from"] == "builder_chat_scaffold"
+
     def test_flag_enabled_non_idle_prompt_leaves_registry_metadata_absent(self):
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "landing-page"},
@@ -495,6 +601,17 @@ class TestEnrichPlanMetadataWithRegistryV2:
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "generic"},
             "Build a dashboard grid",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "1"},
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
+
+    def test_flag_enabled_non_resource_management_sim_prompt_leaves_registry_metadata_absent(
+        self,
+    ):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            "Create an inventory management app",
             env={"HAM_BUILD_REGISTRY_V2_ENABLED": "1"},
         )
         assert "registry_v2_app_type" not in metadata
@@ -585,6 +702,14 @@ class TestChatScaffoldSyntheticPlanMetadata:
         assert metadata.get("template_kind") == "generic"
         assert "registry_v2_app_type" not in metadata
 
+    def test_flag_disabled_resource_management_sim_prompt_has_no_registry_metadata(
+        self, monkeypatch
+    ):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = _synthetic_plan_metadata("Build me a resource management sim")
+        assert metadata.get("template_kind") == "generic"
+        assert "registry_v2_app_type" not in metadata
+
     def test_flag_enabled_idle_prompt_adds_registry_metadata(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
         metadata = _synthetic_plan_metadata("build me an idle clicker game")
@@ -620,6 +745,14 @@ class TestChatScaffoldSyntheticPlanMetadata:
         metadata = _synthetic_plan_metadata("Build me a daily puzzle grid game")
         assert metadata.get("template_kind") == "generic"
         assert metadata.get("registry_v2_app_type") == DAILY_PUZZLE_GRID_APP_TYPE
+
+    def test_flag_enabled_resource_management_sim_prompt_adds_registry_metadata(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
+        metadata = _synthetic_plan_metadata("Build me a resource management sim")
+        assert metadata.get("template_kind") == "generic"
+        assert metadata.get("registry_v2_app_type") == RESOURCE_MANAGEMENT_SIM_APP_TYPE
 
     def test_flag_enabled_non_idle_prompt_has_no_registry_metadata(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
@@ -793,6 +926,37 @@ class TestEndToEndScaffoldMessages:
         assert "Builder Kit context:" not in content
         assert content.count("Builder Kit:") == 0
 
+    def test_flag_enabled_resource_management_sim_prompt_produces_v2_context(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            "Build me a resource management sim",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_resource_mgmt_e2e",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message="Build me a resource management sim",
+            steps=[
+                Step(title="Scaffold game", description="Create resource management sim files")
+            ],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(
+            plan,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )[1]["content"]
+        assert "Build Registry v2 playbook context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" in content
+        assert "game.resource-management-sim" in content
+        assert "stack.dom-game-minimal" in content
+        assert "validator.no-negative-resources" in content
+        assert "validator.production-chain-consistency" in content
+        assert "validator.goal-state-detection" in content
+        assert "Builder Kit context:" not in content
+        assert content.count("Builder Kit:") == 0
+
     def test_flag_disabled_idle_prompt_produces_v1_context_only(self, monkeypatch):
         monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
         metadata = enrich_plan_metadata_with_registry_v2(
@@ -900,6 +1064,29 @@ class TestEndToEndScaffoldMessages:
             project_id="proj_test",
             user_message="Build me a daily puzzle grid game",
             steps=[Step(title="Scaffold game", description="Create daily puzzle grid files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(plan)[1]["content"]
+        assert "Builder Kit context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" not in content
+
+    def test_flag_disabled_resource_management_sim_prompt_produces_v1_context_only(
+        self, monkeypatch
+    ):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            "Build me a resource management sim",
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_resource_mgmt_v1",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message="Build me a resource management sim",
+            steps=[
+                Step(title="Scaffold game", description="Create resource management sim files")
+            ],
             planner_confidence="high",
             metadata=metadata,
         )
