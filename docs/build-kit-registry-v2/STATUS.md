@@ -7,8 +7,9 @@ Practical snapshot of where Build Kit Registry v2 stands. For authoring rules se
 ## 1. Current status
 
 - **Build Registry v2 exists and is tested** — loader, composer, renderer, opt-in scaffold wiring, and narrow prompt routing are in place.
-- **Game Pack has four recipes** — `game.idle-incremental`, `game.trivia-timer`, `game.branching-narrative`, and `game.memory-match` (71 indexed modules total).
-- **All four current Game Pack recipes are narrowly routable** behind `HAM_BUILD_REGISTRY_V2_ENABLED` when prompt intent clearly matches idle/incremental/clicker/tycoon, timed trivia/quiz game, branching/choice/story, or memory card matching patterns.
+- **Game Pack has five recipes** — `game.idle-incremental`, `game.trivia-timer`, `game.branching-narrative`, `game.memory-match`, and `game.word-daily` (93 indexed modules total).
+- **Four Game Pack recipes are narrowly routable** behind `HAM_BUILD_REGISTRY_V2_ENABLED` when prompt intent clearly matches idle/incremental/clicker/tycoon, timed trivia/quiz game, branching/choice/story, or memory card matching patterns.
+- **`game.word-daily` validates and composes** but is **schema-only / not routed** — recipe creation does not imply routing; v2 playbook context is not injected for word-daily prompts today.
 - **Default behavior remains v1** — when the flag is unset or false, Lane A uses existing Builder Kit JSON (`src/ham/data/builder_kits/`).
 - **No templates or starter source files** — recipes are generative playbooks only; HAM does not clone checked-in starter trees per kit.
 
@@ -20,11 +21,11 @@ Practical snapshot of where Build Kit Registry v2 stands. For authoring rules se
 |-------|----------|
 | **ADRs** | [0016](../adr/0016-generative-build-kit-registry-v2.md) (registry design), [0017](../adr/0017-build-registry-v2-opt-in-scaffold-wiring.md) (opt-in scaffold wiring), [0018](../adr/0018-build-kit-evolution-loop-with-hermes.md) (future Hermes evolution loop) |
 | **Authoring Guide** | [AUTHORING_GUIDE.md](AUTHORING_GUIDE.md) |
-| **Game Pack** | [game-pack/](game-pack/) — **4 recipes**, **71 modules** |
+| **Game Pack** | [game-pack/](game-pack/) — **5 recipes**, **93 modules** |
 | **Outcome facts / evolution loop docs** | [OUTCOME_FACTS.md](OUTCOME_FACTS.md), [examples/outcome-facts/](examples/outcome-facts/), [examples/hermes-critique-prompt.md](examples/hermes-critique-prompt.md) |
 | **Validation script** | `scripts/validate_game_pack_registry.py` |
 | **Internal package** | `src/ham/build_registry/` (`loader`, `validate`, `compose`, `render`, `scaffold_context`, `intent`) |
-| **Tests** | `tests/test_build_registry.py` (23 cases), `tests/test_build_registry_scaffold_context.py`, `tests/test_builder_llm_scaffold_registry_context.py`, `tests/test_builder_llm_scaffold_registry_manual_smoke.py`, `tests/test_build_registry_intent.py` |
+| **Tests** | `tests/test_build_registry.py` (27 cases), `tests/test_build_registry_scaffold_context.py`, `tests/test_builder_llm_scaffold_registry_context.py`, `tests/test_builder_llm_scaffold_registry_manual_smoke.py`, `tests/test_build_registry_intent.py` |
 | **CI** | `.github/workflows/ci.yml` — warning-only `pytest tests/test_build_registry.py` + idle app-type validation (`continue-on-error: true`) |
 
 ---
@@ -37,8 +38,9 @@ Practical snapshot of where Build Kit Registry v2 stands. For authoring rules se
 | `game.trivia-timer` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow timed trivia/quiz intent | ~9.6k chars | Conservative timed trivia/quiz routing; v1 fallback preserved |
 | `game.branching-narrative` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow branching/choice/story intent | ~10.3k chars | Conservative branching narrative / CYOA / interactive-fiction routing; v1 fallback preserved |
 | `game.memory-match` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow memory card matching intent | ~10.0k chars | Conservative memory card / pair matching / flip-card routing; v1 fallback preserved |
+| `game.word-daily` | Validated | No | none / not routed | ~10.9k chars | DOM-native daily word guessing recipe with duplicate-letter feedback, keyboard input, attempt limit, and deterministic daily seed guidance; schema-only |
 
-All four renders are under the 12k default budget.
+All five renders are under the 12k default budget.
 
 ---
 
@@ -53,7 +55,7 @@ All four renders are under the 12k default budget.
 - **Flag on + timed trivia/quiz prompt:** routing adds `registry_v2_app_type: game.trivia-timer` when the prompt clearly matches conservative timed trivia/quiz game intent (surveys, forms, flashcards, and generic quiz without game signals are excluded).
 - **Flag on + branching/choice/story prompt:** routing adds `registry_v2_app_type: game.branching-narrative` when the prompt clearly matches conservative branching narrative / CYOA / interactive-fiction intent (blogs, chatbots, generic writing apps, generic RPGs, and live AI dungeon prompts are excluded).
 - **Flag on + memory card matching prompt:** routing adds `registry_v2_app_type: game.memory-match` when the prompt clearly matches conservative memory card / pair matching / flip-card intent (card battlers, trading cards, flashcards, poker, solitaire, and generic card games without memory signals are excluded).
-- **Flag on + non-matching prompt:** no v2 metadata from routing — v1 kit context is used.
+- **Flag on + word-daily / non-matching prompt:** no v2 metadata from routing — v1 kit context is used (`game.word-daily` is not routed yet).
 - **Bad v2 app types fall back to v1** — load/validate/compose/render failures silently use the app type’s `legacy_v1_fallback` kit (pilot: `generic`).
 
 ---
@@ -100,6 +102,13 @@ python3 scripts/validate_game_pack_registry.py \
   --check
 ```
 
+```bash
+python3 scripts/validate_game_pack_registry.py \
+  --pack-root docs/build-kit-registry-v2/game-pack \
+  --app-type game.word-daily \
+  --check
+```
+
 Optional render sample:
 
 ```bash
@@ -117,7 +126,7 @@ python3 scripts/validate_game_pack_registry.py \
 - **No starter source trees** per app type.
 - **No autonomous recipe mutation** — YAML changes are normal human-reviewed git commits only ([ADR-0018](../adr/0018-build-kit-evolution-loop-with-hermes.md)).
 - **No auto-merge** of recipe or routing changes.
-- **No default v2 routing** — flag off by default; all four current Game Pack recipes are routed when flag is on. **Future recipes still start schema-only** until explicitly approved for routing.
+- **No default v2 routing** — flag off by default; four Game Pack recipes are routed when flag is on (`game.idle-incremental`, `game.trivia-timer`, `game.branching-narrative`, `game.memory-match`). **`game.word-daily` is not routed.** Future recipes still start schema-only until explicitly approved for routing.
 - **No user-facing kit picker** for registry v2 app types.
 - **No validator/recovery execution yet** — validator and recovery modules are conceptual (`runner: conceptual`); not executed at build time.
 - **Hermes may critique/propose future changes only** through reviewed patches — no runtime recipe editing today.
@@ -142,7 +151,7 @@ Follow [AUTHORING_GUIDE.md](AUTHORING_GUIDE.md). Summary:
 - **Module:** `src/ham/build_registry/intent.py`
 - **`select_registry_v2_app_type_for_prompt(prompt)`** — pure regex; returns `game.idle-incremental`, `game.trivia-timer`, `game.branching-narrative`, `game.memory-match`, or `None`.
 - **`enrich_plan_metadata_with_registry_v2(metadata, prompt, env=...)`** — copies metadata and sets `registry_v2_app_type` only when flag + intent match.
-- **Routed app types today:** `game.idle-incremental`, `game.trivia-timer`, `game.branching-narrative`, and `game.memory-match` (precedence: trivia → idle → branching narrative → memory match).
+- **Routed app types today:** `game.idle-incremental`, `game.trivia-timer`, `game.branching-narrative`, and `game.memory-match` (precedence: trivia → idle → branching narrative → memory match). **`game.word-daily` is not routed yet.**
 - **Trivia routing is conservative** — requires game-like or timed trivia/quiz/challenge signals; avoids survey/forms/flashcards and generic quiz unless clearly game-like/timed trivia.
 - **Branching narrative routing is conservative** — requires branching/choice/story/CYOA/interactive-fiction signals; avoids blogs, chatbots, generic writing apps, generic RPGs, and live AI dungeon prompts.
 - **Memory match routing is conservative** — requires memory/matching/pair/flip/concentration signals; avoids card battlers, trading cards, flashcards, poker, solitaire, and generic card games.
@@ -159,11 +168,11 @@ Outcome facts format, manual example reports, and Hermes critique prompt are **a
 
 Possible next steps:
 
-1. **Add `game.word-daily`** as recipe #5 following the Authoring Guide.
-2. **Keep recipe #5 schema-only first** — validate, compose, and test before any routing approval.
-3. **Approve routing only after** validation, intent tests, and STATUS update (separate PR from schema landing).
-4. **Consider manual outcome report examples for trivia, branching narrative, and memory match** (idle success example exists under [examples/outcome-facts/](examples/outcome-facts/)).
-5. **Consider CI ratchet later** if registry usage increases (today warning-only for idle app-type validation + registry tests).
+1. **Add flag-gated routing for `game.word-daily`** after explicit approval (separate PR from schema landing).
+2. **Then all five current Game Pack recipes will be routed** behind `HAM_BUILD_REGISTRY_V2_ENABLED`.
+3. **Consider manual outcome report examples for trivia, branching narrative, memory match, and word-daily** (idle success example exists under [examples/outcome-facts/](examples/outcome-facts/)).
+4. **Consider CI ratchet later** if registry usage increases (today warning-only for idle app-type validation + registry tests).
+5. **Then add recipe #6** if desired.
 6. **Later:** outcome facts → Hermes critique report → proposed patch workflow (no auto-apply).
 
 Routing policy: [ROUTING_STRATEGY.md](ROUTING_STRATEGY.md).
@@ -176,6 +185,7 @@ Build Registry v2–related commits on `main` (newest first):
 
 | Commit | Subject |
 |--------|---------|
+| `61a128aa` | docs(builder): add daily word game recipe |
 | `c9c73c25` | feat(builder): route memory match prompts to registry v2 |
 | `9712028f` | docs(builder): update build registry status for narrative routing |
 | `07ade6c8` | feat(builder): route branching narrative prompts to registry v2 |
