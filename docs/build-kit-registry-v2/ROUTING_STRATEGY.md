@@ -51,6 +51,7 @@ Related: [STATUS.md](STATUS.md), [AUTHORING_GUIDE.md](AUTHORING_GUIDE.md), [ADR-
 | **No routing from recipe creation alone** | Landing a YAML recipe is Phase R0; routing requires separate approval + code + tests. |
 | **No routing without tests** | Selector tests, metadata enrichment tests, and smoke coverage required before merge. |
 | **No user-facing kit picker yet** | Operators do not choose registry v2 app types in UI; routing is prompt-derived or manual metadata only. |
+| **Adaptive policy ≠ routing** | App-type fields such as `hard_constraints`, `soft_defaults`, and `conflict_policy` document override precedence for generative guidance only; they do not change prompt routing in `intent.py`. |
 
 ---
 

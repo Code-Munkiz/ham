@@ -61,6 +61,30 @@ EXPECTED_WORD_DAILY_MECHANIC_ORDER = (
     "mechanic.keyboard-input",
 )
 
+WAVE_1_APP_TYPES = (
+    "game.idle-incremental",
+    "game.trivia-timer",
+    "game.branching-narrative",
+    "game.memory-match",
+    "game.word-daily",
+)
+
+WAVE_1_ADAPTIVE_POLICY_LIST_FIELDS = (
+    "hard_constraints",
+    "soft_defaults",
+    "user_overridable",
+    "clarify_if_changed",
+    "out_of_scope_unless_explicit",
+)
+
+WAVE_1_CONFLICT_POLICY_KEYS = (
+    "user_explicit_overrides_soft_defaults",
+    "safety_constraints_override_user_request",
+    "core_loop_conflicts_require_clarification",
+    "out_of_scope_items_require_explicit_request",
+    "fallback_to_v1_or_generic_when_recipe_no_longer_fits",
+)
+
 
 @pytest.fixture
 def game_pack_root() -> Path:
@@ -274,6 +298,29 @@ class TestWordDailyRecipe:
         assert trivia.mechanic_ids == EXPECTED_TRIVIA_MECHANIC_ORDER
         assert branching.mechanic_ids == EXPECTED_BRANCHING_NARRATIVE_MECHANIC_ORDER
         assert memory.mechanic_ids == EXPECTED_MEMORY_MATCH_MECHANIC_ORDER
+
+
+class TestWave1AdaptivePolicyFields:
+    @pytest.mark.parametrize("app_type_id", WAVE_1_APP_TYPES)
+    def test_wave1_app_types_include_adaptive_policy_fields(
+        self, game_pack_root: Path, app_type_id: str
+    ):
+        pack = load_registry_pack(game_pack_root)
+        app = pack.module_data(app_type_id)
+        for field in WAVE_1_ADAPTIVE_POLICY_LIST_FIELDS:
+            value = app.get(field)
+            assert isinstance(value, list), f"{app_type_id}: {field} must be a list"
+            assert value, f"{app_type_id}: {field} must be non-empty"
+
+        conflict_policy = app.get("conflict_policy")
+        assert isinstance(conflict_policy, dict), (
+            f"{app_type_id}: conflict_policy must be a mapping"
+        )
+        for key in WAVE_1_CONFLICT_POLICY_KEYS:
+            assert key in conflict_policy, f"{app_type_id}: missing conflict_policy.{key}"
+            assert conflict_policy[key] is True, (
+                f"{app_type_id}: conflict_policy.{key} must be true"
+            )
 
 
 class TestBrokenFixtures:

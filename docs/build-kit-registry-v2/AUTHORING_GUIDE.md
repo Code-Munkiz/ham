@@ -39,6 +39,7 @@ Do **not** use this guide to:
 | **No starter source files** | Never add game code, scene files, or “example implementations” to the repo as part of recipe authoring. |
 | **No template cloning** | Do not check in copy-paste React components “for reference.” Use `non_template_statement` on every module. |
 | **Recipe ≠ routing** | Adding a recipe to the pack does **not** route user prompts to it. Routing is a separate, reviewed phase. |
+| **Adaptive precedence** | User prompt = source of truth; Build Kit = expert playbook. See §7.1 for hard/soft defaults and core-loop conflict rules. |
 | **Routing needs approval** | Prompt → `registry_v2_app_type` mapping lives in `src/ham/build_registry/intent.py` (or future equivalents) and requires explicit scope + tests. |
 | **Validators/recovery are conceptual** | `runner: conceptual` modules document future checks/repairs. They do not run in production unless separately wired. |
 | **Default behavior unchanged** | `HAM_BUILD_REGISTRY_V2_ENABLED` stays off by default. v1 Builder Kits remain the production fallback unless a dedicated task opts in. |
@@ -142,6 +143,12 @@ Every `app-types/*.yaml` should include at minimum:
 | `legacy_v1_fallback` | v1 kit id for strangler fallback (e.g. `generic`) |
 | `stack_kit_id` | Must resolve in pack (usually `stack.dom-game-minimal`) |
 | `safety_constraints` | Non-empty list (network, eval, accounts, etc.) |
+| `hard_constraints` | Non-negotiable bounds; override user requests when safety requires |
+| `soft_defaults` | Recipe MVP defaults the user may override when safe |
+| `user_overridable` | Fields users can safely change without leaving the archetype |
+| `clarify_if_changed` | Core-loop changes that should trigger clarification or plan notes |
+| `out_of_scope_unless_explicit` | MVP exclusions that become valid only if the user explicitly asks |
+| `conflict_policy` | Structured precedence rules (see §7.1) |
 | `composed_modules` | Lists of mechanic, contract, validator, recovery ids + scalar progress/learning |
 | `build_phases` | Ordered phases with unique `id` and `order`; optional `phase.recover` |
 | `acceptance_criteria` | Testable outcomes for the generated app |
@@ -150,6 +157,49 @@ Every `app-types/*.yaml` should include at minimum:
 Recommended extras: `guidance`, `default_assumptions`, `user_prompt_examples`, `intent_signals` (for future routing design — not auto-wired).
 
 **Progress labels:** `progress_label.source_phase_owner` must equal your app type id; `phase_message_map` keys must match `build_phases[].id` exactly.
+
+### 7.1 Adaptive policy — hard constraints vs soft defaults
+
+**Canonical precedence:**
+
+| Principle | Meaning |
+|-----------|---------|
+| **User prompt = source of truth** | The operator's request wins when it is safe and archetype-compatible. |
+| **Build Kit = expert playbook** | Recipes guide HAM; they do not dominate user intent. |
+| **Hard constraints = non-negotiable** | Safety and MVP bounds override user phrasing when required. |
+| **Soft defaults = safely overridable** | Recipe-shaped defaults yield to explicit user choices when safe. |
+| **Core-loop conflicts = clarify or plan explicitly** | Contradictions trigger a clarifying question or an explicit plan note — not silent substitution. |
+
+Build Kits are **adaptive playbooks**, not rigid cages. App types should distinguish what HAM must preserve from what the user's prompt may override.
+
+| Field | Role |
+|-------|------|
+| **`hard_constraints`** | Non-negotiable bounds (no template cloning, no real-money economy, no external API for MVP unless explicitly requested elsewhere). Safety wins over user phrasing. |
+| **`soft_defaults`** | Recipe-shaped MVP defaults (e.g. 5-letter word, 6 attempts, localStorage save). **User prompts override soft defaults when safe.** |
+| **`user_overridable`** | Explicit list of knobs users may change without breaking the archetype (theme, timer seconds, board size, copy tone). |
+| **`clarify_if_changed`** | Core-loop contradictions (remove letter feedback, remove choices, replace memory match with card battler) — planner/scaffold should ask or note conflict. |
+| **`out_of_scope_unless_explicit`** | Items excluded from MVP unless the user **explicitly** requests them (accounts, leaderboards, live APIs, runtime AI generation). |
+| **`conflict_policy`** | Structured precedence flags (all Wave 1 recipes use the same five booleans below). |
+
+**Conflict policy (Wave 1 standard):**
+
+```yaml
+conflict_policy:
+  user_explicit_overrides_soft_defaults: true
+  safety_constraints_override_user_request: true
+  core_loop_conflicts_require_clarification: true
+  out_of_scope_items_require_explicit_request: true
+  fallback_to_v1_or_generic_when_recipe_no_longer_fits: true
+```
+
+**Authoring rules:**
+
+- **User prompt is the source of truth** when safe; the Build Kit is an **expert playbook**, not a cage.
+- **Hard constraints are non-negotiable**; **soft defaults are safely overridable** by explicit user intent.
+- **Core-loop conflicts require clarification or an explicit plan note** — not silent substitution.
+- **Routing remains separate** from these fields. Adaptive policy shapes generative guidance; `intent.py` routing is unchanged unless explicitly approved.
+
+**Runtime note:** These fields are schema/documentation today. No runtime interpreter consumes them yet — do not claim live compatibility checking without a separate wiring task.
 
 ---
 

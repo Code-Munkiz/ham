@@ -85,6 +85,56 @@ default_assumptions:
   - "DOM/React UI; no canvas engine unless user explicitly requests it"
   - "Mobile-friendly layout at 360px width"
 
+hard_constraints:
+  - no-real-money-economy
+  - no-template-cloning
+  - no-runtime-llm-generation-for-mvp
+  - no-external-api-for-mvp
+  - no-user-secrets-or-credentials
+  - preserve-safe-local-mvp-scope
+  - static-story-data-for-mvp
+
+soft_defaults:
+  - static in-memory story node graph
+  - explicit choice cards per scene
+  - explicit ending nodes (two to four endings)
+  - lightweight story flags; optional inventory-lite
+  - no live LLM story continuation in MVP
+
+user_overridable:
+  - theme, genre, and copy tone
+  - story genre (mystery, fantasy, sci-fi, etc.)
+  - number of story nodes and endings
+  - inventory on or off
+  - character and scene names
+  - flag names used in branching logic
+
+clarify_if_changed:
+  - removing player choices or branching
+  - requiring live AI story generation at runtime
+  - replacing static graph with open-ended chatbot
+  - adding multiplayer roleplay or shared sessions
+  - removing ending nodes or win/loss resolution
+  - converting to linear blog or article reader
+
+out_of_scope_unless_explicit:
+  - live AI-generated story continuation
+  - procedural infinite story generation
+  - user accounts or cloud sync
+  - global publishing or UGC marketplace
+  - visual novel asset pipeline (sprites, CG backgrounds)
+  - multiplayer roleplay sessions
+  - external story APIs
+  - Web3 or token rewards
+  - payments or real-money outcomes
+
+conflict_policy:
+  user_explicit_overrides_soft_defaults: true
+  safety_constraints_override_user_request: true
+  core_loop_conflicts_require_clarification: true
+  out_of_scope_items_require_explicit_request: true
+  fallback_to_v1_or_generic_when_recipe_no_longer_fits: true
+
 stack_kit_id: stack.dom-game-minimal
 
 compose_order_ref: pack.game#compose_defaults.compose_order

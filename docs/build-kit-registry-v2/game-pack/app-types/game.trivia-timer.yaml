@@ -85,6 +85,55 @@ default_assumptions:
   - "DOM/React UI; no canvas engine unless user explicitly requests it"
   - "Mobile-friendly layout at 360px width"
 
+hard_constraints:
+  - no-real-money-economy
+  - no-template-cloning
+  - no-runtime-llm-generation-for-mvp
+  - no-external-api-for-mvp
+  - no-user-secrets-or-credentials
+  - preserve-safe-local-mvp-scope
+  - static-question-data-for-mvp
+
+soft_defaults:
+  - static in-memory question set themed from user prompt
+  - multiple-choice answers (typically four options)
+  - per-question countdown timer
+  - deterministic score (+points per correct answer)
+  - final results summary screen after last question
+
+user_overridable:
+  - theme and copy tone
+  - question topic and difficulty tone
+  - question count
+  - timer seconds per question
+  - scoring policy (points per correct, optional speed bonus)
+  - number of answer choices per question
+
+clarify_if_changed:
+  - removing answer feedback or score updates
+  - removing scoring entirely
+  - replacing timed quiz with survey or form flow
+  - adding live question API or runtime LLM generation
+  - removing timer when timed quiz is implied
+  - converting to flashcard study mode without game signals
+
+out_of_scope_unless_explicit:
+  - live trivia API or runtime question generation
+  - user accounts or cloud sync
+  - global leaderboards
+  - multiplayer or real-time rooms
+  - user-generated question editor
+  - payments or real-money prizes
+  - Web3 or token rewards
+  - social sharing integrations
+
+conflict_policy:
+  user_explicit_overrides_soft_defaults: true
+  safety_constraints_override_user_request: true
+  core_loop_conflicts_require_clarification: true
+  out_of_scope_items_require_explicit_request: true
+  fallback_to_v1_or_generic_when_recipe_no_longer_fits: true
+
 stack_kit_id: stack.dom-game-minimal
 
 compose_order_ref: pack.game#compose_defaults.compose_order

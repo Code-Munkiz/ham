@@ -38,6 +38,7 @@ HAM still **does not clone templates or starter source files**. Recipes are gene
 - **Routing can remain feature-flagged and narrow** — v2 only applies when `HAM_BUILD_REGISTRY_V2_ENABLED` is truthy **and** intent matches.
 - **v1 fallback is available as a safety net** — every app type declares `legacy_v1_fallback: generic`; compose/render failures fall back silently.
 - **Authoring and routing are separate lanes** — recipes landed schema-only first; routing was added one recipe at a time with explicit approval and tests.
+- **Adaptive policy fields** — Wave 1 app types now distinguish hard constraints, soft defaults, user-overridable knobs, clarification triggers, and conflict policy (documentation only until a runtime interpreter lands).
 - **The Game Pack covers different browser-game patterns** — economy loops, timed quizzes, narrative graphs, card grids, and word-guess feedback are distinct mechanic graphs, not one monolithic “game kit.”
 
 ---
