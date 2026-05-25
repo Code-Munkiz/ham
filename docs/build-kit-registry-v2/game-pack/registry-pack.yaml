@@ -9,7 +9,7 @@ description: >
   Root manifest for the Build Kit Registry v2 Game Pack schema pilot. Indexes all
   proposed modules for DOM-native casual games, starting with game.idle-incremental,
   game.trivia-timer, game.branching-narrative, game.memory-match, game.word-daily,
-  and game.daily-puzzle-grid (Wave 2 schema-only).
+  game.daily-puzzle-grid, and game.resource-management-sim (Wave 2 schema-only).
   Used for cross-reference validation and future composer defaults — not loaded by HAM
   at runtime today.
 
@@ -26,6 +26,7 @@ module_index:
     - game.memory-match
     - game.word-daily
     - game.daily-puzzle-grid
+    - game.resource-management-sim
   stack_kits:
     - stack.dom-game-minimal
   mechanics:
@@ -62,6 +63,14 @@ module_index:
     - mechanic.mistake-tracking
     - mechanic.hint-system-lite
     - mechanic.completion-check
+    - mechanic.resource-pool
+    - mechanic.capacity-limit
+    - mechanic.production-chain
+    - mechanic.allocation-decision
+    - mechanic.turn-or-tick-loop
+    - mechanic.upgrade-path
+    - mechanic.event-modifier
+    - mechanic.goal-and-failure-state
   component_contracts:
     - component.game-shell
     - component.resource-counter
@@ -92,6 +101,12 @@ module_index:
     - component.puzzle-status-bar
     - component.hint-button
     - component.completion-modal
+    - component.resource-dashboard
+    - component.allocation-control
+    - component.production-panel
+    - component.upgrade-panel
+    - component.event-log
+    - component.goal-status
   validators:
     - validator.no-negative-currency
     - validator.passive-income-tick
@@ -114,6 +129,12 @@ module_index:
     - validator.cell-state-transitions
     - validator.puzzle-seed-stability
     - validator.completion-detection
+    - validator.no-negative-resources
+    - validator.production-chain-consistency
+    - validator.allocation-bounds
+    - validator.capacity-limit-enforcement
+    - validator.goal-state-detection
+    - validator.tick-loop-stability
   recovery_playbooks:
     - recovery.stale-interval-or-bad-tick-loop
     - recovery.invalid-local-storage-json
@@ -131,6 +152,10 @@ module_index:
     - recovery.inconsistent-constraint-rules
     - recovery.unstable-puzzle-seed
     - recovery.bad-completion-check
+    - recovery.broken-resource-accounting
+    - recovery.invalid-production-chain
+    - recovery.runaway-tick-loop
+    - recovery.unreachable-goal-state
   progress_labels:
     - progress.idle-incremental
     - progress.trivia-timer
@@ -138,6 +163,7 @@ module_index:
     - progress.memory-match
     - progress.word-daily
     - progress.daily-puzzle-grid
+    - progress.resource-management-sim
   learning_hooks:
     - learning.idle-incremental
     - learning.trivia-timer
@@ -145,6 +171,7 @@ module_index:
     - learning.memory-match
     - learning.word-daily
     - learning.daily-puzzle-grid
+    - learning.resource-management-sim
 
 compose_defaults:
   compose_order:
@@ -157,7 +184,7 @@ compose_defaults:
     - validators
     - recovery
     - progress
-  max_modules: 24
+  max_modules: 26
   default_stack_kit_id: stack.dom-game-minimal
   validator_policy:
     run_after: [scaffold, economy_edit]

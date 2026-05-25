@@ -1,0 +1,71 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.goal-and-failure-state
+kind: mechanic
+name: Goal and failure state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Defines win and optional failure conditions from resource thresholds, turn limits,
+  or production targets. Pauses sim loop when terminal state reached.
+
+non_template_statement: >
+  Terminal state guidance only. Not a victory screen asset file.
+
+applies_to:
+  - game.resource-management-sim
+  - tag:resource-management-sim
+
+depends_on:
+  - mechanic.event-modifier
+  - mechanic.resource-pool
+  - mechanic.turn-or-tick-loop
+
+provides:
+  - terminal_state
+
+binds_components:
+  - component.goal-status
+
+inputs:
+  - win_condition: object — e.g. resourceId + target quantity
+  - failure_conditions: array — optional turn limit, depleted resource
+  - show_summary_on_terminal: boolean — default true
+
+outputs:
+  - phase: playing | won | lost
+  - terminalReason: string | null
+
+guidance:
+  - "At least one explicit win condition for MVP"
+  - "Check after each turn/tick advance"
+  - "Pause loop and show goal-status on terminal"
+  - "Failure optional — clarify with user if removed"
+
+validation_notes:
+  - validator.goal-state-detection
+
+risk_notes:
+  - Win triggers before goal reachable in test sims
+
+state_model:
+  fields:
+    - name: phase
+      type: string
+    - name: terminalReason
+      type: string
+  events:
+    - evaluate_goals
+    - reset_terminal
+
+common_failure_modes:
+  - "Win never fires when threshold met"
+  - "Sim continues after terminal phase"
+
+test_ideas:
+  - "Reach target quantity sets phase won"
+  - "Turn limit sets phase lost when configured"
+
+reusable_across:
+  - game.resource-management-sim

@@ -1,0 +1,224 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: game.resource-management-sim
+kind: app_type
+name: Resource management simulation game
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  A browser-based resource-management simulation where the player allocates limited
+  resources, makes tradeoffs, produces outputs over turns or slow ticks, upgrades
+  capacity, and reaches explicit win or failure states. Uses static in-memory sim
+  definitions for MVP. Output is always custom-generated from the user prompt plus
+  composed playbook modules — never cloned from a starter project.
+
+non_template_statement: >
+  This app type does not reference checked-in sim presets, economy APIs, or clone
+  baselines. It defines generative guidance only.
+
+legacy_v1_fallback: generic
+
+safety_constraints:
+  - no-network-egress-for-mvp
+  - no-eval
+  - no-user-accounts-for-mvp
+  - no-multiplayer-for-mvp
+  - static-sim-data-for-mvp
+  - no-external-economy-api-for-mvp
+  - no-real-money-economy
+  - dom-native-ui-only-for-mvp
+
+applies_to:
+  - tag:resource-management-sim
+  - tag:dom-casual-game
+
+inputs:
+  - user_prompt: natural language theme for resource names and UI copy
+  - optional_resource_count: number of resources (default 2–4)
+  - optional_tick_mode: turn | slow_tick (default turn)
+
+outputs:
+  - runnable_vite_react_app: single-page DOM resource sim game
+  - composed_build_recipe: ids of mechanics, contracts, validators, recovery modules
+  - normie_plan_summary: phased build description for chat/activity stream
+
+guidance:
+  - "React state; static resource and production definitions embedded in source"
+  - "2–4 named resources with explicit quantities and capacity limits"
+  - "Production chains as data; allocation shows visible tradeoffs"
+  - "Turn-based or slow tick loop; deterministic for MVP"
+  - "Explicit win and failure states; optional bounded events"
+  - "DOM/React only; no Canvas or external economy API"
+
+validation_notes:
+  - Run composed validators after scaffold and tick/allocation edits
+  - Preview must boot without console errors before success copy
+
+risk_notes:
+  - Runaway tick loops corrupt resource balances
+  - Production chain data inconsistent with capacity limits
+  - Goal state never reachable with default parameters
+
+user_prompt_examples:
+  - "Build a resource management sim with wood, stone, and food"
+  - "Make a turn-based colony sim where I allocate workers to production"
+  - "Create a lightweight factory sim with upgrades and capacity limits"
+  - "Build a browser game where I trade resources to reach a production goal"
+
+intent_signals:
+  - "\\b(resource\\s+management|management\\s+sim|colony\\s+sim)\\b"
+  - "\\b(allocate\\s+resources|production\\s+chain|capacity\\s+limit)\\b"
+  - "\\b(turn[- ]based\\s+sim|factory\\s+sim|economy\\s+sim)\\b"
+
+clarifying_questions:
+  - when: intent_confidence_low
+    ask: "How many resources and what theme — for example wood/stone/food in a colony?"
+  - when: tick_mode_ambiguous
+    ask: "Turn-based discrete steps or a slow automatic tick loop?"
+  - when: goal_ambiguous
+    ask: "What is the win condition — reach a target amount, survive N turns, or complete a build?"
+
+default_assumptions:
+  - "2–4 resources with starting quantities and capacity caps"
+  - "Turn-based loop by default; optional slow tick"
+  - "Small upgrade set affecting rates or capacity"
+  - "One clear win condition and optional failure condition"
+  - "DOM/React UI; mobile-friendly at 360px width"
+
+hard_constraints:
+  - no-real-money-economy
+  - no-template-cloning
+  - no-runtime-llm-generation-for-mvp
+  - no-external-api-for-mvp
+  - no-user-secrets-or-credentials
+  - preserve-safe-local-mvp-scope
+  - static-sim-data-for-mvp
+  - dom-native-ui-only-for-mvp
+
+soft_defaults:
+  - two to four resources
+  - local-only session state
+  - deterministic turn or slow tick loop
+  - small upgrade set
+  - one clear win condition
+  - bounded optional random events
+
+user_overridable:
+  - theme and copy tone
+  - resource names and starting quantities
+  - production rates and chain definitions
+  - tick interval or turn-based mode
+  - upgrade names and effects
+  - goal threshold and failure conditions
+  - event frequency when events enabled
+
+clarify_if_changed:
+  - adding live economy or market price APIs
+  - requiring multiplayer economy
+  - requiring backend persistence or accounts
+  - removing explicit goal or failure state
+  - adding real-money rewards
+  - converting into a dashboard rather than a playable sim
+
+out_of_scope_unless_explicit:
+  - user accounts or cloud sync
+  - backend save sync
+  - global leaderboards
+  - multiplayer or real-time economy
+  - external economy or market APIs
+  - live market data
+  - AI-generated runtime events
+  - Web3 or token rewards
+  - payments or monetized prizes
+
+conflict_policy:
+  user_explicit_overrides_soft_defaults: true
+  safety_constraints_override_user_request: true
+  core_loop_conflicts_require_clarification: true
+  out_of_scope_items_require_explicit_request: true
+  fallback_to_v1_or_generic_when_recipe_no_longer_fits: true
+
+stack_kit_id: stack.dom-game-minimal
+
+compose_order_ref: pack.game#compose_defaults.compose_order
+
+composed_modules:
+  stack_kit_id: stack.dom-game-minimal
+  mechanics:
+    - mechanic.resource-pool
+    - mechanic.capacity-limit
+    - mechanic.production-chain
+    - mechanic.allocation-decision
+    - mechanic.turn-or-tick-loop
+    - mechanic.upgrade-path
+    - mechanic.event-modifier
+    - mechanic.goal-and-failure-state
+  component_contracts:
+    - component.game-shell
+    - component.resource-dashboard
+    - component.allocation-control
+    - component.production-panel
+    - component.upgrade-panel
+    - component.event-log
+    - component.goal-status
+  validators:
+    - validator.no-negative-resources
+    - validator.production-chain-consistency
+    - validator.allocation-bounds
+    - validator.capacity-limit-enforcement
+    - validator.tick-loop-stability
+    - validator.goal-state-detection
+  recovery_playbooks:
+    - recovery.broken-resource-accounting
+    - recovery.invalid-production-chain
+    - recovery.runaway-tick-loop
+    - recovery.unreachable-goal-state
+  progress_labels: progress.resource-management-sim
+  learning_hooks: learning.resource-management-sim
+
+build_phases:
+  - id: phase.understand
+    title: Understand the resource sim idea
+    order: 1
+    modules_used: [app_type]
+  - id: phase.compose
+    title: Compose mechanics and UI contracts
+    order: 2
+    modules_used: [mechanics, component_contracts]
+  - id: phase.generate
+    title: Generate custom resource sim code
+    order: 3
+    modules_used: [stack_kit_id, guidance]
+  - id: phase.validate
+    title: Check resources, production, and goals
+    order: 4
+    modules_used: [validators]
+  - id: phase.preview
+    title: Prepare Workbench preview
+    order: 5
+    modules_used: []
+  - id: phase.recover
+    title: Fix known failure modes if needed
+    order: 6
+    optional: true
+    modules_used: [recovery_playbooks]
+
+acceptance_criteria:
+  - "Game loads in preview without runtime console errors"
+  - "Player can allocate resources and advance turns or ticks"
+  - "Production chains apply according to data definitions"
+  - "Capacity limits enforced; no negative resource quantities"
+  - "Upgrades change rates, capacity, or unlock actions"
+  - "Win or failure state triggers at defined thresholds"
+  - "UI readable on mobile-width viewport"
+
+out_of_scope:
+  - Real-time multiplayer economy
+  - Live market prices or external economy APIs
+  - Backend persistence or user accounts
+  - Global leaderboards
+  - Complex 4X strategy or combat engines
+  - Canvas, Phaser, or physics engines
+  - AI-generated events at runtime
+  - Monetized prizes or Web3/token rewards

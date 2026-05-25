@@ -1,0 +1,59 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: progress.resource-management-sim
+kind: progress_label
+name: Resource management sim build progress
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Normie-friendly phase labels for chat and Workbench activity stream during a
+  resource management simulation Game Pack build.
+
+non_template_statement: >
+  Progress copy module only. Not emitted by runtime today.
+
+source_phase_owner: game.resource-management-sim
+
+applies_to:
+  - game.resource-management-sim
+
+inputs:
+  - current_phase_id: from game.resource-management-sim build_phases
+  - recovery_active: boolean
+
+outputs:
+  - activity_title: short string for feed
+  - activity_message: one sentence for feed or chat ack
+
+guidance:
+  - "Avoid internal words: scaffold, template_kind, OpenRouter, kit_id"
+  - "Use resource sim plain language"
+  - "Phase ids and order come from source_phase_owner build_phases only"
+
+validation_notes:
+  - Each mapped phase id exists on source_phase_owner build_phases
+  - Each phase has a unique normie message
+
+risk_notes:
+  - Over-long messages clutter activity stream
+
+phase_message_map:
+  phase.understand:
+    title: "Getting your resource sim idea"
+    message: "I'm turning your description into a resource management game plan."
+  phase.compose:
+    title: "Planning the sim pieces"
+    message: "I'm lining up resources, production, and allocation for your sim."
+  phase.generate:
+    title: "Building your resource sim"
+    message: "I'm creating the custom code for your management sim preview."
+  phase.validate:
+    title: "Checking the economy rules"
+    message: "I'm verifying resources, production chains, and win conditions."
+  phase.preview:
+    title: "Opening your sim preview"
+    message: "Your resource management sim is almost ready to play in preview."
+  phase.recover:
+    title: "Fixing a sim issue"
+    message: "I'm correcting a resource or production issue so the sim runs cleanly."

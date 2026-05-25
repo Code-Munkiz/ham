@@ -1,0 +1,71 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.allocation-decision
+kind: mechanic
+name: Allocation decisions
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Player assigns limited resources to actions, buildings, or production slots with
+  visible tradeoffs. Validates bounds before committing each allocation.
+
+non_template_statement: >
+  Allocation interaction guidance only. Not a preset action tree file.
+
+applies_to:
+  - game.resource-management-sim
+  - tag:resource-management-sim
+
+depends_on:
+  - mechanic.resource-pool
+  - mechanic.capacity-limit
+  - mechanic.production-chain
+
+provides:
+  - allocation_state
+
+binds_components:
+  - component.allocation-control
+
+inputs:
+  - allocation_slots: array — id, cost map, effect description
+  - max_per_turn: number | null
+
+outputs:
+  - allocations: map slotId to amount or boolean
+  - pendingCost: map resourceId to number
+
+guidance:
+  - "Show cost and effect before commit"
+  - "Reject allocation when pool insufficient or over max_per_turn"
+  - "Tradeoffs visible — spending A reduces ability to spend B"
+  - "Apply allocation on turn advance or explicit confirm"
+
+validation_notes:
+  - validator.allocation-bounds
+
+risk_notes:
+  - Double-submit spends resources twice
+
+state_model:
+  fields:
+    - name: allocations
+      type: object
+    - name: pendingCost
+      type: object
+  events:
+    - propose_allocation
+    - commit_allocation
+    - reset_allocations
+
+common_failure_modes:
+  - "Allocation exceeds available quantity"
+  - "Committed without capacity check"
+
+test_ideas:
+  - "Over-budget allocation rejected"
+  - "Valid allocation updates pool on commit"
+
+reusable_across:
+  - game.resource-management-sim

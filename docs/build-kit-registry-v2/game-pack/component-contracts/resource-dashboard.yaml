@@ -1,0 +1,41 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.resource-dashboard
+kind: component_contract
+name: Resource dashboard
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Summary panel showing each resource name, current quantity, and capacity usage.
+
+non_template_statement: >
+  UI contract only. Not a dashboard widget library.
+
+applies_to:
+  - game.resource-management-sim
+
+binds_mechanics:
+  - mechanic.resource-pool
+  - mechanic.capacity-limit
+
+required_props:
+  - resources: array of id, name, quantity, cap
+  - atCapacity: map resourceId to boolean
+
+optional_props:
+  - compact: boolean
+
+accessibility:
+  - "Each resource row has accessible name including quantity"
+  - "At-cap state announced or visually distinct"
+
+guidance:
+  - "Read-only summary; no hidden resource totals"
+  - "Show current / max when caps defined"
+
+validation_notes:
+  - All pool resource ids appear in dashboard
+
+risk_notes:
+  - Stale quantities if not wired to pool state

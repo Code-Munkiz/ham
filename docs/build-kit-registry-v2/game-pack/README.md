@@ -2,7 +2,7 @@
 
 **Status:** Non-runtime schema pilot only. **Schema version:** `0.1`
 
-This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: **`game.idle-incremental`**, **`game.trivia-timer`**, **`game.branching-narrative`**, **`game.memory-match`**, **`game.word-daily`**, and **`game.daily-puzzle-grid`** (Wave 2, schema-only).
+This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: **`game.idle-incremental`**, **`game.trivia-timer`**, **`game.branching-narrative`**, **`game.memory-match`**, **`game.word-daily`**, **`game.daily-puzzle-grid`**, and **`game.resource-management-sim`** (Wave 2 — schema-only, not routed).
 
 ## Root manifest
 
@@ -89,7 +89,7 @@ Use vocabulary: **module**, **playbook**, **contract**, **mechanic**. Avoid “t
 | **Distinct validators** | Duplicate-letter feedback, guess length/attempts, daily seed stability, keyboard guardrails — complementary to other recipes. |
 | **Explicit MVP bounds** | Static in-memory word list; date-based daily seed; no accounts, leaderboard, or live word API. |
 
-### `game.daily-puzzle-grid` (Wave 2 — schema-only, not routed)
+### `game.daily-puzzle-grid` (Wave 2)
 
 | Reason | Detail |
 |--------|--------|
@@ -98,6 +98,16 @@ Use vocabulary: **module**, **playbook**, **contract**, **mechanic**. Avoid “t
 | **Shared reuse** | Reuses `component.game-shell`, `stack.dom-game-minimal`. |
 | **Distinct mechanics** | Puzzle seed, grid state, constraint rules, cell interaction, mistake tracking, hints, completion check. |
 | **Explicit MVP bounds** | Static in-memory puzzle definitions; deterministic daily seed; no accounts, leaderboard, or live puzzle API. |
+
+### `game.resource-management-sim` (Wave 2 — schema-only, not routed)
+
+| Reason | Detail |
+|--------|--------|
+| **Seventh recipe shape** | Proves the pack supports turn/tick resource sims with allocation tradeoffs — distinct from idle clickers and grid puzzles. |
+| **DOM-native sim UI** | Resource dashboard, allocation controls, production panel, upgrades, event log, goal status — no Canvas or external economy API for MVP. |
+| **Shared reuse** | Reuses `component.game-shell`, `stack.dom-game-minimal`. Does not reuse idle `mechanic.economy` or `mechanic.score`. |
+| **Distinct mechanics** | Resource pool, capacity limits, production chains, allocation decisions, turn/tick loop, upgrades, bounded events, goal/failure state. |
+| **Explicit MVP bounds** | Static in-memory sim data; 2–4 resources; local-only state; no accounts, multiplayer economy, or live market APIs. |
 | **Routing** | Schema-only — not routed behind `HAM_BUILD_REGISTRY_V2_ENABLED` until explicitly approved. |
 
 ## Pilot module layout
@@ -113,13 +123,14 @@ docs/build-kit-registry-v2/game-pack/
   app-types/game.memory-match.yaml
   app-types/game.word-daily.yaml
   app-types/game.daily-puzzle-grid.yaml
+  app-types/game.resource-management-sim.yaml
   stack-kits/dom-game-minimal.yaml
-  mechanics/{score,economy,upgrades,save-load,question-set,timer,answer-validation,progression,story-node-graph,story-flags,inventory-lite,choice-resolution,ending-resolution,card-pair-set,card-flip-state,interaction-lock,match-detection,move-counter,victory-detection,word-target,daily-seed,guess-grid,keyboard-input,letter-feedback,attempt-limit,win-loss-state,puzzle-seed,grid-state,constraint-rules,cell-interaction,mistake-tracking,hint-system-lite,completion-check}.yaml
-  component-contracts/{game-shell,resource-counter,upgrade-card,save-status,question-card,choice-list,timer-display,results-summary,story-panel,choice-card,story-state-summary,inventory-panel,ending-screen,card-grid,memory-card,move-counter,match-progress,victory-screen,word-grid,guess-row,letter-tile,on-screen-keyboard,word-result-panel,puzzle-grid,grid-cell,rule-panel,puzzle-status-bar,hint-button,completion-modal}.yaml
-  validators/{no-negative-currency,passive-income-tick,local-storage-roundtrip,timer-cleanup,score-calculation,question-progression,story-graph-reachability,no-dead-end-choice,story-state-consistency,card-pair-integrity,flip-lock-prevents-third-card,match-completion,duplicate-letter-feedback,guess-length-and-attempts,daily-seed-stability,keyboard-input-guardrails,grid-dimensions,constraint-consistency,cell-state-transitions,puzzle-seed-stability,completion-detection}.yaml
-  recovery-playbooks/{stale-interval-or-bad-tick-loop,invalid-local-storage-json,stale-timer-or-uncleared-timeout,broken-question-progression,broken-story-graph,inconsistent-story-state,broken-card-flip-state,mismatched-card-pairs,stuck-interaction-lock,broken-duplicate-letter-feedback,unstable-daily-seed,invalid-guess-state,broken-grid-state,inconsistent-constraint-rules,unstable-puzzle-seed,bad-completion-check}.yaml
-  progress-labels/{idle-incremental,trivia-timer,branching-narrative,memory-match,word-daily,daily-puzzle-grid}.yaml
-  learning-hooks/{idle-incremental,trivia-timer,branching-narrative,memory-match,word-daily,daily-puzzle-grid}.yaml
+  mechanics/{score,economy,upgrades,save-load,question-set,timer,answer-validation,progression,story-node-graph,story-flags,inventory-lite,choice-resolution,ending-resolution,card-pair-set,card-flip-state,interaction-lock,match-detection,move-counter,victory-detection,word-target,daily-seed,guess-grid,keyboard-input,letter-feedback,attempt-limit,win-loss-state,puzzle-seed,grid-state,constraint-rules,cell-interaction,mistake-tracking,hint-system-lite,completion-check,resource-pool,capacity-limit,production-chain,allocation-decision,turn-or-tick-loop,upgrade-path,event-modifier,goal-and-failure-state}.yaml
+  component-contracts/{game-shell,resource-counter,upgrade-card,save-status,question-card,choice-list,timer-display,results-summary,story-panel,choice-card,story-state-summary,inventory-panel,ending-screen,card-grid,memory-card,move-counter,match-progress,victory-screen,word-grid,guess-row,letter-tile,on-screen-keyboard,word-result-panel,puzzle-grid,grid-cell,rule-panel,puzzle-status-bar,hint-button,completion-modal,resource-dashboard,allocation-control,production-panel,upgrade-panel,event-log,goal-status}.yaml
+  validators/{no-negative-currency,passive-income-tick,local-storage-roundtrip,timer-cleanup,score-calculation,question-progression,story-graph-reachability,no-dead-end-choice,story-state-consistency,card-pair-integrity,flip-lock-prevents-third-card,match-completion,duplicate-letter-feedback,guess-length-and-attempts,daily-seed-stability,keyboard-input-guardrails,grid-dimensions,constraint-consistency,cell-state-transitions,puzzle-seed-stability,completion-detection,no-negative-resources,production-chain-consistency,allocation-bounds,capacity-limit-enforcement,goal-state-detection,tick-loop-stability}.yaml
+  recovery-playbooks/{stale-interval-or-bad-tick-loop,invalid-local-storage-json,stale-timer-or-uncleared-timeout,broken-question-progression,broken-story-graph,inconsistent-story-state,broken-card-flip-state,mismatched-card-pairs,stuck-interaction-lock,broken-duplicate-letter-feedback,unstable-daily-seed,invalid-guess-state,broken-grid-state,inconsistent-constraint-rules,unstable-puzzle-seed,bad-completion-check,broken-resource-accounting,invalid-production-chain,runaway-tick-loop,unreachable-goal-state}.yaml
+  progress-labels/{idle-incremental,trivia-timer,branching-narrative,memory-match,word-daily,daily-puzzle-grid,resource-management-sim}.yaml
+  learning-hooks/{idle-incremental,trivia-timer,branching-narrative,memory-match,word-daily,daily-puzzle-grid,resource-management-sim}.yaml
 ```
 
 ## Conceptual composition example
@@ -226,6 +237,25 @@ validators:   validator.grid-dimensions, validator.constraint-consistency, valid
 recovery:     recovery.broken-grid-state, recovery.inconsistent-constraint-rules, recovery.unstable-puzzle-seed, recovery.bad-completion-check
 progress:     progress.daily-puzzle-grid
 learning:     learning.daily-puzzle-grid
+```
+
+**Note:** This recipe is **schema-only** today — not routed until explicitly approved.
+
+### Conceptual composition — `game.resource-management-sim`
+
+When a user says *“Build a turn-based resource management sim where I allocate wood and stone to production”*, a **future** composer would assemble:
+
+```txt
+registry_pack: pack.game
+schema_version: 0.1
+app_type:     game.resource-management-sim
+stack_kit:    stack.dom-game-minimal
+mechanics:    mechanic.resource-pool → mechanic.capacity-limit → mechanic.production-chain → mechanic.allocation-decision → mechanic.turn-or-tick-loop → mechanic.upgrade-path → mechanic.event-modifier → mechanic.goal-and-failure-state
+contracts:    component.game-shell, component.resource-dashboard, component.allocation-control, component.production-panel, component.upgrade-panel, component.event-log, component.goal-status
+validators:   validator.no-negative-resources, validator.production-chain-consistency, validator.allocation-bounds, validator.capacity-limit-enforcement, validator.tick-loop-stability, validator.goal-state-detection
+recovery:     recovery.broken-resource-accounting, recovery.invalid-production-chain, recovery.runaway-tick-loop, recovery.unreachable-goal-state
+progress:     progress.resource-management-sim
+learning:     learning.resource-management-sim
 ```
 
 **Note:** This recipe is **schema-only** today — not routed until explicitly approved.

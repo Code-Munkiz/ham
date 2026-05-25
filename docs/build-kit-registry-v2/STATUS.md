@@ -7,8 +7,8 @@ Practical snapshot of where Build Kit Registry v2 stands. For authoring rules se
 ## 1. Current status
 
 - **Build Registry v2 exists and is tested** — loader, composer, renderer, opt-in scaffold wiring, and narrow prompt routing are in place.
-- **Game Pack has six recipes** — **118 indexed modules** total.
-- **All six current Game Pack recipes are narrowly routable** behind `HAM_BUILD_REGISTRY_V2_ENABLED` when prompt intent clearly matches idle/incremental/clicker/tycoon, timed trivia/quiz game, branching/choice/story, memory card matching, daily word guessing / Wordle-style patterns, or daily/grid/logic puzzle patterns. **Wave 1 is complete** from schema + routing perspective; **Wave 2 has started** with **`game.daily-puzzle-grid`** (schema + routing complete).
+- **Game Pack has seven recipes** — **145 indexed modules** total.
+- **Six current Game Pack recipes are narrowly routable** behind `HAM_BUILD_REGISTRY_V2_ENABLED` when prompt intent clearly matches idle/incremental/clicker/tycoon, timed trivia/quiz game, branching/choice/story, memory card matching, daily word guessing / Wordle-style patterns, or daily/grid/logic puzzle patterns. **Wave 1 is complete** from schema + routing perspective; **Wave 2 is in progress** — **`game.daily-puzzle-grid`** (schema + routing complete), **`game.resource-management-sim`** (schema-only, not routed).
 - **Default behavior remains v1** — when the flag is unset or false, Lane A uses existing Builder Kit JSON (`src/ham/data/builder_kits/`).
 - **No templates or starter source files** — recipes are generative playbooks only; HAM does not clone checked-in starter trees per kit.
 - **Adaptive policy fields on all Wave 1 app types** — `hard_constraints`, `soft_defaults`, `user_overridable`, `clarify_if_changed`, `out_of_scope_unless_explicit`, and `conflict_policy` document override precedence (schema only; not interpreted at runtime yet).
@@ -21,11 +21,11 @@ Practical snapshot of where Build Kit Registry v2 stands. For authoring rules se
 |-------|----------|
 | **ADRs** | [0016](../adr/0016-generative-build-kit-registry-v2.md) (registry design), [0017](../adr/0017-build-registry-v2-opt-in-scaffold-wiring.md) (opt-in scaffold wiring), [0018](../adr/0018-build-kit-evolution-loop-with-hermes.md) (future Hermes evolution loop) |
 | **Authoring Guide** | [AUTHORING_GUIDE.md](AUTHORING_GUIDE.md) |
-| **Game Pack** | [game-pack/](game-pack/) — **6 recipes** (all routed when flag on), **118 modules** |
+| **Game Pack** | [game-pack/](game-pack/) — **7 recipes** (6 routed when flag on, 1 schema-only), **145 modules** |
 | **Outcome facts / evolution loop docs** | [OUTCOME_FACTS.md](OUTCOME_FACTS.md), [examples/outcome-facts/](examples/outcome-facts/), [examples/hermes-critique-prompt.md](examples/hermes-critique-prompt.md) |
 | **Validation script** | `scripts/validate_game_pack_registry.py` |
 | **Internal package** | `src/ham/build_registry/` (`loader`, `validate`, `compose`, `render`, `scaffold_context`, `intent`) |
-| **Tests** | `tests/test_build_registry.py` (27 cases), `tests/test_build_registry_scaffold_context.py`, `tests/test_builder_llm_scaffold_registry_context.py`, `tests/test_builder_llm_scaffold_registry_manual_smoke.py`, `tests/test_build_registry_intent.py` |
+| **Tests** | `tests/test_build_registry.py` (42 cases), `tests/test_build_registry_scaffold_context.py`, `tests/test_builder_llm_scaffold_registry_context.py`, `tests/test_builder_llm_scaffold_registry_manual_smoke.py`, `tests/test_build_registry_intent.py` |
 | **CI** | `.github/workflows/ci.yml` — warning-only `pytest tests/test_build_registry.py` + idle app-type validation (`continue-on-error: true`) |
 
 ---
@@ -40,8 +40,9 @@ Practical snapshot of where Build Kit Registry v2 stands. For authoring rules se
 | `game.memory-match` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow memory card matching intent | ~10.0k chars | Conservative memory card / pair matching / flip-card routing; v1 fallback preserved |
 | `game.word-daily` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow daily word guessing / Wordle-style intent | ~10.9k chars | Conservative daily word / Wordle-style routing; generic “word game” excluded; v1 fallback preserved |
 | `game.daily-puzzle-grid` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow daily/grid/logic puzzle intent | ~11.4k chars | Conservative daily/grid/logic/cell/rule/clue routing; generic “grid”, “puzzle”, and “daily game” excluded; v1 fallback preserved |
+| `game.resource-management-sim` | Proposed (schema-only) | No | — | ~10.9k chars | Wave 2 resource sim; allocation, production chains, capacity, turn/tick loop; **not routed** until explicit approval |
 
-All six renders are under the 12k default budget.
+Six routed renders are under the 12k default budget. Resource-management-sim render is also under the 12k budget.
 
 ---
 

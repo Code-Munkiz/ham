@@ -1,0 +1,67 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.capacity-limit
+kind: mechanic
+name: Capacity limits
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Defines per-resource storage caps and enforces allocation/production cannot exceed
+  capacity unless explicitly consumed or transferred.
+
+non_template_statement: >
+  Capacity rule guidance only. Not hardcoded UI caps.
+
+applies_to:
+  - game.resource-management-sim
+  - tag:resource-management-sim
+
+depends_on:
+  - mechanic.resource-pool
+
+provides:
+  - capacity_limits
+
+binds_components:
+  - component.resource-dashboard
+
+inputs:
+  - caps: map resourceId to maxQuantity
+  - overflow_policy: block | waste — default block for MVP
+
+outputs:
+  - atCapacity: map resourceId to boolean
+
+guidance:
+  - "Explicit caps per resource in sim definition data"
+  - "Block gains that would exceed cap when overflow_policy is block"
+  - "Show cap usage in dashboard (current / max)"
+  - "Upgrades may raise caps via upgrade-path"
+
+validation_notes:
+  - validator.capacity-limit-enforcement
+
+risk_notes:
+  - Production grants ignore caps silently
+
+state_model:
+  fields:
+    - name: caps
+      type: object
+    - name: atCapacity
+      type: object
+  events:
+    - check_capacity
+    - raise_cap
+
+common_failure_modes:
+  - "Production pushes quantity above cap"
+  - "Cap undefined for resource in chain"
+
+test_ideas:
+  - "At-cap resource blocks further production gain"
+  - "Upgrade raises cap and allows more storage"
+
+reusable_across:
+  - game.resource-management-sim

@@ -1,0 +1,84 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.invalid-production-chain
+kind: recovery_playbook
+name: Fix invalid production chain
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs chain data that references unknown resources or fails to run in preview.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.resource-management-sim
+  - tag:resource-management-sim
+
+depends_on:
+  - mechanic.production-chain
+  - validator.production-chain-consistency
+
+repairs_validators:
+  - validator.production-chain-consistency
+
+inputs:
+  - failure_context: validator result
+  - current_source: sim definition data (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.production-chain-consistency
+
+guidance:
+  - "Keep chains in same data file as resources for MVP"
+
+validation_notes:
+  - Re-run production-chain-consistency after repair
+
+risk_notes:
+  - Typo in id breaks entire chain silently
+
+failure_signals:
+  - validator.production-chain-consistency fail
+  - Chains never run in preview
+
+diagnosis_steps:
+  - "List all resource ids in pool definition"
+  - "Compare chain input/output keys"
+  - "Check unique chain ids"
+
+steps:
+  - id: step.align_ids
+    action: align_ids
+    detail: "Align chain input/output keys to pool resource ids"
+  - id: step.positive_amounts
+    action: positive_amounts
+    detail: "Ensure all amounts are positive numbers"
+  - id: step.unique_chain_ids
+    action: unique_chain_ids
+    detail: "Deduplicate or rename conflicting chain ids"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.production-chain-consistency"
+
+repair_strategy:
+  - action: align_ids
+    detail: "Fix unknown resource references"
+  - action: positive_amounts
+    detail: "Normalize chain amounts"
+  - action: unique_chain_ids
+    detail: "Resolve duplicate ids"
+  - action: re_validate
+    target: validator.production-chain-consistency
+
+guardrails:
+  - max_attempts: 2
+  - do_not: "Add new resources without user theme alignment"
+  - preserve: "User-facing resource names"
+
+user_facing_summary: >
+  I fixed the production chain definitions so inputs and outputs match your resources.

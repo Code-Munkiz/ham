@@ -1,0 +1,66 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.upgrade-path
+kind: mechanic
+name: Upgrade path
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Small set of purchasable upgrades that modify production rates, capacity, or unlock
+  allocation slots. Costs paid from resource pool.
+
+non_template_statement: >
+  Upgrade tree guidance only. Not a balanced preset tree file.
+
+applies_to:
+  - game.resource-management-sim
+  - tag:resource-management-sim
+
+depends_on:
+  - mechanic.turn-or-tick-loop
+  - mechanic.resource-pool
+
+provides:
+  - upgrade_state
+
+binds_components:
+  - component.upgrade-panel
+
+inputs:
+  - upgrades: array — id, cost map, effect on rates/caps/slots
+  - max_level_per_upgrade: number — default 1 for MVP
+
+outputs:
+  - purchasedUpgrades: set of upgrade ids
+
+guidance:
+  - "Small upgrade set for MVP (3–6 items)"
+  - "Affordability check before purchase"
+  - "Effects apply to production-chain or capacity-limit data"
+  - "Disable purchases after win/failure"
+
+validation_notes:
+  - Cannot purchase when pool insufficient
+
+risk_notes:
+  - Upgrade effect not wired to production rates
+
+state_model:
+  fields:
+    - name: purchasedUpgrades
+      type: array
+  events:
+    - purchase_upgrade
+    - apply_upgrade_effects
+
+common_failure_modes:
+  - "Purchase allowed at zero balance"
+  - "Effect not applied to sim parameters"
+
+test_ideas:
+  - "Valid purchase deducts cost and applies effect"
+  - "Duplicate purchase blocked when max level 1"
+
+reusable_across:
+  - game.resource-management-sim

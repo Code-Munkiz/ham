@@ -1,0 +1,66 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.capacity-limit-enforcement
+kind: validator
+name: Capacity limit enforcement
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Ensures production and gains respect per-resource storage caps when overflow
+  policy is block.
+
+non_template_statement: >
+  Conceptual capacity check. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.resource-management-sim
+  - tag:resource-management-sim
+
+depends_on:
+  - mechanic.capacity-limit
+  - mechanic.production-chain
+
+validates_modules:
+  - mechanic.capacity-limit
+  - mechanic.production-chain
+  - component.resource-dashboard
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - caps: object
+  - pool: object
+  - overflow_policy: string
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "Every producible resource has a cap or explicit unlimited flag"
+  - "After production, quantity <= cap when overflow_policy is block"
+
+validation_notes:
+  - Fill resource to cap then run production
+
+risk_notes:
+  - Production grants ignore caps silently
+
+validation_goal: >
+  Storage caps are defined and enforced on resource gains.
+
+pass_conditions:
+  - "Quantity never exceeds cap under block policy"
+  - "Dashboard shows current / max"
+
+fail_conditions:
+  - "Production pushes quantity above cap"
+  - "Cap undefined for resource in chain"
+
+suggested_failure_message: >
+  A resource exceeded its storage cap. I'll enforce capacity limits on production gains.
+
+recovery_playbooks:
+  - recovery.broken-resource-accounting

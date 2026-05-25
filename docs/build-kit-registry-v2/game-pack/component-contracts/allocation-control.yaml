@@ -1,0 +1,42 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.allocation-control
+kind: component_contract
+name: Allocation control
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  UI for assigning resources to slots or actions with cost preview and confirm.
+
+non_template_statement: >
+  UI contract only. Not a form template file.
+
+applies_to:
+  - game.resource-management-sim
+
+binds_mechanics:
+  - mechanic.allocation-decision
+
+required_props:
+  - slots: array of id, label, cost, effectSummary
+  - allocations: map slotId to value
+  - onAllocate: callback
+  - canAfford: boolean or per-slot map
+
+optional_props:
+  - disabled: boolean
+
+accessibility:
+  - "Buttons have labels describing cost and effect"
+  - "Disabled state when cannot afford"
+
+guidance:
+  - "Show tradeoff before commit"
+  - "Disable or explain when over budget"
+
+validation_notes:
+  - validator.allocation-bounds
+
+risk_notes:
+  - Double-click commits twice

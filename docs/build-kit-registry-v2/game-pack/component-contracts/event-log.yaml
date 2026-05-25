@@ -1,0 +1,38 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.event-log
+kind: component_contract
+name: Event log
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Scrollable log of bounded simulation events with timestamp or turn number.
+
+non_template_statement: >
+  UI contract only. Not a chat transcript template.
+
+applies_to:
+  - game.resource-management-sim
+
+binds_mechanics:
+  - mechanic.event-modifier
+
+required_props:
+  - entries: array of turn, message, effectSummary
+
+optional_props:
+  - maxVisible: number
+
+accessibility:
+  - "Log region has aria-live polite when new entries added"
+
+guidance:
+  - "Hide or empty when events disabled"
+  - "Newest entries visible; cap list length"
+
+validation_notes:
+  - Entries match event-modifier log state
+
+risk_notes:
+  - Unbounded log growth in long sessions

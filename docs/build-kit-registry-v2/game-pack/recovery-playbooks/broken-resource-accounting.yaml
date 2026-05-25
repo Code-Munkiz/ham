@@ -1,0 +1,92 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.broken-resource-accounting
+kind: recovery_playbook
+name: Fix broken resource accounting
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs pool quantities that go negative, double-spend, or ignore capacity caps.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.resource-management-sim
+  - tag:resource-management-sim
+
+depends_on:
+  - mechanic.resource-pool
+  - mechanic.allocation-decision
+  - validator.no-negative-resources
+  - validator.allocation-bounds
+  - validator.capacity-limit-enforcement
+
+repairs_validators:
+  - validator.no-negative-resources
+  - validator.allocation-bounds
+  - validator.capacity-limit-enforcement
+
+inputs:
+  - failure_context: validator result or pool corruption report
+  - current_source: pool reducer and allocation handlers (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.no-negative-resources
+
+guidance:
+  - "Single source of truth for pool in React state"
+  - "Never mutate pool object in place"
+
+validation_notes:
+  - Re-run no-negative-resources after repair
+  - Max 2 repair attempts before honest failure
+
+risk_notes:
+  - Partial fixes leave race on double-click
+
+failure_signals:
+  - validator.no-negative-resources fail
+  - validator.allocation-bounds fail
+  - validator.capacity-limit-enforcement fail
+
+diagnosis_steps:
+  - "Trace pool updates for in-place mutation"
+  - "Verify spend guard before subtract"
+  - "Check production applies atomically"
+
+steps:
+  - id: step.immutable_pool
+    action: immutable_pool
+    detail: "Use immutable spread or functional reducer for pool updates"
+  - id: step.spend_guard
+    action: spend_guard
+    detail: "Check balance before subtract on allocation and production"
+  - id: step.atomic_production
+    action: atomic_production
+    detail: "Consume all inputs or none per chain step"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.no-negative-resources and capacity-limit-enforcement"
+
+repair_strategy:
+  - action: immutable_pool
+    detail: "Prevent stale reference bugs"
+  - action: spend_guard
+    detail: "Block over-spend"
+  - action: atomic_production
+    detail: "Keep pool consistent during production"
+  - action: re_validate
+    target: validator.no-negative-resources
+
+guardrails:
+  - max_attempts: 2
+  - do_not: "Reset user progress without consent"
+  - preserve: "Resource names and theme"
+
+user_facing_summary: >
+  I fixed resource accounting so spending and production stay within valid limits.

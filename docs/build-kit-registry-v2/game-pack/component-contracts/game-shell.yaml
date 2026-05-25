@@ -20,6 +20,7 @@ applies_to:
   - game.memory-match
   - game.word-daily
   - game.daily-puzzle-grid
+  - game.resource-management-sim
   - tag:dom-game-layout
 
 depends_on: []

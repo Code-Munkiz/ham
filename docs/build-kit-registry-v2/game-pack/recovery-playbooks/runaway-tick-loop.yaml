@@ -1,0 +1,84 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.runaway-tick-loop
+kind: recovery_playbook
+name: Fix runaway tick loop
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs multiple intervals, uncleared timers, or sim advances after terminal state.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.resource-management-sim
+  - tag:resource-management-sim
+
+depends_on:
+  - mechanic.turn-or-tick-loop
+  - validator.tick-loop-stability
+
+repairs_validators:
+  - validator.tick-loop-stability
+
+inputs:
+  - failure_context: validator result
+  - current_source: tick/turn effect hooks (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.tick-loop-stability
+
+guidance:
+  - "Prefer turn button for MVP to avoid interval bugs"
+
+validation_notes:
+  - Re-run tick-loop-stability after repair
+
+risk_notes:
+  - Strict mode double-mount can duplicate intervals without guard
+
+failure_signals:
+  - validator.tick-loop-stability fail
+  - Turn counter jumps rapidly
+
+diagnosis_steps:
+  - "Check interval ref and cleanup in useEffect"
+  - "Verify advance gated on phase === playing"
+  - "Count active intervals in slow_tick mode"
+
+steps:
+  - id: step.single_interval
+    action: single_interval
+    detail: "Store interval id in ref; do not start duplicate intervals"
+  - id: step.cleanup_unmount
+    action: cleanup_unmount
+    detail: "Clear interval in useEffect cleanup"
+  - id: step.pause_terminal
+    action: pause_terminal
+    detail: "Gate advance_turn on phase === playing"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.tick-loop-stability"
+
+repair_strategy:
+  - action: single_interval
+    detail: "Prevent duplicate schedulers"
+  - action: cleanup_unmount
+    detail: "Clear timers on unmount"
+  - action: pause_terminal
+    detail: "Stop loop at win/loss"
+  - action: re_validate
+    target: validator.tick-loop-stability
+
+guardrails:
+  - max_attempts: 2
+  - do_not: "Switch to realtime tick without user request"
+  - preserve: "Turn-based mode when user chose turns"
+
+user_facing_summary: >
+  I fixed the sim clock so turns advance once at a time and stop when you win or lose.

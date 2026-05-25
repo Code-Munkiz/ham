@@ -1,0 +1,65 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.production-chain-consistency
+kind: validator
+name: Production chain consistency
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Validates production chain definitions reference known resources and use positive
+  amounts with unique chain ids.
+
+non_template_statement: >
+  Conceptual chain check. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.resource-management-sim
+  - tag:resource-management-sim
+
+depends_on:
+  - mechanic.production-chain
+  - mechanic.resource-pool
+
+validates_modules:
+  - mechanic.production-chain
+  - component.production-panel
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - chains: array
+  - resource_ids: array
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "All input and output keys exist in resource pool definition"
+  - "Input and output amounts are positive numbers"
+  - "Every chain id is unique"
+
+validation_notes:
+  - Inspect sim definition data before preview
+
+risk_notes:
+  - Typo in resource id breaks entire chain
+
+validation_goal: >
+  Production chain data is internally consistent and references valid resources.
+
+pass_conditions:
+  - "All chain resource ids exist in pool"
+  - "Amounts positive and chain ids unique"
+
+fail_conditions:
+  - "Unknown resource id in chain"
+  - "Duplicate chain id or zero amount"
+
+suggested_failure_message: >
+  A production chain references an unknown resource. I'll align chain data with the pool.
+
+recovery_playbooks:
+  - recovery.invalid-production-chain

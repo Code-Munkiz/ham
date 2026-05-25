@@ -1,0 +1,87 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.unreachable-goal-state
+kind: recovery_playbook
+name: Fix unreachable goal state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs win conditions that never fire or failure triggers that fire incorrectly.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.resource-management-sim
+  - tag:resource-management-sim
+
+depends_on:
+  - mechanic.goal-and-failure-state
+  - validator.goal-state-detection
+
+repairs_validators:
+  - validator.goal-state-detection
+
+inputs:
+  - failure_context: validator result
+  - current_source: goal evaluation and loop pause hooks (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.goal-state-detection
+
+guidance:
+  - "Win threshold should be reachable with default starting state and one chain"
+
+validation_notes:
+  - Re-run goal-state-detection after repair
+
+risk_notes:
+  - Impossible win frustrates playtest — adjust soft_defaults target
+
+failure_signals:
+  - validator.goal-state-detection fail
+  - Win never fires in smoke play
+
+diagnosis_steps:
+  - "Verify win_condition resourceId exists in pool"
+  - "Confirm evaluate_goals runs after production"
+  - "Check terminal phase pauses turn-or-tick-loop"
+
+steps:
+  - id: step.align_win_resource
+    action: align_win_resource
+    detail: "Ensure win_condition resourceId exists in pool"
+  - id: step.hook_evaluate
+    action: hook_evaluate
+    detail: "Run evaluate_goals after production and allocation"
+  - id: step.pause_on_terminal
+    action: pause_on_terminal
+    detail: "Pause loop when phase is won or lost"
+  - id: step.smoke_threshold
+    action: smoke_threshold
+    detail: "Lower target temporarily for smoke test if needed"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.goal-state-detection"
+
+repair_strategy:
+  - action: align_win_resource
+    detail: "Fix resource id mismatch"
+  - action: hook_evaluate
+    detail: "Evaluate goals at correct time"
+  - action: pause_on_terminal
+    detail: "Stop sim at terminal"
+  - action: re_validate
+    target: validator.goal-state-detection
+
+guardrails:
+  - max_attempts: 2
+  - do_not: "Remove win condition without user consent"
+  - preserve: "User-facing goal description"
+
+user_facing_summary: >
+  I fixed the win condition so the game recognizes when you've reached your goal.
