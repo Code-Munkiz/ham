@@ -13,11 +13,12 @@ IDLE_INCREMENTAL_APP_TYPE = "game.idle-incremental"
 TRIVIA_TIMER_APP_TYPE = "game.trivia-timer"
 BRANCHING_NARRATIVE_APP_TYPE = "game.branching-narrative"
 MEMORY_MATCH_APP_TYPE = "game.memory-match"
+WORD_DAILY_APP_TYPE = "game.word-daily"
 
 _GLOBAL_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(dashboard|landing\s*page|saas|calculator|todo|to[-\s]?do|crm)\b",
     r"\b(crypto|trading)\s+(dashboard|app|platform)\b",
-    r"\b(wordle|snake|pong|asteroids|flappy)\b",
+    r"\b(snake|pong|asteroids|flappy)\b",
     r"\b(tetris|tetromino|platformer)\b",
 )
 
@@ -26,6 +27,7 @@ _IDLE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\bmemory\s+(card|match)\b",
     r"\bbranching\s+story\b",
     r"\bchoose\s+your\s+own\s+adventure\b",
+    r"\b(wordle|daily\s+word|word\s+guess)\b",
 )
 
 _TRIVIA_NEGATIVE_PATTERNS: tuple[str, ...] = (
@@ -41,6 +43,7 @@ _TRIVIA_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\bform\b.{0,80}\bmultiple\s+choice\b",
     r"\bmultiple\s+choice\b.{0,80}\bform\b",
     r"\beducation\s+website\b",
+    r"\b(wordle|daily\s+word|word\s+guess)\b",
 )
 
 _IDLE_POSITIVE_PATTERNS: tuple[str, ...] = (
@@ -83,6 +86,7 @@ _BRANCHING_NARRATIVE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\bsurvey\b",
     r"\bflashcard\b",
     r"\beducation\s+website\b",
+    r"\b(wordle|daily\s+word|word\s+guess)\b",
 )
 
 _BRANCHING_NARRATIVE_POSITIVE_PATTERNS: tuple[str, ...] = (
@@ -113,6 +117,7 @@ _MEMORY_MATCH_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\bpoker\b",
     r"\bsolitaire\b",
     r"\bsurvey\b",
+    r"\b(wordle|daily\s+word|word\s+guess)\b",
 )
 
 _MEMORY_MATCH_POSITIVE_PATTERNS: tuple[str, ...] = (
@@ -127,6 +132,45 @@ _MEMORY_MATCH_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bmatching\s+pairs\b.{0,100}\bflip(ped)?\s+cards?\b",
     r"\b\d+x\d+\b.{0,100}\bcard\s+matching\b",
     r"\bmove\s+counter\b.{0,100}\b(memory|matching|pair|flip)\b",
+)
+
+_WORD_DAILY_NEGATIVE_PATTERNS: tuple[str, ...] = (
+    r"\b(idle|incremental|clicker|tycoon)\b",
+    r"\bcookie\s+clicker\b",
+    r"\bpassive\s+income\b",
+    r"\b(trivia|quiz)\b",
+    r"\bmemory\s+(card|match)\b",
+    r"\bbranching\s+story\b",
+    r"\bchoose\s+your\s+own\s+adventure\b",
+    r"\binteractive\s+fiction\b",
+    r"\bcrossword\b",
+    r"\bword\s+search\b",
+    r"\bflashcard\b",
+    r"\btyping\s+(speed|test|game)\b",
+    r"\bdictionary\b",
+    r"\bwriting\s+app\b",
+    r"\bsurvey\b",
+    r"\beducation\s+website\b",
+)
+
+_WORD_DAILY_POSITIVE_PATTERNS: tuple[str, ...] = (
+    r"\bwordle(-style)?\b",
+    r"\bdaily\s+word\b.{0,100}\b(guess(ing)?|game|puzzle)\b",
+    r"\b(guess(ing)?)\b.{0,100}\bdaily\s+word\b",
+    r"\bword\s+guess(ing)?\b.{0,100}\b(game|puzzle|challenge)\b",
+    r"\b(game|puzzle|challenge)\b.{0,100}\bword\s+guess(ing)?\b",
+    r"\bhidden\s+word\b.{0,120}\b(guess|feedback|green|yellow|gray|grey)\b",
+    r"\b(green|yellow|gray|grey)\b.{0,120}\b(hidden\s+word|letter\s+feedback|feedback)\b",
+    r"\bletter\s+feedback\b.{0,100}\b(word|guess|attempts?|tries)\b",
+    r"\b(attempts?|tries|guesses)\b.{0,100}\bletter\s+feedback\b",
+    r"\b\d+-letter\b.{0,80}\bword\s+guess(ing)?\b",
+    r"\bword\s+guess(ing)?\b.{0,80}\b\d+\s+(attempts?|tries|guesses)\b",
+    r"\bword\s+game\b.{0,120}\b(attempts?|tries|letter\s+feedback|duplicate-letter)\b",
+    r"\b(attempts?|tries|letter\s+feedback|duplicate-letter)\b.{0,120}\bword\s+game\b",
+    r"\bduplicate-letter\b.{0,100}\b(word|guess|handling|feedback)\b",
+    r"\bdaily\s+word\s+puzzle\b",
+    r"\bkeyboard\s+input\b.{0,100}\b(word|guess|daily|puzzle)\b",
+    r"\b(word|daily)\b.{0,100}\bkeyboard\s+input\b",
 )
 
 
@@ -168,6 +212,14 @@ def _matches_memory_match(text: str) -> bool:
     )
 
 
+def _matches_word_daily(text: str) -> bool:
+    return _matches_recipe(
+        text,
+        negatives=_WORD_DAILY_NEGATIVE_PATTERNS,
+        positives=_WORD_DAILY_POSITIVE_PATTERNS,
+    )
+
+
 def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
     """Return a Game Pack app type id for clear prompt matches, else ``None``."""
     text = _normalized_prompt(prompt)
@@ -175,7 +227,7 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
         return None
     if _matches_any(text, _GLOBAL_NEGATIVE_PATTERNS):
         return None
-    # Precedence: trivia → idle → branching narrative → memory match.
+    # Precedence: trivia → idle → branching narrative → memory match → word daily.
     if _matches_trivia(text):
         return TRIVIA_TIMER_APP_TYPE
     if _matches_idle(text):
@@ -184,6 +236,8 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
         return BRANCHING_NARRATIVE_APP_TYPE
     if _matches_memory_match(text):
         return MEMORY_MATCH_APP_TYPE
+    if _matches_word_daily(text):
+        return WORD_DAILY_APP_TYPE
     return None
 
 
