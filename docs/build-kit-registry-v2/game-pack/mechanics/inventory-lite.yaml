@@ -1,0 +1,68 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.inventory-lite
+kind: mechanic
+name: Lightweight inventory
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Optional lightweight inventory tracking item ids with counts or presence flags.
+  Updated by choice effects; may gate choices or endings when user prompt implies collection.
+
+non_template_statement: >
+  Inventory state recipe only. Not a prebuilt inventory UI or item database file.
+
+applies_to:
+  - game.branching-narrative
+  - tag:branching-narrative
+
+depends_on:
+  - mechanic.story-flags
+
+provides:
+  - inventory_state
+
+binds_components:
+  - component.inventory-panel
+
+inputs:
+  - enable_inventory: boolean — default true when user prompt mentions items/clues
+  - max_distinct_items: number — default 8
+
+outputs:
+  - inventory: Record<string, number>
+  - hasItem: "(itemId: string) => boolean"
+
+guidance:
+  - "Skip or minimize inventory when user prompt is flags-only"
+  - "Use simple item ids (key, map, clue-a) with integer counts"
+  - "Apply inventory changes in same transaction as flag updates on choice resolve"
+  - "Show inventory panel only when at least one item exists or user asked for collection UI"
+
+validation_notes:
+  - Item counts never negative
+  - Inventory changes only via choice-resolution
+
+risk_notes:
+  - Inventory desync from flags causes wrong ending branches
+
+state_model:
+  fields:
+    - name: inventory
+      type: object
+  events:
+    - add_item
+    - remove_item
+    - reset_inventory
+
+common_failure_modes:
+  - "Item added but panel not updated"
+  - "Required item check uses wrong id"
+
+test_ideas:
+  - "Collecting item via choice updates inventory panel"
+  - "Ending gated on item presence unlocks when item collected"
+
+reusable_across:
+  - game.branching-narrative

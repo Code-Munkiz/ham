@@ -2,7 +2,7 @@
 
 **Status:** Non-runtime schema pilot only. **Schema version:** `0.1`
 
-This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: **`game.idle-incremental`** and **`game.trivia-timer`**.
+This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: **`game.idle-incremental`**, **`game.trivia-timer`**, and **`game.branching-narrative`**.
 
 ## Root manifest
 
@@ -59,6 +59,16 @@ Use vocabulary: **module**, **playbook**, **contract**, **mechanic**. Avoid “t
 | **Distinct validators** | Timer cleanup, deterministic scoring, and question progression — complementary to idle economy validators. |
 | **Explicit MVP bounds** | Static in-memory questions; no multiplayer, accounts, or LLM-generated questions at runtime. |
 
+### `game.branching-narrative`
+
+| Reason | Detail |
+|--------|--------|
+| **Third recipe shape** | Proves the pack supports choice-based story graphs — not only idle loops or linear quizzes. |
+| **DOM-native narrative UI** | Scene panel, choice cards, optional flags/inventory HUD, explicit ending screen. |
+| **Shared reuse** | Reuses `component.game-shell`, `stack.dom-game-minimal`. |
+| **Distinct validators** | Graph reachability, dead-end prevention, state consistency — complementary to idle/trivia validators. |
+| **Explicit MVP bounds** | Static in-memory story nodes; no runtime LLM story, accounts, multiplayer, or external story API. |
+
 ## Pilot module layout
 
 ```txt
@@ -68,13 +78,14 @@ docs/build-kit-registry-v2/game-pack/
   registry-pack.yaml          # pack.game — root manifest (schema_version 0.1)
   app-types/game.idle-incremental.yaml
   app-types/game.trivia-timer.yaml
+  app-types/game.branching-narrative.yaml
   stack-kits/dom-game-minimal.yaml
-  mechanics/{score,economy,upgrades,save-load,question-set,timer,answer-validation,progression}.yaml
-  component-contracts/{game-shell,resource-counter,upgrade-card,save-status,question-card,choice-list,timer-display,results-summary}.yaml
-  validators/{no-negative-currency,passive-income-tick,local-storage-roundtrip,timer-cleanup,score-calculation,question-progression}.yaml
-  recovery-playbooks/{stale-interval-or-bad-tick-loop,invalid-local-storage-json,stale-timer-or-uncleared-timeout,broken-question-progression}.yaml
-  progress-labels/{idle-incremental,trivia-timer}.yaml
-  learning-hooks/{idle-incremental,trivia-timer}.yaml
+  mechanics/{score,economy,upgrades,save-load,question-set,timer,answer-validation,progression,story-node-graph,story-flags,inventory-lite,choice-resolution,ending-resolution}.yaml
+  component-contracts/{game-shell,resource-counter,upgrade-card,save-status,question-card,choice-list,timer-display,results-summary,story-panel,choice-card,story-state-summary,inventory-panel,ending-screen}.yaml
+  validators/{no-negative-currency,passive-income-tick,local-storage-roundtrip,timer-cleanup,score-calculation,question-progression,story-graph-reachability,no-dead-end-choice,story-state-consistency}.yaml
+  recovery-playbooks/{stale-interval-or-bad-tick-loop,invalid-local-storage-json,stale-timer-or-uncleared-timeout,broken-question-progression,broken-story-graph,inconsistent-story-state}.yaml
+  progress-labels/{idle-incremental,trivia-timer,branching-narrative}.yaml
+  learning-hooks/{idle-incremental,trivia-timer,branching-narrative}.yaml
 ```
 
 ## Conceptual composition example
@@ -113,6 +124,23 @@ validators:   validator.timer-cleanup, validator.score-calculation, validator.qu
 recovery:     recovery.stale-timer-or-uncleared-timeout, recovery.broken-question-progression
 progress:     progress.trivia-timer
 learning:     learning.trivia-timer
+```
+
+### Conceptual composition — `game.branching-narrative`
+
+When a user says *“Build a branching story game where my choices change the ending”*, a **future** composer would assemble:
+
+```txt
+registry_pack: pack.game
+schema_version: 0.1
+app_type:     game.branching-narrative
+stack_kit:    stack.dom-game-minimal
+mechanics:    mechanic.story-node-graph → mechanic.story-flags → mechanic.inventory-lite → mechanic.choice-resolution → mechanic.ending-resolution
+contracts:    component.game-shell, component.story-panel, component.choice-card, component.story-state-summary, component.inventory-panel, component.ending-screen
+validators:   validator.story-graph-reachability, validator.no-dead-end-choice, validator.story-state-consistency
+recovery:     recovery.broken-story-graph, recovery.inconsistent-story-state
+progress:     progress.branching-narrative
+learning:     learning.branching-narrative
 ```
 
 ## Relation to v1 Builder Kits

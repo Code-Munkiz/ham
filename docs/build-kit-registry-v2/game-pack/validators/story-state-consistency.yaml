@@ -1,0 +1,72 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.story-state-consistency
+kind: validator
+name: Story state consistency
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Verifies flags and optional inventory update atomically with choice resolution and
+  remain consistent with displayed HUD summaries.
+
+non_template_statement: >
+  Conceptual state consistency check. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.branching-narrative
+  - tag:branching-narrative
+
+depends_on:
+  - mechanic.story-flags
+  - mechanic.inventory-lite
+  - mechanic.choice-resolution
+
+validates_modules:
+  - mechanic.story-flags
+  - mechanic.inventory-lite
+  - mechanic.choice-resolution
+  - component.story-state-summary
+  - component.inventory-panel
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - simulated_choice_sequence: array of choice ids
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "After each simulated choice, flags/inventory match expected effects"
+  - "HUD summary components read same state slice as choice-resolution writes"
+  - "No negative inventory counts"
+
+validation_notes:
+  - Run after scaffold and after flag/inventory effect edits
+  - Does not execute at runtime today
+
+risk_notes:
+  - Simulation may not cover all precondition branches without expanded fixtures
+
+validation_goal: >
+  Story flags and inventory stay in sync with choice outcomes and UI summaries.
+
+pass_conditions:
+  - "Flag updates match choice effect definitions"
+  - "Inventory counts non-negative and match effects"
+  - "Summary panels reflect authoritative state after each step"
+
+fail_conditions:
+  - "Flag set but summary shows old value"
+  - "Inventory count negative or duplicated effect"
+  - "Navigation completed without applying declared effects"
+
+suggested_failure_message: >
+  Story state got out of sync after a choice. I'll align flag and inventory updates with
+  the choice handler.
+
+recovery_playbooks:
+  - recovery.inconsistent-story-state

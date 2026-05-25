@@ -1,0 +1,73 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.choice-resolution
+kind: mechanic
+name: Choice resolution
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Handles player choice selection: validates preconditions (flags, inventory), applies
+  effects, and navigates to the next story node. Prevents double-submit on rapid clicks.
+
+non_template_statement: >
+  Choice handler recipe only. Not a fixed choice-button component file.
+
+applies_to:
+  - game.branching-narrative
+  - tag:branching-narrative
+
+depends_on:
+  - mechanic.story-node-graph
+  - mechanic.story-flags
+  - mechanic.inventory-lite
+
+provides:
+  - choice_resolution_state
+
+binds_components:
+  - component.choice-card
+
+inputs:
+  - lock_after_select: boolean — default true
+  - show_transition_delay_ms: optional pause before next scene
+
+outputs:
+  - selectedChoiceId: string | null
+  - isResolving: boolean
+
+guidance:
+  - "Disable choice buttons while resolving navigation"
+  - "Evaluate choice preconditions before applying effects (required flags/items)"
+  - "Apply flag and inventory effects then set currentNodeId to nextNodeId"
+  - "If choice is hidden by preconditions, do not render it"
+  - "Logically separate choice click from ending transition"
+
+validation_notes:
+  - Cannot select same choice twice without navigation completing
+  - nextNodeId must exist before navigation
+
+risk_notes:
+  - Double-click fires two navigations
+  - Effects applied but navigation fails leaves inconsistent state
+
+state_model:
+  fields:
+    - name: selectedChoiceId
+      type: string | null
+    - name: isResolving
+      type: boolean
+  events:
+    - select_choice
+    - complete_navigation
+
+common_failure_modes:
+  - "Double navigation skips nodes"
+  - "Effects applied twice"
+
+test_ideas:
+  - "Single click advances exactly one node"
+  - "Locked choices do not appear when preconditions fail"
+
+reusable_across:
+  - game.branching-narrative

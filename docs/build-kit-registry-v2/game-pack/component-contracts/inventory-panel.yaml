@@ -1,0 +1,66 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.inventory-panel
+kind: component_contract
+name: Lightweight inventory panel
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Displays collected items with counts or icons-as-text labels. Optional when inventory
+  mechanic is active and at least one item exists or user requested collection UI.
+
+non_template_statement: >
+  UI contract for inventory display. Not a prebuilt inventory grid file.
+
+applies_to:
+  - game.branching-narrative
+  - tag:branching-narrative
+
+depends_on:
+  - mechanic.inventory-lite
+
+provides:
+  - inventory_panel_ui
+
+binds_mechanics:
+  - mechanic.inventory-lite
+
+inputs:
+  - item_labels: map itemId → display name
+  - show_counts: boolean — default true
+
+outputs:
+  - inventory_rows: array
+
+guidance:
+  - "Simple list or chip row — no drag-drop for MVP"
+  - "Hide panel when inventory empty unless user asked for always-visible slot"
+  - "Update on same render cycle as flag changes after choice"
+
+validation_notes:
+  - Counts match inventory state
+  - Panel does not overflow layout on mobile
+
+risk_notes:
+  - Item shown after failed choice effect application
+
+purpose: >
+  Optional collection feedback for clue/item gathering stories.
+
+expected_props:
+  - inventory: Record<string, number>
+  - itemLabels: Record<string, string>
+
+states:
+  - empty
+  - has_items
+
+accessibility_notes:
+  - "Announce new item acquisition if using live region — optional for MVP"
+
+responsive_notes:
+  - "Horizontal scroll chips acceptable on very narrow screens"
+
+styling_guidance:
+  - "Compact; secondary to story panel"

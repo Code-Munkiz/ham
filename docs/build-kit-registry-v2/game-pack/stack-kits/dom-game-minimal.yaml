@@ -19,6 +19,7 @@ non_template_statement: >
 applies_to:
   - game.idle-incremental
   - game.trivia-timer
+  - game.branching-narrative
   - tag:dom-casual-game
 
 provides:

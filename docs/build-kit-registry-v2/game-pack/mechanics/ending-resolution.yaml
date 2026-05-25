@@ -1,0 +1,71 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.ending-resolution
+kind: mechanic
+name: Ending resolution
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Detects when the player reaches an explicit ending node and transitions to the ending
+  presentation phase. Supports optional replay/restart when user prompt implies it.
+
+non_template_statement: >
+  Ending phase recipe only. Not a prebuilt ending screen component file.
+
+applies_to:
+  - game.branching-narrative
+  - tag:branching-narrative
+
+depends_on:
+  - mechanic.story-node-graph
+  - mechanic.choice-resolution
+
+provides:
+  - ending_phase_state
+
+binds_components:
+  - component.ending-screen
+
+inputs:
+  - show_replay_button: boolean — default false for MVP
+  - ending_title_from_node: boolean — default true
+
+outputs:
+  - phase: playing | ending
+  - activeEndingNodeId: string | null
+
+guidance:
+  - "Set phase to ending when current node has isEnding: true"
+  - "Render ending-screen with ending node text and optional recap of flags/items"
+  - "Hide choice cards on ending phase unless replay offered"
+  - "Default MVP: single playthrough without replay unless user asks"
+
+validation_notes:
+  - Ending phase only when current node is marked ending
+  - Story panel and ending screen not conflicting on layout
+
+risk_notes:
+  - Ending never shown if isEnding flag omitted on terminal nodes
+  - Player sees choices on ending node incorrectly
+
+state_model:
+  fields:
+    - name: phase
+      type: enum
+    - name: activeEndingNodeId
+      type: string | null
+  events:
+    - enter_ending
+    - restart_story
+
+common_failure_modes:
+  - "Terminal node missing isEnding shows empty choices"
+  - "Ending screen never mounts"
+
+test_ideas:
+  - "Navigating to ending node shows ending screen"
+  - "Choices hidden during ending phase"
+
+reusable_across:
+  - game.branching-narrative

@@ -1,0 +1,75 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.story-node-graph
+kind: mechanic
+name: Story node graph
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Defines a static in-memory graph of story nodes keyed by stable ids. Each node includes
+  scene text, optional metadata, and outgoing choices. Includes a designated start node id
+  and explicit ending node ids.
+
+non_template_statement: >
+  Behavioral recipe for story graph shape only. Does not ship a checked-in story script file.
+
+applies_to:
+  - game.branching-narrative
+  - tag:branching-narrative
+
+depends_on: []
+
+provides:
+  - story_graph_state
+
+binds_components:
+  - component.story-panel
+  - component.choice-card
+
+inputs:
+  - start_node_id: string
+  - node_count_hint: number — default 8–15
+  - theme_hint: string from user prompt
+
+outputs:
+  - nodes: map of nodeId → { text, choices[], isEnding?, tags[] }
+  - currentNodeId: string
+
+guidance:
+  - "Use a plain object/map keyed by stable string ids (e.g. scene-1, ending-good)"
+  - "Every non-ending node must have at least one choice unless it is a deliberate dead-end (avoid for MVP)"
+  - "Each choice includes label, nextNodeId, and optional flag/inventory effects"
+  - "Mark ending nodes explicitly with isEnding: true"
+  - "Embed graph in generated source — no external story API for MVP"
+
+validation_notes:
+  - start_node_id exists in nodes map
+  - All choice nextNodeId values reference existing nodes
+  - At least one ending node reachable from start
+
+risk_notes:
+  - Orphan nodes never reachable from start
+  - Missing nextNodeId breaks navigation
+
+state_model:
+  fields:
+    - name: nodes
+      type: object
+    - name: currentNodeId
+      type: string
+  events:
+    - load_graph
+    - navigate_to_node
+
+common_failure_modes:
+  - "Choice points to nonexistent node id"
+  - "Player stuck on node with empty choices and isEnding false"
+
+test_ideas:
+  - "Start node renders on first paint"
+  - "Choosing an option updates currentNodeId"
+
+reusable_across:
+  - game.branching-narrative
+  - tag:branching-narrative

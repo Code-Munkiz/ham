@@ -1,0 +1,68 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.no-dead-end-choice
+kind: validator
+name: No dead-end non-ending nodes
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Verifies non-ending nodes expose at least one enabled choice path (or intentional
+  ending transition) so the player cannot become stuck mid-story without an ending.
+
+non_template_statement: >
+  Conceptual dead-end check. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.branching-narrative
+  - tag:branching-narrative
+
+depends_on:
+  - mechanic.story-node-graph
+  - mechanic.choice-resolution
+
+validates_modules:
+  - mechanic.story-node-graph
+  - mechanic.choice-resolution
+  - component.choice-card
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - nodes: story graph map
+  - simulate_preconditions: boolean — default false
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "Non-ending nodes must have choices.length >= 1 OR auto-advance rule documented"
+  - "Choices hidden by preconditions must leave at least one viable path on each node"
+  - "Ending nodes should have isEnding true and no required outgoing choices"
+
+validation_notes:
+  - Run after scaffold and after choice precondition edits
+  - Does not execute at runtime today
+
+risk_notes:
+  - Over-strict check may flag intentionally linear nodes with one choice — that is OK
+
+validation_goal: >
+  Player never lands on a non-ending node with zero viable forward paths.
+
+pass_conditions:
+  - "Every non-ending node has >= 1 choice with valid nextNodeId"
+  - "Or node is marked ending with isEnding true"
+
+fail_conditions:
+  - "Non-ending node with empty choices array"
+  - "All choices on a node locked with no alternate path"
+
+suggested_failure_message: >
+  The story can get stuck on a scene with no way forward. I'll add valid choices or
+  mark the node as an ending.
+
+recovery_playbooks:
+  - recovery.broken-story-graph

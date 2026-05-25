@@ -1,0 +1,67 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.story-flags
+kind: mechanic
+name: Story flags
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Tracks simple story state flags (booleans or string values) updated when the player
+  makes choices. Flags may gate visibility of choices or unlock endings.
+
+non_template_statement: >
+  Flag state recipe only. Not a prebuilt state management library file.
+
+applies_to:
+  - game.branching-narrative
+  - tag:branching-narrative
+
+depends_on:
+  - mechanic.story-node-graph
+
+provides:
+  - story_flags_state
+
+binds_components:
+  - component.story-state-summary
+
+inputs:
+  - initial_flags: object — default {}
+  - flag_schema_hint: optional list of known flag keys
+
+outputs:
+  - flags: Record<string, boolean | string>
+  - flagChangeLog: optional array for debug
+
+guidance:
+  - "Keep flags flat — booleans or short strings; avoid deep nested objects for MVP"
+  - "Apply flag updates atomically when a choice is resolved"
+  - "Document which choices set which flags in story graph choice effects"
+  - "Use flags to conditionally show/hide choices when user prompt implies gating"
+
+validation_notes:
+  - Flag updates only occur through choice-resolution path
+  - Unknown flag keys should not crash render
+
+risk_notes:
+  - Partial flag updates leave inconsistent branching preconditions
+
+state_model:
+  fields:
+    - name: flags
+      type: object
+  events:
+    - apply_choice_effects
+    - reset_story
+
+common_failure_modes:
+  - "Flag set but UI still shows locked choice"
+  - "Conflicting flag values after replay"
+
+test_ideas:
+  - "Choice that sets flag updates summary display"
+  - "Gated choice appears only when required flag true"
+
+reusable_across:
+  - game.branching-narrative

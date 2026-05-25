@@ -1,0 +1,92 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.inconsistent-story-state
+kind: recovery_playbook
+name: Fix inconsistent story state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs branching narrative games where flags, inventory, and HUD summaries desync
+  after choice resolution or double-submit bugs.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.branching-narrative
+  - tag:branching-narrative
+
+depends_on:
+  - mechanic.story-flags
+  - mechanic.inventory-lite
+  - mechanic.choice-resolution
+  - validator.story-state-consistency
+
+repairs_validators:
+  - validator.story-state-consistency
+
+inputs:
+  - failure_context: validator result or wrong-flag report
+  - current_source: choice handler and summary components (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.story-state-consistency
+
+guidance:
+  - "Apply flag and inventory effects in one atomic state update before navigation"
+  - "Guard choice handler with isResolving to prevent double application"
+  - "Bind summary panels to same flags/inventory state as choice-resolution writes"
+  - "Clamp inventory counts to >= 0"
+
+validation_notes:
+  - Re-run validator.story-state-consistency after repair
+  - Max 2 repair attempts before honest failure
+
+risk_notes:
+  - Patch may remove optional inventory to reduce complexity — note in user-facing summary
+
+failure_signals:
+  - validator.story-state-consistency fail
+  - User reports wrong flag or missing item after choice
+  - Negative inventory displayed
+
+diagnosis_steps:
+  - "Trace choice handler for duplicate effect application"
+  - "Verify summary components read authoritative state"
+  - "Check effect definitions on choices match expected flag/inventory keys"
+
+steps:
+  - id: step.atomic_effects
+    action: atomic_effects
+    detail: "Batch flag/inventory updates before setCurrentNodeId"
+  - id: step.guard_double_submit
+    action: guard_double_submit
+    detail: "Set isResolving true on first click until navigation completes"
+  - id: step.align_summaries
+    action: align_summaries
+    detail: "Ensure HUD reads same state slice as choice handler writes"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.story-state-consistency after patch"
+
+repair_strategy:
+  - action: atomic_effects
+    detail: "Single state transaction per choice"
+  - action: guard_double_submit
+    detail: "Prevent duplicate resolution"
+  - action: align_summaries
+    detail: "Fix HUD desync"
+  - action: re_validate
+    target: validator.story-state-consistency
+
+guardrails:
+  - max_attempts: 2
+  - do_not: "Reset entire story progress without user consent"
+  - preserve: "Current node id unless navigation was invalid"
+
+user_facing_summary: >
+  I fixed story state tracking so flags and items stay in sync when you make choices.

@@ -7,8 +7,8 @@ schema_version: "0.1"
 
 description: >
   Root manifest for the Build Kit Registry v2 Game Pack schema pilot. Indexes all
-  proposed modules for DOM-native casual games, starting with game.idle-incremental
-  and game.trivia-timer.
+  proposed modules for DOM-native casual games, starting with game.idle-incremental,
+  game.trivia-timer, and game.branching-narrative.
   Used for cross-reference validation and future composer defaults — not loaded by HAM
   at runtime today.
 
@@ -21,6 +21,7 @@ module_index:
   app_types:
     - game.idle-incremental
     - game.trivia-timer
+    - game.branching-narrative
   stack_kits:
     - stack.dom-game-minimal
   mechanics:
@@ -32,6 +33,11 @@ module_index:
     - mechanic.timer
     - mechanic.answer-validation
     - mechanic.progression
+    - mechanic.story-node-graph
+    - mechanic.story-flags
+    - mechanic.inventory-lite
+    - mechanic.choice-resolution
+    - mechanic.ending-resolution
   component_contracts:
     - component.game-shell
     - component.resource-counter
@@ -41,6 +47,11 @@ module_index:
     - component.choice-list
     - component.timer-display
     - component.results-summary
+    - component.story-panel
+    - component.choice-card
+    - component.story-state-summary
+    - component.inventory-panel
+    - component.ending-screen
   validators:
     - validator.no-negative-currency
     - validator.passive-income-tick
@@ -48,17 +59,24 @@ module_index:
     - validator.timer-cleanup
     - validator.score-calculation
     - validator.question-progression
+    - validator.story-graph-reachability
+    - validator.no-dead-end-choice
+    - validator.story-state-consistency
   recovery_playbooks:
     - recovery.stale-interval-or-bad-tick-loop
     - recovery.invalid-local-storage-json
     - recovery.stale-timer-or-uncleared-timeout
     - recovery.broken-question-progression
+    - recovery.broken-story-graph
+    - recovery.inconsistent-story-state
   progress_labels:
     - progress.idle-incremental
     - progress.trivia-timer
+    - progress.branching-narrative
   learning_hooks:
     - learning.idle-incremental
     - learning.trivia-timer
+    - learning.branching-narrative
 
 compose_defaults:
   compose_order:

@@ -1,0 +1,65 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.story-state-summary
+kind: component_contract
+name: Story state summary
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Compact HUD or sidebar showing active story flags (and optionally key inventory hints)
+  for player orientation. Optional — may collapse on mobile.
+
+non_template_statement: >
+  UI contract for flag summary. Not a prebuilt HUD component file.
+
+applies_to:
+  - game.branching-narrative
+  - tag:branching-narrative
+
+depends_on:
+  - mechanic.story-flags
+
+provides:
+  - story_state_summary_ui
+
+binds_mechanics:
+  - mechanic.story-flags
+
+inputs:
+  - show_flag_labels: boolean — default true
+  - max_visible_flags: number — default 6
+
+outputs:
+  - flag_display_list: array
+
+guidance:
+  - "Show human-readable labels for flags when space allows"
+  - "Update immediately after choice effects apply"
+  - "Hide section when no flags are set if user did not ask for persistent HUD"
+
+validation_notes:
+  - Summary reflects authoritative flags state
+  - No overflow breaking layout at 360px
+
+risk_notes:
+  - Stale flag display after choice resolution
+
+purpose: >
+  Optional orientation surface for branching state without exposing raw ids.
+
+expected_props:
+  - flags: Record<string, boolean | string>
+
+states:
+  - empty: no flags set
+  - populated: one or more flags visible
+
+accessibility_notes:
+  - "Use list or dl semantics for flag rows"
+
+responsive_notes:
+  - "Collapse to compact chips on narrow viewports"
+
+styling_guidance:
+  - "Subtle secondary typography; do not compete with story panel"

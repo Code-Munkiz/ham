@@ -34,6 +34,14 @@ EXPECTED_TRIVIA_MECHANIC_ORDER = (
     "mechanic.progression",
 )
 
+EXPECTED_BRANCHING_NARRATIVE_MECHANIC_ORDER = (
+    "mechanic.story-node-graph",
+    "mechanic.story-flags",
+    "mechanic.inventory-lite",
+    "mechanic.choice-resolution",
+    "mechanic.ending-resolution",
+)
+
 
 @pytest.fixture
 def game_pack_root() -> Path:
@@ -45,7 +53,7 @@ class TestHappyPath:
         pack = load_registry_pack(game_pack_root)
         assert pack.pack_id == "pack.game"
         assert pack.schema_version == "0.1"
-        assert len(pack.modules) == 33
+        assert len(pack.modules) == 51
 
     def test_validate_docs_game_pack(self, game_pack_root: Path):
         pack = load_registry_pack(game_pack_root)
@@ -122,6 +130,43 @@ class TestTriviaTimerRecipe:
         validate_registry_pack(pack)
         recipe = compose_build_recipe(pack, "game.idle-incremental")
         assert recipe.mechanic_ids == EXPECTED_MECHANIC_ORDER
+
+
+class TestBranchingNarrativeRecipe:
+    def test_compose_branching_narrative(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        validate_registry_pack(pack)
+        recipe = compose_build_recipe(pack, "game.branching-narrative")
+        assert recipe.app_type_id == "game.branching-narrative"
+        assert recipe.stack_kit_id == "stack.dom-game-minimal"
+        assert recipe.mechanic_ids == EXPECTED_BRANCHING_NARRATIVE_MECHANIC_ORDER
+
+    def test_render_branching_narrative_includes_key_ids(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        recipe = compose_build_recipe(pack, "game.branching-narrative")
+        rendered = render_playbook_context(recipe)
+        assert "game.branching-narrative" in rendered
+        assert "stack.dom-game-minimal" in rendered
+        assert "mechanic.story-node-graph" in rendered
+        assert "mechanic.choice-resolution" in rendered
+        assert "validator.story-graph-reachability" in rendered
+        assert "validator.no-dead-end-choice" in rendered
+        assert "static-story-data-for-mvp" in rendered
+
+    def test_render_branching_narrative_under_default_budget(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        recipe = compose_build_recipe(pack, "game.branching-narrative")
+        rendered = render_playbook_context(recipe)
+        assert len(rendered) <= 12_000
+        assert rendered.startswith("Build Kit Registry v2 — BuildRecipe\n")
+
+    def test_idle_and_trivia_still_compose_after_branching_added(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        validate_registry_pack(pack)
+        idle = compose_build_recipe(pack, "game.idle-incremental")
+        trivia = compose_build_recipe(pack, "game.trivia-timer")
+        assert idle.mechanic_ids == EXPECTED_MECHANIC_ORDER
+        assert trivia.mechanic_ids == EXPECTED_TRIVIA_MECHANIC_ORDER
 
 
 class TestBrokenFixtures:

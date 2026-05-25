@@ -1,0 +1,68 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.story-panel
+kind: component_contract
+name: Story scene panel
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Primary reading area for the active story node: scene title optional, body text, and
+  narrative typography. Mounts content from currentNodeId in the story graph.
+
+non_template_statement: >
+  Layout contract only. Does not provide a copy-paste React component file.
+
+applies_to:
+  - game.branching-narrative
+  - tag:branching-narrative
+
+depends_on:
+  - mechanic.story-node-graph
+
+provides:
+  - story_panel_ui
+
+binds_mechanics:
+  - mechanic.story-node-graph
+
+inputs:
+  - show_scene_title: boolean — default false
+  - max_paragraphs: number — default 6
+
+outputs:
+  - rendered_scene_text: string
+
+guidance:
+  - "Readable line length; comfortable padding on mobile"
+  - "Update panel when currentNodeId changes"
+  - "Support basic paragraph breaks in node text"
+
+validation_notes:
+  - Scene text visible without horizontal scroll at 360px
+  - Empty node text should not render blank main region without fallback copy
+
+risk_notes:
+  - Stale scene text if currentNodeId updates without re-render
+
+purpose: >
+  Main narrative surface for branching story games.
+
+expected_props:
+  - nodeId: string
+  - title: string | null
+  - bodyText: string
+
+states:
+  - default: showing active scene
+  - transition: optional brief fade between nodes
+
+accessibility_notes:
+  - "Use semantic article or section for scene content"
+  - "Sufficient color contrast for body text"
+
+responsive_notes:
+  - "Full-width text block with max-width constraint on desktop"
+
+styling_guidance:
+  - "Tailwind typography; calm readable font size for long text"

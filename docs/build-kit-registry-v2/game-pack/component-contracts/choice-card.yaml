@@ -1,0 +1,71 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.choice-card
+kind: component_contract
+name: Story choice card
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Renders selectable choices for the active story node. Supports disabled/locked state,
+  precondition hints, and single selection per navigation step.
+
+non_template_statement: >
+  UI contract for choice buttons. Not a fixed choice-card library file.
+
+applies_to:
+  - game.branching-narrative
+  - tag:branching-narrative
+
+depends_on:
+  - mechanic.story-node-graph
+  - mechanic.choice-resolution
+
+provides:
+  - choice_card_ui
+
+binds_mechanics:
+  - mechanic.choice-resolution
+  - mechanic.story-node-graph
+
+inputs:
+  - choices: array of { id, label, disabled?, lockedReason? }
+  - isResolving: boolean
+
+outputs:
+  - select_event: choiceId
+
+guidance:
+  - "Use button elements stacked vertically on mobile"
+  - "Disable all choices while isResolving is true"
+  - "Do not render choices hidden by flag/inventory preconditions"
+  - "Optional subtle hint when choice is locked (e.g. 'Need key')"
+
+validation_notes:
+  - At least one enabled choice on non-ending nodes with outgoing paths
+  - No double-fire on rapid clicks
+
+risk_notes:
+  - Rapid clicks before disabled state applies
+
+purpose: >
+  Primary interaction surface for branching narrative choices.
+
+expected_props:
+  - choices: array
+  - disabled: boolean
+  - onSelect: "(choiceId: string) => void"
+
+states:
+  - selectable
+  - resolving_locked
+
+accessibility_notes:
+  - "Each choice button has accessible name from label text"
+  - "Disabled state exposed to assistive tech while resolving"
+
+responsive_notes:
+  - "Full-width buttons; minimum 44px tap height"
+
+styling_guidance:
+  - "Clear hover/focus states; avoid color-only locked cues"

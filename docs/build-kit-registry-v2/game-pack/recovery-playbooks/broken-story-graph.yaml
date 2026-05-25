@@ -1,0 +1,95 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.broken-story-graph
+kind: recovery_playbook
+name: Fix broken story graph
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs branching narrative games with invalid choice targets, missing start nodes,
+  unreachable endings, or dead-end non-ending nodes.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.branching-narrative
+  - tag:branching-narrative
+
+depends_on:
+  - mechanic.story-node-graph
+  - validator.story-graph-reachability
+  - validator.no-dead-end-choice
+
+repairs_validators:
+  - validator.story-graph-reachability
+  - validator.no-dead-end-choice
+
+inputs:
+  - failure_context: validator result or stuck-player report
+  - current_source: story graph and choice components (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.story-graph-reachability
+
+guidance:
+  - "Fix nextNodeId typos to reference existing node ids"
+  - "Add missing choices on non-ending nodes or mark node as ending"
+  - "Ensure start_node_id exists and at least one ending is reachable"
+  - "Re-run reachability and dead-end validators after patch"
+
+validation_notes:
+  - Re-run both graph validators after repair
+  - Max 2 repair attempts before honest failure
+
+risk_notes:
+  - Patch may simplify graph by removing branches — preserve user intent when possible
+
+failure_signals:
+  - validator.story-graph-reachability fail
+  - validator.no-dead-end-choice fail
+  - User reports stuck scene with no choices
+  - Preview console errors on undefined node lookup
+
+diagnosis_steps:
+  - "List all node ids and verify start_node_id present"
+  - "For each choice, confirm nextNodeId in nodes map"
+  - "BFS from start to find reachable endings"
+  - "Find non-ending nodes with empty choices"
+
+steps:
+  - id: step.fix_broken_refs
+    action: fix_broken_refs
+    detail: "Correct choice nextNodeId values to valid node keys"
+  - id: step.add_forward_path
+    action: add_forward_path
+    detail: "Add at least one choice or mark isEnding on stranded nodes"
+  - id: step.ensure_endings
+    action: ensure_endings
+    detail: "Verify at least one isEnding node reachable from start"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run graph validators after patch"
+
+repair_strategy:
+  - action: fix_broken_refs
+    detail: "Resolve invalid nextNodeId references"
+  - action: add_forward_path
+    detail: "Eliminate dead-end non-ending nodes"
+  - action: ensure_endings
+    detail: "Guarantee reachable ending"
+  - action: re_validate
+    target: validator.story-graph-reachability
+
+guardrails:
+  - max_attempts: 2
+  - do_not: "Silently delete user-authored story branches without noting reduction"
+  - preserve: "Start node and at least one ending path"
+
+user_facing_summary: >
+  I fixed broken story links so your choices lead to valid scenes and you can reach
+  an ending.

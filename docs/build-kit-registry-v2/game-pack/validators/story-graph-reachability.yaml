@@ -1,0 +1,69 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.story-graph-reachability
+kind: validator
+name: Story graph reachability
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Verifies the static story graph has a valid start node, resolvable choice targets,
+  and at least one reachable explicit ending node from the start.
+
+non_template_statement: >
+  Conceptual graph check. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.branching-narrative
+  - tag:branching-narrative
+
+depends_on:
+  - mechanic.story-node-graph
+
+validates_modules:
+  - mechanic.story-node-graph
+  - component.story-panel
+  - component.choice-card
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - start_node_id: string
+  - nodes: story graph map
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "BFS/DFS from start; all choice nextNodeId must exist"
+  - "At least one node with isEnding reachable from start"
+  - "Report orphan nodes as warnings — not blocking unless all endings unreachable"
+
+validation_notes:
+  - Run after scaffold and after graph edits
+  - Does not execute at runtime today
+
+risk_notes:
+  - Large graphs may need bounded traversal in future harness
+
+validation_goal: >
+  Player can reach an ending without broken links from the authored graph.
+
+pass_conditions:
+  - "start_node_id exists in nodes"
+  - "Every choice nextNodeId references an existing node"
+  - "At least one ending node reachable from start"
+
+fail_conditions:
+  - "Missing start node"
+  - "Choice points to unknown node id"
+  - "No ending reachable from start"
+
+suggested_failure_message: >
+  The story graph has broken links or no reachable ending. I'll fix node references
+  so choices lead to valid scenes and finales.
+
+recovery_playbooks:
+  - recovery.broken-story-graph

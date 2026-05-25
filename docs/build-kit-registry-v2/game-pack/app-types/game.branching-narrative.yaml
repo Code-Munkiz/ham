@@ -1,0 +1,161 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: game.branching-narrative
+kind: app_type
+name: Branching narrative / choice story game
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  A browser-based branching story game where the player reads scenes, makes choices,
+  tracks story flags and optional lightweight inventory, and reaches explicit ending
+  nodes. Uses static in-memory story node data for MVP. Output is always custom-generated
+  from the user prompt plus composed playbook modules — never cloned from a starter project.
+
+non_template_statement: >
+  This app type does not reference checked-in story scripts, visual novel assets, or
+  clone baselines. It defines generative guidance only.
+
+legacy_v1_fallback: generic
+
+safety_constraints:
+  - no-network-egress-for-mvp
+  - no-eval
+  - no-user-accounts-for-mvp
+  - no-multiplayer-for-mvp
+  - static-story-data-for-mvp
+  - no-runtime-llm-story-for-mvp
+  - no-real-money-economy
+
+applies_to:
+  - tag:branching-narrative
+  - tag:dom-casual-game
+
+inputs:
+  - user_prompt: natural language story theme and tone
+  - optional_node_count: approximate scene count (default 8–15)
+  - optional_ending_count: number of distinct endings (default 2–4)
+  - optional_inventory: whether lightweight inventory is included
+
+outputs:
+  - runnable_vite_react_app: single-page DOM story game
+  - composed_build_recipe: ids of mechanics, contracts, validators, recovery modules
+  - normie_plan_summary: phased build description for chat/activity stream
+
+guidance:
+  - "Prefer React state; static story graph/map keyed by stable node ids"
+  - "Each node includes scene text and zero or more choices pointing to valid next nodes"
+  - "Story flags are simple booleans or string values updated by choice effects"
+  - "Inventory is lightweight and optional — item ids with counts or presence flags"
+  - "Endings are explicit ending nodes — not accidental missing links"
+  - "Keep all logic client-side; no story API or runtime LLM text generation for MVP"
+
+validation_notes:
+  - Run composed validators after scaffold and after graph/state edits
+  - Preview must boot without console errors before success copy
+
+risk_notes:
+  - Broken choice targets strand the player on dead-end nodes
+  - Inconsistent flags/inventory after choice resolution corrupts branching
+  - Unreachable endings if graph is not validated from start node
+
+user_prompt_examples:
+  - "Build a branching story game where my choices change the ending"
+  - "Make a text adventure with multiple endings based on decisions"
+  - "Create a choose-your-own-adventure game in the browser"
+  - "Build a mystery story where I collect clues and pick suspects"
+
+intent_signals:
+  - "\\b(branching|choose\\s+your\\s+own|interactive\\s+fiction|text\\s+adventure)\\b"
+  - "\\b(story|narrative|scene)\\b.{0,40}\\b(choice|decision|path)\\b"
+  - "\\b(multiple\\s+endings?|different\\s+endings?)\\b"
+
+clarifying_questions:
+  - when: intent_confidence_low
+    ask: "What genre or tone should the story have — mystery, fantasy, sci-fi, or slice-of-life?"
+  - when: ending_count_ambiguous
+    ask: "How many distinct endings do you want — for example 2 or 3?"
+  - when: inventory_ambiguous
+    ask: "Should the player collect inventory items, or focus on story flags only?"
+
+default_assumptions:
+  - "Eight to fifteen story nodes including 2–4 explicit ending nodes"
+  - "Static in-memory story graph themed from user prompt"
+  - "Simple boolean/string flags; optional lightweight inventory"
+  - "DOM/React UI; no canvas engine unless user explicitly requests it"
+  - "Mobile-friendly layout at 360px width"
+
+stack_kit_id: stack.dom-game-minimal
+
+compose_order_ref: pack.game#compose_defaults.compose_order
+
+composed_modules:
+  stack_kit_id: stack.dom-game-minimal
+  mechanics:
+    - mechanic.story-node-graph
+    - mechanic.story-flags
+    - mechanic.inventory-lite
+    - mechanic.choice-resolution
+    - mechanic.ending-resolution
+  component_contracts:
+    - component.game-shell
+    - component.story-panel
+    - component.choice-card
+    - component.story-state-summary
+    - component.inventory-panel
+    - component.ending-screen
+  validators:
+    - validator.story-graph-reachability
+    - validator.no-dead-end-choice
+    - validator.story-state-consistency
+  recovery_playbooks:
+    - recovery.broken-story-graph
+    - recovery.inconsistent-story-state
+  progress_labels: progress.branching-narrative
+  learning_hooks: learning.branching-narrative
+
+build_phases:
+  - id: phase.understand
+    title: Understand the story idea
+    order: 1
+    modules_used: [app_type]
+  - id: phase.compose
+    title: Compose mechanics and UI contracts
+    order: 2
+    modules_used: [mechanics, component_contracts]
+  - id: phase.generate
+    title: Generate custom story game code
+    order: 3
+    modules_used: [stack_kit_id, guidance]
+  - id: phase.validate
+    title: Check story graph and state consistency
+    order: 4
+    modules_used: [validators]
+  - id: phase.preview
+    title: Prepare Workbench preview
+    order: 5
+    modules_used: []
+  - id: phase.recover
+    title: Fix known failure modes if needed
+    order: 6
+    optional: true
+    modules_used: [recovery_playbooks]
+
+acceptance_criteria:
+  - "Game loads in preview without runtime console errors"
+  - "Player can read the starting scene and select at least one choice"
+  - "Each choice navigates to a valid next node or ending"
+  - "Story flags and optional inventory update deterministically after choices"
+  - "At least one explicit ending node is reachable from the start"
+  - "UI readable on mobile-width viewport"
+
+out_of_scope:
+  - Live AI-generated story continuation
+  - Procedural infinite story generation
+  - Multiplayer roleplay or shared sessions
+  - Account-based saves or cloud sync
+  - Global publishing or UGC story marketplace
+  - Visual novel asset pipeline (sprites, CG backgrounds)
+  - Audio or voice acting pipeline
+  - Web3 or token rewards
+  - Real-money prizes or gambling outcomes

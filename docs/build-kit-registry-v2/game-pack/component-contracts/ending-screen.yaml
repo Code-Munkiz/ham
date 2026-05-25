@@ -1,0 +1,71 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.ending-screen
+kind: component_contract
+name: Ending screen
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Full presentation for an explicit ending node: ending title, body text, optional recap
+  of flags/items, and optional replay control when enabled.
+
+non_template_statement: >
+  UI contract for ending presentation. Not a fixed ending page template file.
+
+applies_to:
+  - game.branching-narrative
+  - tag:branching-narrative
+
+depends_on:
+  - mechanic.ending-resolution
+  - mechanic.story-node-graph
+
+provides:
+  - ending_screen_ui
+
+binds_mechanics:
+  - mechanic.ending-resolution
+
+inputs:
+  - show_recap: boolean — default true
+  - show_replay_button: boolean — default false
+
+outputs:
+  - "ending_display: { title, body, recap (optional) }"
+
+guidance:
+  - "Replace or overlay story panel when phase === ending"
+  - "Use ending node text as primary content"
+  - "Optional recap lists key flags/items that influenced the path"
+  - "Do not show choice cards on ending screen for MVP"
+
+validation_notes:
+  - Ending content visible without console errors
+  - Choices hidden during ending phase
+
+risk_notes:
+  - Ending and story panel both visible simultaneously
+
+purpose: >
+  Clear finale surface for branching narrative games.
+
+expected_props:
+  - endingNodeId: string
+  - title: string | null
+  - bodyText: string
+  - recapFlags: Record<string, boolean | string> | null
+  - onReplay: optional callback
+
+states:
+  - ending_active
+
+accessibility_notes:
+  - "Use heading for ending title when present"
+  - "Focus management moves to ending content on transition"
+
+responsive_notes:
+  - "Centered column layout; readable on mobile"
+
+styling_guidance:
+  - "Distinct but cohesive with story panel typography"
