@@ -19,6 +19,7 @@ applies_to:
   - game.branching-narrative
   - game.memory-match
   - game.word-daily
+  - game.daily-puzzle-grid
   - tag:dom-game-layout
 
 depends_on: []

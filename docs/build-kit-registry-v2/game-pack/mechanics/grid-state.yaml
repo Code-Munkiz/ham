@@ -1,0 +1,78 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.grid-state
+kind: mechanic
+name: Grid state model
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Maintains the two-dimensional grid of cells with explicit finite states, dimensions,
+  and locked/given cells from the selected puzzle definition.
+
+non_template_statement: >
+  Grid state recipe only. Not a prebuilt grid component file.
+
+applies_to:
+  - game.daily-puzzle-grid
+  - tag:daily-puzzle-grid
+
+depends_on:
+  - mechanic.puzzle-seed
+
+provides:
+  - grid_state
+
+binds_components:
+  - component.puzzle-grid
+  - component.grid-cell
+
+inputs:
+  - rows: number
+  - cols: number
+  - initial_givens: array — locked cell positions from puzzle definition
+  - cell_state_enum: empty | filled | marked | error | locked
+
+outputs:
+  - cells: array — row-major or nested 2D with state per cell
+  - rows: number
+  - cols: number
+
+guidance:
+  - "Initialize grid from puzzleDefinition dimensions and givens"
+  - "Locked cells cannot be edited"
+  - "Finite cell state enum in generated code"
+  - "Grid as data — not hardcoded JSX per cell"
+
+validation_notes:
+  - cells.length === rows * cols
+  - Given cells match puzzle definition on init
+
+risk_notes:
+  - Dimension mismatch between puzzle def and rendered grid
+  - Mutable reference bugs when updating cell state
+
+state_model:
+  fields:
+    - name: cells
+      type: array
+    - name: rows
+      type: number
+    - name: cols
+      type: number
+  events:
+    - init_grid
+    - reset_grid
+    - set_cell_state
+
+common_failure_modes:
+  - "Grid dimensions do not match puzzle definition"
+  - "Given cells overwritten by player edits"
+
+test_ideas:
+  - "Init produces correct rows x cols"
+  - "Given cells start locked"
+  - "Reset restores puzzle givens"
+
+reusable_across:
+  - game.daily-puzzle-grid

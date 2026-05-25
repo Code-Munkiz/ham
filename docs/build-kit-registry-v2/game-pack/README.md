@@ -2,7 +2,7 @@
 
 **Status:** Non-runtime schema pilot only. **Schema version:** `0.1`
 
-This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: **`game.idle-incremental`**, **`game.trivia-timer`**, **`game.branching-narrative`**, **`game.memory-match`**, and **`game.word-daily`**.
+This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: **`game.idle-incremental`**, **`game.trivia-timer`**, **`game.branching-narrative`**, **`game.memory-match`**, **`game.word-daily`**, and **`game.daily-puzzle-grid`** (Wave 2, schema-only).
 
 ## Root manifest
 
@@ -89,6 +89,17 @@ Use vocabulary: **module**, **playbook**, **contract**, **mechanic**. Avoid “t
 | **Distinct validators** | Duplicate-letter feedback, guess length/attempts, daily seed stability, keyboard guardrails — complementary to other recipes. |
 | **Explicit MVP bounds** | Static in-memory word list; date-based daily seed; no accounts, leaderboard, or live word API. |
 
+### `game.daily-puzzle-grid` (Wave 2 — schema-only, not routed)
+
+| Reason | Detail |
+|--------|--------|
+| **Sixth recipe shape** | Proves the pack supports daily grid logic puzzles with constraint-based completion — distinct from word guessing and card games. |
+| **DOM-native grid UI** | Puzzle grid, cells, rule panel, status bar, optional hints — no Canvas or external puzzle API for MVP. |
+| **Shared reuse** | Reuses `component.game-shell`, `stack.dom-game-minimal`. |
+| **Distinct mechanics** | Puzzle seed, grid state, constraint rules, cell interaction, mistake tracking, hints, completion check. |
+| **Explicit MVP bounds** | Static in-memory puzzle definitions; deterministic daily seed; no accounts, leaderboard, or live puzzle API. |
+| **Routing** | Schema-only — not routed behind `HAM_BUILD_REGISTRY_V2_ENABLED` until explicitly approved. |
+
 ## Pilot module layout
 
 ```txt
@@ -101,13 +112,14 @@ docs/build-kit-registry-v2/game-pack/
   app-types/game.branching-narrative.yaml
   app-types/game.memory-match.yaml
   app-types/game.word-daily.yaml
+  app-types/game.daily-puzzle-grid.yaml
   stack-kits/dom-game-minimal.yaml
-  mechanics/{score,economy,upgrades,save-load,question-set,timer,answer-validation,progression,story-node-graph,story-flags,inventory-lite,choice-resolution,ending-resolution,card-pair-set,card-flip-state,interaction-lock,match-detection,move-counter,victory-detection,word-target,daily-seed,guess-grid,keyboard-input,letter-feedback,attempt-limit,win-loss-state}.yaml
-  component-contracts/{game-shell,resource-counter,upgrade-card,save-status,question-card,choice-list,timer-display,results-summary,story-panel,choice-card,story-state-summary,inventory-panel,ending-screen,card-grid,memory-card,move-counter,match-progress,victory-screen,word-grid,guess-row,letter-tile,on-screen-keyboard,word-result-panel}.yaml
-  validators/{no-negative-currency,passive-income-tick,local-storage-roundtrip,timer-cleanup,score-calculation,question-progression,story-graph-reachability,no-dead-end-choice,story-state-consistency,card-pair-integrity,flip-lock-prevents-third-card,match-completion,duplicate-letter-feedback,guess-length-and-attempts,daily-seed-stability,keyboard-input-guardrails}.yaml
-  recovery-playbooks/{stale-interval-or-bad-tick-loop,invalid-local-storage-json,stale-timer-or-uncleared-timeout,broken-question-progression,broken-story-graph,inconsistent-story-state,broken-card-flip-state,mismatched-card-pairs,stuck-interaction-lock,broken-duplicate-letter-feedback,unstable-daily-seed,invalid-guess-state}.yaml
-  progress-labels/{idle-incremental,trivia-timer,branching-narrative,memory-match,word-daily}.yaml
-  learning-hooks/{idle-incremental,trivia-timer,branching-narrative,memory-match,word-daily}.yaml
+  mechanics/{score,economy,upgrades,save-load,question-set,timer,answer-validation,progression,story-node-graph,story-flags,inventory-lite,choice-resolution,ending-resolution,card-pair-set,card-flip-state,interaction-lock,match-detection,move-counter,victory-detection,word-target,daily-seed,guess-grid,keyboard-input,letter-feedback,attempt-limit,win-loss-state,puzzle-seed,grid-state,constraint-rules,cell-interaction,mistake-tracking,hint-system-lite,completion-check}.yaml
+  component-contracts/{game-shell,resource-counter,upgrade-card,save-status,question-card,choice-list,timer-display,results-summary,story-panel,choice-card,story-state-summary,inventory-panel,ending-screen,card-grid,memory-card,move-counter,match-progress,victory-screen,word-grid,guess-row,letter-tile,on-screen-keyboard,word-result-panel,puzzle-grid,grid-cell,rule-panel,puzzle-status-bar,hint-button,completion-modal}.yaml
+  validators/{no-negative-currency,passive-income-tick,local-storage-roundtrip,timer-cleanup,score-calculation,question-progression,story-graph-reachability,no-dead-end-choice,story-state-consistency,card-pair-integrity,flip-lock-prevents-third-card,match-completion,duplicate-letter-feedback,guess-length-and-attempts,daily-seed-stability,keyboard-input-guardrails,grid-dimensions,constraint-consistency,cell-state-transitions,puzzle-seed-stability,completion-detection}.yaml
+  recovery-playbooks/{stale-interval-or-bad-tick-loop,invalid-local-storage-json,stale-timer-or-uncleared-timeout,broken-question-progression,broken-story-graph,inconsistent-story-state,broken-card-flip-state,mismatched-card-pairs,stuck-interaction-lock,broken-duplicate-letter-feedback,unstable-daily-seed,invalid-guess-state,broken-grid-state,inconsistent-constraint-rules,unstable-puzzle-seed,bad-completion-check}.yaml
+  progress-labels/{idle-incremental,trivia-timer,branching-narrative,memory-match,word-daily,daily-puzzle-grid}.yaml
+  learning-hooks/{idle-incremental,trivia-timer,branching-narrative,memory-match,word-daily,daily-puzzle-grid}.yaml
 ```
 
 ## Conceptual composition example
@@ -198,6 +210,25 @@ recovery:     recovery.broken-duplicate-letter-feedback, recovery.unstable-daily
 progress:     progress.word-daily
 learning:     learning.word-daily
 ```
+
+### Conceptual composition — `game.daily-puzzle-grid`
+
+When a user says *“Build a daily grid logic puzzle with row and column constraints”*, a **future** composer would assemble:
+
+```txt
+registry_pack: pack.game
+schema_version: 0.1
+app_type:     game.daily-puzzle-grid
+stack_kit:    stack.dom-game-minimal
+mechanics:    mechanic.puzzle-seed → mechanic.grid-state → mechanic.constraint-rules → mechanic.cell-interaction → mechanic.mistake-tracking → mechanic.hint-system-lite → mechanic.completion-check
+contracts:    component.game-shell, component.puzzle-grid, component.grid-cell, component.rule-panel, component.puzzle-status-bar, component.hint-button, component.completion-modal
+validators:   validator.grid-dimensions, validator.constraint-consistency, validator.cell-state-transitions, validator.puzzle-seed-stability, validator.completion-detection
+recovery:     recovery.broken-grid-state, recovery.inconsistent-constraint-rules, recovery.unstable-puzzle-seed, recovery.bad-completion-check
+progress:     progress.daily-puzzle-grid
+learning:     learning.daily-puzzle-grid
+```
+
+**Note:** This recipe is **schema-only** today — not routed until explicitly approved.
 
 ## Relation to v1 Builder Kits
 

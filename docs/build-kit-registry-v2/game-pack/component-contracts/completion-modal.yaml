@@ -1,0 +1,72 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.completion-modal
+kind: component_contract
+name: Puzzle completion modal
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Overlay or panel shown when all constraints are satisfied. Congratulatory copy,
+  optional puzzle stats, dismiss or play-again actions for free-play mode.
+
+non_template_statement: >
+  Completion UI contract only. Not a social share or leaderboard modal.
+
+applies_to:
+  - game.daily-puzzle-grid
+  - tag:daily-puzzle-grid
+
+depends_on:
+  - mechanic.completion-check
+
+provides:
+  - completion_modal_ui
+
+binds_mechanics:
+  - mechanic.completion-check
+
+inputs:
+  - isComplete: boolean
+  - puzzleId: string
+  - stats: object — optional moves, mistakes, time
+
+outputs:
+  - dismiss_event: event
+  - play_again_event: event
+
+guidance:
+  - "Mount when isComplete becomes true"
+  - "Block grid interaction while visible"
+  - "Free-play may offer play again; daily shows return copy"
+  - "No share/leaderboard unless user requests later"
+
+validation_notes:
+  - Not visible before completion
+  - Grid non-interactive while modal open
+
+risk_notes:
+  - Modal blocks entire app without dismiss
+
+purpose: >
+  Clear terminal state for constraint-satisfied puzzles.
+
+expected_props:
+  - isOpen: boolean
+  - puzzleId: string
+  - onDismiss: "() => void"
+  - onPlayAgain: "() => void"
+
+states:
+  - hidden
+  - visible
+
+accessibility_notes:
+  - "Focus trap in modal; return focus on dismiss"
+  - "role=dialog with aria-labelledby"
+
+responsive_notes:
+  - "Centered card on desktop; bottom sheet acceptable on mobile"
+
+styling_guidance:
+  - "Celebratory but concise; match user theme"

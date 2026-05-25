@@ -1,0 +1,90 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.bad-completion-check
+kind: recovery_playbook
+name: Fix bad completion check
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs puzzles that complete too early, never complete when constraints satisfied,
+  or fail to show completion modal / lock interaction.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.daily-puzzle-grid
+  - tag:daily-puzzle-grid
+
+depends_on:
+  - mechanic.completion-check
+  - mechanic.constraint-rules
+  - validator.completion-detection
+
+repairs_validators:
+  - validator.completion-detection
+
+inputs:
+  - failure_context: validator result
+  - current_source: completion handler (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.completion-detection
+
+guidance:
+  - "Wire isComplete to allConstraintsSatisfied from constraint-rules"
+  - "Do not use filled-cell count alone for completion"
+  - "Open completion modal on isComplete transition"
+  - "Set interactionBlocked via cell-interaction"
+
+validation_notes:
+  - Re-run completion-detection after repair
+
+risk_notes:
+  - Modal opens on partial constraint pass if eval buggy
+
+failure_signals:
+  - validator.completion-detection fail
+  - Victory on incomplete constraints
+  - No modal when puzzle solved
+
+diagnosis_steps:
+  - "Trace check_completion after cell updates"
+  - "Compare isComplete to allConstraintsSatisfied"
+  - "Verify modal isOpen binding"
+
+steps:
+  - id: step.constraint_gate
+    action: constraint_gate
+    detail: "Complete only when allConstraintsSatisfied"
+  - id: step.modal_bind
+    action: modal_bind
+    detail: "Bind completion-modal to isComplete"
+  - id: step.lock_interaction
+    action: lock_interaction
+    detail: "Block clicks after complete"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.completion-detection"
+
+repair_strategy:
+  - action: constraint_gate
+    detail: "Constraint-based completion"
+  - action: modal_bind
+    detail: "Terminal UI on success"
+  - action: lock_interaction
+    detail: "Post-complete lock"
+  - action: re_validate
+    target: validator.completion-detection
+
+guardrails:
+  - max_attempts: 2
+  - do_not: "Auto-fill remaining cells to force complete"
+  - preserve: "Player grid state unless reset requested"
+
+user_facing_summary: >
+  I fixed puzzle completion so it triggers when all rules are satisfied.

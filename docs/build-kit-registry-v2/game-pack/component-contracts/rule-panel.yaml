@@ -1,0 +1,69 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.rule-panel
+kind: component_contract
+name: Constraint rule panel
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Displays human-readable row, column, and region constraint summaries derived from
+  constraint-rules data. Optional per-unit satisfaction indicators.
+
+non_template_statement: >
+  Rule display contract only. Not hardcoded Sudoku clue markup.
+
+applies_to:
+  - game.daily-puzzle-grid
+  - tag:daily-puzzle-grid
+
+depends_on:
+  - mechanic.constraint-rules
+
+provides:
+  - rule_panel_ui
+
+binds_mechanics:
+  - mechanic.constraint-rules
+
+inputs:
+  - constraints: object — from puzzle definition
+  - constraintResults: object — optional pass/fail highlights
+
+outputs:
+  - rendered_rules: string | ReactNode
+
+guidance:
+  - "Render rules from data — not hardcoded variant JSX"
+  - "Row/column clues adjacent to grid when layout allows"
+  - "Optional satisfaction highlights per unit"
+  - "Collapse or scroll on mobile"
+
+validation_notes:
+  - Rule count matches constraint data
+  - No orphan rules for nonexistent grid units
+
+risk_notes:
+  - Rules rendered out of sync with constraint evaluation
+
+purpose: >
+  Help player understand constraints without embedding logic in UI components.
+
+expected_props:
+  - constraints: object
+  - constraintResults: object
+  - compact: boolean
+
+states:
+  - default
+  - partial_progress
+  - all_satisfied
+
+accessibility_notes:
+  - "Rules available as text list for screen readers"
+
+responsive_notes:
+  - "Stack below grid on narrow viewports"
+
+styling_guidance:
+  - "Readable monospace or tabular nums for numeric clues"

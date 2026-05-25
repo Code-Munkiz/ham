@@ -1,0 +1,68 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.constraint-consistency
+kind: validator
+name: Constraint data consistency
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Verifies constraint rules data is internally consistent, matches grid dimensions, and
+  evaluates deterministically against known solved and unsolved fixture grids.
+
+non_template_statement: >
+  Conceptual constraint check. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.daily-puzzle-grid
+  - tag:daily-puzzle-grid
+
+depends_on:
+  - mechanic.constraint-rules
+
+validates_modules:
+  - mechanic.constraint-rules
+  - component.rule-panel
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - constraint_data: object
+  - fixture_solved_grid: object
+  - fixture_partial_grid: object
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "Known solved fixture passes allConstraintsSatisfied"
+  - "Partial fixture fails appropriately"
+  - "Rule panel summaries derivable from constraint data"
+
+validation_notes:
+  - Run after constraint-rules wired
+  - Does not execute at runtime today
+
+risk_notes:
+  - Fixtures too trivial to catch region constraint bugs
+
+validation_goal: >
+  Constraint rules are coherent and evaluate correctly against test grids.
+
+pass_conditions:
+  - "Solved fixture passes all constraints"
+  - "Invalid partial grid fails"
+  - "No orphan constraint units"
+
+fail_conditions:
+  - "Constraints reference invalid units"
+  - "Solved fixture fails evaluation"
+  - "Rule panel data out of sync"
+
+suggested_failure_message: >
+  The puzzle rules don't line up with the grid. I'll fix the constraint data and evaluation.
+
+recovery_playbooks:
+  - recovery.inconsistent-constraint-rules

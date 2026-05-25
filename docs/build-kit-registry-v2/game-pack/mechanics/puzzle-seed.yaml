@@ -1,0 +1,77 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.puzzle-seed
+kind: mechanic
+name: Puzzle seed selection
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Picks a deterministic daily puzzle from a static in-memory puzzle list using a
+  date-based seed or stable puzzle id. Supports conceptual dev/test override without
+  changing production daily behavior.
+
+non_template_statement: >
+  Seed algorithm guidance only. Not a live calendar or puzzle API service.
+
+applies_to:
+  - game.daily-puzzle-grid
+  - tag:daily-puzzle-grid
+
+depends_on: []
+
+provides:
+  - puzzle_seed_state
+
+binds_components:
+  - component.puzzle-status-bar
+
+inputs:
+  - seed_date: string — YYYY-MM-DD local date default
+  - allowed_puzzles: array — static puzzle definitions
+  - puzzle_id: string | null — free-play stable id override
+  - dev_override_puzzle_id: string | null — test mode only
+
+outputs:
+  - selectedPuzzleId: string
+  - seedKey: string
+  - puzzleDefinition: object
+
+guidance:
+  - "Hash or index allowed_puzzles from seed_date deterministically"
+  - "Same seed_date yields same puzzle within a build"
+  - "dev_override_puzzle_id only with explicit test flag"
+  - "No network fetch for MVP"
+
+validation_notes:
+  - Stable output for fixed seed_date
+  - Override ignored when test flag false
+
+risk_notes:
+  - Clock/timezone changes mid-session alter seed unexpectedly
+  - Empty puzzle list yields no selection
+
+state_model:
+  fields:
+    - name: seedKey
+      type: string
+    - name: selectedPuzzleId
+      type: string
+    - name: puzzleDefinition
+      type: object
+  events:
+    - init_daily_puzzle
+    - select_free_play_puzzle
+    - apply_dev_override
+
+common_failure_modes:
+  - "Different puzzle on refresh for same calendar day"
+  - "Empty puzzle list yields no puzzle"
+
+test_ideas:
+  - "Two runs with same seed pick same puzzle"
+  - "Free-play puzzle_id selects fixed puzzle"
+  - "Override selects fixed puzzle in test mode"
+
+reusable_across:
+  - game.daily-puzzle-grid

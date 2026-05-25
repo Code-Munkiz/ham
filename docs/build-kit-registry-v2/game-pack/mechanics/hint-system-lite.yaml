@@ -1,0 +1,73 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.hint-system-lite
+kind: mechanic
+name: Lightweight hint system
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Optional lightweight hints: reveal a cell, highlight a row/column, or show one rule
+  clarification. Configurable hint budget; off when user disables hints.
+
+non_template_statement: >
+  Hint behavior guidance only. Not a paid hint monetization system.
+
+applies_to:
+  - game.daily-puzzle-grid
+  - tag:daily-puzzle-grid
+
+depends_on:
+  - mechanic.grid-state
+  - mechanic.constraint-rules
+  - mechanic.mistake-tracking
+
+provides:
+  - hint_system
+
+binds_components:
+  - component.hint-button
+
+inputs:
+  - max_hints: number — default 1–3
+  - hint_types: array — reveal_cell | highlight_unit | rule_nudge
+
+outputs:
+  - hintsRemaining: number
+  - lastHintApplied: object | null
+
+guidance:
+  - "Single hint button; optional per user override"
+  - "Decrement hintsRemaining on use; disable at zero"
+  - "Hints must not auto-complete puzzle"
+  - "Local hints only — no server fetch"
+
+validation_notes:
+  - hintsRemaining never negative
+  - Button disabled when hints exhausted
+
+risk_notes:
+  - Hint reveals answer for entire puzzle accidentally
+  - Hint stack overflow if unlimited hints requested without guard
+
+state_model:
+  fields:
+    - name: hintsRemaining
+      type: number
+    - name: lastHintApplied
+      type: object
+  events:
+    - apply_hint
+    - reset_hints
+
+common_failure_modes:
+  - "Hints bypass completion validation"
+  - "Button active with zero hints left"
+
+test_ideas:
+  - "Each hint decrements budget"
+  - "Zero hints disables button"
+  - "Reveal cell sets correct state for one cell"
+
+reusable_across:
+  - game.daily-puzzle-grid

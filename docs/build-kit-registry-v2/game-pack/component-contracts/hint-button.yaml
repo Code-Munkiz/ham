@@ -1,0 +1,69 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.hint-button
+kind: component_contract
+name: Hint button
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Optional control to consume one hint from the hint budget. Disabled when hints
+  exhausted or puzzle complete.
+
+non_template_statement: >
+  Hint control contract only. Not a monetized IAP button.
+
+applies_to:
+  - game.daily-puzzle-grid
+  - tag:daily-puzzle-grid
+
+depends_on:
+  - mechanic.hint-system-lite
+
+provides:
+  - hint_button_ui
+
+binds_mechanics:
+  - mechanic.hint-system-lite
+
+inputs:
+  - hintsRemaining: number
+  - disabled: boolean
+
+outputs:
+  - hint_requested: event
+
+guidance:
+  - "Hint button; disabled at zero hints or when complete"
+  - "Show remaining count in label"
+  - "No double-click double consume"
+
+validation_notes:
+  - Button disabled at zero hints
+  - No click handler when complete
+
+risk_notes:
+  - Double-click consumes two hints
+
+purpose: >
+  Lightweight optional assist without external API.
+
+expected_props:
+  - hintsRemaining: number
+  - disabled: boolean
+  - onHint: "() => void"
+
+states:
+  - enabled
+  - disabled_exhausted
+  - disabled_complete
+
+accessibility_notes:
+  - "Button aria-disabled when not usable"
+  - "Hints remaining in accessible name"
+
+responsive_notes:
+  - "Min 44px tap target"
+
+styling_guidance:
+  - "Secondary styling; not primary grid action"

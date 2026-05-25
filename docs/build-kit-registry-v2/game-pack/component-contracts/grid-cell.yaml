@@ -1,0 +1,77 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.grid-cell
+kind: component_contract
+name: Single puzzle grid cell
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  One interactive or display-only grid cell showing empty, filled, marked, error, or
+  locked state. Primary tap/click target for player edits.
+
+non_template_statement: >
+  UI contract for one cell. Not a fixed cell component library file.
+
+applies_to:
+  - game.daily-puzzle-grid
+  - tag:daily-puzzle-grid
+
+depends_on:
+  - mechanic.cell-interaction
+
+provides:
+  - grid_cell_ui
+
+binds_mechanics:
+  - mechanic.cell-interaction
+  - mechanic.grid-state
+
+inputs:
+  - row: number
+  - col: number
+  - state: empty | filled | marked | error | locked
+  - disabled: boolean
+
+outputs:
+  - "click_event: { row, col }"
+
+guidance:
+  - "Min 44px tap target per cell"
+  - "Visual distinction per state; locked non-interactive"
+  - "Clear error state on correction"
+  - "Keyboard activation when focused"
+
+validation_notes:
+  - Locked cells not clickable
+  - State matches grid-state model
+
+risk_notes:
+  - Click fires when disabled due to missing guard
+
+purpose: >
+  Primary per-cell interaction surface for grid puzzles.
+
+expected_props:
+  - row: number
+  - col: number
+  - state: string
+  - disabled: boolean
+  - onActivate: "(row: number, col: number) => void"
+
+states:
+  - empty
+  - filled
+  - marked
+  - error
+  - locked
+
+accessibility_notes:
+  - "aria-disabled for locked cells"
+  - "State announced for screen readers where appropriate"
+
+responsive_notes:
+  - "Square aspect ratio; readable symbol or fill marker"
+
+styling_guidance:
+  - "High contrast for error and locked states"

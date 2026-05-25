@@ -8,7 +8,8 @@ schema_version: "0.1"
 description: >
   Root manifest for the Build Kit Registry v2 Game Pack schema pilot. Indexes all
   proposed modules for DOM-native casual games, starting with game.idle-incremental,
-  game.trivia-timer, game.branching-narrative, game.memory-match, and game.word-daily.
+  game.trivia-timer, game.branching-narrative, game.memory-match, game.word-daily,
+  and game.daily-puzzle-grid (Wave 2 schema-only).
   Used for cross-reference validation and future composer defaults — not loaded by HAM
   at runtime today.
 
@@ -24,6 +25,7 @@ module_index:
     - game.branching-narrative
     - game.memory-match
     - game.word-daily
+    - game.daily-puzzle-grid
   stack_kits:
     - stack.dom-game-minimal
   mechanics:
@@ -53,6 +55,13 @@ module_index:
     - mechanic.letter-feedback
     - mechanic.attempt-limit
     - mechanic.win-loss-state
+    - mechanic.puzzle-seed
+    - mechanic.grid-state
+    - mechanic.constraint-rules
+    - mechanic.cell-interaction
+    - mechanic.mistake-tracking
+    - mechanic.hint-system-lite
+    - mechanic.completion-check
   component_contracts:
     - component.game-shell
     - component.resource-counter
@@ -77,6 +86,12 @@ module_index:
     - component.letter-tile
     - component.on-screen-keyboard
     - component.word-result-panel
+    - component.puzzle-grid
+    - component.grid-cell
+    - component.rule-panel
+    - component.puzzle-status-bar
+    - component.hint-button
+    - component.completion-modal
   validators:
     - validator.no-negative-currency
     - validator.passive-income-tick
@@ -94,6 +109,11 @@ module_index:
     - validator.guess-length-and-attempts
     - validator.daily-seed-stability
     - validator.keyboard-input-guardrails
+    - validator.grid-dimensions
+    - validator.constraint-consistency
+    - validator.cell-state-transitions
+    - validator.puzzle-seed-stability
+    - validator.completion-detection
   recovery_playbooks:
     - recovery.stale-interval-or-bad-tick-loop
     - recovery.invalid-local-storage-json
@@ -107,18 +127,24 @@ module_index:
     - recovery.broken-duplicate-letter-feedback
     - recovery.unstable-daily-seed
     - recovery.invalid-guess-state
+    - recovery.broken-grid-state
+    - recovery.inconsistent-constraint-rules
+    - recovery.unstable-puzzle-seed
+    - recovery.bad-completion-check
   progress_labels:
     - progress.idle-incremental
     - progress.trivia-timer
     - progress.branching-narrative
     - progress.memory-match
     - progress.word-daily
+    - progress.daily-puzzle-grid
   learning_hooks:
     - learning.idle-incremental
     - learning.trivia-timer
     - learning.branching-narrative
     - learning.memory-match
     - learning.word-daily
+    - learning.daily-puzzle-grid
 
 compose_defaults:
   compose_order:
