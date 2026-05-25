@@ -1,0 +1,70 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.word-grid
+kind: component_contract
+name: Word guess grid
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Container for all guess rows in a daily word game — fixed rows × word length grid.
+
+non_template_statement: >
+  Layout contract for the grid. Not a fixed Wordle clone component file.
+
+applies_to:
+  - game.word-daily
+  - tag:word-daily
+
+depends_on:
+  - mechanic.guess-grid
+  - mechanic.attempt-limit
+
+provides:
+  - word_grid_ui
+
+binds_mechanics:
+  - mechanic.guess-grid
+  - mechanic.attempt-limit
+
+inputs:
+  - rows: array of row state
+  - maxAttempts: number
+  - wordLength: number
+
+outputs:
+  - grid_layout: visual structure
+
+guidance:
+  - "Render maxAttempts rows even if unused rows empty"
+  - "Center grid in main play area"
+  - "Consistent gap between tiles"
+
+validation_notes:
+  - Row count matches maxAttempts
+  - Each row has wordLength slots
+
+risk_notes:
+  - Grid overflow on small screens
+
+purpose: >
+  Stable mount point for guess rows and letter tiles.
+
+expected_props:
+  - rows: array
+  - maxAttempts: number
+  - wordLength: number
+
+states:
+  - playing
+  - won
+  - lost
+
+accessibility_notes:
+  - "Grid announced as word puzzle with attempt count"
+
+responsive_notes:
+  - "Scale tile size down on narrow viewports; maintain tap targets"
+
+styling_guidance:
+  - "Clear separation between rows; minimal chrome"

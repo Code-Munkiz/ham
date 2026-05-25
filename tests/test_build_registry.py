@@ -51,6 +51,16 @@ EXPECTED_MEMORY_MATCH_MECHANIC_ORDER = (
     "mechanic.victory-detection",
 )
 
+EXPECTED_WORD_DAILY_MECHANIC_ORDER = (
+    "mechanic.word-target",
+    "mechanic.daily-seed",
+    "mechanic.guess-grid",
+    "mechanic.attempt-limit",
+    "mechanic.letter-feedback",
+    "mechanic.win-loss-state",
+    "mechanic.keyboard-input",
+)
+
 
 @pytest.fixture
 def game_pack_root() -> Path:
@@ -62,7 +72,7 @@ class TestHappyPath:
         pack = load_registry_pack(game_pack_root)
         assert pack.pack_id == "pack.game"
         assert pack.schema_version == "0.1"
-        assert len(pack.modules) == 71
+        assert len(pack.modules) == 93
 
     def test_validate_docs_game_pack(self, game_pack_root: Path):
         pack = load_registry_pack(game_pack_root)
@@ -219,6 +229,51 @@ class TestMemoryMatchRecipe:
         assert idle.mechanic_ids == EXPECTED_MECHANIC_ORDER
         assert trivia.mechanic_ids == EXPECTED_TRIVIA_MECHANIC_ORDER
         assert branching.mechanic_ids == EXPECTED_BRANCHING_NARRATIVE_MECHANIC_ORDER
+
+
+class TestWordDailyRecipe:
+    def test_compose_word_daily(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        validate_registry_pack(pack)
+        recipe = compose_build_recipe(pack, "game.word-daily")
+        assert recipe.app_type_id == "game.word-daily"
+        assert recipe.stack_kit_id == "stack.dom-game-minimal"
+        assert recipe.mechanic_ids == EXPECTED_WORD_DAILY_MECHANIC_ORDER
+
+    def test_render_word_daily_includes_key_ids(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        recipe = compose_build_recipe(pack, "game.word-daily")
+        rendered = render_playbook_context(recipe)
+        assert "game.word-daily" in rendered
+        assert "stack.dom-game-minimal" in rendered
+        assert "mechanic.word-target" in rendered
+        assert "mechanic.guess-grid" in rendered
+        assert "mechanic.letter-feedback" in rendered
+        assert "mechanic.daily-seed" in rendered
+        assert "validator.duplicate-letter-feedback" in rendered
+        assert "validator.daily-seed-stability" in rendered
+        assert "static-word-list-for-mvp" in rendered
+
+    def test_render_word_daily_under_default_budget(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        recipe = compose_build_recipe(pack, "game.word-daily")
+        rendered = render_playbook_context(recipe)
+        assert len(rendered) <= 12_000
+        assert rendered.startswith("Build Kit Registry v2 — BuildRecipe\n")
+
+    def test_other_recipes_still_compose_after_word_daily_added(
+        self, game_pack_root: Path
+    ):
+        pack = load_registry_pack(game_pack_root)
+        validate_registry_pack(pack)
+        idle = compose_build_recipe(pack, "game.idle-incremental")
+        trivia = compose_build_recipe(pack, "game.trivia-timer")
+        branching = compose_build_recipe(pack, "game.branching-narrative")
+        memory = compose_build_recipe(pack, "game.memory-match")
+        assert idle.mechanic_ids == EXPECTED_MECHANIC_ORDER
+        assert trivia.mechanic_ids == EXPECTED_TRIVIA_MECHANIC_ORDER
+        assert branching.mechanic_ids == EXPECTED_BRANCHING_NARRATIVE_MECHANIC_ORDER
+        assert memory.mechanic_ids == EXPECTED_MEMORY_MATCH_MECHANIC_ORDER
 
 
 class TestBrokenFixtures:

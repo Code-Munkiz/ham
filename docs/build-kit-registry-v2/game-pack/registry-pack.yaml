@@ -8,7 +8,7 @@ schema_version: "0.1"
 description: >
   Root manifest for the Build Kit Registry v2 Game Pack schema pilot. Indexes all
   proposed modules for DOM-native casual games, starting with game.idle-incremental,
-  game.trivia-timer, game.branching-narrative, and game.memory-match.
+  game.trivia-timer, game.branching-narrative, game.memory-match, and game.word-daily.
   Used for cross-reference validation and future composer defaults — not loaded by HAM
   at runtime today.
 
@@ -23,6 +23,7 @@ module_index:
     - game.trivia-timer
     - game.branching-narrative
     - game.memory-match
+    - game.word-daily
   stack_kits:
     - stack.dom-game-minimal
   mechanics:
@@ -45,6 +46,13 @@ module_index:
     - mechanic.match-detection
     - mechanic.move-counter
     - mechanic.victory-detection
+    - mechanic.word-target
+    - mechanic.daily-seed
+    - mechanic.guess-grid
+    - mechanic.keyboard-input
+    - mechanic.letter-feedback
+    - mechanic.attempt-limit
+    - mechanic.win-loss-state
   component_contracts:
     - component.game-shell
     - component.resource-counter
@@ -64,6 +72,11 @@ module_index:
     - component.move-counter
     - component.match-progress
     - component.victory-screen
+    - component.word-grid
+    - component.guess-row
+    - component.letter-tile
+    - component.on-screen-keyboard
+    - component.word-result-panel
   validators:
     - validator.no-negative-currency
     - validator.passive-income-tick
@@ -77,6 +90,10 @@ module_index:
     - validator.card-pair-integrity
     - validator.flip-lock-prevents-third-card
     - validator.match-completion
+    - validator.duplicate-letter-feedback
+    - validator.guess-length-and-attempts
+    - validator.daily-seed-stability
+    - validator.keyboard-input-guardrails
   recovery_playbooks:
     - recovery.stale-interval-or-bad-tick-loop
     - recovery.invalid-local-storage-json
@@ -87,16 +104,21 @@ module_index:
     - recovery.broken-card-flip-state
     - recovery.mismatched-card-pairs
     - recovery.stuck-interaction-lock
+    - recovery.broken-duplicate-letter-feedback
+    - recovery.unstable-daily-seed
+    - recovery.invalid-guess-state
   progress_labels:
     - progress.idle-incremental
     - progress.trivia-timer
     - progress.branching-narrative
     - progress.memory-match
+    - progress.word-daily
   learning_hooks:
     - learning.idle-incremental
     - learning.trivia-timer
     - learning.branching-narrative
     - learning.memory-match
+    - learning.word-daily
 
 compose_defaults:
   compose_order:

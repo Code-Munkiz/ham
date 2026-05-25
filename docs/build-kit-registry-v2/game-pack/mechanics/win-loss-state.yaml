@@ -1,0 +1,73 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.win-loss-state
+kind: mechanic
+name: Win and loss resolution
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Determines win when a guess matches the target word, loss when attempts are exhausted
+  without a match, and blocks further input after terminal state.
+
+non_template_statement: >
+  Terminal game state guidance only.
+
+applies_to:
+  - game.word-daily
+  - tag:word-daily
+
+depends_on:
+  - mechanic.letter-feedback
+  - mechanic.attempt-limit
+
+provides:
+  - win_loss_state
+
+binds_components:
+  - component.word-result-panel
+
+inputs:
+  - game_status: playing | won | lost
+  - target_word: string
+  - last_guess: string
+
+outputs:
+  - gameStatus: playing | won | lost
+  - revealTarget: boolean
+
+guidance:
+  - "Set won when submitted guess equals target_word"
+  - "Set lost when attempts exhausted and not won"
+  - "Block keyboard and submit when status !== playing"
+  - "Show result panel with win/loss copy; optionally reveal target on loss"
+
+validation_notes:
+  - No transitions from won/lost back to playing without explicit new game
+  - revealTarget true on loss for MVP honesty
+
+risk_notes:
+  - Game stays playing after correct guess
+  - Input still accepted after loss
+
+state_model:
+  fields:
+    - name: gameStatus
+      type: enum
+    - name: revealTarget
+      type: boolean
+  events:
+    - check_win
+    - check_loss
+    - reset_game
+
+common_failure_modes:
+  - "Status stuck on playing after win"
+  - "Allows guess after loss"
+
+test_ideas:
+  - "Correct guess on row 3 sets won"
+  - "Six wrong guesses sets lost"
+
+reusable_across:
+  - game.word-daily

@@ -1,0 +1,67 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.daily-seed-stability
+kind: validator
+name: Daily seed stability
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Verifies the same date seed selects the same target word within a session and across
+  reloads (MVP deterministic behavior).
+
+non_template_statement: >
+  Conceptual seed stability check. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.word-daily
+  - tag:word-daily
+
+depends_on:
+  - mechanic.daily-seed
+  - mechanic.word-target
+
+validates_modules:
+  - mechanic.daily-seed
+  - mechanic.word-target
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - seed_date: string
+  - allowed_words: array
+  - runs: number — default 2
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "Same seed_date + same word list → same target"
+  - "dev_override_target only when test flag enabled"
+  - "No network fetch for seed or words"
+
+validation_notes:
+  - Run after daily seed init wired
+  - Does not execute at runtime today
+
+risk_notes:
+  - Timezone drift changes effective seed mid-day
+
+validation_goal: >
+  Daily target selection is stable and deterministic for a given seed date.
+
+pass_conditions:
+  - "Repeated init with same seed picks same word"
+  - "Override ignored without test flag"
+
+fail_conditions:
+  - "Target changes between reloads for same seed"
+  - "Random target each mount without explicit non-daily mode"
+
+suggested_failure_message: >
+  The daily word changed unexpectedly. I'll stabilize the date-based seed selection.
+
+recovery_playbooks:
+  - recovery.unstable-daily-seed

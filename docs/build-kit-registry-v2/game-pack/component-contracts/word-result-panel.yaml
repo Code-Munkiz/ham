@@ -1,0 +1,72 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.word-result-panel
+kind: component_contract
+name: Word game result panel
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Win/loss summary panel showing outcome copy and optional target word reveal after game
+  ends.
+
+non_template_statement: >
+  Result panel contract only. Not a fixed modal component file.
+
+applies_to:
+  - game.word-daily
+  - tag:word-daily
+
+depends_on:
+  - mechanic.win-loss-state
+  - mechanic.daily-seed
+
+provides:
+  - word_result_ui
+
+binds_mechanics:
+  - mechanic.win-loss-state
+  - mechanic.daily-seed
+
+inputs:
+  - gameStatus: won | lost
+  - targetWord: string | null — revealed on loss or win per policy
+  - guessesUsed: number
+
+outputs:
+  - result_display: panel content
+
+guidance:
+  - "Show clear win or loss message"
+  - "Reveal target on loss for MVP; optional on win"
+  - "Optional play-again disabled for daily mode (same seed same day)"
+  - "No social share buttons unless user explicitly requested"
+
+validation_notes:
+  - Hidden while gameStatus is playing
+  - Visible when won or lost
+
+risk_notes:
+  - Target leaked before game end
+
+purpose: >
+  Terminal feedback for the player after last guess.
+
+expected_props:
+  - gameStatus: string
+  - targetWord: string | null
+  - guessesUsed: number
+
+states:
+  - hidden
+  - won
+  - lost
+
+accessibility_notes:
+  - "Result announced to screen readers on game end"
+
+responsive_notes:
+  - "Panel below grid; readable on mobile"
+
+styling_guidance:
+  - "Concise copy; no clutter"

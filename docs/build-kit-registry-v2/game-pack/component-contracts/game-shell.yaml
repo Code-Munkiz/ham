@@ -18,6 +18,7 @@ applies_to:
   - game.trivia-timer
   - game.branching-narrative
   - game.memory-match
+  - game.word-daily
   - tag:dom-game-layout
 
 depends_on: []

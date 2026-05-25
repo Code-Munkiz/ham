@@ -1,0 +1,70 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.letter-feedback
+kind: mechanic
+name: Per-letter feedback evaluation
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Evaluates each letter in a submitted guess against the target word with correct,
+  present (wrong position), and absent states. Handles duplicate letters deterministically.
+
+non_template_statement: >
+  Feedback algorithm guidance only. Not an executable scoring library.
+
+applies_to:
+  - game.word-daily
+  - tag:word-daily
+
+depends_on:
+  - mechanic.word-target
+  - mechanic.guess-grid
+
+provides:
+  - letter_feedback_state
+
+binds_components:
+  - component.letter-tile
+  - component.guess-row
+
+inputs:
+  - target_word: string
+  - guess: string
+  - word_length: number
+
+outputs:
+  - feedback: array of correct | present | absent per slot
+
+guidance:
+  - "First pass: mark exact position matches as correct and consume target letters"
+  - "Second pass: mark remaining guess letters as present if unused target letters remain"
+  - "Otherwise mark absent"
+  - "Duplicate letters: only as many present/correct as target contains"
+  - "Store feedback per row for tile coloring"
+
+validation_notes:
+  - feedback.length === word_length
+  - Deterministic for same target + guess
+
+risk_notes:
+  - Naive char-count breaks duplicate letter cases (e.g. ROBIN vs BROIL)
+
+state_model:
+  fields:
+    - name: rowFeedback
+      type: array
+  events:
+    - evaluate_guess
+    - clear_feedback
+
+common_failure_modes:
+  - "Double-counts duplicate letters in present state"
+  - "Correct letter marked absent when duplicate exists in target"
+
+test_ideas:
+  - "Target ROBIN guess BROIL yields expected pattern"
+  - "All correct when guess equals target"
+
+reusable_across:
+  - game.word-daily

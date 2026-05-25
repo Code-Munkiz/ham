@@ -1,0 +1,75 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.keyboard-input
+kind: mechanic
+name: Keyboard input handling
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Handles physical keyboard and optional on-screen keyboard input for letter entry,
+  backspace, and submit in a word guessing game.
+
+non_template_statement: >
+  Input handling guidance only. Not a vendored keyboard library.
+
+applies_to:
+  - game.word-daily
+  - tag:word-daily
+
+depends_on:
+  - mechanic.guess-grid
+  - mechanic.win-loss-state
+
+provides:
+  - keyboard_input_state
+
+binds_components:
+  - component.on-screen-keyboard
+
+inputs:
+  - enable_on_screen_keyboard: boolean — default true
+  - letters: A-Z
+  - key_states: map letter → unused | absent | present | correct
+
+outputs:
+  - lastKey: string | null
+  - inputBlocked: boolean
+
+guidance:
+  - "Listen for keydown: letters, Backspace, Enter"
+  - "Ignore input when gameStatus is won or lost"
+  - "On-screen keys mirror physical behavior"
+  - "Update key_states after each evaluated guess for keyboard hints"
+  - "Prevent default browser shortcuts where they interfere with typing"
+
+validation_notes:
+  - No input accepted after win/loss
+  - Enter submits only when guess complete
+
+risk_notes:
+  - Duplicate key listeners cause double entry
+  - Mobile soft keyboard conflicts with on-screen keyboard
+
+state_model:
+  fields:
+    - name: keyStates
+      type: object
+    - name: inputBlocked
+      type: boolean
+  events:
+    - key_press
+    - backspace
+    - submit
+    - block_input
+
+common_failure_modes:
+  - "Keys work after game ended"
+  - "Enter submits partial row"
+
+test_ideas:
+  - "Backspace removes last letter in current row"
+  - "On-screen key click equals physical key"
+
+reusable_across:
+  - game.word-daily

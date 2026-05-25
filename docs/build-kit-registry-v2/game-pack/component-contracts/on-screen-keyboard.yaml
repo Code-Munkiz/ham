@@ -1,0 +1,70 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.on-screen-keyboard
+kind: component_contract
+name: On-screen keyboard
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Optional QWERTY on-screen keyboard with letter keys, Enter, and Backspace. Key colors
+  reflect best-known letter states from prior guesses.
+
+non_template_statement: >
+  Keyboard UI contract only. Not a vendored keyboard widget.
+
+applies_to:
+  - game.word-daily
+  - tag:word-daily
+
+depends_on:
+  - mechanic.keyboard-input
+
+provides:
+  - on_screen_keyboard_ui
+
+binds_mechanics:
+  - mechanic.keyboard-input
+
+inputs:
+  - keyStates: map letter → unused | absent | present | correct
+  - disabled: boolean
+
+outputs:
+  - key_click: letter | Enter | Backspace
+
+guidance:
+  - "Three-row QWERTY layout typical for word games"
+  - "Disable all keys when game over or disabled flag true"
+  - "Enter and Backspace as wide keys"
+  - "Mirror physical keyboard behavior"
+
+validation_notes:
+  - Disabled when gameStatus not playing
+  - Key states monotonic (correct > present > absent)
+
+risk_notes:
+  - Keys remain clickable after win/loss
+
+purpose: >
+  Touch-friendly input for mobile players.
+
+expected_props:
+  - keyStates: object
+  - disabled: boolean
+  - onKey: "(key: string) => void"
+  - onEnter: "() => void"
+  - onBackspace: "() => void"
+
+states:
+  - enabled
+  - disabled
+
+accessibility_notes:
+  - "Buttons labeled; disabled state communicated"
+
+responsive_notes:
+  - "Fit within viewport width; wrap rows if needed"
+
+styling_guidance:
+  - "Key hints use same palette as letter tiles"

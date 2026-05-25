@@ -1,0 +1,84 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.invalid-guess-state
+kind: recovery_playbook
+name: Fix invalid guess state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs word games that accept incomplete guesses, allow guesses after win/loss, or
+  exceed attempt limits.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.word-daily
+  - tag:word-daily
+
+depends_on:
+  - mechanic.guess-grid
+  - mechanic.win-loss-state
+  - validator.guess-length-and-attempts
+
+repairs_validators:
+  - validator.guess-length-and-attempts
+  - validator.keyboard-input-guardrails
+
+inputs:
+  - failure_context: invalid submit report
+  - current_source: submit handler (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.guess-length-and-attempts
+
+guidance:
+  - "Guard submit: word_length match, gameStatus playing, attempts remaining"
+  - "Centralize submit in one function used by Enter and on-screen keyboard"
+  - "Block keyboard listeners when terminal state reached"
+
+validation_notes:
+  - Re-run guess-length and keyboard validators after repair
+  - Max 2 attempts
+
+risk_notes:
+  - Over-strict guards block valid last-row win
+
+failure_signals:
+  - validator.guess-length-and-attempts fail
+  - validator.keyboard-input-guardrails fail
+  - Seventh guess accepted
+
+diagnosis_steps:
+  - "Trace submit path from keyboard and on-screen Enter"
+  - "Verify win/loss check runs before append"
+
+steps:
+  - id: step.submit_guard
+    action: submit_guard
+    detail: "Single guarded submit function"
+  - id: step.block_after_terminal
+    action: block_after_terminal
+    detail: "Disable input when won or lost"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.guess-length-and-attempts"
+
+repair_strategy:
+  - action: submit_guard
+    detail: "Length + status + attempts checks"
+  - action: block_after_terminal
+    detail: "Input guardrails after game over"
+  - action: re_validate
+    target: validator.guess-length-and-attempts
+
+guardrails:
+  - max_attempts: 2
+  - do_not: "Remove attempt limit entirely"
+
+user_facing_summary: >
+  I fixed guess rules so only valid complete words submit and the game stops after win or loss.

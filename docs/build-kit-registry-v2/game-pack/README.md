@@ -2,7 +2,7 @@
 
 **Status:** Non-runtime schema pilot only. **Schema version:** `0.1`
 
-This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: **`game.idle-incremental`**, **`game.trivia-timer`**, **`game.branching-narrative`**, and **`game.memory-match`**.
+This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: **`game.idle-incremental`**, **`game.trivia-timer`**, **`game.branching-narrative`**, **`game.memory-match`**, and **`game.word-daily`**.
 
 ## Root manifest
 
@@ -79,6 +79,16 @@ Use vocabulary: **module**, **playbook**, **contract**, **mechanic**. Avoid “t
 | **Distinct validators** | Pair integrity, flip-lock third-card prevention, match completion — complementary to other recipes. |
 | **Explicit MVP bounds** | Static in-memory deck; no image assets, multiplayer, accounts, or Canvas engines. |
 
+### `game.word-daily`
+
+| Reason | Detail |
+|--------|--------|
+| **Fifth recipe shape** | Proves the pack supports daily word guessing with per-letter feedback — distinct from idle, quiz, narrative, and card games. |
+| **DOM-native word UI** | Guess grid, letter tiles, optional on-screen keyboard, win/loss panel — no external dictionary API for MVP. |
+| **Shared reuse** | Reuses `component.game-shell`, `stack.dom-game-minimal`. |
+| **Distinct validators** | Duplicate-letter feedback, guess length/attempts, daily seed stability, keyboard guardrails — complementary to other recipes. |
+| **Explicit MVP bounds** | Static in-memory word list; date-based daily seed; no accounts, leaderboard, or live word API. |
+
 ## Pilot module layout
 
 ```txt
@@ -90,13 +100,14 @@ docs/build-kit-registry-v2/game-pack/
   app-types/game.trivia-timer.yaml
   app-types/game.branching-narrative.yaml
   app-types/game.memory-match.yaml
+  app-types/game.word-daily.yaml
   stack-kits/dom-game-minimal.yaml
-  mechanics/{score,economy,upgrades,save-load,question-set,timer,answer-validation,progression,story-node-graph,story-flags,inventory-lite,choice-resolution,ending-resolution,card-pair-set,card-flip-state,interaction-lock,match-detection,move-counter,victory-detection}.yaml
-  component-contracts/{game-shell,resource-counter,upgrade-card,save-status,question-card,choice-list,timer-display,results-summary,story-panel,choice-card,story-state-summary,inventory-panel,ending-screen,card-grid,memory-card,move-counter,match-progress,victory-screen}.yaml
-  validators/{no-negative-currency,passive-income-tick,local-storage-roundtrip,timer-cleanup,score-calculation,question-progression,story-graph-reachability,no-dead-end-choice,story-state-consistency,card-pair-integrity,flip-lock-prevents-third-card,match-completion}.yaml
-  recovery-playbooks/{stale-interval-or-bad-tick-loop,invalid-local-storage-json,stale-timer-or-uncleared-timeout,broken-question-progression,broken-story-graph,inconsistent-story-state,broken-card-flip-state,mismatched-card-pairs,stuck-interaction-lock}.yaml
-  progress-labels/{idle-incremental,trivia-timer,branching-narrative,memory-match}.yaml
-  learning-hooks/{idle-incremental,trivia-timer,branching-narrative,memory-match}.yaml
+  mechanics/{score,economy,upgrades,save-load,question-set,timer,answer-validation,progression,story-node-graph,story-flags,inventory-lite,choice-resolution,ending-resolution,card-pair-set,card-flip-state,interaction-lock,match-detection,move-counter,victory-detection,word-target,daily-seed,guess-grid,keyboard-input,letter-feedback,attempt-limit,win-loss-state}.yaml
+  component-contracts/{game-shell,resource-counter,upgrade-card,save-status,question-card,choice-list,timer-display,results-summary,story-panel,choice-card,story-state-summary,inventory-panel,ending-screen,card-grid,memory-card,move-counter,match-progress,victory-screen,word-grid,guess-row,letter-tile,on-screen-keyboard,word-result-panel}.yaml
+  validators/{no-negative-currency,passive-income-tick,local-storage-roundtrip,timer-cleanup,score-calculation,question-progression,story-graph-reachability,no-dead-end-choice,story-state-consistency,card-pair-integrity,flip-lock-prevents-third-card,match-completion,duplicate-letter-feedback,guess-length-and-attempts,daily-seed-stability,keyboard-input-guardrails}.yaml
+  recovery-playbooks/{stale-interval-or-bad-tick-loop,invalid-local-storage-json,stale-timer-or-uncleared-timeout,broken-question-progression,broken-story-graph,inconsistent-story-state,broken-card-flip-state,mismatched-card-pairs,stuck-interaction-lock,broken-duplicate-letter-feedback,unstable-daily-seed,invalid-guess-state}.yaml
+  progress-labels/{idle-incremental,trivia-timer,branching-narrative,memory-match,word-daily}.yaml
+  learning-hooks/{idle-incremental,trivia-timer,branching-narrative,memory-match,word-daily}.yaml
 ```
 
 ## Conceptual composition example
@@ -169,6 +180,23 @@ validators:   validator.card-pair-integrity, validator.flip-lock-prevents-third-
 recovery:     recovery.broken-card-flip-state, recovery.mismatched-card-pairs, recovery.stuck-interaction-lock
 progress:     progress.memory-match
 learning:     learning.memory-match
+```
+
+### Conceptual composition — `game.word-daily`
+
+When a user says *“Build a daily word guessing game like Wordle”*, a **future** composer would assemble:
+
+```txt
+registry_pack: pack.game
+schema_version: 0.1
+app_type:     game.word-daily
+stack_kit:    stack.dom-game-minimal
+mechanics:    mechanic.word-target → mechanic.daily-seed → mechanic.guess-grid → mechanic.keyboard-input → mechanic.letter-feedback → mechanic.attempt-limit → mechanic.win-loss-state
+contracts:    component.game-shell, component.word-grid, component.guess-row, component.letter-tile, component.on-screen-keyboard, component.word-result-panel
+validators:   validator.duplicate-letter-feedback, validator.guess-length-and-attempts, validator.daily-seed-stability, validator.keyboard-input-guardrails
+recovery:     recovery.broken-duplicate-letter-feedback, recovery.unstable-daily-seed, recovery.invalid-guess-state
+progress:     progress.word-daily
+learning:     learning.word-daily
 ```
 
 ## Relation to v1 Builder Kits

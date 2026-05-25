@@ -1,0 +1,70 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.guess-length-and-attempts
+kind: validator
+name: Guess length and attempt limits
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Verifies guesses require full word length, respect max attempts, and block input after
+  win/loss.
+
+non_template_statement: >
+  Conceptual guess guard check. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.word-daily
+  - tag:word-daily
+
+depends_on:
+  - mechanic.guess-grid
+  - mechanic.attempt-limit
+  - mechanic.win-loss-state
+
+validates_modules:
+  - mechanic.guess-grid
+  - mechanic.attempt-limit
+  - mechanic.win-loss-state
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - word_length: number
+  - max_attempts: number
+  - simulated_guesses: array
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "Reject submit when current guess shorter than word_length"
+  - "No seventh guess with default max_attempts=6"
+  - "No submit after gameStatus won or lost"
+
+validation_notes:
+  - Run after grid and win/loss handlers wired
+  - Does not execute at runtime today
+
+risk_notes:
+  - Off-by-one on attempt counter
+
+validation_goal: >
+  Guess submission rules enforce length, attempt cap, and terminal game state.
+
+pass_conditions:
+  - "Incomplete guess rejected"
+  - "Attempts capped at max_attempts"
+  - "Input blocked after win/loss"
+
+fail_conditions:
+  - "Partial guess accepted"
+  - "Guess allowed after game over"
+
+suggested_failure_message: >
+  The game allowed an invalid guess or too many attempts. I'll tighten submit guards.
+
+recovery_playbooks:
+  - recovery.invalid-guess-state
