@@ -12,6 +12,7 @@ from typing import Any
 IDLE_INCREMENTAL_APP_TYPE = "game.idle-incremental"
 TRIVIA_TIMER_APP_TYPE = "game.trivia-timer"
 BRANCHING_NARRATIVE_APP_TYPE = "game.branching-narrative"
+MEMORY_MATCH_APP_TYPE = "game.memory-match"
 
 _GLOBAL_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(dashboard|landing\s*page|saas|calculator|todo|to[-\s]?do|crm)\b",
@@ -97,6 +98,37 @@ _BRANCHING_NARRATIVE_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bbranching\s+narrative\b",
 )
 
+_MEMORY_MATCH_NEGATIVE_PATTERNS: tuple[str, ...] = (
+    r"\b(idle|incremental|clicker|tycoon)\b",
+    r"\bcookie\s+clicker\b",
+    r"\bpassive\s+income\b",
+    r"\b(trivia|quiz)\b",
+    r"\bbranching\s+story\b",
+    r"\bchoose\s+your\s+own\s+adventure\b",
+    r"\binteractive\s+fiction\b",
+    r"\bcard\s+battler\b",
+    r"\btrading\s+card\b",
+    r"\bflashcard\b",
+    r"\bgeneric\s+card\s+game\b",
+    r"\bpoker\b",
+    r"\bsolitaire\b",
+    r"\bsurvey\b",
+)
+
+_MEMORY_MATCH_POSITIVE_PATTERNS: tuple[str, ...] = (
+    r"\bmemory\s+(card|match)\b",
+    r"\bemoji\s+memory\b.{0,80}\bgame\b",
+    r"\bgame\b.{0,80}\bmemory\s+(card|match)\b",
+    r"\bflip(ped)?\s+cards?\b.{0,100}\b(find|match|pair)\b",
+    r"\b(find|match|pair)\b.{0,100}\bflip(ped)?\s+cards?\b",
+    r"\bconcentration\b.{0,80}\bcard\b.{0,80}\bgame\b",
+    r"\bcard\s+matching\b.{0,80}\bgame\b",
+    r"\bmatching\s+pairs\b.{0,100}\bgame\b",
+    r"\bmatching\s+pairs\b.{0,100}\bflip(ped)?\s+cards?\b",
+    r"\b\d+x\d+\b.{0,100}\bcard\s+matching\b",
+    r"\bmove\s+counter\b.{0,100}\b(memory|matching|pair|flip)\b",
+)
+
 
 def _normalized_prompt(prompt: str) -> str:
     return re.sub(r"\s+", " ", str(prompt or "").strip().lower())
@@ -128,6 +160,14 @@ def _matches_branching_narrative(text: str) -> bool:
     )
 
 
+def _matches_memory_match(text: str) -> bool:
+    return _matches_recipe(
+        text,
+        negatives=_MEMORY_MATCH_NEGATIVE_PATTERNS,
+        positives=_MEMORY_MATCH_POSITIVE_PATTERNS,
+    )
+
+
 def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
     """Return a Game Pack app type id for clear prompt matches, else ``None``."""
     text = _normalized_prompt(prompt)
@@ -135,13 +175,15 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
         return None
     if _matches_any(text, _GLOBAL_NEGATIVE_PATTERNS):
         return None
-    # Precedence: trivia → idle → branching narrative (most specific game archetypes first).
+    # Precedence: trivia → idle → branching narrative → memory match.
     if _matches_trivia(text):
         return TRIVIA_TIMER_APP_TYPE
     if _matches_idle(text):
         return IDLE_INCREMENTAL_APP_TYPE
     if _matches_branching_narrative(text):
         return BRANCHING_NARRATIVE_APP_TYPE
+    if _matches_memory_match(text):
+        return MEMORY_MATCH_APP_TYPE
     return None
 
 
