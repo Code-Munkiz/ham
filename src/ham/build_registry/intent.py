@@ -17,6 +17,7 @@ WORD_DAILY_APP_TYPE = "game.word-daily"
 DAILY_PUZZLE_GRID_APP_TYPE = "game.daily-puzzle-grid"
 RESOURCE_MANAGEMENT_SIM_APP_TYPE = "game.resource-management-sim"
 HANGMAN_LITE_APP_TYPE = "game.hangman-lite"
+TYPING_SPEED_RACER_APP_TYPE = "game.typing-speed-racer"
 
 _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES: tuple[str, ...] = (
     r"\bhangman(-style)?\b",
@@ -41,6 +42,22 @@ _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES: tuple[str, ...] = (
     r"\bturn[-\s]?based\b.{0,80}\bresource\s+management\b",
 )
 
+_TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES: tuple[str, ...] = (
+    r"\btyping\s+speed\b",
+    r"\btyping\s+speed\s+racer\b",
+    r"\btyping\s+speed\s+game\b",
+    r"\bwpm\b.{0,80}\b(typing|accuracy|challenge|game|test)\b",
+    r"\b(typing|accuracy|challenge|game|test)\b.{0,80}\bwpm\b",
+    r"\bwords?\s+per\s+minute\b",
+    r"\btyping\s+(challenge|test|game)\b.{0,100}\b(wpm|accuracy|mistakes?|timer|streaks?)\b",
+    r"\b(wpm|accuracy|mistakes?|timer|streaks?)\b.{0,100}\btyping\s+(challenge|test|game)\b",
+    r"\b\d+\s+second\b.{0,60}\btyping\b.{0,60}\b(test|game|challenge)\b",
+    r"\btype\b.{0,60}\bprompts?\b.{0,100}\b(fast|quick|speed|possible)\b",
+    r"\b(fast|quick|speed|possible)\b.{0,100}\btype\b.{0,60}\bprompts?\b",
+    r"\bkeyboard\s+speed\b.{0,80}\b(game|challenge|test|timer)\b",
+    r"\b(game|challenge|test)\b.{0,80}\bkeyboard\s+speed\b",
+)
+
 _GLOBAL_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(dashboard|landing\s*page|saas|calculator|todo|to[-\s]?do|crm)\b",
     r"\b(crypto|trading)\s+(dashboard|app|platform)\b",
@@ -57,7 +74,7 @@ _IDLE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES
 
 _TRIVIA_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(idle|incremental|clicker|tycoon)\b",
@@ -76,7 +93,7 @@ _TRIVIA_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES
 
 _IDLE_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\b(idle|incremental|clicker|tycoon)\b",
@@ -122,7 +139,7 @@ _BRANCHING_NARRATIVE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES
 
 _BRANCHING_NARRATIVE_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bbranching\s+story\b.{0,80}\bgame\b",
@@ -156,7 +173,7 @@ _MEMORY_MATCH_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES
 
 _MEMORY_MATCH_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bmemory\s+(card|match)\b",
@@ -193,7 +210,7 @@ _WORD_DAILY_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
     r"\bfill\s+cells\b.{0,80}\b(clue|row|column|constraint)\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES
 
 _WORD_DAILY_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bwordle(-style)?\b",
@@ -237,7 +254,7 @@ _DAILY_PUZZLE_GRID_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\beducation\s+website\b",
     r"\b(blog|chatbot)\b",
     r"\bwriting\s+app\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES
 
 _DAILY_PUZZLE_GRID_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bdaily\s+puzzle\s+grid\b",
@@ -285,7 +302,7 @@ _RESOURCE_MANAGEMENT_SIM_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\breal[-\s]?time\s+combat\b",
     r"\bcity\s+builder\b.{0,100}\bcombat\b",
     r"\bgeneric\s+dashboard\b",
-) + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES
+) + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES
 
 _HANGMAN_LITE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(idle|incremental|clicker|tycoon)\b",
@@ -349,6 +366,58 @@ _RESOURCE_MANAGEMENT_SIM_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bfarm\s+management\b.{0,80}\bsim\b",
     r"\btiny\s+farm\s+management\s+sim\b",
     r"\bsmall\b.{0,40}\bcolony\s+management\b.{0,80}\bgame\b",
+)
+
+_TYPING_SPEED_RACER_NEGATIVE_PATTERNS: tuple[str, ...] = (
+    r"\b(idle|incremental|clicker|tycoon)\b",
+    r"\bcookie\s+clicker\b",
+    r"\bpassive\s+income\b",
+    r"\b(trivia|quiz)\b",
+    r"\bmemory\s+(card|match)\b",
+    r"\bbranching\s+story\b",
+    r"\bchoose\s+your\s+own\s+adventure\b",
+    r"\binteractive\s+fiction\b",
+    r"\b(wordle|daily\s+word|wordle-style)\b",
+    r"\bdaily\s+word\b.{0,100}\b(guess(ing)?|game|puzzle)\b",
+    r"\bword\s+guess(ing)?\b.{0,100}\b(game|puzzle|challenge)\b",
+    r"\bhangman(-style)?\b",
+    r"\bhangman\b.{0,80}\b(game|word)\b",
+    r"\bguess\s+letters?\b",
+    r"\bletter\s+guessing\b",
+    r"\bcrossword\b",
+    r"\bword\s+search\b",
+    r"\bflashcard\b",
+    r"\bdictionary\b",
+    r"\bwriting\s+app\b",
+    r"\btext\s+editor\b",
+    r"\btyping\s+tutor\b",
+    r"\btyping\s+app\b(?!.{0,80}\b(speed|wpm|race|challenge|accuracy|mistakes?|timer|streaks?)\b)",
+    r"\b(dashboard|landing\s*page|saas)\b",
+    r"\b(nonogram|picross|sudoku|minesweeper)\b",
+    r"\blogic\s+grid\s+puzzle\b",
+    r"\bdaily\s+puzzle\s+grid\b",
+    r"\bsurvey\b",
+    r"\beducation\s+website\b",
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES
+
+_TYPING_SPEED_RACER_POSITIVE_PATTERNS: tuple[str, ...] = (
+    r"\btyping\s+speed\b.{0,80}\b(game|racer|challenge|test)\b",
+    r"\b(game|racer|challenge|test)\b.{0,80}\btyping\s+speed\b",
+    r"\btyping\s+speed\s+racer\b",
+    r"\btyping\s+speed\s+game\b",
+    r"\bwpm\b.{0,100}\b(typing|accuracy|challenge|game|test)\b",
+    r"\b(typing|accuracy|challenge|game|test)\b.{0,100}\bwpm\b",
+    r"\bwords?\s+per\s+minute\b",
+    r"\btyping\s+(challenge|test|game)\b.{0,100}\b(wpm|accuracy|mistakes?|timer|streaks?)\b",
+    r"\b(wpm|accuracy|mistakes?|timer|streaks?)\b.{0,100}\btyping\s+(challenge|test|game)\b",
+    r"\btyping\s+game\b.{0,100}\b(accuracy|mistakes?)\b",
+    r"\b(accuracy|mistakes?)\b.{0,100}\btyping\s+game\b",
+    r"\b\d+\s+second\b.{0,60}\btyping\b.{0,60}\b(test|game|challenge)\b",
+    r"\btype\b.{0,60}\bprompts?\b.{0,100}\b(fast|quick|speed|possible)\b",
+    r"\b(fast|quick|speed|possible)\b.{0,100}\btype\b.{0,60}\bprompts?\b",
+    r"\bkeyboard\s+speed\b.{0,80}\b(game|challenge|test|timer)\b",
+    r"\b(game|challenge|test)\b.{0,80}\bkeyboard\s+speed\b",
+    r"\btyping\b.{0,60}\b(race|racer)\b",
 )
 
 
@@ -422,6 +491,14 @@ def _matches_hangman_lite(text: str) -> bool:
     )
 
 
+def _matches_typing_speed_racer(text: str) -> bool:
+    return _matches_recipe(
+        text,
+        negatives=_TYPING_SPEED_RACER_NEGATIVE_PATTERNS,
+        positives=_TYPING_SPEED_RACER_POSITIVE_PATTERNS,
+    )
+
+
 def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
     """Return a Game Pack app type id for clear prompt matches, else ``None``."""
     text = _normalized_prompt(prompt)
@@ -430,7 +507,7 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
     if _matches_any(text, _GLOBAL_NEGATIVE_PATTERNS):
         return None
     # Precedence: trivia → idle → branching narrative → memory match → word daily
-    # → daily puzzle grid → resource management sim → hangman lite.
+    # → daily puzzle grid → resource management sim → hangman lite → typing speed racer.
     if _matches_trivia(text):
         return TRIVIA_TIMER_APP_TYPE
     if _matches_idle(text):
@@ -447,6 +524,8 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
         return RESOURCE_MANAGEMENT_SIM_APP_TYPE
     if _matches_hangman_lite(text):
         return HANGMAN_LITE_APP_TYPE
+    if _matches_typing_speed_racer(text):
+        return TYPING_SPEED_RACER_APP_TYPE
     return None
 
 

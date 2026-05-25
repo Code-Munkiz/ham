@@ -17,6 +17,7 @@ from src.ham.build_registry.intent import (
     MEMORY_MATCH_APP_TYPE,
     RESOURCE_MANAGEMENT_SIM_APP_TYPE,
     TRIVIA_TIMER_APP_TYPE,
+    TYPING_SPEED_RACER_APP_TYPE,
     WORD_DAILY_APP_TYPE,
     enrich_plan_metadata_with_registry_v2,
     select_registry_v2_app_type_for_prompt,
@@ -115,7 +116,7 @@ _WORD_DAILY_NEGATIVE_PROMPTS = (
     "Build a crossword puzzle",
     "Make a word search",
     "Create flashcards",
-    "Build a typing speed game",
+    "Build a spelling practice app",
     "Create a dictionary app",
     "Make a writing app",
     "Build a SaaS dashboard",
@@ -217,6 +218,43 @@ _HANGMAN_LITE_CROSS_RECIPE_NEGATIVE_PROMPTS = (
     "Build a SaaS dashboard",
 )
 
+_TYPING_SPEED_RACER_POSITIVE_PROMPTS = (
+    "Build me a typing speed game",
+    "Make a typing speed racer",
+    "Create a WPM typing challenge",
+    "Build a typing game with accuracy and mistakes",
+    "Make a 60 second typing test game",
+    "Create a game where I type prompts as fast as possible",
+    "Build a typing challenge with WPM, accuracy, and streaks",
+    "Make a keyboard speed game with a timer",
+)
+
+_TYPING_SPEED_RACER_NEGATIVE_PROMPTS = (
+    "Build a Wordle-style game",
+    "Make a hangman game",
+    "Create flashcards",
+    "Build a trivia quiz with timer",
+    "Make a word search",
+    "Build a crossword puzzle",
+    "Create a dictionary app",
+    "Make a writing app",
+    "Build a typing tutor dashboard",
+    "Create a text editor",
+    "Build an idle clicker game",
+    "Build a SaaS dashboard",
+)
+
+_TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVE_PROMPTS = (
+    "Build a Wordle-style game",
+    "Build me a trivia quiz with a timer",
+    "Build an idle clicker game",
+    "Build me a memory card matching game",
+    "Build a hangman word game",
+    "Build me a daily puzzle grid game",
+    "Build me a resource management sim",
+    "Build a SaaS dashboard",
+)
+
 _CROSS_EXCLUSION_PROMPTS = (
     ("build me an idle clicker game", IDLE_INCREMENTAL_APP_TYPE),
     ("Build me a trivia quiz with a timer", TRIVIA_TIMER_APP_TYPE),
@@ -234,6 +272,8 @@ _CROSS_EXCLUSION_PROMPTS = (
     ("Make a turn-based resource management game", RESOURCE_MANAGEMENT_SIM_APP_TYPE),
     ("Build a hangman word game", HANGMAN_LITE_APP_TYPE),
     ("Make a simple hangman game with letter guessing", HANGMAN_LITE_APP_TYPE),
+    ("Build me a typing speed game", TYPING_SPEED_RACER_APP_TYPE),
+    ("Make a typing speed racer", TYPING_SPEED_RACER_APP_TYPE),
 )
 
 
@@ -315,6 +355,18 @@ class TestSelectRegistryV2AppTypeForPrompt:
     @pytest.mark.parametrize("prompt", _HANGMAN_LITE_CROSS_RECIPE_NEGATIVE_PROMPTS)
     def test_other_recipe_prompts_do_not_route_to_hangman_lite_param(self, prompt: str):
         assert select_registry_v2_app_type_for_prompt(prompt) != HANGMAN_LITE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _TYPING_SPEED_RACER_POSITIVE_PROMPTS)
+    def test_matches_typing_speed_racer_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) == TYPING_SPEED_RACER_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _TYPING_SPEED_RACER_NEGATIVE_PROMPTS)
+    def test_rejects_non_typing_speed_racer_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != TYPING_SPEED_RACER_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVE_PROMPTS)
+    def test_other_recipe_prompts_do_not_route_to_typing_speed_racer_param(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != TYPING_SPEED_RACER_APP_TYPE
 
     @pytest.mark.parametrize("prompt,expected", _CROSS_EXCLUSION_PROMPTS)
     def test_recipes_do_not_steal_each_other(self, prompt: str, expected: str):
@@ -525,6 +577,81 @@ class TestSelectRegistryV2AppTypeForPrompt:
             != HANGMAN_LITE_APP_TYPE
         )
 
+    def test_typing_speed_racer_prompt_does_not_route_to_other_recipes(self):
+        prompt = "Build me a typing speed game"
+        assert select_registry_v2_app_type_for_prompt(prompt) == TYPING_SPEED_RACER_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != IDLE_INCREMENTAL_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != TRIVIA_TIMER_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != BRANCHING_NARRATIVE_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != MEMORY_MATCH_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != WORD_DAILY_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != DAILY_PUZZLE_GRID_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != RESOURCE_MANAGEMENT_SIM_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != HANGMAN_LITE_APP_TYPE
+
+    def test_other_recipe_prompts_do_not_route_to_typing_speed_racer(self):
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a trivia quiz with a timer")
+            != TYPING_SPEED_RACER_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("build me an idle clicker game")
+            != TYPING_SPEED_RACER_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a branching story game")
+            != TYPING_SPEED_RACER_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a memory card matching game")
+            != TYPING_SPEED_RACER_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Make a Wordle-style game")
+            != TYPING_SPEED_RACER_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a daily word guessing game")
+            != TYPING_SPEED_RACER_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a daily puzzle grid game")
+            != TYPING_SPEED_RACER_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a resource management sim")
+            != TYPING_SPEED_RACER_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build a hangman word game")
+            != TYPING_SPEED_RACER_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build a crossword puzzle")
+            != TYPING_SPEED_RACER_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Make a word search")
+            != TYPING_SPEED_RACER_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Create flashcards")
+            != TYPING_SPEED_RACER_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build a typing tutor dashboard")
+            != TYPING_SPEED_RACER_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build a SaaS dashboard")
+            != TYPING_SPEED_RACER_APP_TYPE
+        )
+
+    def test_typing_speed_prompt_routes_to_typing_speed_racer_not_hangman(self):
+        prompt = "Build a typing speed game"
+        assert select_registry_v2_app_type_for_prompt(prompt) == TYPING_SPEED_RACER_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != HANGMAN_LITE_APP_TYPE
+
 
 class TestEnrichPlanMetadataWithRegistryV2:
     def test_flag_disabled_does_not_add_registry_metadata(self, monkeypatch):
@@ -599,6 +726,17 @@ class TestEnrichPlanMetadataWithRegistryV2:
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "generic"},
             "Build a hangman word game",
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
+
+    def test_flag_disabled_typing_speed_racer_prompt_does_not_add_registry_metadata(
+        self, monkeypatch
+    ):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            "Build me a typing speed game",
         )
         assert "registry_v2_app_type" not in metadata
         assert metadata["template_kind"] == "generic"
@@ -683,6 +821,16 @@ class TestEnrichPlanMetadataWithRegistryV2:
         assert metadata["template_kind"] == "generic"
         assert metadata["originated_from"] == "builder_chat_scaffold"
 
+    def test_flag_enabled_typing_speed_racer_prompt_adds_registry_metadata(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic", "originated_from": "builder_chat_scaffold"},
+            "Build me a typing speed game",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        assert metadata["registry_v2_app_type"] == TYPING_SPEED_RACER_APP_TYPE
+        assert metadata["template_kind"] == "generic"
+        assert metadata["originated_from"] == "builder_chat_scaffold"
+
     def test_flag_enabled_non_idle_prompt_leaves_registry_metadata_absent(self):
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "landing-page"},
@@ -756,6 +904,15 @@ class TestEnrichPlanMetadataWithRegistryV2:
         )
         assert metadata["registry_v2_app_type"] == WORD_DAILY_APP_TYPE
         assert metadata["registry_v2_app_type"] != HANGMAN_LITE_APP_TYPE
+
+    def test_flag_enabled_non_typing_speed_racer_prompt_leaves_registry_metadata_absent(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            "Build a typing tutor dashboard",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "1"},
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
 
 
 def _byo_actor() -> HamActor:
@@ -856,6 +1013,12 @@ class TestChatScaffoldSyntheticPlanMetadata:
         assert metadata.get("template_kind") == "generic"
         assert "registry_v2_app_type" not in metadata
 
+    def test_flag_disabled_typing_speed_racer_prompt_has_no_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = _synthetic_plan_metadata("Build me a typing speed game")
+        assert metadata.get("template_kind") == "generic"
+        assert "registry_v2_app_type" not in metadata
+
     def test_flag_enabled_idle_prompt_adds_registry_metadata(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
         metadata = _synthetic_plan_metadata("build me an idle clicker game")
@@ -905,6 +1068,12 @@ class TestChatScaffoldSyntheticPlanMetadata:
         metadata = _synthetic_plan_metadata("Build a hangman word game")
         assert metadata.get("template_kind") == "generic"
         assert metadata.get("registry_v2_app_type") == HANGMAN_LITE_APP_TYPE
+
+    def test_flag_enabled_typing_speed_racer_prompt_adds_registry_metadata(self, monkeypatch):
+        monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
+        metadata = _synthetic_plan_metadata("Build me a typing speed game")
+        assert metadata.get("template_kind") == "generic"
+        assert metadata.get("registry_v2_app_type") == TYPING_SPEED_RACER_APP_TYPE
 
     def test_flag_enabled_non_idle_prompt_has_no_registry_metadata(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
@@ -1287,6 +1456,54 @@ class TestEndToEndScaffoldMessages:
             project_id="proj_test",
             user_message="Build a hangman word game",
             steps=[Step(title="Scaffold game", description="Create hangman game files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(plan)[1]["content"]
+        assert "Builder Kit context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" not in content
+
+    def test_flag_enabled_typing_speed_racer_prompt_produces_v2_context(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            "Build me a typing speed game",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_typing_speed_racer_e2e",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message="Build me a typing speed game",
+            steps=[Step(title="Scaffold game", description="Create typing speed game files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(
+            plan,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )[1]["content"]
+        assert "Build Registry v2 playbook context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" in content
+        assert "game.typing-speed-racer" in content
+        assert "stack.dom-game-minimal" in content
+        assert "validator.wpm-calculation-consistency" in content
+        assert "validator.accuracy-score-bounds" in content
+        assert "validator.input-lock-after-finish" in content
+        assert "Builder Kit context:" not in content
+        assert content.count("Builder Kit:") == 0
+
+    def test_flag_disabled_typing_speed_racer_prompt_produces_v1_context_only(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            "Build me a typing speed game",
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_typing_speed_racer_v1",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message="Build me a typing speed game",
+            steps=[Step(title="Scaffold game", description="Create typing speed game files")],
             planner_confidence="high",
             metadata=metadata,
         )
