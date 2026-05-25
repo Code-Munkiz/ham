@@ -1,0 +1,64 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.move-counter
+kind: component_contract
+name: Move counter display
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  HUD element showing current move count (and optional score) during play.
+
+non_template_statement: >
+  UI contract for move HUD. Not a prebuilt counter widget file.
+
+applies_to:
+  - game.memory-match
+  - tag:memory-match
+
+depends_on:
+  - mechanic.move-counter
+
+provides:
+  - move_counter_ui
+
+binds_mechanics:
+  - mechanic.move-counter
+
+inputs:
+  - label: string — default Moves
+  - show_score: boolean
+
+outputs:
+  - display_text: string
+
+guidance:
+  - "Bind directly to moves state from move-counter mechanic"
+  - "Place in header or above grid"
+  - "Update immediately on increment"
+
+validation_notes:
+  - Visible without scrolling on 360px
+  - Value matches authoritative moves state
+
+risk_notes:
+  - Stale display after state update
+
+purpose: >
+  Player feedback for attempt count.
+
+expected_props:
+  - moves: number
+  - score: number | null
+
+states:
+  - default
+
+accessibility_notes:
+  - "Live region optional when moves increment"
+
+responsive_notes:
+  - "Compact single-line HUD on mobile"
+
+styling_guidance:
+  - "Secondary typography; clear numeric value"

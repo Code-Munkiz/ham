@@ -1,0 +1,68 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.interaction-lock
+kind: mechanic
+name: Interaction lock during flip resolution
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Prevents third-card clicks and invalid input while two cards are resolving (match
+  check or mismatch flip-back pending).
+
+non_template_statement: >
+  Lock guard recipe only. Not a shared input-blocking utility file.
+
+applies_to:
+  - game.memory-match
+  - tag:memory-match
+
+depends_on:
+  - mechanic.card-flip-state
+
+provides:
+  - interaction_lock_state
+
+binds_components:
+  - component.memory-card
+  - component.card-grid
+
+inputs:
+  - lock_during_flip_back: boolean — default true
+  - lock_during_match_check: boolean — default true
+
+outputs:
+  - isInteractionLocked: boolean
+
+guidance:
+  - "Set lock true when second card flipped until match/mismatch resolved"
+  - "Block clicks on all non-matched cards while locked"
+  - "Release lock after match applied or flip-back complete"
+  - "Always ignore clicks on matched cards regardless of lock"
+
+validation_notes:
+  - No third card face-up while lock active
+  - Lock clears after resolution completes
+
+risk_notes:
+  - Lock stuck true freezes entire board
+  - Lock released too early allows third flip
+
+state_model:
+  fields:
+    - name: isInteractionLocked
+      type: boolean
+  events:
+    - acquire_lock
+    - release_lock
+
+common_failure_modes:
+  - "Player can click third card during mismatch delay"
+  - "Board permanently locked after one round"
+
+test_ideas:
+  - "Third click ignored while lock active"
+  - "Lock releases after mismatch flip-back"
+
+reusable_across:
+  - game.memory-match

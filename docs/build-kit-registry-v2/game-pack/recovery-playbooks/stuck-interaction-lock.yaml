@@ -1,0 +1,83 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.stuck-interaction-lock
+kind: recovery_playbook
+name: Fix stuck interaction lock
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs memory games where isInteractionLocked stays true and no further card
+  clicks are accepted.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.memory-match
+  - tag:memory-match
+
+depends_on:
+  - mechanic.interaction-lock
+  - validator.flip-lock-prevents-third-card
+
+repairs_validators:
+  - validator.flip-lock-prevents-third-card
+
+inputs:
+  - failure_context: frozen board report
+  - current_source: lock handler (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.flip-lock-prevents-third-card
+
+guidance:
+  - "Always release lock in finally path after match/mismatch resolution"
+  - "Release lock on component unmount"
+  - "Guard acquire_lock with timeout fallback for MVP safety"
+
+validation_notes:
+  - Re-run flip-lock validator after repair
+  - Max 2 attempts
+
+risk_notes:
+  - Timeout fallback may mask underlying bug — log internally
+
+failure_signals:
+  - validator.flip-lock-prevents-third-card fail with lock stuck
+  - User cannot flip any card mid-game
+  - Lock true while faceUpCardIds empty
+
+diagnosis_steps:
+  - "Trace every acquire_lock without matching release"
+  - "Check error paths in match handler"
+  - "Verify lock cleared after flip-back timeout"
+
+steps:
+  - id: step.pair_lock_release
+    action: pair_lock_release
+    detail: "try/finally release lock around resolution"
+  - id: step.unmount_release
+    action: unmount_release
+    detail: "Release lock on cleanup"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.flip-lock-prevents-third-card"
+
+repair_strategy:
+  - action: pair_lock_release
+    detail: "Guaranteed lock release"
+  - action: unmount_release
+    detail: "Cleanup on unmount"
+  - action: re_validate
+    target: validator.flip-lock-prevents-third-card
+
+guardrails:
+  - max_attempts: 2
+  - do_not: "Disable lock entirely — breaks third-card prevention"
+
+user_facing_summary: >
+  I fixed a stuck input lock so you can keep flipping cards after each match attempt.

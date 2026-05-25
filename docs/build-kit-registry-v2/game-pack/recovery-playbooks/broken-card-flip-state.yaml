@@ -1,0 +1,91 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.broken-card-flip-state
+kind: recovery_playbook
+name: Fix broken card flip state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs memory games with more than two face-up cards, stuck flip-back timers, or
+  victory not triggering due to flip state bugs.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.memory-match
+  - tag:memory-match
+
+depends_on:
+  - mechanic.card-flip-state
+  - validator.flip-lock-prevents-third-card
+
+repairs_validators:
+  - validator.flip-lock-prevents-third-card
+  - validator.match-completion
+
+inputs:
+  - failure_context: validator result or stuck-board report
+  - current_source: flip and lock handlers (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.flip-lock-prevents-third-card
+
+guidance:
+  - "Cap faceUpCardIds at two unmatched cards"
+  - "Clear pending timeouts on unmount and before new flip"
+  - "Release interaction lock after flip-back completes"
+
+validation_notes:
+  - Re-run flip-lock validator after repair
+  - Max 2 repair attempts before honest failure
+
+risk_notes:
+  - Patch may remove flip animation to simplify state
+
+failure_signals:
+  - validator.flip-lock-prevents-third-card fail
+  - Three or more cards visible face-up
+  - Board stuck after mismatch
+
+diagnosis_steps:
+  - "Trace faceUpCardIds updates on each click"
+  - "Check timeout cleanup on mismatch path"
+  - "Verify lock acquire/release pairing"
+
+steps:
+  - id: step.cap_face_up
+    action: cap_face_up
+    detail: "Reject flip when two unmatched cards already face-up"
+  - id: step.cleanup_timeouts
+    action: cleanup_timeouts
+    detail: "Clear mismatch timeout refs on resolve and unmount"
+  - id: step.sync_lock
+    action: sync_lock
+    detail: "Release lock when flip-back or match completes"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.flip-lock-prevents-third-card"
+
+repair_strategy:
+  - action: cap_face_up
+    detail: "Enforce two-card reveal limit"
+  - action: cleanup_timeouts
+    detail: "Prevent stale flip-back"
+  - action: sync_lock
+    detail: "Fix lock lifecycle"
+  - action: re_validate
+    target: validator.flip-lock-prevents-third-card
+
+guardrails:
+  - max_attempts: 2
+  - do_not: "Reset matched pairs without user consent"
+  - preserve: "Deck shuffle and pair definitions"
+
+user_facing_summary: >
+  I fixed the card flip behavior so only two cards reveal at a time and mismatches
+  flip back correctly.

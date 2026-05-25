@@ -1,0 +1,67 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.flip-lock-prevents-third-card
+kind: validator
+name: Flip lock prevents third card
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Verifies at most two non-matched cards are face-up and third clicks are ignored while
+  interaction lock or mismatch flip-back is pending.
+
+non_template_statement: >
+  Conceptual interaction check. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.memory-match
+  - tag:memory-match
+
+depends_on:
+  - mechanic.card-flip-state
+  - mechanic.interaction-lock
+
+validates_modules:
+  - mechanic.card-flip-state
+  - mechanic.interaction-lock
+  - component.memory-card
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - simulated_clicks: rapid click sequence
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "faceUpCardIds.length <= 2 for non-matched cards"
+  - "Third click during lock does not change face-up set"
+  - "Matched cards excluded from face-up limit"
+
+validation_notes:
+  - Run after scaffold and lock handler edits
+  - Does not execute at runtime today
+
+risk_notes:
+  - Animation timing races in real browser
+
+validation_goal: >
+  Player cannot corrupt flip state by clicking a third card during resolution.
+
+pass_conditions:
+  - "Never more than two unmatched face-up cards"
+  - "Lock blocks additional flips until resolution"
+
+fail_conditions:
+  - "Three cards face-up simultaneously"
+  - "Third click accepted during mismatch delay"
+
+suggested_failure_message: >
+  The game allowed a third card flip during matching. I'll tighten the interaction lock.
+
+recovery_playbooks:
+  - recovery.broken-card-flip-state
+  - recovery.stuck-interaction-lock

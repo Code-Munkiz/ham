@@ -1,0 +1,64 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.match-progress
+kind: component_contract
+name: Match progress indicator
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Shows pairs matched vs total pairs (e.g. 3/8). Optional progress bar or text.
+
+non_template_statement: >
+  UI contract for match progress. Not a prebuilt progress component file.
+
+applies_to:
+  - game.memory-match
+  - tag:memory-match
+
+depends_on:
+  - mechanic.match-detection
+
+provides:
+  - match_progress_ui
+
+binds_mechanics:
+  - mechanic.match-detection
+
+inputs:
+  - display_style: text | bar — default text
+
+outputs:
+  - progress_label: string
+
+guidance:
+  - "Show matchedPairCount / pairCount"
+  - "Update on each successful match"
+  - "Hide or show complete state on victory"
+
+validation_notes:
+  - Progress never exceeds total pairs
+  - Synced with match-detection state
+
+risk_notes:
+  - Off-by-one display vs internal count
+
+purpose: >
+  Orientation for how close player is to victory.
+
+expected_props:
+  - matchedPairCount: number
+  - pairCount: number
+
+states:
+  - in_progress
+  - complete
+
+accessibility_notes:
+  - "Progress text readable by assistive tech"
+
+responsive_notes:
+  - "Single line near move counter"
+
+styling_guidance:
+  - "Subtle; do not compete with card grid"

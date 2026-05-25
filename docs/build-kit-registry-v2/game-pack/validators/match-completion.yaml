@@ -1,0 +1,70 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.match-completion
+kind: validator
+name: Match completion and victory
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Verifies victory triggers only when all pairs matched, matchedPairCount equals
+  pairCount, and victory screen mounts in victory phase.
+
+non_template_statement: >
+  Conceptual completion check. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.memory-match
+  - tag:memory-match
+
+depends_on:
+  - mechanic.match-detection
+  - mechanic.victory-detection
+
+validates_modules:
+  - mechanic.match-detection
+  - mechanic.victory-detection
+  - component.victory-screen
+  - component.match-progress
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - pair_count: number
+  - simulated_match_sequence: length pair_count
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "After all pairs matched, phase === victory"
+  - "matchedPairCount === pairCount before victory"
+  - "Victory screen visible; grid non-interactive"
+
+validation_notes:
+  - Run after scaffold and victory handler edits
+  - Does not execute at runtime today
+
+risk_notes:
+  - Simulated sequence may miss edge cases with lock timing
+
+validation_goal: >
+  Game ends cleanly when all pairs are found.
+
+pass_conditions:
+  - "Victory phase after last match"
+  - "Progress shows full completion"
+  - "No further flips accepted in victory"
+
+fail_conditions:
+  - "Victory before all pairs matched"
+  - "All matched but no victory screen"
+  - "Stuck in playing phase with full board matched"
+
+suggested_failure_message: >
+  The game didn't finish properly when all pairs were matched. I'll fix victory detection.
+
+recovery_playbooks:
+  - recovery.broken-card-flip-state

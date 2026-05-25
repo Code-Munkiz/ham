@@ -1,0 +1,70 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.match-detection
+kind: mechanic
+name: Pair match detection
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Compares two face-up cards by pairId, marks matches permanently, and triggers
+  mismatch flip-back when pairIds differ.
+
+non_template_statement: >
+  Match logic recipe only. Not a prebuilt matching algorithm file.
+
+applies_to:
+  - game.memory-match
+  - tag:memory-match
+
+depends_on:
+  - mechanic.card-pair-set
+  - mechanic.card-flip-state
+
+provides:
+  - match_detection_state
+
+binds_components:
+  - component.match-progress
+
+inputs:
+  - match_on_second_flip: boolean — default true
+
+outputs:
+  - matchedPairCount: number
+  - lastMatchResult: match | mismatch | null
+
+guidance:
+  - "When two face-up cards share pairId, set both matched true"
+  - "On mismatch, schedule flip-back via card-flip-state — do not mark matched"
+  - "Prevent treating double-click same card as a valid two-card attempt"
+  - "Update matchedPairCount atomically with card state"
+
+validation_notes:
+  - matchedPairCount never exceeds pairCount
+  - Same card id cannot form a match with itself
+
+risk_notes:
+  - Match applied twice increments counter incorrectly
+  - Mismatch handler not invoked leaves two cards stuck face-up
+
+state_model:
+  fields:
+    - name: matchedPairCount
+      type: number
+    - name: lastMatchResult
+      type: enum
+  events:
+    - evaluate_pair
+    - mark_matched
+
+common_failure_modes:
+  - "Pair marked matched on mismatch"
+  - "matchedPairCount desync from card.matched flags"
+
+test_ideas:
+  - "Matching pair stays face-up and increments progress"
+  - "Mismatch triggers flip-back not match"
+
+reusable_across:
+  - game.memory-match

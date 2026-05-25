@@ -1,0 +1,69 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.card-grid
+kind: component_contract
+name: Memory card grid layout
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Responsive grid container for memory cards. Maps deck size to rows/columns with
+  consistent spacing and tap targets.
+
+non_template_statement: >
+  Layout contract only. Does not provide a copy-paste grid component file.
+
+applies_to:
+  - game.memory-match
+  - tag:memory-match
+
+depends_on:
+  - mechanic.card-pair-set
+
+provides:
+  - card_grid_layout
+
+binds_mechanics:
+  - mechanic.card-pair-set
+
+inputs:
+  - rows: number
+  - cols: number
+  - gap: css spacing token
+
+outputs:
+  - grid_regions: card slots
+
+guidance:
+  - "CSS grid or flex wrap; equal-size cells"
+  - "4x4 default; scale down card size on 360px width"
+  - "Disable pointer events on grid when interaction locked"
+
+validation_notes:
+  - All cards visible without horizontal scroll at 360px
+  - Grid cell count matches cards.length
+
+risk_notes:
+  - Overflow on large grids without scaling
+
+purpose: >
+  Stable layout for memory card components.
+
+expected_props:
+  - rows: number
+  - cols: number
+  - children: ReactNode
+
+states:
+  - playing
+  - locked
+  - victory
+
+accessibility_notes:
+  - "Grid uses list or group semantics where appropriate"
+
+responsive_notes:
+  - "Reduce card min-size on narrow viewports"
+
+styling_guidance:
+  - "Even gaps; centered board in main region"

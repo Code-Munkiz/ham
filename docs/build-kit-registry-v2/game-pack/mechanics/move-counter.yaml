@@ -1,0 +1,67 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.move-counter
+kind: mechanic
+name: Move counter
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Increments move count on each two-card reveal attempt (when second card flipped).
+  Optional score derived from moves and pair count for display.
+
+non_template_statement: >
+  Counter recipe only. Not a prebuilt HUD widget file.
+
+applies_to:
+  - game.memory-match
+  - tag:memory-match
+
+depends_on:
+  - mechanic.match-detection
+
+provides:
+  - move_counter_state
+
+binds_components:
+  - component.move-counter
+
+inputs:
+  - increment_on_second_flip: boolean — default true
+  - show_score: boolean — default false for MVP
+
+outputs:
+  - moves: number
+  - score: number | null
+
+guidance:
+  - "Increment moves once per two-card attempt — not per single flip"
+  - "Do not increment when clicking already matched or locked-invalid cards"
+  - "Optional score: max(0, baseScore - moves) only if user asks for scoring"
+
+validation_notes:
+  - moves monotonic non-decreasing during a round
+  - moves resets on new game
+
+risk_notes:
+  - Double increment on rapid clicks
+  - Move count increments when second click invalid
+
+state_model:
+  fields:
+    - name: moves
+      type: number
+  events:
+    - increment_move
+    - reset_moves
+
+common_failure_modes:
+  - "Moves increment on first flip only"
+  - "Moves increment during locked third-click attempts"
+
+test_ideas:
+  - "One complete two-card attempt adds exactly one move"
+  - "Reset clears moves on new game"
+
+reusable_across:
+  - game.memory-match

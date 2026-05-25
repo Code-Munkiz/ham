@@ -8,7 +8,7 @@ schema_version: "0.1"
 description: >
   Root manifest for the Build Kit Registry v2 Game Pack schema pilot. Indexes all
   proposed modules for DOM-native casual games, starting with game.idle-incremental,
-  game.trivia-timer, and game.branching-narrative.
+  game.trivia-timer, game.branching-narrative, and game.memory-match.
   Used for cross-reference validation and future composer defaults — not loaded by HAM
   at runtime today.
 
@@ -22,6 +22,7 @@ module_index:
     - game.idle-incremental
     - game.trivia-timer
     - game.branching-narrative
+    - game.memory-match
   stack_kits:
     - stack.dom-game-minimal
   mechanics:
@@ -38,6 +39,12 @@ module_index:
     - mechanic.inventory-lite
     - mechanic.choice-resolution
     - mechanic.ending-resolution
+    - mechanic.card-pair-set
+    - mechanic.card-flip-state
+    - mechanic.interaction-lock
+    - mechanic.match-detection
+    - mechanic.move-counter
+    - mechanic.victory-detection
   component_contracts:
     - component.game-shell
     - component.resource-counter
@@ -52,6 +59,11 @@ module_index:
     - component.story-state-summary
     - component.inventory-panel
     - component.ending-screen
+    - component.card-grid
+    - component.memory-card
+    - component.move-counter
+    - component.match-progress
+    - component.victory-screen
   validators:
     - validator.no-negative-currency
     - validator.passive-income-tick
@@ -62,6 +74,9 @@ module_index:
     - validator.story-graph-reachability
     - validator.no-dead-end-choice
     - validator.story-state-consistency
+    - validator.card-pair-integrity
+    - validator.flip-lock-prevents-third-card
+    - validator.match-completion
   recovery_playbooks:
     - recovery.stale-interval-or-bad-tick-loop
     - recovery.invalid-local-storage-json
@@ -69,14 +84,19 @@ module_index:
     - recovery.broken-question-progression
     - recovery.broken-story-graph
     - recovery.inconsistent-story-state
+    - recovery.broken-card-flip-state
+    - recovery.mismatched-card-pairs
+    - recovery.stuck-interaction-lock
   progress_labels:
     - progress.idle-incremental
     - progress.trivia-timer
     - progress.branching-narrative
+    - progress.memory-match
   learning_hooks:
     - learning.idle-incremental
     - learning.trivia-timer
     - learning.branching-narrative
+    - learning.memory-match
 
 compose_defaults:
   compose_order:

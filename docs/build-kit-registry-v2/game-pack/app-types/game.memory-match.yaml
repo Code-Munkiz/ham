@@ -1,0 +1,165 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: game.memory-match
+kind: app_type
+name: Memory card matching game
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  A browser-based memory matching game where the player flips cards, reveals pairs,
+  prevents invalid rapid clicks during flip animations, tracks moves, and reaches a
+  victory state when all pairs are matched. Uses static in-memory card pair data for MVP.
+  Output is always custom-generated from the user prompt plus composed playbook modules —
+  never cloned from a starter project.
+
+non_template_statement: >
+  This app type does not reference checked-in card decks, sprite sheets, or clone
+  baselines. It defines generative guidance only.
+
+legacy_v1_fallback: generic
+
+safety_constraints:
+  - no-network-egress-for-mvp
+  - no-eval
+  - no-user-accounts-for-mvp
+  - no-multiplayer-for-mvp
+  - static-card-data-for-mvp
+  - no-real-money-economy
+
+applies_to:
+  - tag:memory-match
+  - tag:dom-casual-game
+
+inputs:
+  - user_prompt: natural language theme for card symbols (animals, emoji, letters)
+  - optional_grid_size: rows x cols (default 4x4)
+  - optional_pair_count: number of pairs (derived from grid when omitted)
+
+outputs:
+  - runnable_vite_react_app: single-page DOM memory game
+  - composed_build_recipe: ids of mechanics, contracts, validators, recovery modules
+  - normie_plan_summary: phased build description for chat/activity stream
+
+guidance:
+  - "Prefer React state; static pair definitions embedded in generated source"
+  - "Use emoji, text labels, or simple symbols — no generated image assets for MVP"
+  - "Shuffle deck at game start; each symbol appears exactly twice"
+  - "Reveal at most two face-up cards at a time"
+  - "Lock interaction while mismatch flip-back timeout is pending"
+  - "Ignore clicks on already matched cards and double-clicks on same card"
+  - "Increment move count deterministically on each two-card reveal attempt"
+  - "Victory only when all pairs matched"
+  - "Keep board small for MVP (e.g. 4x4); DOM/React UI only"
+
+validation_notes:
+  - Run composed validators after scaffold and after flip/lock edits
+  - Preview must boot without console errors before success copy
+
+risk_notes:
+  - Third card click during mismatch window corrupts flip state
+  - Stuck interaction lock prevents all further play
+  - Odd pair count or duplicate ids break match detection
+
+user_prompt_examples:
+  - "Build a memory matching game with emoji cards"
+  - "Make a concentration card game where I flip pairs"
+  - "Create a 4x4 memory match game with animal symbols"
+  - "Build a simple flip-and-match card game in the browser"
+
+intent_signals:
+  - "\\b(memory|concentration|flip\\s+and\\s+match|matching\\s+game)\\b"
+  - "\\b(match\\s+pairs?|find\\s+pairs?|card\\s+matching)\\b"
+  - "\\b(memory\\s+cards?|flip\\s+cards?)\\b"
+
+clarifying_questions:
+  - when: intent_confidence_low
+    ask: "What theme should the card symbols use — animals, emoji, letters, or something else?"
+  - when: grid_size_ambiguous
+    ask: "How big should the board be — for example 4x4 (16 cards) or 3x4?"
+  - when: scoring_ambiguous
+    ask: "Should we track moves only, or also show a score based on efficiency?"
+
+default_assumptions:
+  - "4x4 grid (8 pairs) with emoji or text symbols"
+  - "Move counter increments on each two-card flip attempt"
+  - "Simple victory screen when all pairs matched"
+  - "DOM/React UI; no canvas unless user explicitly requests it"
+  - "Mobile-friendly layout at 360px width"
+
+stack_kit_id: stack.dom-game-minimal
+
+compose_order_ref: pack.game#compose_defaults.compose_order
+
+composed_modules:
+  stack_kit_id: stack.dom-game-minimal
+  mechanics:
+    - mechanic.card-pair-set
+    - mechanic.card-flip-state
+    - mechanic.interaction-lock
+    - mechanic.match-detection
+    - mechanic.move-counter
+    - mechanic.victory-detection
+  component_contracts:
+    - component.game-shell
+    - component.card-grid
+    - component.memory-card
+    - component.move-counter
+    - component.match-progress
+    - component.victory-screen
+  validators:
+    - validator.card-pair-integrity
+    - validator.flip-lock-prevents-third-card
+    - validator.match-completion
+  recovery_playbooks:
+    - recovery.broken-card-flip-state
+    - recovery.mismatched-card-pairs
+    - recovery.stuck-interaction-lock
+  progress_labels: progress.memory-match
+  learning_hooks: learning.memory-match
+
+build_phases:
+  - id: phase.understand
+    title: Understand the memory game idea
+    order: 1
+    modules_used: [app_type]
+  - id: phase.compose
+    title: Compose mechanics and UI contracts
+    order: 2
+    modules_used: [mechanics, component_contracts]
+  - id: phase.generate
+    title: Generate custom memory game code
+    order: 3
+    modules_used: [stack_kit_id, guidance]
+  - id: phase.validate
+    title: Check pairs, flips, and victory
+    order: 4
+    modules_used: [validators]
+  - id: phase.preview
+    title: Prepare Workbench preview
+    order: 5
+    modules_used: []
+  - id: phase.recover
+    title: Fix known failure modes if needed
+    order: 6
+    optional: true
+    modules_used: [recovery_playbooks]
+
+acceptance_criteria:
+  - "Game loads in preview without runtime console errors"
+  - "Player can flip cards and reveal at most two face-up at a time"
+  - "Matched pairs stay revealed; mismatches flip back after brief delay"
+  - "Third card clicks blocked while mismatch timeout pending"
+  - "Move count increments deterministically"
+  - "Victory screen appears when all pairs matched"
+  - "UI readable on mobile-width viewport"
+
+out_of_scope:
+  - Online multiplayer
+  - Global leaderboards
+  - User accounts or cloud sync
+  - Custom image upload or generated image card assets
+  - Real-time animation engine or Canvas/WebGL rendering
+  - Phaser, Kaplay, or other game engines
+  - Web3 or token rewards
+  - Real-money prizes

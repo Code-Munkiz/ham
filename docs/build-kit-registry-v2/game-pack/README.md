@@ -2,7 +2,7 @@
 
 **Status:** Non-runtime schema pilot only. **Schema version:** `0.1`
 
-This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: **`game.idle-incremental`**, **`game.trivia-timer`**, and **`game.branching-narrative`**.
+This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: **`game.idle-incremental`**, **`game.trivia-timer`**, **`game.branching-narrative`**, and **`game.memory-match`**.
 
 ## Root manifest
 
@@ -69,6 +69,16 @@ Use vocabulary: **module**, **playbook**, **contract**, **mechanic**. Avoid “t
 | **Distinct validators** | Graph reachability, dead-end prevention, state consistency — complementary to idle/trivia validators. |
 | **Explicit MVP bounds** | Static in-memory story nodes; no runtime LLM story, accounts, multiplayer, or external story API. |
 
+### `game.memory-match`
+
+| Reason | Detail |
+|--------|--------|
+| **Fourth recipe shape** | Proves the pack supports flip-and-match card grids — distinct from idle, quiz, and narrative graphs. |
+| **DOM-native card UI** | Grid, flip state, move counter, victory screen — emoji/text symbols only for MVP. |
+| **Shared reuse** | Reuses `component.game-shell`, `stack.dom-game-minimal`. |
+| **Distinct validators** | Pair integrity, flip-lock third-card prevention, match completion — complementary to other recipes. |
+| **Explicit MVP bounds** | Static in-memory deck; no image assets, multiplayer, accounts, or Canvas engines. |
+
 ## Pilot module layout
 
 ```txt
@@ -79,13 +89,14 @@ docs/build-kit-registry-v2/game-pack/
   app-types/game.idle-incremental.yaml
   app-types/game.trivia-timer.yaml
   app-types/game.branching-narrative.yaml
+  app-types/game.memory-match.yaml
   stack-kits/dom-game-minimal.yaml
-  mechanics/{score,economy,upgrades,save-load,question-set,timer,answer-validation,progression,story-node-graph,story-flags,inventory-lite,choice-resolution,ending-resolution}.yaml
-  component-contracts/{game-shell,resource-counter,upgrade-card,save-status,question-card,choice-list,timer-display,results-summary,story-panel,choice-card,story-state-summary,inventory-panel,ending-screen}.yaml
-  validators/{no-negative-currency,passive-income-tick,local-storage-roundtrip,timer-cleanup,score-calculation,question-progression,story-graph-reachability,no-dead-end-choice,story-state-consistency}.yaml
-  recovery-playbooks/{stale-interval-or-bad-tick-loop,invalid-local-storage-json,stale-timer-or-uncleared-timeout,broken-question-progression,broken-story-graph,inconsistent-story-state}.yaml
-  progress-labels/{idle-incremental,trivia-timer,branching-narrative}.yaml
-  learning-hooks/{idle-incremental,trivia-timer,branching-narrative}.yaml
+  mechanics/{score,economy,upgrades,save-load,question-set,timer,answer-validation,progression,story-node-graph,story-flags,inventory-lite,choice-resolution,ending-resolution,card-pair-set,card-flip-state,interaction-lock,match-detection,move-counter,victory-detection}.yaml
+  component-contracts/{game-shell,resource-counter,upgrade-card,save-status,question-card,choice-list,timer-display,results-summary,story-panel,choice-card,story-state-summary,inventory-panel,ending-screen,card-grid,memory-card,move-counter,match-progress,victory-screen}.yaml
+  validators/{no-negative-currency,passive-income-tick,local-storage-roundtrip,timer-cleanup,score-calculation,question-progression,story-graph-reachability,no-dead-end-choice,story-state-consistency,card-pair-integrity,flip-lock-prevents-third-card,match-completion}.yaml
+  recovery-playbooks/{stale-interval-or-bad-tick-loop,invalid-local-storage-json,stale-timer-or-uncleared-timeout,broken-question-progression,broken-story-graph,inconsistent-story-state,broken-card-flip-state,mismatched-card-pairs,stuck-interaction-lock}.yaml
+  progress-labels/{idle-incremental,trivia-timer,branching-narrative,memory-match}.yaml
+  learning-hooks/{idle-incremental,trivia-timer,branching-narrative,memory-match}.yaml
 ```
 
 ## Conceptual composition example
@@ -141,6 +152,23 @@ validators:   validator.story-graph-reachability, validator.no-dead-end-choice, 
 recovery:     recovery.broken-story-graph, recovery.inconsistent-story-state
 progress:     progress.branching-narrative
 learning:     learning.branching-narrative
+```
+
+### Conceptual composition — `game.memory-match`
+
+When a user says *“Build a memory matching game with emoji cards”*, a **future** composer would assemble:
+
+```txt
+registry_pack: pack.game
+schema_version: 0.1
+app_type:     game.memory-match
+stack_kit:    stack.dom-game-minimal
+mechanics:    mechanic.card-pair-set → mechanic.card-flip-state → mechanic.interaction-lock → mechanic.match-detection → mechanic.move-counter → mechanic.victory-detection
+contracts:    component.game-shell, component.card-grid, component.memory-card, component.move-counter, component.match-progress, component.victory-screen
+validators:   validator.card-pair-integrity, validator.flip-lock-prevents-third-card, validator.match-completion
+recovery:     recovery.broken-card-flip-state, recovery.mismatched-card-pairs, recovery.stuck-interaction-lock
+progress:     progress.memory-match
+learning:     learning.memory-match
 ```
 
 ## Relation to v1 Builder Kits

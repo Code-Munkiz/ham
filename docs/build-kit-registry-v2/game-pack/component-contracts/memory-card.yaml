@@ -1,0 +1,79 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.memory-card
+kind: component_contract
+name: Single memory card
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  One flippable card showing back when face-down and symbol/label when face-up.
+  Disabled when matched or interaction locked.
+
+non_template_statement: >
+  UI contract for one card. Not a fixed card flip animation library file.
+
+applies_to:
+  - game.memory-match
+  - tag:memory-match
+
+depends_on:
+  - mechanic.card-flip-state
+  - mechanic.interaction-lock
+
+provides:
+  - memory_card_ui
+
+binds_mechanics:
+  - mechanic.card-flip-state
+  - mechanic.interaction-lock
+
+inputs:
+  - cardId: string
+  - face: string
+  - faceUp: boolean
+  - matched: boolean
+  - disabled: boolean
+
+outputs:
+  - click_event: cardId
+
+guidance:
+  - "Button or clickable div with min 44px tap target"
+  - "Show back pattern when !faceUp && !matched"
+  - "Ignore click when matched or disabled"
+  - "Optional CSS transition for flip — keep MVP simple"
+
+validation_notes:
+  - Matched cards not clickable
+  - Face hidden when face-down
+
+risk_notes:
+  - Click fires while disabled due to missing guard
+
+purpose: >
+  Primary per-card interaction surface.
+
+expected_props:
+  - cardId: string
+  - face: string
+  - faceUp: boolean
+  - matched: boolean
+  - disabled: boolean
+  - onFlip: "(cardId: string) => void"
+
+states:
+  - face_down
+  - face_up
+  - matched_revealed
+  - disabled_locked
+
+accessibility_notes:
+  - "aria-pressed or aria-expanded for face-up state when appropriate"
+  - "Accessible label includes match state for screen readers"
+
+responsive_notes:
+  - "Square aspect ratio; readable symbol size"
+
+styling_guidance:
+  - "Clear back vs face distinction; matched state visually distinct"

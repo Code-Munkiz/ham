@@ -42,6 +42,15 @@ EXPECTED_BRANCHING_NARRATIVE_MECHANIC_ORDER = (
     "mechanic.ending-resolution",
 )
 
+EXPECTED_MEMORY_MATCH_MECHANIC_ORDER = (
+    "mechanic.card-pair-set",
+    "mechanic.card-flip-state",
+    "mechanic.interaction-lock",
+    "mechanic.match-detection",
+    "mechanic.move-counter",
+    "mechanic.victory-detection",
+)
+
 
 @pytest.fixture
 def game_pack_root() -> Path:
@@ -53,7 +62,7 @@ class TestHappyPath:
         pack = load_registry_pack(game_pack_root)
         assert pack.pack_id == "pack.game"
         assert pack.schema_version == "0.1"
-        assert len(pack.modules) == 51
+        assert len(pack.modules) == 71
 
     def test_validate_docs_game_pack(self, game_pack_root: Path):
         pack = load_registry_pack(game_pack_root)
@@ -167,6 +176,49 @@ class TestBranchingNarrativeRecipe:
         trivia = compose_build_recipe(pack, "game.trivia-timer")
         assert idle.mechanic_ids == EXPECTED_MECHANIC_ORDER
         assert trivia.mechanic_ids == EXPECTED_TRIVIA_MECHANIC_ORDER
+
+
+class TestMemoryMatchRecipe:
+    def test_compose_memory_match(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        validate_registry_pack(pack)
+        recipe = compose_build_recipe(pack, "game.memory-match")
+        assert recipe.app_type_id == "game.memory-match"
+        assert recipe.stack_kit_id == "stack.dom-game-minimal"
+        assert recipe.mechanic_ids == EXPECTED_MEMORY_MATCH_MECHANIC_ORDER
+
+    def test_render_memory_match_includes_key_ids(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        recipe = compose_build_recipe(pack, "game.memory-match")
+        rendered = render_playbook_context(recipe)
+        assert "game.memory-match" in rendered
+        assert "stack.dom-game-minimal" in rendered
+        assert "mechanic.card-pair-set" in rendered
+        assert "mechanic.card-flip-state" in rendered
+        assert "mechanic.match-detection" in rendered
+        assert "mechanic.interaction-lock" in rendered
+        assert "validator.flip-lock-prevents-third-card" in rendered
+        assert "validator.match-completion" in rendered
+        assert "static-card-data-for-mvp" in rendered
+
+    def test_render_memory_match_under_default_budget(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        recipe = compose_build_recipe(pack, "game.memory-match")
+        rendered = render_playbook_context(recipe)
+        assert len(rendered) <= 12_000
+        assert rendered.startswith("Build Kit Registry v2 — BuildRecipe\n")
+
+    def test_other_recipes_still_compose_after_memory_match_added(
+        self, game_pack_root: Path
+    ):
+        pack = load_registry_pack(game_pack_root)
+        validate_registry_pack(pack)
+        idle = compose_build_recipe(pack, "game.idle-incremental")
+        trivia = compose_build_recipe(pack, "game.trivia-timer")
+        branching = compose_build_recipe(pack, "game.branching-narrative")
+        assert idle.mechanic_ids == EXPECTED_MECHANIC_ORDER
+        assert trivia.mechanic_ids == EXPECTED_TRIVIA_MECHANIC_ORDER
+        assert branching.mechanic_ids == EXPECTED_BRANCHING_NARRATIVE_MECHANIC_ORDER
 
 
 class TestBrokenFixtures:

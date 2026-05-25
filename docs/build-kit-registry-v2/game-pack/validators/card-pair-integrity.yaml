@@ -1,0 +1,69 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.card-pair-integrity
+kind: validator
+name: Card pair deck integrity
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Verifies the deck has even card count, each pairId appears exactly twice, and grid
+  dimensions match deck size.
+
+non_template_statement: >
+  Conceptual deck check. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.memory-match
+  - tag:memory-match
+
+depends_on:
+  - mechanic.card-pair-set
+
+validates_modules:
+  - mechanic.card-pair-set
+  - component.card-grid
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - cards: deck array
+  - rows: number
+  - cols: number
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "Count pairId frequency — each must be 2"
+  - "cards.length === rows * cols"
+  - "cards.length even and >= 4"
+
+validation_notes:
+  - Run after scaffold and deck edits
+  - Does not execute at runtime today
+
+risk_notes:
+  - Shuffle does not fix invalid pair definitions
+
+validation_goal: >
+  Deck is structurally valid before gameplay begins.
+
+pass_conditions:
+  - "Every pairId appears exactly twice"
+  - "Grid cell count equals deck size"
+  - "No orphan single-card pairIds"
+
+fail_conditions:
+  - "Odd deck size"
+  - "pairId count not equal to 2"
+  - "Grid mismatch"
+
+suggested_failure_message: >
+  The card deck has invalid pairs or grid size. I'll fix the deck so every symbol
+  appears exactly twice.
+
+recovery_playbooks:
+  - recovery.mismatched-card-pairs

@@ -17,6 +17,7 @@ applies_to:
   - game.idle-incremental
   - game.trivia-timer
   - game.branching-narrative
+  - game.memory-match
   - tag:dom-game-layout
 
 depends_on: []

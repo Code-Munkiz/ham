@@ -1,0 +1,71 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.card-flip-state
+kind: mechanic
+name: Card flip face-up state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Tracks which cards are face-up, enforces at most two revealed non-matched cards, and
+  handles flip-back after mismatch delay.
+
+non_template_statement: >
+  Flip state recipe only. Not a prebuilt card animation component file.
+
+applies_to:
+  - game.memory-match
+  - tag:memory-match
+
+depends_on:
+  - mechanic.card-pair-set
+
+provides:
+  - flip_state
+
+binds_components:
+  - component.memory-card
+
+inputs:
+  - mismatch_delay_ms: number — default 600–1000
+  - max_face_up: number — default 2
+
+outputs:
+  - faceUpCardIds: string[]
+  - pendingFlipBack: boolean
+
+guidance:
+  - "Toggle faceUp on card click when not matched and not locked"
+  - "When two face-up cards mismatch, schedule flip-back after delay"
+  - "Clear faceUpCardIds after flip-back completes"
+  - "Never leave more than two non-matched cards face-up"
+
+validation_notes:
+  - faceUpCardIds.length <= max_face_up when not matched
+  - Matched cards stay face-up permanently
+
+risk_notes:
+  - Stale timeout flips wrong cards after state change
+  - Third card briefly face-up if lock missing
+
+state_model:
+  fields:
+    - name: faceUpCardIds
+      type: array
+    - name: pendingFlipBack
+      type: boolean
+  events:
+    - flip_card
+    - flip_back_mismatch
+    - clear_face_up
+
+common_failure_modes:
+  - "More than two cards face-up simultaneously"
+  - "Mismatch timeout fires after match already resolved"
+
+test_ideas:
+  - "Second flip reveals two cards max"
+  - "Mismatch returns cards face-down after delay"
+
+reusable_across:
+  - game.memory-match

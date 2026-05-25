@@ -1,0 +1,67 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.victory-screen
+kind: component_contract
+name: Memory game victory screen
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Shown when all pairs matched: congratulatory message, final move count, optional
+  play-again control.
+
+non_template_statement: >
+  UI contract for victory overlay. Not a fixed win screen template file.
+
+applies_to:
+  - game.memory-match
+  - tag:memory-match
+
+depends_on:
+  - mechanic.victory-detection
+
+provides:
+  - victory_screen_ui
+
+binds_mechanics:
+  - mechanic.victory-detection
+
+inputs:
+  - show_final_moves: boolean — default true
+  - show_play_again: boolean — default false
+
+outputs:
+  - victory_message: string
+
+guidance:
+  - "Render when phase === victory"
+  - "Display finalMoves prominently"
+  - "Disable card grid clicks underneath"
+  - "Play again only if user prompt implies replay"
+
+validation_notes:
+  - Only visible in victory phase
+  - Move count matches finalMoves from mechanic
+
+risk_notes:
+  - Victory overlay blocks interaction incorrectly if phase stuck
+
+purpose: >
+  Clear win state for memory matching games.
+
+expected_props:
+  - finalMoves: number
+  - onPlayAgain: optional callback
+
+states:
+  - victory_active
+
+accessibility_notes:
+  - "Heading for victory message"
+  - "Focus moves to victory content on transition"
+
+responsive_notes:
+  - "Centered modal or panel; readable on mobile"
+
+styling_guidance:
+  - "Celebratory but minimal; consistent with game shell"

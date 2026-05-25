@@ -1,0 +1,72 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.card-pair-set
+kind: mechanic
+name: Card pair deck definition
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Defines static in-memory card pairs (symbol ids appearing exactly twice), grid layout,
+  and shuffle-at-start behavior for a memory matching game.
+
+non_template_statement: >
+  Behavioral recipe for deck shape only. Does not ship a checked-in card deck file.
+
+applies_to:
+  - game.memory-match
+  - tag:memory-match
+
+depends_on: []
+
+provides:
+  - card_deck_state
+
+binds_components:
+  - component.card-grid
+
+inputs:
+  - pair_symbols: array of symbol ids or labels
+  - grid_rows: number — default 4
+  - grid_cols: number — default 4
+  - shuffle_on_start: boolean — default true
+
+outputs:
+  - cards: array of { id, pairId, face, matched, faceUp }
+  - pairCount: number
+
+guidance:
+  - "Each pairId appears on exactly two cards"
+  - "Use emoji or short text for face values — no image URLs for MVP"
+  - "Shuffle card order on mount or new game"
+  - "Grid size must equal cards.length (even count)"
+
+validation_notes:
+  - pairCount * 2 === cards.length
+  - All pairIds have exactly two members
+
+risk_notes:
+  - Odd card count breaks grid layout
+  - Duplicate single ids mistaken for pairs
+
+state_model:
+  fields:
+    - name: cards
+      type: array
+    - name: pairCount
+      type: number
+  events:
+    - init_deck
+    - shuffle_deck
+    - reset_game
+
+common_failure_modes:
+  - "Three cards share same pairId"
+  - "Grid dimensions do not match deck size"
+
+test_ideas:
+  - "Deck has even number of cards"
+  - "Each symbol appears exactly twice after shuffle"
+
+reusable_across:
+  - game.memory-match

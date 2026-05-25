@@ -1,0 +1,71 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.victory-detection
+kind: mechanic
+name: Victory detection
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Detects when all pairs are matched and transitions to victory phase with final
+  move count summary.
+
+non_template_statement: >
+  Victory phase recipe only. Not a prebuilt win screen file.
+
+applies_to:
+  - game.memory-match
+  - tag:memory-match
+
+depends_on:
+  - mechanic.match-detection
+  - mechanic.card-pair-set
+  - mechanic.move-counter
+
+provides:
+  - victory_phase_state
+
+binds_components:
+  - component.victory-screen
+
+inputs:
+  - show_play_again: boolean — default false for MVP
+
+outputs:
+  - phase: playing | victory
+  - finalMoves: number
+
+guidance:
+  - "Set phase to victory when matchedPairCount === pairCount"
+  - "Only transition after last match resolved (not mid flip-back)"
+  - "Pass finalMoves to victory screen"
+  - "Hide card grid interaction in victory phase"
+
+validation_notes:
+  - Victory only when all cards matched
+  - No victory while face-up mismatch pending
+
+risk_notes:
+  - Victory triggers one pair early if count desynced
+  - Victory never shown if matchedPairCount stuck below pairCount
+
+state_model:
+  fields:
+    - name: phase
+      type: enum
+    - name: finalMoves
+      type: number
+  events:
+    - enter_victory
+    - restart_game
+
+common_failure_modes:
+  - "Victory before last pair matched"
+  - "Game playable after all pairs matched"
+
+test_ideas:
+  - "Last match triggers victory screen"
+  - "Move count shown on victory"
+
+reusable_across:
+  - game.memory-match
