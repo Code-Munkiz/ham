@@ -14,6 +14,7 @@ TRIVIA_TIMER_APP_TYPE = "game.trivia-timer"
 BRANCHING_NARRATIVE_APP_TYPE = "game.branching-narrative"
 MEMORY_MATCH_APP_TYPE = "game.memory-match"
 WORD_DAILY_APP_TYPE = "game.word-daily"
+DAILY_PUZZLE_GRID_APP_TYPE = "game.daily-puzzle-grid"
 
 _GLOBAL_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(dashboard|landing\s*page|saas|calculator|todo|to[-\s]?do|crm)\b",
@@ -28,6 +29,9 @@ _IDLE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\bbranching\s+story\b",
     r"\bchoose\s+your\s+own\s+adventure\b",
     r"\b(wordle|daily\s+word|word\s+guess)\b",
+    r"\b(nonogram|picross|sudoku|minesweeper)\b",
+    r"\blogic\s+grid\s+puzzle\b",
+    r"\bdaily\s+puzzle\s+grid\b",
 )
 
 _TRIVIA_NEGATIVE_PATTERNS: tuple[str, ...] = (
@@ -44,6 +48,9 @@ _TRIVIA_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\bmultiple\s+choice\b.{0,80}\bform\b",
     r"\beducation\s+website\b",
     r"\b(wordle|daily\s+word|word\s+guess)\b",
+    r"\b(nonogram|picross|sudoku|minesweeper)\b",
+    r"\blogic\s+grid\s+puzzle\b",
+    r"\bdaily\s+puzzle\s+grid\b",
 )
 
 _IDLE_POSITIVE_PATTERNS: tuple[str, ...] = (
@@ -87,6 +94,9 @@ _BRANCHING_NARRATIVE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\bflashcard\b",
     r"\beducation\s+website\b",
     r"\b(wordle|daily\s+word|word\s+guess)\b",
+    r"\b(nonogram|picross|sudoku|minesweeper)\b",
+    r"\blogic\s+grid\s+puzzle\b",
+    r"\bdaily\s+puzzle\s+grid\b",
 )
 
 _BRANCHING_NARRATIVE_POSITIVE_PATTERNS: tuple[str, ...] = (
@@ -118,6 +128,9 @@ _MEMORY_MATCH_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\bsolitaire\b",
     r"\bsurvey\b",
     r"\b(wordle|daily\s+word|word\s+guess)\b",
+    r"\b(nonogram|picross|sudoku|minesweeper)\b",
+    r"\blogic\s+grid\s+puzzle\b",
+    r"\bdaily\s+puzzle\s+grid\b",
 )
 
 _MEMORY_MATCH_POSITIVE_PATTERNS: tuple[str, ...] = (
@@ -151,6 +164,10 @@ _WORD_DAILY_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\bwriting\s+app\b",
     r"\bsurvey\b",
     r"\beducation\s+website\b",
+    r"\b(nonogram|picross|sudoku|minesweeper)\b",
+    r"\blogic\s+grid\s+puzzle\b",
+    r"\bdaily\s+puzzle\s+grid\b",
+    r"\bfill\s+cells\b.{0,80}\b(clue|row|column|constraint)\b",
 )
 
 _WORD_DAILY_POSITIVE_PATTERNS: tuple[str, ...] = (
@@ -171,6 +188,50 @@ _WORD_DAILY_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bdaily\s+word\s+puzzle\b",
     r"\bkeyboard\s+input\b.{0,100}\b(word|guess|daily|puzzle)\b",
     r"\b(word|daily)\b.{0,100}\bkeyboard\s+input\b",
+)
+
+_DAILY_PUZZLE_GRID_NEGATIVE_PATTERNS: tuple[str, ...] = (
+    r"\b(idle|incremental|clicker|tycoon)\b",
+    r"\bcookie\s+clicker\b",
+    r"\bpassive\s+income\b",
+    r"\b(trivia|quiz)\b",
+    r"\bmemory\s+(card|match)\b",
+    r"\bbranching\s+story\b",
+    r"\bchoose\s+your\s+own\s+adventure\b",
+    r"\binteractive\s+fiction\b",
+    r"\b(wordle|daily\s+word|word\s+guess|wordle-style)\b",
+    r"\bcrossword\b",
+    r"\bword\s+search\b",
+    r"\bminesweeper\b",
+    r"\b(dashboard|data\s+table|spreadsheet)\b",
+    r"\bdashboard\s+grid\b",
+    r"\bcss\s+grid\b",
+    r"\bgrid\s+layout\b",
+    r"\bsurvey\b",
+    r"\bflashcard\b",
+    r"\beducation\s+website\b",
+    r"\b(blog|chatbot)\b",
+    r"\bwriting\s+app\b",
+)
+
+_DAILY_PUZZLE_GRID_POSITIVE_PATTERNS: tuple[str, ...] = (
+    r"\bdaily\s+puzzle\s+grid\b",
+    r"\blogic\s+grid\s+puzzle\b",
+    r"\bgrid\s+logic\s+puzzle\b",
+    r"\btile\s+logic\s+puzzle\b",
+    r"\bdaily\s+grid\s+puzzle\b.{0,120}\b(row|column|rule|clue|constraint|cell)\b",
+    r"\b(row|column|rule|clue|constraint|cell)\b.{0,120}\bdaily\s+grid\s+puzzle\b",
+    r"\bsudoku(-like)?\b.{0,80}\b(grid|puzzle|game)\b",
+    r"\b(grid|puzzle|game)\b.{0,80}\bsudoku(-like)?\b",
+    r"\bnonogram(-style)?\b.{0,80}\b(puzzle|game)\b",
+    r"\b(picross|nonogram)\b.{0,80}\b(puzzle|game|style)\b",
+    r"\bfill\s+cells\b.{0,120}\b(clue|clues|constraint|rule|row|column)\b",
+    r"\b(clue|clues|constraint|rule)\b.{0,120}\bfill\s+cells\b",
+    r"\bgame\b.{0,80}\bfill\s+cells\b.{0,80}\b(clue|clues)\b",
+    r"\bmini\s+sudoku\b",
+    r"\b(row|column)\b.{0,80}\b(rule|constraint|clue)\b.{0,80}\b(grid|puzzle|cell)\b",
+    r"\bgrid\s+puzzle\b.{0,100}\b(hint|completion|constraint|rule|clue|cell)\b",
+    r"\b(hint|completion)\b.{0,100}\bgrid\s+puzzle\b",
 )
 
 
@@ -220,6 +281,14 @@ def _matches_word_daily(text: str) -> bool:
     )
 
 
+def _matches_daily_puzzle_grid(text: str) -> bool:
+    return _matches_recipe(
+        text,
+        negatives=_DAILY_PUZZLE_GRID_NEGATIVE_PATTERNS,
+        positives=_DAILY_PUZZLE_GRID_POSITIVE_PATTERNS,
+    )
+
+
 def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
     """Return a Game Pack app type id for clear prompt matches, else ``None``."""
     text = _normalized_prompt(prompt)
@@ -227,7 +296,7 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
         return None
     if _matches_any(text, _GLOBAL_NEGATIVE_PATTERNS):
         return None
-    # Precedence: trivia → idle → branching narrative → memory match → word daily.
+    # Precedence: trivia → idle → branching narrative → memory match → word daily → daily puzzle grid.
     if _matches_trivia(text):
         return TRIVIA_TIMER_APP_TYPE
     if _matches_idle(text):
@@ -238,6 +307,8 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
         return MEMORY_MATCH_APP_TYPE
     if _matches_word_daily(text):
         return WORD_DAILY_APP_TYPE
+    if _matches_daily_puzzle_grid(text):
+        return DAILY_PUZZLE_GRID_APP_TYPE
     return None
 
 

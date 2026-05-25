@@ -11,6 +11,7 @@ from src.ham.builder_llm_scaffold import ScaffoldResult, _build_scaffold_message
 from src.ham.builder_plan import Plan, Step
 from src.ham.build_registry.intent import (
     BRANCHING_NARRATIVE_APP_TYPE,
+    DAILY_PUZZLE_GRID_APP_TYPE,
     IDLE_INCREMENTAL_APP_TYPE,
     MEMORY_MATCH_APP_TYPE,
     TRIVIA_TIMER_APP_TYPE,
@@ -119,6 +120,37 @@ _WORD_DAILY_NEGATIVE_PROMPTS = (
     "Build a word game",
 )
 
+_DAILY_PUZZLE_GRID_POSITIVE_PROMPTS = (
+    "Build me a daily puzzle grid game",
+    "Make a logic grid puzzle",
+    "Create a daily grid puzzle with row and column rules",
+    "Build a mini sudoku-like grid puzzle",
+    "Make a nonogram-style puzzle game",
+    "Create a game where I fill cells based on clues",
+    "Build a tile logic puzzle with hints and completion checking",
+)
+
+_DAILY_PUZZLE_GRID_NEGATIVE_PROMPTS = (
+    "Build a dashboard grid",
+    "Make a data table",
+    "Create a CSS grid layout",
+    "Build a crossword puzzle",
+    "Make a word search",
+    "Build Tetris",
+    "Make Minesweeper",
+    "Build a puzzle game",
+    "Build a grid game",
+    "Make a daily game",
+)
+
+_DAILY_PUZZLE_GRID_CROSS_RECIPE_NEGATIVE_PROMPTS = (
+    "Build a memory card game",
+    "Build a Wordle-style game",
+    "Build a trivia quiz with timer",
+    "Build an idle clicker game",
+    "Build a branching story game",
+)
+
 _CROSS_EXCLUSION_PROMPTS = (
     ("build me an idle clicker game", IDLE_INCREMENTAL_APP_TYPE),
     ("Build me a trivia quiz with a timer", TRIVIA_TIMER_APP_TYPE),
@@ -130,6 +162,8 @@ _CROSS_EXCLUSION_PROMPTS = (
     ("Make a choose your own adventure game", BRANCHING_NARRATIVE_APP_TYPE),
     ("Make an emoji memory match game", MEMORY_MATCH_APP_TYPE),
     ("Make a Wordle-style game", WORD_DAILY_APP_TYPE),
+    ("Build me a daily puzzle grid game", DAILY_PUZZLE_GRID_APP_TYPE),
+    ("Make a logic grid puzzle", DAILY_PUZZLE_GRID_APP_TYPE),
 )
 
 
@@ -173,6 +207,18 @@ class TestSelectRegistryV2AppTypeForPrompt:
     @pytest.mark.parametrize("prompt", _WORD_DAILY_NEGATIVE_PROMPTS)
     def test_rejects_non_word_daily_prompts(self, prompt: str):
         assert select_registry_v2_app_type_for_prompt(prompt) is None
+
+    @pytest.mark.parametrize("prompt", _DAILY_PUZZLE_GRID_POSITIVE_PROMPTS)
+    def test_matches_daily_puzzle_grid_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) == DAILY_PUZZLE_GRID_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _DAILY_PUZZLE_GRID_NEGATIVE_PROMPTS)
+    def test_rejects_non_daily_puzzle_grid_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) is None
+
+    @pytest.mark.parametrize("prompt", _DAILY_PUZZLE_GRID_CROSS_RECIPE_NEGATIVE_PROMPTS)
+    def test_other_recipe_prompts_do_not_route_to_daily_puzzle_grid_param(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != DAILY_PUZZLE_GRID_APP_TYPE
 
     @pytest.mark.parametrize("prompt,expected", _CROSS_EXCLUSION_PROMPTS)
     def test_recipes_do_not_steal_each_other(self, prompt: str, expected: str):
@@ -251,6 +297,37 @@ class TestSelectRegistryV2AppTypeForPrompt:
             != WORD_DAILY_APP_TYPE
         )
 
+    def test_daily_puzzle_grid_prompt_does_not_route_to_other_recipes(self):
+        prompt = "Build me a daily puzzle grid game"
+        assert select_registry_v2_app_type_for_prompt(prompt) == DAILY_PUZZLE_GRID_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != IDLE_INCREMENTAL_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != TRIVIA_TIMER_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != BRANCHING_NARRATIVE_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != MEMORY_MATCH_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != WORD_DAILY_APP_TYPE
+
+    def test_other_recipe_prompts_do_not_route_to_daily_puzzle_grid(self):
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a trivia quiz with a timer")
+            != DAILY_PUZZLE_GRID_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("build me an idle clicker game")
+            != DAILY_PUZZLE_GRID_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a branching story game")
+            != DAILY_PUZZLE_GRID_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a memory card matching game")
+            != DAILY_PUZZLE_GRID_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a daily word guessing game")
+            != DAILY_PUZZLE_GRID_APP_TYPE
+        )
+
 
 class TestEnrichPlanMetadataWithRegistryV2:
     def test_flag_disabled_does_not_add_registry_metadata(self, monkeypatch):
@@ -294,6 +371,17 @@ class TestEnrichPlanMetadataWithRegistryV2:
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "generic"},
             "Build me a daily word guessing game",
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
+
+    def test_flag_disabled_daily_puzzle_grid_prompt_does_not_add_registry_metadata(
+        self, monkeypatch
+    ):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            "Build me a daily puzzle grid game",
         )
         assert "registry_v2_app_type" not in metadata
         assert metadata["template_kind"] == "generic"
@@ -348,6 +436,16 @@ class TestEnrichPlanMetadataWithRegistryV2:
         assert metadata["template_kind"] == "generic"
         assert metadata["originated_from"] == "builder_chat_scaffold"
 
+    def test_flag_enabled_daily_puzzle_grid_prompt_adds_registry_metadata(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic", "originated_from": "builder_chat_scaffold"},
+            "Build me a daily puzzle grid game",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        assert metadata["registry_v2_app_type"] == DAILY_PUZZLE_GRID_APP_TYPE
+        assert metadata["template_kind"] == "generic"
+        assert metadata["originated_from"] == "builder_chat_scaffold"
+
     def test_flag_enabled_non_idle_prompt_leaves_registry_metadata_absent(self):
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "landing-page"},
@@ -388,6 +486,15 @@ class TestEnrichPlanMetadataWithRegistryV2:
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "generic"},
             "Build a crossword puzzle",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "1"},
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
+
+    def test_flag_enabled_non_daily_puzzle_grid_prompt_leaves_registry_metadata_absent(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            "Build a dashboard grid",
             env={"HAM_BUILD_REGISTRY_V2_ENABLED": "1"},
         )
         assert "registry_v2_app_type" not in metadata
@@ -472,6 +579,12 @@ class TestChatScaffoldSyntheticPlanMetadata:
         assert metadata.get("template_kind") == "generic"
         assert "registry_v2_app_type" not in metadata
 
+    def test_flag_disabled_daily_puzzle_grid_prompt_has_no_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = _synthetic_plan_metadata("Build me a daily puzzle grid game")
+        assert metadata.get("template_kind") == "generic"
+        assert "registry_v2_app_type" not in metadata
+
     def test_flag_enabled_idle_prompt_adds_registry_metadata(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
         metadata = _synthetic_plan_metadata("build me an idle clicker game")
@@ -501,6 +614,12 @@ class TestChatScaffoldSyntheticPlanMetadata:
         metadata = _synthetic_plan_metadata("Build me a daily word guessing game")
         assert metadata.get("template_kind") == "generic"
         assert metadata.get("registry_v2_app_type") == WORD_DAILY_APP_TYPE
+
+    def test_flag_enabled_daily_puzzle_grid_prompt_adds_registry_metadata(self, monkeypatch):
+        monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
+        metadata = _synthetic_plan_metadata("Build me a daily puzzle grid game")
+        assert metadata.get("template_kind") == "generic"
+        assert metadata.get("registry_v2_app_type") == DAILY_PUZZLE_GRID_APP_TYPE
 
     def test_flag_enabled_non_idle_prompt_has_no_registry_metadata(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
@@ -645,6 +764,35 @@ class TestEndToEndScaffoldMessages:
         assert "Builder Kit context:" not in content
         assert content.count("Builder Kit:") == 0
 
+    def test_flag_enabled_daily_puzzle_grid_prompt_produces_v2_context(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            "Build me a daily puzzle grid game",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_daily_puzzle_grid_e2e",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message="Build me a daily puzzle grid game",
+            steps=[Step(title="Scaffold game", description="Create daily puzzle grid files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(
+            plan,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )[1]["content"]
+        assert "Build Registry v2 playbook context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" in content
+        assert "game.daily-puzzle-grid" in content
+        assert "stack.dom-game-minimal" in content
+        assert "validator.grid-dimensions" in content
+        assert "validator.constraint-consistency" in content
+        assert "validator.completion-detection" in content
+        assert "Builder Kit context:" not in content
+        assert content.count("Builder Kit:") == 0
+
     def test_flag_disabled_idle_prompt_produces_v1_context_only(self, monkeypatch):
         monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
         metadata = enrich_plan_metadata_with_registry_v2(
@@ -733,6 +881,25 @@ class TestEndToEndScaffoldMessages:
             project_id="proj_test",
             user_message="Build me a daily word guessing game",
             steps=[Step(title="Scaffold game", description="Create word daily files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(plan)[1]["content"]
+        assert "Builder Kit context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" not in content
+
+    def test_flag_disabled_daily_puzzle_grid_prompt_produces_v1_context_only(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            "Build me a daily puzzle grid game",
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_daily_puzzle_grid_v1",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message="Build me a daily puzzle grid game",
+            steps=[Step(title="Scaffold game", description="Create daily puzzle grid files")],
             planner_confidence="high",
             metadata=metadata,
         )
