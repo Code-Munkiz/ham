@@ -1,0 +1,68 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.streak-combo
+kind: mechanic
+name: Streak combo
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Tracks consecutive correct keystrokes or words for optional combo display.
+
+non_template_statement: >
+  Streak counter recipe only. Optional MVP embellishment.
+
+applies_to:
+  - game.typing-speed-racer
+  - tag:typing-speed-racer
+
+depends_on:
+  - mechanic.mistake-tracking-typing
+  - mechanic.accuracy-scoring
+  - mechanic.wpm-calculation
+
+provides:
+  - streak_state
+
+binds_components:
+  - component.streak-indicator
+
+inputs:
+  - isCorrectKeystroke: boolean
+  - currentStreak: number
+
+outputs:
+  - streak: number
+  - bestStreak: number
+
+guidance:
+  - "Increment streak on correct; reset on mistake"
+  - "Track bestStreak for results summary"
+  - "Optional HUD indicator; can hide if user prefers minimal UI"
+
+validation_notes:
+  - Streak resets on mistake
+
+risk_notes:
+  - Streak never resets
+
+state_model:
+  fields:
+    - name: streak
+      type: number
+    - name: bestStreak
+      type: number
+  events:
+    - increment_streak
+    - reset_streak
+
+common_failure_modes:
+  - "Streak negative"
+  - "bestStreak lower than streak"
+
+test_ideas:
+  - "Streak increments on correct keys"
+  - "Streak resets on mistake"
+
+reusable_across:
+  - game.typing-speed-racer

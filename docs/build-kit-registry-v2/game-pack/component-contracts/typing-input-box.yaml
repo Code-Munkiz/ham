@@ -1,0 +1,42 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.typing-input-box
+kind: component_contract
+name: Typing input box
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Captures live typing input for the active prompt; disables when challenge ends.
+
+non_template_statement: >
+  UI contract only. Typing-specific; not word-daily guess row.
+
+applies_to:
+  - game.typing-speed-racer
+
+binds_mechanics:
+  - mechanic.typing-input-stream
+
+required_props:
+  - value: string
+  - onChange: callback
+  - disabled: boolean
+
+optional_props:
+  - autoFocus: boolean — default true
+  - placeholder: string
+
+accessibility:
+  - "Input labeled for typing challenge; disabled state announced"
+
+guidance:
+  - "Single controlled input or contenteditable with guardrails"
+  - "Set disabled when inputLocked or challenge finished"
+  - "Ignore input events when disabled"
+
+validation_notes:
+  - validator.input-lock-after-finish
+
+risk_notes:
+  - Focus trap after finish

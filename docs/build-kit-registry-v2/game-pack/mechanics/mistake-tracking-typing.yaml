@@ -1,0 +1,63 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.mistake-tracking-typing
+kind: mechanic
+name: Mistake tracking (typing)
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Counts typing mistakes deterministically from incorrect characters or words.
+
+non_template_statement: >
+  Mistake counter recipe only. Distinct from puzzle-grid mistake-tracking.
+
+applies_to:
+  - game.typing-speed-racer
+  - tag:typing-speed-racer
+
+depends_on:
+  - mechanic.typing-input-stream
+
+provides:
+  - mistake_count_state
+
+binds_components:
+  - component.accuracy-meter
+
+inputs:
+  - isCorrectKeystroke: boolean
+  - mistakePolicy: per_character | per_word — default per_character
+
+outputs:
+  - mistakeCount: number
+
+guidance:
+  - "Increment on wrong character relative to prompt"
+  - "Do not decrement mistakes on backspace unless explicitly requested"
+  - "Expose mistakeCount in results summary"
+
+validation_notes:
+  - validator.mistake-counting
+
+risk_notes:
+  - Mistakes double-count on hold-repeat keys
+
+state_model:
+  fields:
+    - name: mistakeCount
+      type: number
+  events:
+    - record_mistake
+    - reset_mistakes
+
+common_failure_modes:
+  - "Mistake count negative"
+  - "Correct keystrokes increment mistakes"
+
+test_ideas:
+  - "Wrong key increments count once"
+  - "Correct key does not increment"
+
+reusable_across:
+  - game.typing-speed-racer

@@ -1,0 +1,77 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.stuck-typing-timer
+kind: recovery_playbook
+name: Fix stuck typing timer
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs race clocks that fail to finish or leak intervals after challenge end.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.typing-speed-racer
+  - tag:typing-speed-racer
+
+depends_on:
+  - mechanic.timer-or-race-clock
+  - validator.timer-completion
+
+repairs_validators:
+  - validator.timer-completion
+
+inputs:
+  - failure_context: validator result
+  - current_source: timer effect (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.timer-completion
+
+guidance:
+  - "clearInterval in effect cleanup"
+  - "Set isFinished once on countdown zero"
+
+validation_notes:
+  - Re-run timer-completion after repair
+
+risk_notes:
+  - Double finish triggers duplicate results
+
+failure_signals:
+  - validator.timer-completion fail
+
+diagnosis_steps:
+  - "Inspect interval cleanup on unmount"
+  - "Check finish handler idempotency"
+
+steps:
+  - id: step.clear_interval
+    action: clear_interval
+    detail: "Clear interval on stop and unmount"
+  - id: step.idempotent_finish
+    action: idempotent_finish
+    detail: "Guard finish handler against double fire"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.timer-completion"
+
+repair_strategy:
+  - action: clear_interval
+    detail: "Stop leaking timers"
+  - action: idempotent_finish
+    detail: "Single finish transition"
+  - action: re_validate
+    target: validator.timer-completion
+
+guardrails:
+  - max_attempts: 2
+  - preserve: "Challenge duration config"
+
+user_facing_summary: >
+  I fixed the typing timer so it stops cleanly when your challenge ends.

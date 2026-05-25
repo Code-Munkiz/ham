@@ -1,0 +1,65 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.input-lock-after-finish
+kind: validator
+name: Input lock after finish
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Verifies typing input is disabled after the challenge ends.
+
+non_template_statement: >
+  Conceptual input lock check. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.typing-speed-racer
+  - tag:typing-speed-racer
+
+depends_on:
+  - mechanic.typing-input-stream
+  - mechanic.typing-result-state
+
+validates_modules:
+  - mechanic.typing-input-stream
+  - component.typing-input-box
+  - component.typing-results-panel
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - isFinished: boolean
+  - inputLocked: boolean
+  - disabled: boolean
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "inputLocked and disabled true when isFinished"
+  - "Keystrokes after finish do not mutate metrics"
+
+validation_notes:
+  - Test keyboard events after timer zero
+
+risk_notes:
+  - Focus returns to input after results
+
+validation_goal: >
+  No typing input is accepted after the challenge finishes.
+
+pass_conditions:
+  - "Input disabled when finished"
+  - "Metrics unchanged by post-finish keys"
+
+fail_conditions:
+  - "Keystrokes change WPM after finish"
+  - "Input box enabled on results screen"
+
+suggested_failure_message: >
+  Typing input still works after the challenge ended. I'll lock input on finish.
+
+recovery_playbooks:
+  - recovery.input-accepted-after-finish

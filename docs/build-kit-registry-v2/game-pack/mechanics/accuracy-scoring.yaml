@@ -1,0 +1,66 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.accuracy-scoring
+kind: mechanic
+name: Accuracy scoring
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Computes bounded accuracy percentage from correct vs attempted characters or words.
+
+non_template_statement: >
+  Accuracy formula guidance only. Not trivia answer scoring.
+
+applies_to:
+  - game.typing-speed-racer
+  - tag:typing-speed-racer
+
+depends_on:
+  - mechanic.mistake-tracking-typing
+  - mechanic.typing-input-stream
+
+provides:
+  - accuracy_state
+
+binds_components:
+  - component.accuracy-meter
+
+inputs:
+  - typedCharacters: number
+  - mistakeCount: number
+  - correctCharacters: number
+
+outputs:
+  - accuracyPercent: number — 0–100
+
+guidance:
+  - "accuracy = correct / attempted * 100, clamped 0–100"
+  - "Update live during challenge; freeze on finish"
+  - "Show in HUD and results panel"
+
+validation_notes:
+  - validator.accuracy-score-bounds
+
+risk_notes:
+  - Division by zero when no attempts
+  - Accuracy above 100%
+
+state_model:
+  fields:
+    - name: accuracyPercent
+      type: number
+  events:
+    - recalculate_accuracy
+    - freeze_accuracy
+
+common_failure_modes:
+  - "Accuracy NaN with zero attempts"
+  - "Accuracy exceeds 100%"
+
+test_ideas:
+  - "100% when no mistakes"
+  - "Clamped at 0 with all mistakes"
+
+reusable_across:
+  - game.typing-speed-racer

@@ -1,0 +1,41 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.typing-prompt-panel
+kind: component_contract
+name: Typing prompt panel
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Displays the active typing prompt with character-level progress highlighting.
+
+non_template_statement: >
+  UI contract only. Not a checked-in prompt widget.
+
+applies_to:
+  - game.typing-speed-racer
+
+binds_mechanics:
+  - mechanic.typing-prompt-set
+  - mechanic.typing-input-stream
+
+required_props:
+  - prompt: string
+  - typedValue: string
+
+optional_props:
+  - highlightCorrect: boolean — default true
+
+accessibility:
+  - "Prompt text readable; progress visible without color-only cues"
+
+guidance:
+  - "Show current prompt prominently"
+  - "Highlight typed vs remaining characters"
+  - "Do not leak next prompt before advance"
+
+validation_notes:
+  - Prompt non-empty during active challenge
+
+risk_notes:
+  - Illegible contrast on mobile

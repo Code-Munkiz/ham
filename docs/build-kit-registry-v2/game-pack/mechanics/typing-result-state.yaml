@@ -1,0 +1,72 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.typing-result-state
+kind: mechanic
+name: Typing result state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Terminal state when the typing challenge ends — aggregates WPM, accuracy,
+  mistakes, streak, and locks input.
+
+non_template_statement: >
+  End-state recipe only. Not hangman win/loss.
+
+applies_to:
+  - game.typing-speed-racer
+  - tag:typing-speed-racer
+
+depends_on:
+  - mechanic.wpm-calculation
+  - mechanic.accuracy-scoring
+  - mechanic.timer-or-race-clock
+  - mechanic.typing-input-stream
+
+provides:
+  - result_state
+
+binds_components:
+  - component.typing-results-panel
+
+inputs:
+  - wpm: number
+  - accuracyPercent: number
+  - mistakeCount: number
+  - bestStreak: number
+  - isFinished: boolean
+
+outputs:
+  - showResults: boolean
+  - summary: object
+
+guidance:
+  - "Transition to results when timer finishes or user completes all prompts"
+  - "Lock input before showing results panel"
+  - "Offer play-again without accounts or leaderboard"
+
+validation_notes:
+  - validator.input-lock-after-finish
+
+risk_notes:
+  - Results shown before clock stops
+  - Summary missing frozen metrics
+
+state_model:
+  fields:
+    - name: showResults
+      type: boolean
+  events:
+    - finish_challenge
+    - play_again
+
+common_failure_modes:
+  - "Results panel while input still active"
+  - "Live WPM changes after finish"
+
+test_ideas:
+  - "Results appear when timer ends"
+  - "Play again resets challenge state"
+
+reusable_across:
+  - game.typing-speed-racer

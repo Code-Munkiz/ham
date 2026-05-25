@@ -1,0 +1,62 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.mistake-counting
+kind: validator
+name: Mistake counting
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Verifies mistakes increment only on incorrect keystrokes and never go negative.
+
+non_template_statement: >
+  Conceptual mistake check. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.typing-speed-racer
+  - tag:typing-speed-racer
+
+depends_on:
+  - mechanic.mistake-tracking-typing
+
+validates_modules:
+  - mechanic.mistake-tracking-typing
+  - component.accuracy-meter
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - mistakeCount: number
+  - keystrokeLog: array — conceptual
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "mistakeCount >= 0"
+  - "Each wrong character increments once"
+
+validation_notes:
+  - Hold-repeat key edge case
+
+risk_notes:
+  - Backspace incorrectly decrements mistakes
+
+validation_goal: >
+  Mistake counter reflects incorrect keystrokes deterministically.
+
+pass_conditions:
+  - "mistakeCount non-negative"
+  - "Correct keys do not increment"
+
+fail_conditions:
+  - "Negative mistake count"
+  - "Wrong key does not increment"
+
+suggested_failure_message: >
+  Mistake counting is inconsistent. I'll fix the mistake tracker.
+
+recovery_playbooks:
+  - recovery.invalid-accuracy-score

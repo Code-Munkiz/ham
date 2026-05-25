@@ -1,0 +1,63 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.accuracy-score-bounds
+kind: validator
+name: Accuracy score bounds
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Verifies accuracy percentage stays within 0–100 and matches mistake data.
+
+non_template_statement: >
+  Conceptual accuracy check. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.typing-speed-racer
+  - tag:typing-speed-racer
+
+depends_on:
+  - mechanic.accuracy-scoring
+
+validates_modules:
+  - mechanic.accuracy-scoring
+  - component.accuracy-meter
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - accuracyPercent: number
+  - typedCharacters: number
+  - mistakeCount: number
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "accuracyPercent must be >= 0 and <= 100"
+  - "No NaN when attempts > 0"
+
+validation_notes:
+  - Zero attempts edge case
+
+risk_notes:
+  - Display shows raw unclamped value
+
+validation_goal: >
+  Accuracy score is bounded and consistent with typing attempts and mistakes.
+
+pass_conditions:
+  - "accuracyPercent between 0 and 100 inclusive"
+  - "100% when mistakes zero and attempts > 0"
+
+fail_conditions:
+  - "accuracyPercent > 100 or < 0"
+  - "NaN accuracy with active typing"
+
+suggested_failure_message: >
+  Accuracy score is out of bounds. I'll fix the accuracy calculation.
+
+recovery_playbooks:
+  - recovery.invalid-accuracy-score

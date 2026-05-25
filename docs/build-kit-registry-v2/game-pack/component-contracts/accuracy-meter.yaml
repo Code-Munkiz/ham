@@ -1,0 +1,40 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.accuracy-meter
+kind: component_contract
+name: Accuracy meter
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  HUD element showing live accuracy percentage and optional mistake count.
+
+non_template_statement: >
+  UI contract only. Not hangman wrong-guess meter.
+
+applies_to:
+  - game.typing-speed-racer
+
+binds_mechanics:
+  - mechanic.accuracy-scoring
+  - mechanic.mistake-tracking-typing
+
+required_props:
+  - accuracyPercent: number
+
+optional_props:
+  - mistakeCount: number
+  - showMistakes: boolean — default true
+
+accessibility:
+  - "Accuracy percentage exposed as text, not bar-only"
+
+guidance:
+  - "Clamp display 0–100%"
+  - "Update during challenge; freeze on finish"
+
+validation_notes:
+  - validator.accuracy-score-bounds
+
+risk_notes:
+  - Misleading 100% before any typing

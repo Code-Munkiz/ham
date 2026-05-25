@@ -1,0 +1,74 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.typing-input-stream
+kind: mechanic
+name: Typing input stream
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Captures character-by-character typing input against the active prompt while the
+  challenge is running.
+
+non_template_statement: >
+  Input handling guidance only. Not word-daily or hangman guess semantics.
+
+applies_to:
+  - game.typing-speed-racer
+  - tag:typing-speed-racer
+
+depends_on:
+  - mechanic.typing-prompt-set
+  - mechanic.timer-or-race-clock
+
+provides:
+  - typing_input_state
+
+binds_components:
+  - component.typing-input-box
+  - component.typing-prompt-panel
+
+inputs:
+  - typedValue: string
+  - currentPrompt: string
+  - isFinished: boolean
+
+outputs:
+  - typedCharacters: number
+  - typedWords: number
+  - cursorIndex: number
+  - inputLocked: boolean
+
+guidance:
+  - "Compare typed input to current prompt character by character"
+  - "Lock input when isFinished or inputLocked"
+  - "Do not reuse hangman letter-bank or word-daily keyboard grid"
+
+validation_notes:
+  - validator.input-lock-after-finish
+
+risk_notes:
+  - Input accepted after finish
+  - Paste flooding WPM unfairly — optional block paste for MVP
+
+state_model:
+  fields:
+    - name: typedValue
+      type: string
+    - name: inputLocked
+      type: boolean
+  events:
+    - key_input
+    - lock_input
+    - reset_input
+
+common_failure_modes:
+  - "Keystrokes processed after timer end"
+  - "Cursor desync from prompt"
+
+test_ideas:
+  - "Correct characters advance cursor"
+  - "Input ignored when locked"
+
+reusable_across:
+  - game.typing-speed-racer

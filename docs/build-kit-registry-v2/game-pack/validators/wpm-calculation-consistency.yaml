@@ -1,0 +1,65 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.wpm-calculation-consistency
+kind: validator
+name: WPM calculation consistency
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Verifies WPM formula matches typed content and elapsed time within tolerance.
+
+non_template_statement: >
+  Conceptual WPM check. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.typing-speed-racer
+  - tag:typing-speed-racer
+
+depends_on:
+  - mechanic.wpm-calculation
+  - mechanic.timer-or-race-clock
+
+validates_modules:
+  - mechanic.wpm-calculation
+  - component.wpm-display
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - wpm: number
+  - typedCharacters: number
+  - elapsedSeconds: number
+  - charsPerWord: number
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "Expected WPM = (typedCharacters / charsPerWord) / (elapsedMinutes)"
+  - "Guard minimum elapsed denominator"
+
+validation_notes:
+  - Test finish boundary when elapsed small
+
+risk_notes:
+  - Rounding mismatch false positives
+
+validation_goal: >
+  Displayed WPM matches deterministic formula from typed content and elapsed time.
+
+pass_conditions:
+  - "WPM within tolerance of expected formula"
+  - "No Infinity or NaN WPM"
+
+fail_conditions:
+  - "WPM inconsistent with typed characters"
+  - "WPM updates after finish lock"
+
+suggested_failure_message: >
+  WPM does not match typed content and elapsed time. I'll fix the calculation.
+
+recovery_playbooks:
+  - recovery.broken-wpm-calculation

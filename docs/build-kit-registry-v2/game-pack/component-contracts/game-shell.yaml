@@ -22,6 +22,7 @@ applies_to:
   - game.daily-puzzle-grid
   - game.resource-management-sim
   - game.hangman-lite
+  - game.typing-speed-racer
   - tag:dom-game-layout
 
 depends_on: []

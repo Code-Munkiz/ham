@@ -1,0 +1,79 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.invalid-accuracy-score
+kind: recovery_playbook
+name: Fix invalid accuracy score
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs accuracy percentages outside 0–100 or inconsistent with mistake counts.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.typing-speed-racer
+  - tag:typing-speed-racer
+
+depends_on:
+  - mechanic.accuracy-scoring
+  - validator.accuracy-score-bounds
+
+repairs_validators:
+  - validator.accuracy-score-bounds
+  - validator.mistake-counting
+
+inputs:
+  - failure_context: validator result
+  - current_source: accuracy handler (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.accuracy-score-bounds
+
+guidance:
+  - "Clamp accuracy 0–100 after calculation"
+  - "Handle zero attempts without NaN"
+
+validation_notes:
+  - Re-run accuracy-score-bounds after repair
+
+risk_notes:
+  - Clamping hides mistake counter bugs
+
+failure_signals:
+  - validator.accuracy-score-bounds fail
+  - validator.mistake-counting fail
+
+diagnosis_steps:
+  - "Trace accuracy formula inputs"
+  - "Verify mistake increment path"
+
+steps:
+  - id: step.clamp_accuracy
+    action: clamp_accuracy
+    detail: "Clamp accuracyPercent to 0–100"
+  - id: step.zero_attempt_guard
+    action: zero_attempt_guard
+    detail: "Return 0 or 100 safely when no attempts"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.accuracy-score-bounds"
+
+repair_strategy:
+  - action: clamp_accuracy
+    detail: "Bound accuracy display"
+  - action: zero_attempt_guard
+    detail: "Avoid NaN"
+  - action: re_validate
+    target: validator.accuracy-score-bounds
+
+guardrails:
+  - max_attempts: 2
+  - preserve: "Mistake counter semantics"
+
+user_facing_summary: >
+  I fixed the accuracy score so it stays within 0–100% and matches your mistakes.

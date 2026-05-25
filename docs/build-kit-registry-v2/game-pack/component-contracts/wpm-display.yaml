@@ -1,0 +1,42 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.wpm-display
+kind: component_contract
+name: WPM display
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  HUD element showing live and final words-per-minute.
+
+non_template_statement: >
+  UI contract only. Not idle resource counter.
+
+applies_to:
+  - game.typing-speed-racer
+
+binds_mechanics:
+  - mechanic.wpm-calculation
+  - mechanic.timer-or-race-clock
+
+required_props:
+  - wpm: number
+
+optional_props:
+  - label: string — default "WPM"
+  - showTimer: boolean — default true
+  - remainingSeconds: number | null
+
+accessibility:
+  - "WPM and timer readable; not color-only"
+
+guidance:
+  - "Update live during challenge"
+  - "Show frozen WPM on results"
+  - "Round WPM to sensible precision"
+
+validation_notes:
+  - Non-negative WPM display
+
+risk_notes:
+  - Flickering WPM from sub-second elapsed

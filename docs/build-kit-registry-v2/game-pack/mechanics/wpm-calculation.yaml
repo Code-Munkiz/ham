@@ -1,0 +1,67 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.wpm-calculation
+kind: mechanic
+name: WPM calculation
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Calculates words-per-minute from typed characters or words and elapsed time.
+
+non_template_statement: >
+  WPM formula guidance only. Not idle economy scoring.
+
+applies_to:
+  - game.typing-speed-racer
+  - tag:typing-speed-racer
+
+depends_on:
+  - mechanic.typing-input-stream
+  - mechanic.timer-or-race-clock
+
+provides:
+  - wpm_state
+
+binds_components:
+  - component.wpm-display
+
+inputs:
+  - typedCharacters: number
+  - typedWords: number
+  - elapsedSeconds: number
+  - charsPerWord: number — default 5
+
+outputs:
+  - wpm: number
+
+guidance:
+  - "Standard MVP: (typedCharacters / charsPerWord) / (elapsedMinutes)"
+  - "Use elapsedSeconds from race clock; minimum 1 second denominator guard"
+  - "Freeze WPM on finish; show in HUD and results"
+
+validation_notes:
+  - validator.wpm-calculation-consistency
+
+risk_notes:
+  - WPM spikes when elapsed near zero
+  - Inconsistent chars-per-word assumption
+
+state_model:
+  fields:
+    - name: wpm
+      type: number
+  events:
+    - recalculate_wpm
+    - freeze_wpm
+
+common_failure_modes:
+  - "WPM Infinity at start"
+  - "WPM not updated on finish"
+
+test_ideas:
+  - "WPM increases with more typed content"
+  - "WPM stable after finish"
+
+reusable_across:
+  - game.typing-speed-racer

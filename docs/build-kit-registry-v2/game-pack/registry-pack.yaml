@@ -9,7 +9,8 @@ description: >
   Root manifest for the Build Kit Registry v2 Game Pack schema pilot. Indexes all
   proposed modules for DOM-native casual games, starting with game.idle-incremental,
   game.trivia-timer, game.branching-narrative, game.memory-match, game.word-daily,
-  game.daily-puzzle-grid, game.resource-management-sim, and game.hangman-lite (Wave 2 schema-only).
+  game.daily-puzzle-grid, game.resource-management-sim, game.hangman-lite, and
+  game.typing-speed-racer (Wave 2 schema-only).
   Used for cross-reference validation and future composer defaults — not loaded by HAM
   at runtime today.
 
@@ -28,6 +29,7 @@ module_index:
     - game.daily-puzzle-grid
     - game.resource-management-sim
     - game.hangman-lite
+    - game.typing-speed-racer
   stack_kits:
     - stack.dom-game-minimal
   mechanics:
@@ -78,6 +80,14 @@ module_index:
     - mechanic.reveal-state
     - mechanic.wrong-guess-limit
     - mechanic.hangman-win-loss-state
+    - mechanic.typing-prompt-set
+    - mechanic.timer-or-race-clock
+    - mechanic.typing-input-stream
+    - mechanic.mistake-tracking-typing
+    - mechanic.accuracy-scoring
+    - mechanic.wpm-calculation
+    - mechanic.streak-combo
+    - mechanic.typing-result-state
   component_contracts:
     - component.game-shell
     - component.resource-counter
@@ -119,6 +129,12 @@ module_index:
     - component.wrong-guess-meter
     - component.guess-input
     - component.hangman-result-panel
+    - component.typing-prompt-panel
+    - component.typing-input-box
+    - component.wpm-display
+    - component.accuracy-meter
+    - component.streak-indicator
+    - component.typing-results-panel
   validators:
     - validator.no-negative-currency
     - validator.passive-income-tick
@@ -151,6 +167,11 @@ module_index:
     - validator.duplicate-guess-blocking
     - validator.wrong-guess-limit-enforcement
     - validator.hangman-win-loss-detection
+    - validator.wpm-calculation-consistency
+    - validator.accuracy-score-bounds
+    - validator.timer-completion
+    - validator.mistake-counting
+    - validator.input-lock-after-finish
   recovery_playbooks:
     - recovery.stale-interval-or-bad-tick-loop
     - recovery.invalid-local-storage-json
@@ -175,6 +196,10 @@ module_index:
     - recovery.broken-letter-reveal
     - recovery.duplicate-guess-state
     - recovery.invalid-hangman-end-state
+    - recovery.broken-wpm-calculation
+    - recovery.invalid-accuracy-score
+    - recovery.stuck-typing-timer
+    - recovery.input-accepted-after-finish
   progress_labels:
     - progress.idle-incremental
     - progress.trivia-timer
@@ -184,6 +209,7 @@ module_index:
     - progress.daily-puzzle-grid
     - progress.resource-management-sim
     - progress.hangman-lite
+    - progress.typing-speed-racer
   learning_hooks:
     - learning.idle-incremental
     - learning.trivia-timer
@@ -193,6 +219,7 @@ module_index:
     - learning.daily-puzzle-grid
     - learning.resource-management-sim
     - learning.hangman-lite
+    - learning.typing-speed-racer
 
 compose_defaults:
   compose_order:

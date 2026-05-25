@@ -1,0 +1,78 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.input-accepted-after-finish
+kind: recovery_playbook
+name: Fix input accepted after finish
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs input handlers that continue accepting keystrokes after challenge end.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.typing-speed-racer
+  - tag:typing-speed-racer
+
+depends_on:
+  - mechanic.typing-input-stream
+  - mechanic.typing-result-state
+  - validator.input-lock-after-finish
+
+repairs_validators:
+  - validator.input-lock-after-finish
+
+inputs:
+  - failure_context: validator result
+  - current_source: input handler (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.input-lock-after-finish
+
+guidance:
+  - "Set inputLocked before showing results"
+  - "Early return in onChange when disabled"
+
+validation_notes:
+  - Re-run input-lock-after-finish after repair
+
+risk_notes:
+  - Blur/focus race re-enables input
+
+failure_signals:
+  - validator.input-lock-after-finish fail
+
+diagnosis_steps:
+  - "Trace finish → lock → results order"
+  - "Test keyboard events after timer zero"
+
+steps:
+  - id: step.lock_on_finish
+    action: lock_on_finish
+    detail: "Set inputLocked when isFinished becomes true"
+  - id: step.guard_on_change
+    action: guard_on_change
+    detail: "Ignore onChange when disabled or locked"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.input-lock-after-finish"
+
+repair_strategy:
+  - action: lock_on_finish
+    detail: "Lock before results"
+  - action: guard_on_change
+    detail: "No post-finish mutations"
+  - action: re_validate
+    target: validator.input-lock-after-finish
+
+guardrails:
+  - max_attempts: 2
+  - preserve: "Frozen final metrics"
+
+user_facing_summary: >
+  I locked typing input after the challenge ended so scores stay final.

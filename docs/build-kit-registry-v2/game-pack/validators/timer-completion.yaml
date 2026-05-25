@@ -1,0 +1,63 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.timer-completion
+kind: validator
+name: Timer completion
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Verifies race clock stops on finish and does not leak intervals after unmount.
+
+non_template_statement: >
+  Conceptual timer check. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.typing-speed-racer
+  - tag:typing-speed-racer
+
+depends_on:
+  - mechanic.timer-or-race-clock
+
+validates_modules:
+  - mechanic.timer-or-race-clock
+  - component.wpm-display
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - isFinished: boolean
+  - isRunning: boolean
+  - remainingSeconds: number | null
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "isRunning false when isFinished true"
+  - "Countdown zero triggers finish once"
+
+validation_notes:
+  - Unmount cleanup test
+
+risk_notes:
+  - Timer keeps ticking after finish
+
+validation_goal: >
+  Challenge timer completes cleanly and stops driving state after finish.
+
+pass_conditions:
+  - "Clock stopped when challenge finished"
+  - "No duplicate finish events"
+
+fail_conditions:
+  - "Timer running after isFinished"
+  - "Interval survives unmount"
+
+suggested_failure_message: >
+  The typing timer did not stop cleanly. I'll fix the clock cleanup.
+
+recovery_playbooks:
+  - recovery.stuck-typing-timer

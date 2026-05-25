@@ -1,0 +1,43 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.typing-results-panel
+kind: component_contract
+name: Typing results panel
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Final summary panel with WPM, accuracy, mistakes, optional streak, and play again.
+
+non_template_statement: >
+  UI contract only. Not trivia results summary.
+
+applies_to:
+  - game.typing-speed-racer
+
+binds_mechanics:
+  - mechanic.typing-result-state
+
+required_props:
+  - wpm: number
+  - accuracyPercent: number
+  - mistakeCount: number
+  - onPlayAgain: callback
+
+optional_props:
+  - bestStreak: number
+  - challengeSeconds: number
+
+accessibility:
+  - "Results readable; play-again button keyboard accessible"
+
+guidance:
+  - "Show only after challenge finished and input locked"
+  - "Use frozen metrics from result state"
+  - "No leaderboard or account CTAs for MVP"
+
+validation_notes:
+  - Summary matches frozen state
+
+risk_notes:
+  - Live metrics shown instead of frozen finals

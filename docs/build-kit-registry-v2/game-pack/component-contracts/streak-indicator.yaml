@@ -1,0 +1,39 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.streak-indicator
+kind: component_contract
+name: Streak indicator
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Optional HUD showing current typing streak or combo count.
+
+non_template_statement: >
+  UI contract only. Optional MVP embellishment.
+
+applies_to:
+  - game.typing-speed-racer
+
+binds_mechanics:
+  - mechanic.streak-combo
+
+required_props:
+  - streak: number
+
+optional_props:
+  - bestStreak: number
+  - visible: boolean — default true
+
+accessibility:
+  - "Streak count readable as text"
+
+guidance:
+  - "Hide component when user prefers minimal HUD"
+  - "Reset display on play again"
+
+validation_notes:
+  - Non-negative streak values
+
+risk_notes:
+  - Distracting animation hurts readability
