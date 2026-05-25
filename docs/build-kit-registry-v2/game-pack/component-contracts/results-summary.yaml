@@ -1,0 +1,71 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.results-summary
+kind: component_contract
+name: Results summary
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Final screen after all questions: total score, questions answered, optional correct
+  count, and short celebratory or encouraging copy.
+
+non_template_statement: >
+  Results layout contract only. Not a shipped results page template file.
+
+applies_to:
+  - game.trivia-timer
+  - tag:trivia-quiz
+
+depends_on:
+  - mechanic.progression
+  - mechanic.score
+
+provides:
+  - results_ui
+
+binds_mechanics:
+  - mechanic.progression
+  - mechanic.score
+
+inputs:
+  - totalScore: number
+  - totalQuestions: number
+  - correctCount: number | null
+
+outputs:
+  - results_view: summary panel
+
+guidance:
+  - "Clear headline: round complete or similar"
+  - "Show score prominently; optional breakdown if tracked"
+  - "Keep MVP simple — no leaderboard embed"
+
+validation_notes:
+  - Renders when progression phase is results
+  - Score matches mechanic.score authoritative value
+
+risk_notes:
+  - Results shown mid-quiz if progression bug
+
+purpose: >
+  Clean terminal state so players know the round ended and how they scored.
+
+expected_props:
+  - totalScore: number
+  - totalQuestions: number
+  - correctCount: number | null
+
+states:
+  - results_visible
+  - replay_offered: optional if replay implemented
+
+accessibility_notes:
+  - "Results heading and score readable by screen readers"
+  - "Semantic structure for summary stats"
+
+responsive_notes:
+  - "Centered summary readable on narrow viewports"
+
+styling_guidance:
+  - "Distinct from in-round layout; calm completion tone"

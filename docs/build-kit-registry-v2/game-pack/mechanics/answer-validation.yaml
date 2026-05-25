@@ -1,0 +1,76 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.answer-validation
+kind: mechanic
+name: Answer validation and submit guard
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Validates the player's selected choice against the current question's correct answer,
+  applies score delta deterministically, and prevents double-submit from rapid clicks.
+
+non_template_statement: >
+  Validation logic recipe only. Not executable validator runner code.
+
+applies_to:
+  - game.trivia-timer
+  - tag:trivia-quiz
+
+depends_on:
+  - mechanic.question-set
+  - mechanic.score
+  - mechanic.timer
+
+provides:
+  - answer_validation_state
+
+binds_components:
+  - component.choice-list
+
+inputs:
+  - points_per_correct: number — default 10
+  - lock_after_submit: boolean — default true
+
+outputs:
+  - lastAnswerCorrect: boolean | null
+  - hasSubmittedCurrentQuestion: boolean
+  - scoreDeltaApplied: number
+
+guidance:
+  - "Compare selectedChoiceId to question.correctChoiceId"
+  - "Set submitted flag before async work to block double clicks"
+  - "Stop timer when answer is submitted"
+  - "Show brief correct/incorrect feedback before advancing"
+
+validation_notes:
+  - Score changes at most once per question
+  - Incorrect answers do not reduce score unless user requests penalty scoring
+
+risk_notes:
+  - Race between timer expire and click submit
+  - Missing guard allows double score on rapid clicks
+
+state_model:
+  fields:
+    - name: selectedChoiceId
+      type: string | null
+    - name: hasSubmittedCurrentQuestion
+      type: boolean
+    - name: lastAnswerCorrect
+      type: boolean | null
+  events:
+    - select_choice
+    - submit_answer
+    - timer_expire_submit
+
+common_failure_modes:
+  - "Double score increment on double click"
+  - "Submit allowed after question already advanced"
+
+test_ideas:
+  - "Correct choice adds points once"
+  - "Second click ignored after submit"
+
+reusable_across:
+  - game.trivia-timer

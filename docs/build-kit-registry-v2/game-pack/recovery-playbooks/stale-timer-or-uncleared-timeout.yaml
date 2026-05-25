@@ -1,0 +1,94 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.stale-timer-or-uncleared-timeout
+kind: recovery_playbook
+name: Fix stale timer or uncleared timeout
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs timed trivia games where countdown intervals or timeouts survive question
+  changes or unmount, causing double advances, late score updates, or frozen preview.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.trivia-timer
+  - tag:timed-quiz
+
+depends_on:
+  - mechanic.timer
+  - validator.timer-cleanup
+
+repairs_validators:
+  - validator.timer-cleanup
+  - validator.score-calculation
+
+inputs:
+  - failure_context: validator result or preview glitch report
+  - current_source: generated timer hook files (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.timer-cleanup
+
+guidance:
+  - "Single timer effect keyed to currentQuestionIndex"
+  - "Store interval id in ref; clear in cleanup and before restart"
+  - "Stop timer synchronously on submit handler entry"
+
+validation_notes:
+  - Re-run validator.timer-cleanup after repair
+  - Max 2 repair attempts before user-facing honest failure
+
+risk_notes:
+  - Over-aggressive patch may remove countdown entirely
+
+failure_signals:
+  - validator.timer-cleanup fail
+  - Score jumps after question already advanced
+  - Multiple active timers detected heuristically
+  - Preview unresponsive / high CPU during quiz
+
+diagnosis_steps:
+  - "Search for setInterval/setTimeout in timer code"
+  - "Verify effect deps include currentQuestionIndex"
+  - "Confirm cleanup clears handle on unmount"
+  - "Confirm submit handler stops timer before state updates"
+
+steps:
+  - id: step.isolate_timer_effect
+    action: isolate_timer_effect
+    detail: "One useEffect per question; deps [currentQuestionIndex, secondsPerQuestion]"
+  - id: step.clear_on_submit
+    action: clear_on_submit
+    detail: "Call clearTimer() at start of submitAnswer before score/index updates"
+  - id: step.dedupe_timers
+    action: dedupe_timers
+    detail: "Remove duplicate countdown loops if scaffold produced extras"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.timer-cleanup after patch"
+
+repair_strategy:
+  - action: isolate_timer_effect
+    detail: "One useEffect per question; deps [currentQuestionIndex, secondsPerQuestion]"
+  - action: clear_on_submit
+    detail: "Call clearTimer() at start of submitAnswer"
+  - action: dedupe_timers
+    detail: "Remove duplicate countdown loops"
+  - action: re_validate
+    target: validator.timer-cleanup
+
+guardrails:
+  - max_attempts: 2
+  - do_not: "Introduce network calls or eval"
+  - do_not: "Remove timer UX entirely without user request"
+  - preserve: "Per-question countdown behavior when possible"
+
+user_facing_summary: >
+  I fixed the quiz countdown so it resets cleanly for each question and doesn't keep
+  ticking in the background.

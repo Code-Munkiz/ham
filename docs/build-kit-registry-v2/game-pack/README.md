@@ -2,7 +2,7 @@
 
 **Status:** Non-runtime schema pilot only. **Schema version:** `0.1`
 
-This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: **`game.idle-incremental`**.
+This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: **`game.idle-incremental`** and **`game.trivia-timer`**.
 
 ## Root manifest
 
@@ -37,7 +37,9 @@ Use vocabulary: **module**, **playbook**, **contract**, **mechanic**. Avoid “t
 - **`progress_label`** (`progress.idle-incremental`) maps those phase ids to normie-friendly copy via `phase_message_map` and `source_phase_owner`.
 - Progress labels do **not** redefine phases independently.
 
-## Why `game.idle-incremental` first
+## Why these app types first
+
+### `game.idle-incremental`
 
 | Reason | Detail |
 |--------|--------|
@@ -47,6 +49,16 @@ Use vocabulary: **module**, **playbook**, **contract**, **mechanic**. Avoid “t
 | **No asset pipeline** | No spritesheets, audio packs, or level editors in scope. |
 | **Strong Game Pack proof** | Exercises composition, validators, tick-loop recovery, and persistence — without Tetris-style monolithic archetype kits. |
 
+### `game.trivia-timer`
+
+| Reason | Detail |
+|--------|--------|
+| **Second recipe shape** | Proves the pack supports a different mechanic graph (questions, timer, progression) — not only idle loops. |
+| **DOM-native quiz UI** | Multiple-choice buttons, countdown HUD, results screen — no canvas or external trivia API for MVP. |
+| **Shared reuse** | Reuses `mechanic.score`, `component.game-shell`, `stack.dom-game-minimal`, and score HUD patterns. |
+| **Distinct validators** | Timer cleanup, deterministic scoring, and question progression — complementary to idle economy validators. |
+| **Explicit MVP bounds** | Static in-memory questions; no multiplayer, accounts, or LLM-generated questions at runtime. |
+
 ## Pilot module layout
 
 ```txt
@@ -55,13 +67,14 @@ docs/build-kit-registry-v2/game-pack/
   CONVENTIONS.md
   registry-pack.yaml          # pack.game — root manifest (schema_version 0.1)
   app-types/game.idle-incremental.yaml
+  app-types/game.trivia-timer.yaml
   stack-kits/dom-game-minimal.yaml
-  mechanics/{score,economy,upgrades,save-load}.yaml
-  component-contracts/{game-shell,resource-counter,upgrade-card,save-status}.yaml
-  validators/{no-negative-currency,passive-income-tick,local-storage-roundtrip}.yaml
-  recovery-playbooks/{stale-interval-or-bad-tick-loop,invalid-local-storage-json}.yaml
-  progress-labels/idle-incremental.yaml
-  learning-hooks/idle-incremental.yaml
+  mechanics/{score,economy,upgrades,save-load,question-set,timer,answer-validation,progression}.yaml
+  component-contracts/{game-shell,resource-counter,upgrade-card,save-status,question-card,choice-list,timer-display,results-summary}.yaml
+  validators/{no-negative-currency,passive-income-tick,local-storage-roundtrip,timer-cleanup,score-calculation,question-progression}.yaml
+  recovery-playbooks/{stale-interval-or-bad-tick-loop,invalid-local-storage-json,stale-timer-or-uncleared-timeout,broken-question-progression}.yaml
+  progress-labels/{idle-incremental,trivia-timer}.yaml
+  learning-hooks/{idle-incremental,trivia-timer}.yaml
 ```
 
 ## Conceptual composition example
@@ -84,6 +97,23 @@ learning:     learning.idle-incremental
 Full id graph and dependency fields: [CONVENTIONS.md](CONVENTIONS.md#example-composition--gameidle-incremental).
 
 HAM would then **generate custom code** from the composed playbook context — not copy a starter repo.
+
+### Conceptual composition — `game.trivia-timer`
+
+When a user says *“Build a timed trivia quiz with multiple choice questions”*, a **future** composer would assemble:
+
+```txt
+registry_pack: pack.game
+schema_version: 0.1
+app_type:     game.trivia-timer
+stack_kit:    stack.dom-game-minimal
+mechanics:    mechanic.question-set → mechanic.score → mechanic.timer → mechanic.answer-validation → mechanic.progression
+contracts:    component.game-shell, component.resource-counter, component.question-card, component.choice-list, component.timer-display, component.results-summary
+validators:   validator.timer-cleanup, validator.score-calculation, validator.question-progression
+recovery:     recovery.stale-timer-or-uncleared-timeout, recovery.broken-question-progression
+progress:     progress.trivia-timer
+learning:     learning.trivia-timer
+```
 
 ## Relation to v1 Builder Kits
 

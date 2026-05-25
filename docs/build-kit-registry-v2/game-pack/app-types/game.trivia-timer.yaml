@@ -1,0 +1,160 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: game.trivia-timer
+kind: app_type
+name: Timed trivia / quiz game
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  A browser-based trivia or quiz game where the player answers multiple-choice
+  questions under a per-question timer, receives immediate score feedback, and
+  finishes on a results summary screen. Uses static in-memory question data for MVP.
+  Output is always custom-generated from the user prompt plus composed playbook
+  modules — never cloned from a starter project.
+
+non_template_statement: >
+  This app type does not reference checked-in game source files, question banks on
+  disk, or clone baselines. It defines generative guidance only.
+
+legacy_v1_fallback: generic
+
+safety_constraints:
+  - no-network-egress-for-mvp
+  - no-eval
+  - no-user-accounts-for-mvp
+  - no-multiplayer-for-mvp
+  - static-question-data-for-mvp
+
+applies_to:
+  - tag:trivia-quiz
+  - tag:dom-casual-game
+
+inputs:
+  - user_prompt: natural language quiz theme and difficulty tone
+  - optional_question_count: number of questions (default 5–10)
+  - optional_timer_seconds: per-question countdown (default 15–30)
+  - optional_scoring_policy: points per correct answer, speed bonus optional
+
+outputs:
+  - runnable_vite_react_app: single-page DOM quiz game
+  - composed_build_recipe: ids of mechanics, contracts, validators, recovery modules
+  - normie_plan_summary: phased build description for chat/activity stream
+
+guidance:
+  - "Prefer React state + effects; static question array in source or module constant"
+  - "One timer per active question; clear timeout/interval on unmount and question advance"
+  - "Disable choice buttons after submit to prevent double-scoring"
+  - "Score updates deterministically: correct +N, incorrect +0 unless user asks otherwise"
+  - "End cleanly on results screen when question index reaches length"
+  - "Keep all logic client-side; no trivia API or LLM question generation at runtime"
+
+validation_notes:
+  - Run composed validators after scaffold and after timer/score edits
+  - Preview must boot without console errors before success copy
+
+risk_notes:
+  - Stale timers fire after question change and corrupt score or index
+  - Rapid clicks may double-submit without guard flags
+  - Off-by-one question index breaks final results transition
+
+user_prompt_examples:
+  - "Build a timed trivia quiz with multiple choice questions"
+  - "Make a science quiz game with a countdown timer and score"
+  - "Create a fun trivia game where I pick answers before time runs out"
+  - "Build a quiz show style game with a final score screen"
+
+intent_signals:
+  - "\\b(trivia|quiz|quiz\\s+show|multiple\\s+choice|question\\s+and\\s+answer)\\b"
+  - "\\b(timer|countdown|timed)\\b.{0,40}\\b(quiz|trivia|question)\\b"
+  - "\\b(answer|guess)\\b.{0,40}\\b(question|choices?)\\b"
+
+clarifying_questions:
+  - when: intent_confidence_low
+    ask: "What topic should the questions cover — general knowledge, science, movies, or something else?"
+  - when: missing_timer_detail
+    ask: "How many seconds should players have per question — for example 15 or 30?"
+  - when: question_count_ambiguous
+    ask: "How many questions should a round have to start — for example 5 or 10?"
+
+default_assumptions:
+  - "Five to ten multiple-choice questions with four options each"
+  - "Fifteen to thirty second timer per question"
+  - "+10 points per correct answer; no penalty for wrong answers unless user asks"
+  - "Static in-memory question list themed from user prompt"
+  - "DOM/React UI; no canvas engine unless user explicitly requests it"
+  - "Mobile-friendly layout at 360px width"
+
+stack_kit_id: stack.dom-game-minimal
+
+compose_order_ref: pack.game#compose_defaults.compose_order
+
+composed_modules:
+  stack_kit_id: stack.dom-game-minimal
+  mechanics:
+    - mechanic.score
+    - mechanic.question-set
+    - mechanic.timer
+    - mechanic.answer-validation
+    - mechanic.progression
+  component_contracts:
+    - component.game-shell
+    - component.resource-counter
+    - component.question-card
+    - component.choice-list
+    - component.timer-display
+    - component.results-summary
+  validators:
+    - validator.timer-cleanup
+    - validator.score-calculation
+    - validator.question-progression
+  recovery_playbooks:
+    - recovery.stale-timer-or-uncleared-timeout
+    - recovery.broken-question-progression
+  progress_labels: progress.trivia-timer
+  learning_hooks: learning.trivia-timer
+
+build_phases:
+  - id: phase.understand
+    title: Understand the quiz idea
+    order: 1
+    modules_used: [app_type]
+  - id: phase.compose
+    title: Compose mechanics and UI contracts
+    order: 2
+    modules_used: [mechanics, component_contracts]
+  - id: phase.generate
+    title: Generate custom quiz code
+    order: 3
+    modules_used: [stack_kit_id, guidance]
+  - id: phase.validate
+    title: Check timer, score, and progression
+    order: 4
+    modules_used: [validators]
+  - id: phase.preview
+    title: Prepare Workbench preview
+    order: 5
+    modules_used: []
+  - id: phase.recover
+    title: Fix known failure modes if needed
+    order: 6
+    optional: true
+    modules_used: [recovery_playbooks]
+
+acceptance_criteria:
+  - "Game loads in preview without runtime console errors"
+  - "Player can read a question and select one multiple-choice answer"
+  - "Timer counts down per question and stops or resets on advance"
+  - "Score updates deterministically after each answered question"
+  - "Final results screen appears after the last question"
+  - "UI readable on mobile-width viewport"
+
+out_of_scope:
+  - Live API question fetching
+  - Multiplayer or real-time rooms
+  - Global leaderboards
+  - User-generated question editor
+  - LLM-generated questions at runtime
+  - Payments or real-money prizes
+  - Web3 or token rewards
+  - User accounts or cloud sync

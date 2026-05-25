@@ -1,0 +1,74 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.timer
+kind: mechanic
+name: Per-question countdown timer
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Countdown timer for the active trivia question. Must start on question display,
+  stop or reset on answer submit or question change, and clean up intervals/timeouts
+  on unmount.
+
+non_template_statement: >
+  Timer behavior recipe only. Not a copy-paste hook implementation file.
+
+applies_to:
+  - game.trivia-timer
+  - tag:timed-quiz
+
+depends_on:
+  - mechanic.question-set
+
+provides:
+  - timer_state
+
+binds_components:
+  - component.timer-display
+
+inputs:
+  - seconds_per_question: number — default 15–30
+  - on_expire: auto_submit | mark_incorrect | skip (default auto_submit or mark_incorrect)
+
+outputs:
+  - remainingSeconds: number
+  - isExpired: boolean
+  - timerDriverId: conceptual handle for cleanup
+
+guidance:
+  - "Use useEffect keyed to currentQuestionIndex to start/stop timer"
+  - "clearInterval/clearTimeout in effect cleanup"
+  - "Do not create a new timer without clearing the previous one"
+  - "Pause or stop timer immediately when user submits an answer"
+
+validation_notes:
+  - Timer resets when question index changes
+  - No timer callbacks fire after unmount
+
+risk_notes:
+  - Stale timeout increments score or advances twice
+  - Background tab throttling may skew display — acceptable for MVP
+
+state_model:
+  fields:
+    - name: remainingSeconds
+      type: number
+    - name: isExpired
+      type: boolean
+  events:
+    - start_question_timer
+    - tick
+    - stop_timer
+    - expire
+
+common_failure_modes:
+  - "Interval survives question change"
+  - "Double expire handler on rapid navigation"
+
+test_ideas:
+  - "Timer decreases while question active"
+  - "Timer stops after answer selected"
+
+reusable_across:
+  - game.trivia-timer

@@ -1,0 +1,68 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.timer-cleanup
+kind: validator
+name: Timer cleanup invariant
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Ensures per-question timers are cleared on unmount, question change, and after
+  answer submit — no stale intervals or timeouts fire late.
+
+non_template_statement: >
+  Validation rule definition only. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.trivia-timer
+  - tag:timed-quiz
+
+depends_on:
+  - mechanic.timer
+
+validates_modules:
+  - mechanic.timer
+  - component.timer-display
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - generated_source: conceptual — timer hook and question advance logic
+  - simulated_actions: change question, unmount, submit answer
+
+outputs:
+  - pass | fail with reason code
+
+guidance:
+  - "Check useEffect cleanup clears interval/timeout id"
+  - "Check timer stopped before advancing question index"
+  - "Heuristic: no setInterval without matching clear in same effect"
+
+validation_notes:
+  - Run after initial scaffold and after timer-related edits
+  - Does not execute at runtime today
+
+risk_notes:
+  - Background tab throttling may delay ticks — distinct from stale handle leaks
+
+validation_goal: >
+  Prevent double advances and ghost scoring from uncleared timers.
+
+pass_conditions:
+  - "Timer effect returns cleanup that clears active handle"
+  - "Question change stops prior timer before starting next"
+  - "No score or index mutation from expired timer after submit"
+
+fail_conditions:
+  - "Multiple concurrent timers for one question"
+  - "Timeout fires after component unmount"
+  - "Timer expire runs after user already submitted"
+
+suggested_failure_message: >
+  The quiz timer kept running in the background after you moved on. I'll fix the
+  cleanup so each question gets a fresh countdown.
+
+recovery_playbooks:
+  - recovery.stale-timer-or-uncleared-timeout

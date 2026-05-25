@@ -1,0 +1,73 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.question-set
+kind: mechanic
+name: Static question set
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Defines an in-memory list of trivia questions with prompts, multiple-choice options,
+  and a single correct answer id per question. MVP uses static data embedded in generated
+  source — no external trivia API.
+
+non_template_statement: >
+  Behavioral recipe for question data shape only. Does not ship a checked-in question bank file.
+
+applies_to:
+  - game.trivia-timer
+  - tag:trivia-quiz
+
+depends_on: []
+
+provides:
+  - question_set_state
+
+binds_components:
+  - component.question-card
+  - component.choice-list
+
+inputs:
+  - question_count: number — default 5–10
+  - options_per_question: number — default 4
+  - theme_hint: string from user prompt
+
+outputs:
+  - questions: array of { id, prompt, choices[], correctChoiceId }
+  - currentQuestionIndex: number
+
+guidance:
+  - "Embed a small static array in generated code themed to user prompt"
+  - "Each question has stable string ids for choices and correct answer"
+  - "Avoid duplicate prompts within a round"
+  - "Keep reading level appropriate to stated audience"
+
+validation_notes:
+  - Every question has at least two choices and exactly one correctChoiceId
+  - currentQuestionIndex in range [0, length) during play
+
+risk_notes:
+  - Empty question array breaks progression
+  - Mismatched correctChoiceId yields false negatives in scoring
+
+state_model:
+  fields:
+    - name: questions
+      type: array
+    - name: currentQuestionIndex
+      type: number
+  events:
+    - load_questions
+    - advance_question
+
+common_failure_modes:
+  - "Question index out of bounds"
+  - "Missing correctChoiceId on a question"
+
+test_ideas:
+  - "First question renders with expected prompt text"
+  - "All choices render for active question"
+
+reusable_across:
+  - game.trivia-timer
+  - tag:trivia-quiz

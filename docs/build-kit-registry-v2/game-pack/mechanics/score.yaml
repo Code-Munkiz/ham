@@ -15,6 +15,7 @@ non_template_statement: >
 
 applies_to:
   - game.idle-incremental
+  - game.trivia-timer
   - tag:dom-hud-primary-currency
 
 depends_on: []
@@ -70,4 +71,5 @@ test_ideas:
 
 reusable_across:
   - game.idle-incremental
+  - game.trivia-timer
   - tag:dom-casual-game

@@ -15,6 +15,7 @@ non_template_statement: >
 
 applies_to:
   - game.idle-incremental
+  - game.trivia-timer
   - tag:dom-game-layout
 
 depends_on: []

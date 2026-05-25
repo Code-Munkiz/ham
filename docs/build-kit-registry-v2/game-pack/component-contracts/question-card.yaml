@@ -1,0 +1,69 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.question-card
+kind: component_contract
+name: Question card
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Displays the active trivia question prompt, optional category or difficulty label,
+  and question number progress (e.g. Question 3 of 10).
+
+non_template_statement: >
+  UI contract for question presentation. Generated styling varies per user theme.
+
+applies_to:
+  - game.trivia-timer
+  - tag:trivia-quiz
+
+depends_on:
+  - mechanic.question-set
+
+provides:
+  - question_display
+
+binds_mechanics:
+  - mechanic.question-set
+
+inputs:
+  - prompt: string
+  - questionNumber: number
+  - totalQuestions: number
+  - categoryLabel: string | null
+
+outputs:
+  - rendered_question: accessible heading region
+
+guidance:
+  - "Use semantic heading for question text"
+  - "Show progress indicator without cluttering mobile layout"
+
+validation_notes:
+  - Prompt visible without horizontal scroll at 360px
+
+risk_notes:
+  - Very long prompts overflow without wrapping
+
+purpose: >
+  Stable mount point for the readable question stem above choice list.
+
+expected_props:
+  - prompt: string
+  - questionNumber: number
+  - totalQuestions: number
+  - categoryLabel: string | null
+
+states:
+  - active
+  - feedback_flash: optional brief state after submit
+
+accessibility_notes:
+  - "Question text exposed as heading with clear hierarchy"
+  - "Progress announced politely when question changes if implemented"
+
+responsive_notes:
+  - "Comfortable line length; padding for thumb reach below"
+
+styling_guidance:
+  - "Card or panel separation from choices; readable type scale"

@@ -1,0 +1,81 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: learning.trivia-timer
+kind: learning_hook
+name: Trivia timer telemetry and learning hooks
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Structured event shapes for future Hermes learning, operator analytics, and registry
+  quality feedback on timed trivia Game Pack builds. Shapes only — no emitter wired.
+
+non_template_statement: >
+  Telemetry schema proposal. HAM does not emit these events today.
+
+applies_to:
+  - game.trivia-timer
+  - Build Kit Registry v2 composition (future)
+
+inputs:
+  - build_recipe_id: ephemeral id
+  - module_ids: composed mechanics, validators, recovery ids
+  - outcome: success | validation_failed | recovery_applied | scaffold_failed
+
+outputs:
+  - event_records: bounded metadata for stores / Hermes critique
+
+guidance:
+  - "Never include raw OpenRouter keys, full user prompts without policy review, or question text dumps"
+  - "Include module ids and outcome for registry tuning"
+  - "Cap string field lengths for activity/audit payloads"
+
+validation_notes:
+  - Events must be JSON-serializable and redaction-safe
+
+risk_notes:
+  - Over-collection of prompt text raises privacy concerns
+
+event_names:
+  - telemetry.game_pack.compose
+  - telemetry.game_pack.scaffold_complete
+  - telemetry.game_pack.validation_result
+  - telemetry.game_pack.recovery_applied
+  - telemetry.game_pack.preview_ready
+  - telemetry.game_pack.build_failed
+
+useful_fields:
+  telemetry.game_pack.compose:
+    - app_type_id
+    - mechanic_ids
+    - validator_ids
+    - workspace_id_hash
+    - project_id_hash
+  telemetry.game_pack.validation_result:
+    - validator_id
+    - passed
+    - failure_code
+  telemetry.game_pack.recovery_applied:
+    - recovery_playbook_id
+    - attempt_number
+    - success
+  telemetry.game_pack.build_failed:
+    - failure_stage
+    - error_code
+    - model_available
+
+success_signals:
+  - "All composed validators pass"
+  - "Preview reaches ready without recovery or within max recovery attempts"
+  - "Timer cleanup validator rarely fails for this recipe"
+
+failure_signals:
+  - "validator.timer-cleanup fails frequently for this recipe"
+  - "recovery.stale-timer-or-uncleared-timeout invoked more than once per build"
+  - "validator.question-progression fails on short question counts"
+
+privacy_notes:
+  - "Store hashes not raw workspace paths"
+  - "Omit user prompt text from durable telemetry by default; use length + intent bucket only"
+  - "No embedded question bank contents in events"
+  - "Align with Hermes critique envelopes — evidence-shaped, capped text"

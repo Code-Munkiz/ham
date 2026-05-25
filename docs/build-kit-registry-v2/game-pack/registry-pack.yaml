@@ -7,7 +7,8 @@ schema_version: "0.1"
 
 description: >
   Root manifest for the Build Kit Registry v2 Game Pack schema pilot. Indexes all
-  proposed modules for DOM-native casual games, starting with game.idle-incremental.
+  proposed modules for DOM-native casual games, starting with game.idle-incremental
+  and game.trivia-timer.
   Used for cross-reference validation and future composer defaults — not loaded by HAM
   at runtime today.
 
@@ -19,6 +20,7 @@ non_template_statement: >
 module_index:
   app_types:
     - game.idle-incremental
+    - game.trivia-timer
   stack_kits:
     - stack.dom-game-minimal
   mechanics:
@@ -26,22 +28,37 @@ module_index:
     - mechanic.economy
     - mechanic.upgrades
     - mechanic.save-load
+    - mechanic.question-set
+    - mechanic.timer
+    - mechanic.answer-validation
+    - mechanic.progression
   component_contracts:
     - component.game-shell
     - component.resource-counter
     - component.upgrade-card
     - component.save-status
+    - component.question-card
+    - component.choice-list
+    - component.timer-display
+    - component.results-summary
   validators:
     - validator.no-negative-currency
     - validator.passive-income-tick
     - validator.local-storage-roundtrip
+    - validator.timer-cleanup
+    - validator.score-calculation
+    - validator.question-progression
   recovery_playbooks:
     - recovery.stale-interval-or-bad-tick-loop
     - recovery.invalid-local-storage-json
+    - recovery.stale-timer-or-uncleared-timeout
+    - recovery.broken-question-progression
   progress_labels:
     - progress.idle-incremental
+    - progress.trivia-timer
   learning_hooks:
     - learning.idle-incremental
+    - learning.trivia-timer
 
 compose_defaults:
   compose_order:
@@ -54,7 +71,7 @@ compose_defaults:
     - validators
     - recovery
     - progress
-  max_modules: 20
+  max_modules: 24
   default_stack_kit_id: stack.dom-game-minimal
   validator_policy:
     run_after: [scaffold, economy_edit]

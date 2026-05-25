@@ -18,6 +18,7 @@ non_template_statement: >
 
 applies_to:
   - game.idle-incremental
+  - game.trivia-timer
   - tag:dom-casual-game
 
 provides:
@@ -72,6 +73,7 @@ recommended_runtime:
 
 use_when:
   - "Idle, incremental, clicker, or menu-driven casual games"
+  - "Timed trivia or multiple-choice quiz games"
   - "Game logic fits in React state without per-frame physics"
   - "User did not ask for platformer, shooter, or canvas sprite gameplay"
   - "Lane A safety requires no-network client-only behavior"

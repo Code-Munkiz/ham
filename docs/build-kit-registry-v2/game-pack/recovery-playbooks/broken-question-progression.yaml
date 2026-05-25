@@ -1,0 +1,93 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.broken-question-progression
+kind: recovery_playbook
+name: Fix broken question progression
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs trivia games that fail to advance questions, skip the results screen, or show
+  a blank view after the final answer due to index/phase bugs.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.trivia-timer
+  - tag:trivia-quiz
+
+depends_on:
+  - mechanic.progression
+  - validator.question-progression
+
+repairs_validators:
+  - validator.question-progression
+  - validator.score-calculation
+
+inputs:
+  - failure_context: validator result or stuck-quiz report
+  - current_source: progression and results components (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.question-progression
+
+guidance:
+  - "Advance index only after hasSubmittedCurrentQuestion is true"
+  - "Set phase to results when nextIndex >= questions.length"
+  - "Render results-summary only when phase === results"
+
+validation_notes:
+  - Re-run validator.question-progression after repair
+  - Max 2 repair attempts before honest failure
+
+risk_notes:
+  - Patch may over-simplify feedback delay between questions
+
+failure_signals:
+  - validator.question-progression fail
+  - User stuck on last question with no results
+  - Results appear before answering all questions
+  - Blank main region after submit
+
+diagnosis_steps:
+  - "Trace currentQuestionIndex updates vs submit guard"
+  - "Verify phase transition when index reaches length"
+  - "Confirm results component conditional on phase state"
+  - "Check off-by-one in comparisons (>= vs >)"
+
+steps:
+  - id: step.guard_advance
+    action: guard_advance
+    detail: "Increment index only inside submit handler after validation"
+  - id: step.fix_results_transition
+    action: fix_results_transition
+    detail: "if (nextIndex >= questions.length) setPhase('results')"
+  - id: step.align_results_ui
+    action: align_results_ui
+    detail: "Mount results-summary when phase is results; hide question UI"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.question-progression after patch"
+
+repair_strategy:
+  - action: guard_advance
+    detail: "Advance only after submit guard satisfied"
+  - action: fix_results_transition
+    detail: "Enter results phase when question list exhausted"
+  - action: align_results_ui
+    detail: "Conditional render for playing vs results"
+  - action: re_validate
+    target: validator.question-progression
+
+guardrails:
+  - max_attempts: 2
+  - do_not: "Skip scoring on intermediate questions"
+  - preserve: "Final score and question count on results screen"
+
+user_facing_summary: >
+  I fixed the quiz flow so each question leads cleanly to the next and the final
+  results screen appears when you're done.

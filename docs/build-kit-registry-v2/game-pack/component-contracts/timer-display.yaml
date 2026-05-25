@@ -1,0 +1,69 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.timer-display
+kind: component_contract
+name: Timer display
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Shows remaining seconds (or mm:ss) for the active question countdown. Binds to
+  mechanic.timer state and reflects expiry visually.
+
+non_template_statement: >
+  HUD contract for countdown display. Generated implementation varies per theme.
+
+applies_to:
+  - game.trivia-timer
+  - tag:timed-quiz
+
+depends_on:
+  - mechanic.timer
+
+provides:
+  - timer_hud
+
+binds_mechanics:
+  - mechanic.timer
+
+inputs:
+  - remainingSeconds: number
+  - isExpired: boolean
+  - warnUnderSeconds: number — optional visual urgency threshold
+
+outputs:
+  - rendered_timer: numeric countdown display
+
+guidance:
+  - "Use tabular nums for stable width while ticking"
+  - "Optional subtle urgency styling under warn threshold"
+  - "Hide or show 0 when expired per UX preference"
+
+validation_notes:
+  - Display updates each tick without layout jump
+  - Resets visually on question change
+
+risk_notes:
+  - Display desync from internal timer state
+
+purpose: >
+  Makes time pressure visible and pairs with timer cleanup validators.
+
+expected_props:
+  - remainingSeconds: number
+  - isExpired: boolean
+  - formattedTime: string
+
+states:
+  - running
+  - warning
+  - expired
+
+accessibility_notes:
+  - "Timer changes may use aria-live polite sparingly to avoid noise"
+
+responsive_notes:
+  - "Remain visible near question header on mobile"
+
+styling_guidance:
+  - "Compact badge or inline HUD; do not compete with question text"

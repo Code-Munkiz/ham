@@ -1,0 +1,65 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: progress.trivia-timer
+kind: progress_label
+name: Trivia timer build progress
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Normie-friendly phase labels for chat and Workbench activity stream during a timed
+  trivia Game Pack build. Maps app_type build_phase ids to user-facing copy.
+
+non_template_statement: >
+  Progress copy module only. Not emitted by runtime today.
+
+source_phase_owner: game.trivia-timer
+
+applies_to:
+  - game.trivia-timer
+
+inputs:
+  - current_phase_id: from game.trivia-timer build_phases
+  - recovery_active: boolean
+
+outputs:
+  - activity_title: short string for feed
+  - activity_message: one sentence for feed or chat ack
+
+guidance:
+  - "Avoid internal words: scaffold, template_kind, OpenRouter, kit_id"
+  - "Use quiz-flavored plain language"
+  - "Phase ids and order come from source_phase_owner build_phases only"
+
+validation_notes:
+  - Each mapped phase id exists on source_phase_owner build_phases
+  - Each phase has a unique normie message
+
+risk_notes:
+  - Over-long messages clutter activity stream
+
+phase_message_map:
+  phase.understand:
+    title: "Getting your quiz idea"
+    message: "I'm turning your description into a timed trivia game plan."
+  phase.compose:
+    title: "Planning the quiz pieces"
+    message: "I'm lining up questions, timer, scoring, and results for your trivia game."
+  phase.generate:
+    title: "Building your quiz"
+    message: "I'm creating the custom code for your timed trivia preview."
+  phase.validate:
+    title: "Checking the quiz"
+    message: "I'm making sure the timer, scoring, and final results work correctly."
+  phase.preview:
+    title: "Opening preview"
+    message: "Your trivia game preview is almost ready in the Workbench."
+  phase.recover:
+    title: "Polishing the quiz"
+    message: "I noticed a small issue and I'm fixing it before showing the preview."
+
+technical_internal_notes:
+  - "Map phase.generate to LLM scaffold step internally when wired"
+  - "phase.compose corresponds to BuildRecipe assembly — not user-visible"
+  - "phase.recover triggers recovery playbook runner — cap attempts per pack.game recovery_policy"
+  - "Do not expose module ids (mechanic.timer) in normie messages"

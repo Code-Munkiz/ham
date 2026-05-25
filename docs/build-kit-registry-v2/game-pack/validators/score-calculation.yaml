@@ -1,0 +1,69 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.score-calculation
+kind: validator
+name: Deterministic score calculation
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Ensures score increases deterministically for correct answers, does not double-apply
+  on rapid clicks, and matches displayed HUD value.
+
+non_template_statement: >
+  Conceptual check definition for future harness or static analysis. Not a live test file.
+
+applies_to:
+  - game.trivia-timer
+  - tag:trivia-quiz
+
+depends_on:
+  - mechanic.score
+  - mechanic.answer-validation
+
+validates_modules:
+  - mechanic.score
+  - mechanic.answer-validation
+  - component.resource-counter
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - points_per_correct: number
+  - simulated_answers: sequence of correct/incorrect choices
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "Verify submit guard before score mutation"
+  - "Verify HUD reads same state field as scoring logic"
+
+validation_notes:
+  - Pairs with answer-validation double-submit guidance
+  - Does not execute at runtime today
+
+risk_notes:
+  - Speed bonus logic adds complexity — keep MVP linear unless user asks
+
+validation_goal: >
+  Players trust the score tally; double-submit bugs erode quiz credibility.
+
+pass_conditions:
+  - "Correct answer adds points_per_correct exactly once"
+  - "Incorrect answer leaves score unchanged unless penalty mode enabled"
+  - "HUD matches authoritative score state after each question"
+
+fail_conditions:
+  - "Double increment on rapid clicks"
+  - "Score desync from HUD display"
+  - "NaN or negative score in normal play"
+
+suggested_failure_message: >
+  The score didn't update reliably when you picked answers. I'll fix the scoring
+  logic so each question counts exactly once.
+
+recovery_playbooks:
+  - recovery.broken-question-progression

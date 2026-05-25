@@ -1,0 +1,73 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.progression
+kind: mechanic
+name: Question progression and results
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Advances the quiz from the active question to the next or to a final results screen
+  when all questions are answered. Owns game phase: playing vs results.
+
+non_template_statement: >
+  Progression state machine recipe only. Not a prebuilt results page component file.
+
+applies_to:
+  - game.trivia-timer
+  - tag:trivia-quiz
+
+depends_on:
+  - mechanic.question-set
+  - mechanic.answer-validation
+
+provides:
+  - progression_state
+
+binds_components:
+  - component.results-summary
+
+inputs:
+  - auto_advance_delay_ms: optional pause before next question
+  - show_results_on_complete: boolean — default true
+
+outputs:
+  - phase: playing | results
+  - questionsAnswered: number
+  - totalQuestions: number
+
+guidance:
+  - "Increment index only after answer validated for current question"
+  - "When index === questions.length, transition to results phase"
+  - "Results screen shows final score and optional recap counts"
+  - "Offer play again only if user prompt implies replay; default single round MVP"
+
+validation_notes:
+  - Never advance past last question without entering results phase
+  - Index monotonic during a round
+
+risk_notes:
+  - Off-by-one skips results or loops last question
+  - Advance before submit causes skipped scoring
+
+state_model:
+  fields:
+    - name: phase
+      type: enum
+    - name: currentQuestionIndex
+      type: number
+  events:
+    - advance_after_submit
+    - enter_results
+    - restart_round
+
+common_failure_modes:
+  - "Results never shown — index stops at length-1"
+  - "Blank screen after last question"
+
+test_ideas:
+  - "After final answer, results phase renders"
+  - "Question index resets on replay if implemented"
+
+reusable_across:
+  - game.trivia-timer

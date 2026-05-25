@@ -1,0 +1,73 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.choice-list
+kind: component_contract
+name: Multiple-choice list
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Renders selectable answer choices for the active question. Supports single selection,
+  disabled state after submit, and visual feedback for correct/incorrect when revealed.
+
+non_template_statement: >
+  UI contract for choice buttons. Not a fixed answer-button library file.
+
+applies_to:
+  - game.trivia-timer
+  - tag:trivia-quiz
+
+depends_on:
+  - mechanic.question-set
+  - mechanic.answer-validation
+
+provides:
+  - choice_list_ui
+
+binds_mechanics:
+  - mechanic.answer-validation
+  - mechanic.question-set
+
+inputs:
+  - choices: array of { id, label }
+  - selectedChoiceId: string | null
+  - disabled: boolean
+
+outputs:
+  - select_event: choiceId
+
+guidance:
+  - "Use button elements for each choice; full-width on mobile"
+  - "Disable all choices after submit"
+  - "Prevent double-fire with submitted guard from answer-validation mechanic"
+
+validation_notes:
+  - At least two choices render for active question
+  - Disabled after submit prevents second click
+
+risk_notes:
+  - Rapid clicks before disabled state applies
+
+purpose: >
+  Primary interaction surface for answering trivia questions.
+
+expected_props:
+  - choices: array
+  - selectedChoiceId: string | null
+  - disabled: boolean
+  - onSelect: "(choiceId: string) => void"
+
+states:
+  - selectable
+  - submitted_locked
+  - reveal_correct: optional after submit
+
+accessibility_notes:
+  - "Each choice button has accessible name from label text"
+  - "Disabled state exposed to assistive tech after submit"
+
+responsive_notes:
+  - "Stack choices vertically; minimum 44px tap height"
+
+styling_guidance:
+  - "Clear selected vs unselected states; avoid color-only correctness cues"

@@ -15,6 +15,7 @@ non_template_statement: >
 
 applies_to:
   - game.idle-incremental
+  - game.trivia-timer
   - tag:dom-hud-primary-currency
 
 depends_on:
@@ -38,6 +39,7 @@ outputs:
 guidance:
   - "Use tabular nums or monospace for stable width while ticking"
   - "Format large values readably (1.2K) only if user asks for scale"
+  - "For trivia/quiz recipes, label as Score or Points and omit per-second rate"
 
 validation_notes:
   - Value updates on click and passive tick

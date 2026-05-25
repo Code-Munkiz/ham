@@ -26,6 +26,14 @@ EXPECTED_MECHANIC_ORDER = (
     "mechanic.save-load",
 )
 
+EXPECTED_TRIVIA_MECHANIC_ORDER = (
+    "mechanic.question-set",
+    "mechanic.score",
+    "mechanic.timer",
+    "mechanic.answer-validation",
+    "mechanic.progression",
+)
+
 
 @pytest.fixture
 def game_pack_root() -> Path:
@@ -37,7 +45,7 @@ class TestHappyPath:
         pack = load_registry_pack(game_pack_root)
         assert pack.pack_id == "pack.game"
         assert pack.schema_version == "0.1"
-        assert len(pack.modules) == 17
+        assert len(pack.modules) == 33
 
     def test_validate_docs_game_pack(self, game_pack_root: Path):
         pack = load_registry_pack(game_pack_root)
@@ -80,6 +88,40 @@ class TestHappyPath:
         recipe = compose_build_recipe(pack, "game.idle-incremental")
         rendered = render_playbook_context(recipe)
         assert len(rendered) <= 12_000
+
+
+class TestTriviaTimerRecipe:
+    def test_compose_trivia_timer(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        validate_registry_pack(pack)
+        recipe = compose_build_recipe(pack, "game.trivia-timer")
+        assert recipe.app_type_id == "game.trivia-timer"
+        assert recipe.stack_kit_id == "stack.dom-game-minimal"
+        assert recipe.mechanic_ids == EXPECTED_TRIVIA_MECHANIC_ORDER
+
+    def test_render_trivia_includes_key_ids(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        recipe = compose_build_recipe(pack, "game.trivia-timer")
+        rendered = render_playbook_context(recipe)
+        assert "game.trivia-timer" in rendered
+        assert "stack.dom-game-minimal" in rendered
+        assert "validator.timer-cleanup" in rendered
+        assert "validator.score-calculation" in rendered
+        assert "validator.question-progression" in rendered
+        assert "static-question-data-for-mvp" in rendered
+
+    def test_render_trivia_under_default_budget(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        recipe = compose_build_recipe(pack, "game.trivia-timer")
+        rendered = render_playbook_context(recipe)
+        assert len(rendered) <= 12_000
+        assert rendered.startswith("Build Kit Registry v2 — BuildRecipe\n")
+
+    def test_idle_recipe_still_compose_after_trivia_added(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        validate_registry_pack(pack)
+        recipe = compose_build_recipe(pack, "game.idle-incremental")
+        assert recipe.mechanic_ids == EXPECTED_MECHANIC_ORDER
 
 
 class TestBrokenFixtures:

@@ -1,0 +1,70 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.question-progression
+kind: validator
+name: Question progression integrity
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Verifies the quiz advances one question at a time after validated submit and enters
+  the results phase cleanly after the final question.
+
+non_template_statement: >
+  Conceptual progression check. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.trivia-timer
+  - tag:trivia-quiz
+
+depends_on:
+  - mechanic.progression
+  - mechanic.question-set
+
+validates_modules:
+  - mechanic.progression
+  - mechanic.question-set
+  - component.results-summary
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - question_count: number
+  - simulated_submit_sequence: length question_count
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "Index increments only after submit guard satisfied"
+  - "phase === results when index reaches question_count"
+  - "Results summary mounts only in results phase"
+
+validation_notes:
+  - Run after scaffold and after progression edits
+  - Does not execute at runtime today
+
+risk_notes:
+  - Auto-advance timers interacting badly with manual submit
+
+validation_goal: >
+  Quiz must end on a clear results screen — not hang or skip the finale.
+
+pass_conditions:
+  - "After N questions answered, results phase active"
+  - "No question UI shown simultaneously with results summary"
+  - "Index never exceeds question_count - 1 during playing phase"
+
+fail_conditions:
+  - "Blank screen after last answer"
+  - "Results shown before final question answered"
+  - "Infinite loop on last question"
+
+suggested_failure_message: >
+  The quiz didn't finish cleanly after the last question. I'll fix progression so
+  you see a proper results screen.
+
+recovery_playbooks:
+  - recovery.broken-question-progression
