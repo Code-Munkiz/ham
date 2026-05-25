@@ -53,15 +53,24 @@ def resolve_pack_root(
     *,
     repo_root: Path,
 ) -> Path:
-    """Resolve registry pack directory from metadata override or default."""
+    """Resolve registry pack directory from metadata override or default.
+
+    ``registry_v2_pack_root`` must resolve inside ``repo_root`` (after
+    resolving ``..`` and symlinks) so plan metadata cannot pivot reads to
+    arbitrary host directories.
+    """
+    root = repo_root.resolve()
     if metadata:
         override = metadata.get("registry_v2_pack_root")
         if isinstance(override, str) and override.strip():
-            path = Path(override.strip())
-            if not path.is_absolute():
-                path = (repo_root / path).resolve()
-            return path.resolve()
-    return (repo_root / DEFAULT_GAME_PACK_REL).resolve()
+            raw = Path(override.strip())
+            candidate = raw.resolve() if raw.is_absolute() else (root / raw).resolve()
+            if not candidate.is_relative_to(root):
+                raise BuildRegistryConfigError(
+                    "registry_v2_pack_root must resolve inside the repository root"
+                )
+            return candidate
+    return (root / DEFAULT_GAME_PACK_REL).resolve()
 
 
 def _metadata_app_type_id(metadata: Mapping[str, Any] | None) -> str | None:
@@ -184,7 +193,6 @@ def resolve_scaffold_context(
             fallback_reason="registry_v2_metadata_missing",
         )
 
-    pack: RegistryPack | None = None
     try:
         return _try_v2_context(
             metadata=metadata or {},
@@ -193,8 +201,9 @@ def resolve_scaffold_context(
             max_chars=max_chars,
         )
     except BuildRegistryConfigError as exc:
-        pack_root = resolve_pack_root(metadata, repo_root=root)
+        pack = None
         try:
+            pack_root = resolve_pack_root(metadata, repo_root=root)
             pack = load_registry_pack(pack_root)
         except BuildRegistryConfigError:
             pack = None
