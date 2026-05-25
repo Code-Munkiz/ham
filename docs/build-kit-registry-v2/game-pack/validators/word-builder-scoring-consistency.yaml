@@ -1,0 +1,64 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.word-builder-scoring-consistency
+kind: validator
+name: Word builder scoring consistency
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Verifies score increases only on valid unique submissions with deterministic rules.
+
+non_template_statement: >
+  Conceptual scoring consistency check.
+
+applies_to:
+  - game.word-builder
+  - tag:word-builder
+
+depends_on:
+  - mechanic.word-builder-scoring
+
+validates_modules:
+  - mechanic.word-builder-scoring
+  - component.word-score-display
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - score_before: number
+  - score_after: number
+  - is_valid_unique: boolean
+  - expected_delta: number
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "Score delta matches rule for word length on valid unique only"
+  - "Invalid submit leaves score unchanged"
+
+validation_notes:
+  - Test zero-point invalid submit
+
+risk_notes:
+  - Score decreases unexpectedly
+
+validation_goal: >
+  Scoring changes align with validation and duplicate rules.
+
+pass_conditions:
+  - "Valid unique word increases score by expected delta"
+  - "Invalid word leaves score unchanged"
+
+fail_conditions:
+  - "Invalid word increases score"
+  - "Duplicate increases score"
+
+suggested_failure_message: >
+  Score changed when it shouldn't have. I'll fix scoring consistency.
+
+recovery_playbooks:
+  - recovery.duplicate-word-submission

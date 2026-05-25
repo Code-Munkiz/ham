@@ -1,0 +1,69 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.word-builder-result-state
+kind: mechanic
+name: Word builder result state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Terminal result state when all levels complete or session ends; shows summary panel.
+
+non_template_statement: >
+  Result state guidance only.
+
+applies_to:
+  - game.word-builder
+  - tag:word-builder
+
+depends_on:
+  - mechanic.level-progression
+
+provides:
+  - word_builder_result
+
+binds_components:
+  - component.word-builder-results-panel
+
+inputs:
+  - final_score: number
+  - words_found: array
+  - levels_completed: number
+
+outputs:
+  - phase: playing | complete
+  - summary: object
+
+guidance:
+  - "Transition to complete when max levels reached or user ends session"
+  - "Show score, words found, attempts, hints used"
+  - "Disable submit and slot edits in complete phase"
+  - "Offer play-again that resets local session"
+
+validation_notes:
+  - validator.word-builder-completion
+
+risk_notes:
+  - Submit still enabled after completion
+  - Summary missing words or score
+
+state_model:
+  fields:
+    - name: phase
+      type: string
+    - name: summary
+      type: object
+  events:
+    - complete_session
+    - play_again
+
+common_failure_modes:
+  - "Result panel never appears"
+  - "Play again leaves stale submitted words"
+
+test_ideas:
+  - "Complete phase locks input"
+  - "Summary reflects final score"
+
+reusable_across:
+  - game.word-builder

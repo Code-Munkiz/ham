@@ -1,0 +1,59 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: progress.word-builder
+kind: progress_label
+name: Word builder build progress
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Normie-friendly phase labels for chat and Workbench activity stream during a word
+  builder Game Pack build.
+
+non_template_statement: >
+  Progress copy module only. Not emitted by runtime today.
+
+source_phase_owner: game.word-builder
+
+applies_to:
+  - game.word-builder
+
+inputs:
+  - current_phase_id: from game.word-builder build_phases
+  - recovery_active: boolean
+
+outputs:
+  - activity_title: short string for feed
+  - activity_message: one sentence for feed or chat ack
+
+guidance:
+  - "Avoid internal words: scaffold, template_kind, OpenRouter, kit_id"
+  - "Use word-building plain language"
+  - "Phase ids and order come from source_phase_owner build_phases only"
+
+validation_notes:
+  - Each mapped phase id exists on source_phase_owner build_phases
+  - Each phase has a unique normie message
+
+risk_notes:
+  - Over-long messages clutter activity stream
+
+phase_message_map:
+  phase.understand:
+    title: "Getting your word builder idea"
+    message: "I'm turning your description into a word-building game plan."
+  phase.compose:
+    title: "Planning the game pieces"
+    message: "I'm lining up letter pools, word slots, validation, and scoring rules."
+  phase.generate:
+    title: "Building your word builder game"
+    message: "I'm creating the custom code for your word builder preview."
+  phase.validate:
+    title: "Checking the word rules"
+    message: "I'm verifying letter pools, word validation, and duplicate blocking."
+  phase.preview:
+    title: "Opening your word builder preview"
+    message: "Your word builder game is almost ready to play in preview."
+  phase.recover:
+    title: "Fixing a word builder issue"
+    message: "I'm correcting a letter pool or validation issue so the game runs cleanly."

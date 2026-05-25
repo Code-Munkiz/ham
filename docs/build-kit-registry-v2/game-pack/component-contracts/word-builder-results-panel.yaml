@@ -1,0 +1,40 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.word-builder-results-panel
+kind: component_contract
+name: Word builder results panel
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  End-of-session summary with score, words found, and play-again action.
+
+non_template_statement: >
+  UI contract only.
+
+applies_to:
+  - game.word-builder
+
+binds_mechanics:
+  - mechanic.word-builder-result-state
+
+required_props:
+  - summary: object
+  - onPlayAgain: callback
+  - visible: boolean
+
+optional_props:
+  - wordsFound: array
+
+accessibility:
+  - "Results heading uses semantic heading level"
+
+guidance:
+  - "Show only when phase is complete"
+  - "Play again resets local session state"
+
+validation_notes:
+  - validator.word-builder-completion
+
+risk_notes:
+  - Results visible while still playing

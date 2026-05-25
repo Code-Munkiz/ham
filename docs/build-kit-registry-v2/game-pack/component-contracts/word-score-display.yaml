@@ -1,0 +1,41 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.word-score-display
+kind: component_contract
+name: Word score display
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  HUD showing total score, level, and optional last points awarded.
+
+non_template_statement: >
+  UI contract only.
+
+applies_to:
+  - game.word-builder
+
+binds_mechanics:
+  - mechanic.word-builder-scoring
+  - mechanic.level-progression
+
+required_props:
+  - score: number
+  - currentLevel: number
+
+optional_props:
+  - lastPointsAwarded: number
+  - wordsFoundThisLevel: number
+
+accessibility:
+  - "Score updates announced politely"
+
+guidance:
+  - "Keep HUD compact on mobile"
+  - "Show level and score prominently"
+
+validation_notes:
+  - validator.word-builder-scoring-consistency
+
+risk_notes:
+  - Score display stale after submit

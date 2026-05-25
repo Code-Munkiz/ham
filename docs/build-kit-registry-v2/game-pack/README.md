@@ -2,7 +2,7 @@
 
 **Status:** Non-runtime schema pilot only. **Schema version:** `0.1`
 
-This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: **`game.idle-incremental`**, **`game.trivia-timer`**, **`game.branching-narrative`**, **`game.memory-match`**, **`game.word-daily`**, **`game.daily-puzzle-grid`**, **`game.resource-management-sim`**, **`game.hangman-lite`**, and **`game.typing-speed-racer`** (Wave 2 — typing-speed-racer schema-only, not routed).
+This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: **`game.idle-incremental`**, **`game.trivia-timer`**, **`game.branching-narrative`**, **`game.memory-match`**, **`game.word-daily`**, **`game.daily-puzzle-grid`**, **`game.resource-management-sim`**, **`game.hangman-lite`**, **`game.typing-speed-racer`**, and **`game.word-builder`** (Wave 2 — word-builder schema-only, not routed).
 
 ## Root manifest
 
@@ -119,7 +119,7 @@ Use vocabulary: **module**, **playbook**, **contract**, **mechanic**. Avoid “t
 | **Distinct mechanics** | Hidden word, letter guessing, duplicate prevention, reveal state, wrong-guess limit, hangman win/loss. |
 | **Explicit MVP bounds** | Static in-memory word list; one target word per round; local-only state; no accounts, leaderboard, or live word API. |
 
-### `game.typing-speed-racer` (Wave 2 — schema-only, not routed)
+### `game.typing-speed-racer` (Wave 2)
 
 | Reason | Detail |
 |--------|--------|
@@ -128,6 +128,16 @@ Use vocabulary: **module**, **playbook**, **contract**, **mechanic**. Avoid “t
 | **Shared reuse** | Reuses `component.game-shell`, `stack.dom-game-minimal`. Does not reuse word-daily, hangman, or trivia timer semantics. |
 | **Distinct mechanics** | Prompt set, race clock, input stream, mistake tracking, accuracy scoring, WPM calculation, streak combo, result state. |
 | **Explicit MVP bounds** | Static in-memory prompt list; local-only state; input lock after finish; no accounts, leaderboard, or multiplayer race. |
+
+### `game.word-builder` (Wave 2 — schema-only, not routed)
+
+| Reason | Detail |
+|--------|--------|
+| **Tenth recipe shape** | Proves the pack supports word-building / spelling challenges — distinct from Wordle-style guessing, hangman letter guessing, and typing speed tests. |
+| **DOM-native word-builder UI** | Letter pool panel, word slot board, submit control, feedback panel, score display, results panel — no Canvas or live dictionary API for MVP. |
+| **Shared reuse** | Reuses `component.game-shell`, `stack.dom-game-minimal`. Does not reuse word-daily, hangman-lite, or typing-speed-racer mechanics. |
+| **Distinct mechanics** | Letter pool, word slot construction, word validation, submission attempts, scoring, lightweight hints, level progression, result state. |
+| **Explicit MVP bounds** | Static in-memory accepted word set; finite letter pool; duplicate submissions do not score twice; local-only state; no accounts or leaderboard. |
 | **Routing** | Schema-only — not routed behind `HAM_BUILD_REGISTRY_V2_ENABLED` until explicitly approved. |
 
 ## Pilot module layout
@@ -146,13 +156,14 @@ docs/build-kit-registry-v2/game-pack/
   app-types/game.resource-management-sim.yaml
   app-types/game.hangman-lite.yaml
   app-types/game.typing-speed-racer.yaml
+  app-types/game.word-builder.yaml
   stack-kits/dom-game-minimal.yaml
-  mechanics/{score,economy,upgrades,save-load,question-set,timer,answer-validation,progression,story-node-graph,story-flags,inventory-lite,choice-resolution,ending-resolution,card-pair-set,card-flip-state,interaction-lock,match-detection,move-counter,victory-detection,word-target,daily-seed,guess-grid,keyboard-input,letter-feedback,attempt-limit,win-loss-state,puzzle-seed,grid-state,constraint-rules,cell-interaction,mistake-tracking,hint-system-lite,completion-check,resource-pool,capacity-limit,production-chain,allocation-decision,turn-or-tick-loop,upgrade-path,event-modifier,goal-and-failure-state,hidden-word,letter-guessing,duplicate-guess-prevention,reveal-state,wrong-guess-limit,hangman-win-loss-state,typing-prompt-set,timer-or-race-clock,typing-input-stream,mistake-tracking-typing,accuracy-scoring,wpm-calculation,streak-combo,typing-result-state}.yaml
-  component-contracts/{game-shell,resource-counter,upgrade-card,save-status,question-card,choice-list,timer-display,results-summary,story-panel,choice-card,story-state-summary,inventory-panel,ending-screen,card-grid,memory-card,move-counter,match-progress,victory-screen,word-grid,guess-row,letter-tile,on-screen-keyboard,word-result-panel,puzzle-grid,grid-cell,rule-panel,puzzle-status-bar,hint-button,completion-modal,resource-dashboard,allocation-control,production-panel,upgrade-panel,event-log,goal-status,hidden-word-display,letter-bank,wrong-guess-meter,guess-input,hangman-result-panel,typing-prompt-panel,typing-input-box,wpm-display,accuracy-meter,streak-indicator,typing-results-panel}.yaml
-  validators/{no-negative-currency,passive-income-tick,local-storage-roundtrip,timer-cleanup,score-calculation,question-progression,story-graph-reachability,no-dead-end-choice,story-state-consistency,card-pair-integrity,flip-lock-prevents-third-card,match-completion,duplicate-letter-feedback,guess-length-and-attempts,daily-seed-stability,keyboard-input-guardrails,grid-dimensions,constraint-consistency,cell-state-transitions,puzzle-seed-stability,completion-detection,no-negative-resources,production-chain-consistency,allocation-bounds,capacity-limit-enforcement,goal-state-detection,tick-loop-stability,letter-reveal-correctness,duplicate-guess-blocking,wrong-guess-limit-enforcement,hangman-win-loss-detection,wpm-calculation-consistency,accuracy-score-bounds,timer-completion,mistake-counting,input-lock-after-finish}.yaml
-  recovery-playbooks/{stale-interval-or-bad-tick-loop,invalid-local-storage-json,stale-timer-or-uncleared-timeout,broken-question-progression,broken-story-graph,inconsistent-story-state,broken-card-flip-state,mismatched-card-pairs,stuck-interaction-lock,broken-duplicate-letter-feedback,unstable-daily-seed,invalid-guess-state,broken-grid-state,inconsistent-constraint-rules,unstable-puzzle-seed,bad-completion-check,broken-resource-accounting,invalid-production-chain,runaway-tick-loop,unreachable-goal-state,broken-letter-reveal,duplicate-guess-state,invalid-hangman-end-state,broken-wpm-calculation,invalid-accuracy-score,stuck-typing-timer,input-accepted-after-finish}.yaml
-  progress-labels/{idle-incremental,trivia-timer,branching-narrative,memory-match,word-daily,daily-puzzle-grid,resource-management-sim,hangman-lite,typing-speed-racer}.yaml
-  learning-hooks/{idle-incremental,trivia-timer,branching-narrative,memory-match,word-daily,daily-puzzle-grid,resource-management-sim,hangman-lite,typing-speed-racer}.yaml
+  mechanics/{score,economy,upgrades,save-load,question-set,timer,answer-validation,progression,story-node-graph,story-flags,inventory-lite,choice-resolution,ending-resolution,card-pair-set,card-flip-state,interaction-lock,match-detection,move-counter,victory-detection,word-target,daily-seed,guess-grid,keyboard-input,letter-feedback,attempt-limit,win-loss-state,puzzle-seed,grid-state,constraint-rules,cell-interaction,mistake-tracking,hint-system-lite,completion-check,resource-pool,capacity-limit,production-chain,allocation-decision,turn-or-tick-loop,upgrade-path,event-modifier,goal-and-failure-state,hidden-word,letter-guessing,duplicate-guess-prevention,reveal-state,wrong-guess-limit,hangman-win-loss-state,typing-prompt-set,timer-or-race-clock,typing-input-stream,mistake-tracking-typing,accuracy-scoring,wpm-calculation,streak-combo,typing-result-state,letter-pool,word-slot-construction,word-validation,submission-attempts,word-builder-scoring,hint-reveal-lite,level-progression,word-builder-result-state}.yaml
+  component-contracts/{game-shell,resource-counter,upgrade-card,save-status,question-card,choice-list,timer-display,results-summary,story-panel,choice-card,story-state-summary,inventory-panel,ending-screen,card-grid,memory-card,move-counter,match-progress,victory-screen,word-grid,guess-row,letter-tile,on-screen-keyboard,word-result-panel,puzzle-grid,grid-cell,rule-panel,puzzle-status-bar,hint-button,completion-modal,resource-dashboard,allocation-control,production-panel,upgrade-panel,event-log,goal-status,hidden-word-display,letter-bank,wrong-guess-meter,guess-input,hangman-result-panel,typing-prompt-panel,typing-input-box,wpm-display,accuracy-meter,streak-indicator,typing-results-panel,letter-pool-panel,word-slot-board,submit-word-control,word-feedback-panel,word-score-display,word-builder-results-panel}.yaml
+  validators/{no-negative-currency,passive-income-tick,local-storage-roundtrip,timer-cleanup,score-calculation,question-progression,story-graph-reachability,no-dead-end-choice,story-state-consistency,card-pair-integrity,flip-lock-prevents-third-card,match-completion,duplicate-letter-feedback,guess-length-and-attempts,daily-seed-stability,keyboard-input-guardrails,grid-dimensions,constraint-consistency,cell-state-transitions,puzzle-seed-stability,completion-detection,no-negative-resources,production-chain-consistency,allocation-bounds,capacity-limit-enforcement,goal-state-detection,tick-loop-stability,letter-reveal-correctness,duplicate-guess-blocking,wrong-guess-limit-enforcement,hangman-win-loss-detection,wpm-calculation-consistency,accuracy-score-bounds,timer-completion,mistake-counting,input-lock-after-finish,letter-pool-integrity,word-slot-state-consistency,word-validation-rules,duplicate-submission-blocking,word-builder-scoring-consistency,word-builder-completion}.yaml
+  recovery-playbooks/{stale-interval-or-bad-tick-loop,invalid-local-storage-json,stale-timer-or-uncleared-timeout,broken-question-progression,broken-story-graph,inconsistent-story-state,broken-card-flip-state,mismatched-card-pairs,stuck-interaction-lock,broken-duplicate-letter-feedback,unstable-daily-seed,invalid-guess-state,broken-grid-state,inconsistent-constraint-rules,unstable-puzzle-seed,bad-completion-check,broken-resource-accounting,invalid-production-chain,runaway-tick-loop,unreachable-goal-state,broken-letter-reveal,duplicate-guess-state,invalid-hangman-end-state,broken-wpm-calculation,invalid-accuracy-score,stuck-typing-timer,input-accepted-after-finish,broken-letter-pool,invalid-word-slot-state,bad-word-validation,duplicate-word-submission}.yaml
+  progress-labels/{idle-incremental,trivia-timer,branching-narrative,memory-match,word-daily,daily-puzzle-grid,resource-management-sim,hangman-lite,typing-speed-racer,word-builder}.yaml
+  learning-hooks/{idle-incremental,trivia-timer,branching-narrative,memory-match,word-daily,daily-puzzle-grid,resource-management-sim,hangman-lite,typing-speed-racer,word-builder}.yaml
 ```
 
 ## Conceptual composition example
@@ -312,6 +323,25 @@ validators:   validator.wpm-calculation-consistency, validator.accuracy-score-bo
 recovery:     recovery.broken-wpm-calculation, recovery.invalid-accuracy-score, recovery.stuck-typing-timer, recovery.input-accepted-after-finish
 progress:     progress.typing-speed-racer
 learning:     learning.typing-speed-racer
+```
+
+**Note:** This recipe is **schema-only** today — not routed until explicitly approved.
+
+### Conceptual composition — `game.word-builder`
+
+When a user says *"Build a word builder game where I form words from letter tiles"*, a **future** composer would assemble:
+
+```txt
+registry_pack: pack.game
+schema_version: 0.1
+app_type:     game.word-builder
+stack_kit:    stack.dom-game-minimal
+mechanics:    mechanic.letter-pool → mechanic.word-slot-construction → mechanic.word-validation → mechanic.submission-attempts → mechanic.word-builder-scoring → mechanic.hint-reveal-lite → mechanic.level-progression → mechanic.word-builder-result-state
+contracts:    component.game-shell, component.letter-pool-panel, component.word-slot-board, component.submit-word-control, component.word-feedback-panel, component.word-score-display, component.word-builder-results-panel
+validators:   validator.letter-pool-integrity, validator.word-slot-state-consistency, validator.word-validation-rules, validator.duplicate-submission-blocking, validator.word-builder-scoring-consistency, validator.word-builder-completion
+recovery:     recovery.broken-letter-pool, recovery.invalid-word-slot-state, recovery.bad-word-validation, recovery.duplicate-word-submission
+progress:     progress.word-builder
+learning:     learning.word-builder
 ```
 
 **Note:** This recipe is **schema-only** today — not routed until explicitly approved.

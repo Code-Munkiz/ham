@@ -1,0 +1,64 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.word-validation-rules
+kind: validator
+name: Word validation rules
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Verifies submitted words are checked against accepted set, length, and pool usage.
+
+non_template_statement: >
+  Conceptual validation rules check.
+
+applies_to:
+  - game.word-builder
+  - tag:word-builder
+
+depends_on:
+  - mechanic.word-validation
+
+validates_modules:
+  - mechanic.word-validation
+  - component.submit-word-control
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - candidate_word: string
+  - accepted_words: array
+  - min_word_length: number
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "Unknown words rejected"
+  - "Short words rejected"
+  - "Words using unavailable letters rejected"
+
+validation_notes:
+  - Test edge cases with duplicate letters in word
+
+risk_notes:
+  - Invalid word accepted
+
+validation_goal: >
+  Only valid words from accepted set with legal pool usage pass validation.
+
+pass_conditions:
+  - "Accepted word passes when pool allows"
+  - "Unknown word fails with feedback"
+
+fail_conditions:
+  - "Random string accepted"
+  - "Word exceeding pool multiset accepted"
+
+suggested_failure_message: >
+  Word validation accepted or rejected the wrong submissions. I'll fix the rules.
+
+recovery_playbooks:
+  - recovery.bad-word-validation

@@ -1,0 +1,77 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.bad-word-validation
+kind: recovery_playbook
+name: Fix bad word validation
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs validation logic that accepts invalid words or rejects valid ones.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.word-builder
+  - tag:word-builder
+
+depends_on:
+  - mechanic.word-validation
+  - validator.word-validation-rules
+
+repairs_validators:
+  - validator.word-validation-rules
+
+inputs:
+  - failure_context: validator result
+  - current_source: validation handler (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.word-validation-rules
+
+guidance:
+  - "Check accepted set membership before pool multiset"
+  - "Enforce min length before scoring path"
+
+validation_notes:
+  - Re-run word-validation-rules after repair
+
+risk_notes:
+  - Patch breaks case normalization
+
+failure_signals:
+  - validator.word-validation-rules fail
+
+diagnosis_steps:
+  - "Test known valid and invalid words"
+  - "Trace multiset check against pool"
+
+steps:
+  - id: step.fix_membership_check
+    action: fix_membership_check
+    detail: "Validate against static accepted set"
+  - id: step.fix_multiset_check
+    action: fix_multiset_check
+    detail: "Verify pool letter counts for candidate"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.word-validation-rules"
+
+repair_strategy:
+  - action: fix_membership_check
+    detail: "Fix accepted word lookup"
+  - action: fix_multiset_check
+    detail: "Fix pool usage validation"
+  - action: re_validate
+    target: validator.word-validation-rules
+
+guardrails:
+  - max_attempts: 2
+  - preserve: "Accepted word list content"
+
+user_facing_summary: >
+  I fixed word validation so only real words from your letter pool count.

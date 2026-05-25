@@ -1,0 +1,42 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.submit-word-control
+kind: component_contract
+name: Submit word control
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Primary submit button and optional hint trigger for word validation.
+
+non_template_statement: >
+  UI contract only.
+
+applies_to:
+  - game.word-builder
+
+binds_mechanics:
+  - mechanic.word-validation
+  - mechanic.submission-attempts
+
+required_props:
+  - onSubmit: callback
+  - disabled: boolean
+  - canSubmit: boolean
+
+optional_props:
+  - onHint: callback
+  - hintsRemaining: number
+
+accessibility:
+  - "Submit disabled state communicated to assistive tech"
+
+guidance:
+  - "Disable submit when slots empty or phase complete"
+  - "Optional hint button adjacent to submit"
+
+validation_notes:
+  - validator.word-validation-rules
+
+risk_notes:
+  - Submit enabled with empty word

@@ -1,0 +1,77 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.invalid-word-slot-state
+kind: recovery_playbook
+name: Fix invalid word slot state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs slot board when currentWord diverges from slotLetters or slots corrupt pool.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.word-builder
+  - tag:word-builder
+
+depends_on:
+  - mechanic.word-slot-construction
+  - validator.word-slot-state-consistency
+
+repairs_validators:
+  - validator.word-slot-state-consistency
+
+inputs:
+  - failure_context: validator result
+  - current_source: slot handler (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.word-slot-state-consistency
+
+guidance:
+  - "Recompute currentWord from slotLetters"
+  - "Return orphan letters to pool on clear"
+
+validation_notes:
+  - Re-run word-slot-state-consistency after repair
+
+risk_notes:
+  - Patch loses in-progress word
+
+failure_signals:
+  - validator.word-slot-state-consistency fail
+
+diagnosis_steps:
+  - "Log slotLetters vs currentWord"
+  - "Check place/remove handlers"
+
+steps:
+  - id: step.sync_current_word
+    action: sync_current_word
+    detail: "Set currentWord from slotLetters join"
+  - id: step.return_orphans
+    action: return_orphans
+    detail: "Return stray letters to pool on clear"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.word-slot-state-consistency"
+
+repair_strategy:
+  - action: sync_current_word
+    detail: "Fix word string drift"
+  - action: return_orphans
+    detail: "Fix pool sync on clear"
+  - action: re_validate
+    target: validator.word-slot-state-consistency
+
+guardrails:
+  - max_attempts: 2
+  - preserve: "Score and submitted words list"
+
+user_facing_summary: >
+  I synced the word slots so the letters match the word you're building.

@@ -1,0 +1,41 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.letter-pool-panel
+kind: component_contract
+name: Letter pool panel
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Displays available letters with remaining counts; supports tap or drag source.
+
+non_template_statement: >
+  UI contract only.
+
+applies_to:
+  - game.word-builder
+
+binds_mechanics:
+  - mechanic.letter-pool
+
+required_props:
+  - availableLetters: array
+  - letterCounts: object
+  - onSelectLetter: callback
+  - disabled: boolean
+
+optional_props:
+  - layout: row | grid
+
+accessibility:
+  - "Each letter control has accessible name with remaining count"
+
+guidance:
+  - "Disable letters with zero remaining count"
+  - "Visually distinct when disabled"
+
+validation_notes:
+  - validator.letter-pool-integrity
+
+risk_notes:
+  - Zero-count letter still selectable

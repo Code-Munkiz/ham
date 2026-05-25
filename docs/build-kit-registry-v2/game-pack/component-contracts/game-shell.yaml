@@ -23,6 +23,7 @@ applies_to:
   - game.resource-management-sim
   - game.hangman-lite
   - game.typing-speed-racer
+  - game.word-builder
   - tag:dom-game-layout
 
 depends_on: []

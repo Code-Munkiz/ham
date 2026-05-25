@@ -1,0 +1,41 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.word-feedback-panel
+kind: component_contract
+name: Word feedback panel
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Shows validation feedback, duplicate warnings, and hint messages.
+
+non_template_statement: >
+  UI contract only.
+
+applies_to:
+  - game.word-builder
+
+binds_mechanics:
+  - mechanic.word-validation
+  - mechanic.submission-attempts
+  - mechanic.hint-reveal-lite
+
+required_props:
+  - message: string | null
+  - variant: success | error | info | neutral
+
+optional_props:
+  - lastHintApplied: object | null
+
+accessibility:
+  - "Feedback uses live region for screen readers"
+
+guidance:
+  - "Clear success/error styling for valid vs invalid vs duplicate"
+  - "Show hint text without exposing full solution list"
+
+validation_notes:
+  - validator.duplicate-submission-blocking
+
+risk_notes:
+  - Error message missing on invalid submit

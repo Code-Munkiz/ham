@@ -9,8 +9,8 @@ description: >
   Root manifest for the Build Kit Registry v2 Game Pack schema pilot. Indexes all
   proposed modules for DOM-native casual games, starting with game.idle-incremental,
   game.trivia-timer, game.branching-narrative, game.memory-match, game.word-daily,
-  game.daily-puzzle-grid, game.resource-management-sim, game.hangman-lite, and
-  game.typing-speed-racer (Wave 2 schema-only).
+  game.daily-puzzle-grid, game.resource-management-sim, game.hangman-lite,
+  game.typing-speed-racer (Wave 2 routed), and game.word-builder (Wave 2 schema-only).
   Used for cross-reference validation and future composer defaults — not loaded by HAM
   at runtime today.
 
@@ -30,6 +30,7 @@ module_index:
     - game.resource-management-sim
     - game.hangman-lite
     - game.typing-speed-racer
+    - game.word-builder
   stack_kits:
     - stack.dom-game-minimal
   mechanics:
@@ -88,6 +89,14 @@ module_index:
     - mechanic.wpm-calculation
     - mechanic.streak-combo
     - mechanic.typing-result-state
+    - mechanic.letter-pool
+    - mechanic.word-slot-construction
+    - mechanic.word-validation
+    - mechanic.submission-attempts
+    - mechanic.word-builder-scoring
+    - mechanic.hint-reveal-lite
+    - mechanic.level-progression
+    - mechanic.word-builder-result-state
   component_contracts:
     - component.game-shell
     - component.resource-counter
@@ -135,6 +144,12 @@ module_index:
     - component.accuracy-meter
     - component.streak-indicator
     - component.typing-results-panel
+    - component.letter-pool-panel
+    - component.word-slot-board
+    - component.submit-word-control
+    - component.word-feedback-panel
+    - component.word-score-display
+    - component.word-builder-results-panel
   validators:
     - validator.no-negative-currency
     - validator.passive-income-tick
@@ -172,6 +187,12 @@ module_index:
     - validator.timer-completion
     - validator.mistake-counting
     - validator.input-lock-after-finish
+    - validator.letter-pool-integrity
+    - validator.word-slot-state-consistency
+    - validator.word-validation-rules
+    - validator.duplicate-submission-blocking
+    - validator.word-builder-scoring-consistency
+    - validator.word-builder-completion
   recovery_playbooks:
     - recovery.stale-interval-or-bad-tick-loop
     - recovery.invalid-local-storage-json
@@ -200,6 +221,10 @@ module_index:
     - recovery.invalid-accuracy-score
     - recovery.stuck-typing-timer
     - recovery.input-accepted-after-finish
+    - recovery.broken-letter-pool
+    - recovery.invalid-word-slot-state
+    - recovery.bad-word-validation
+    - recovery.duplicate-word-submission
   progress_labels:
     - progress.idle-incremental
     - progress.trivia-timer
@@ -210,6 +235,7 @@ module_index:
     - progress.resource-management-sim
     - progress.hangman-lite
     - progress.typing-speed-racer
+    - progress.word-builder
   learning_hooks:
     - learning.idle-incremental
     - learning.trivia-timer
@@ -220,6 +246,7 @@ module_index:
     - learning.resource-management-sim
     - learning.hangman-lite
     - learning.typing-speed-racer
+    - learning.word-builder
 
 compose_defaults:
   compose_order:

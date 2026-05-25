@@ -102,6 +102,17 @@ EXPECTED_TYPING_SPEED_RACER_MECHANIC_ORDER = (
     "mechanic.typing-result-state",
 )
 
+EXPECTED_WORD_BUILDER_MECHANIC_ORDER = (
+    "mechanic.letter-pool",
+    "mechanic.word-slot-construction",
+    "mechanic.word-validation",
+    "mechanic.submission-attempts",
+    "mechanic.word-builder-scoring",
+    "mechanic.hint-reveal-lite",
+    "mechanic.level-progression",
+    "mechanic.word-builder-result-state",
+)
+
 WAVE_1_APP_TYPES = (
     "game.idle-incremental",
     "game.trivia-timer",
@@ -137,7 +148,7 @@ class TestHappyPath:
         pack = load_registry_pack(game_pack_root)
         assert pack.pack_id == "pack.game"
         assert pack.schema_version == "0.1"
-        assert len(pack.modules) == 192
+        assert len(pack.modules) == 219
 
     def test_validate_docs_game_pack(self, game_pack_root: Path):
         pack = load_registry_pack(game_pack_root)
@@ -604,6 +615,77 @@ class TestTypingSpeedRacerRecipe:
         assert puzzle.mechanic_ids == EXPECTED_DAILY_PUZZLE_GRID_MECHANIC_ORDER
         assert sim.mechanic_ids == EXPECTED_RESOURCE_MANAGEMENT_SIM_MECHANIC_ORDER
         assert hangman.mechanic_ids == EXPECTED_HANGMAN_LITE_MECHANIC_ORDER
+
+
+class TestWordBuilderRecipe:
+    def test_compose_word_builder(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        validate_registry_pack(pack)
+        recipe = compose_build_recipe(pack, "game.word-builder")
+        assert recipe.app_type_id == "game.word-builder"
+        assert recipe.stack_kit_id == "stack.dom-game-minimal"
+        assert recipe.mechanic_ids == EXPECTED_WORD_BUILDER_MECHANIC_ORDER
+
+    def test_render_word_builder_includes_key_ids(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        recipe = compose_build_recipe(pack, "game.word-builder")
+        rendered = render_playbook_context(recipe)
+        assert "game.word-builder" in rendered
+        assert "stack.dom-game-minimal" in rendered
+        assert "mechanic.letter-pool" in rendered
+        assert "mechanic.word-slot-construction" in rendered
+        assert "mechanic.word-validation" in rendered
+        assert "mechanic.word-builder-scoring" in rendered
+        assert "validator.letter-pool-integrity" in rendered
+        assert "validator.word-validation-rules" in rendered
+        assert "validator.duplicate-submission-blocking" in rendered
+        assert "validator.word-builder-completion" in rendered
+        assert "static-word-list-for-mvp" in rendered
+
+    def test_render_word_builder_under_default_budget(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        recipe = compose_build_recipe(pack, "game.word-builder")
+        rendered = render_playbook_context(recipe)
+        assert len(rendered) <= 12_000
+        assert rendered.startswith("Build Kit Registry v2 — BuildRecipe\n")
+
+    def test_word_builder_adaptive_policy_fields(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        app = pack.module_data("game.word-builder")
+        for field in WAVE_1_ADAPTIVE_POLICY_LIST_FIELDS:
+            value = app.get(field)
+            assert isinstance(value, list), f"game.word-builder: {field} must be a list"
+            assert value, f"game.word-builder: {field} must be non-empty"
+
+        conflict_policy = app.get("conflict_policy")
+        assert isinstance(conflict_policy, dict)
+        for key in WAVE_1_CONFLICT_POLICY_KEYS:
+            assert key in conflict_policy
+            assert conflict_policy[key] is True
+
+    def test_existing_nine_recipes_still_compose_after_word_builder_added(
+        self, game_pack_root: Path
+    ):
+        pack = load_registry_pack(game_pack_root)
+        validate_registry_pack(pack)
+        idle = compose_build_recipe(pack, "game.idle-incremental")
+        trivia = compose_build_recipe(pack, "game.trivia-timer")
+        branching = compose_build_recipe(pack, "game.branching-narrative")
+        memory = compose_build_recipe(pack, "game.memory-match")
+        word = compose_build_recipe(pack, "game.word-daily")
+        puzzle = compose_build_recipe(pack, "game.daily-puzzle-grid")
+        sim = compose_build_recipe(pack, "game.resource-management-sim")
+        hangman = compose_build_recipe(pack, "game.hangman-lite")
+        typing = compose_build_recipe(pack, "game.typing-speed-racer")
+        assert idle.mechanic_ids == EXPECTED_MECHANIC_ORDER
+        assert trivia.mechanic_ids == EXPECTED_TRIVIA_MECHANIC_ORDER
+        assert branching.mechanic_ids == EXPECTED_BRANCHING_NARRATIVE_MECHANIC_ORDER
+        assert memory.mechanic_ids == EXPECTED_MEMORY_MATCH_MECHANIC_ORDER
+        assert word.mechanic_ids == EXPECTED_WORD_DAILY_MECHANIC_ORDER
+        assert puzzle.mechanic_ids == EXPECTED_DAILY_PUZZLE_GRID_MECHANIC_ORDER
+        assert sim.mechanic_ids == EXPECTED_RESOURCE_MANAGEMENT_SIM_MECHANIC_ORDER
+        assert hangman.mechanic_ids == EXPECTED_HANGMAN_LITE_MECHANIC_ORDER
+        assert typing.mechanic_ids == EXPECTED_TYPING_SPEED_RACER_MECHANIC_ORDER
 
 
 class TestWave1AdaptivePolicyFields:

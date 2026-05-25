@@ -1,0 +1,72 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.word-validation
+kind: mechanic
+name: Word validation
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Validates candidate words against a static accepted word set and pool usage rules.
+
+non_template_statement: >
+  Validation logic guidance only. Not a live dictionary service.
+
+applies_to:
+  - game.word-builder
+  - tag:word-builder
+
+depends_on:
+  - mechanic.word-slot-construction
+  - mechanic.letter-pool
+
+provides:
+  - word_validation_result
+
+binds_components:
+  - component.word-feedback-panel
+  - component.submit-word-control
+
+inputs:
+  - candidate_word: string
+  - accepted_words: array of strings — static set for MVP
+  - letter_counts: object
+  - min_word_length: number
+
+outputs:
+  - isValid: boolean
+  - reason: string | null
+
+guidance:
+  - "Normalize case for comparison"
+  - "Reject words shorter than minimum length"
+  - "Reject words not in accepted set"
+  - "Verify candidate uses only available pool letters with correct counts"
+  - "No network dictionary lookup for MVP"
+
+validation_notes:
+  - validator.word-validation-rules
+
+risk_notes:
+  - Invalid word accepted
+  - Valid word rejected due to multiset bug
+
+state_model:
+  fields:
+    - name: lastValidation
+      type: object
+  events:
+    - validate_word
+    - reset_validation
+
+common_failure_modes:
+  - "Accepted word rejected because pool check wrong"
+  - "Random string accepted as valid"
+
+test_ideas:
+  - "Known accepted word passes"
+  - "Unknown word fails"
+  - "Word using unavailable letter fails"
+
+reusable_across:
+  - game.word-builder

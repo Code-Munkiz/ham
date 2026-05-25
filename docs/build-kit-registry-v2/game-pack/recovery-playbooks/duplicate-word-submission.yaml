@@ -1,0 +1,79 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.duplicate-word-submission
+kind: recovery_playbook
+name: Fix duplicate word submission
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs submit flow when duplicate valid words score twice or mutate state.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.word-builder
+  - tag:word-builder
+
+depends_on:
+  - mechanic.submission-attempts
+  - mechanic.word-builder-scoring
+  - validator.duplicate-submission-blocking
+
+repairs_validators:
+  - validator.duplicate-submission-blocking
+  - validator.word-builder-scoring-consistency
+
+inputs:
+  - failure_context: validator result
+  - current_source: submit handler (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.duplicate-submission-blocking
+
+guidance:
+  - "Check submittedWords set before award_points"
+  - "Show duplicate feedback without pool mutation"
+
+validation_notes:
+  - Re-run duplicate-submission-blocking after repair
+
+risk_notes:
+  - Patch blocks first valid submit
+
+failure_signals:
+  - validator.duplicate-submission-blocking fail
+
+diagnosis_steps:
+  - "Replay duplicate submit"
+  - "Inspect score delta on second submit"
+
+steps:
+  - id: step.guard_duplicate
+    action: guard_duplicate
+    detail: "Return early if word already in submittedWords"
+  - id: step.isolate_scoring
+    action: isolate_scoring
+    detail: "Award points only after duplicate check passes"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.duplicate-submission-blocking"
+
+repair_strategy:
+  - action: guard_duplicate
+    detail: "Block duplicate scoring"
+  - action: isolate_scoring
+    detail: "Score only on new valid words"
+  - action: re_validate
+    target: validator.duplicate-submission-blocking
+
+guardrails:
+  - max_attempts: 2
+  - preserve: "Legitimate first-time submissions"
+
+user_facing_summary: >
+  I fixed duplicate submissions so the same word can't score twice.

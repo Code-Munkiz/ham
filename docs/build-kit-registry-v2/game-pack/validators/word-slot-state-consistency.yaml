@@ -1,0 +1,61 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.word-slot-state-consistency
+kind: validator
+name: Word slot state consistency
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Verifies slot letters and currentWord stay in sync.
+
+non_template_statement: >
+  Conceptual slot consistency check.
+
+applies_to:
+  - game.word-builder
+  - tag:word-builder
+
+depends_on:
+  - mechanic.word-slot-construction
+
+validates_modules:
+  - mechanic.word-slot-construction
+  - component.word-slot-board
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - slot_letters: array
+  - current_word: string
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "currentWord equals concatenation of non-empty slots in order"
+  - "Removing slot updates currentWord"
+
+validation_notes:
+  - Test partial clear
+
+risk_notes:
+  - Displayed word differs from validation input
+
+validation_goal: >
+  Slot board state matches derived candidate word.
+
+pass_conditions:
+  - "currentWord matches slotLetters join"
+  - "Clear slots empties currentWord"
+
+fail_conditions:
+  - "Stale currentWord after slot edit"
+
+suggested_failure_message: >
+  Word slots and the current word string disagree. I'll sync slot state.
+
+recovery_playbooks:
+  - recovery.invalid-word-slot-state

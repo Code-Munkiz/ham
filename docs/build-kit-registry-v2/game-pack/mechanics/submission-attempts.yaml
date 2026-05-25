@@ -1,0 +1,70 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.submission-attempts
+kind: mechanic
+name: Submission attempts
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Tracks word submission attempts and blocks duplicate valid submissions from scoring.
+
+non_template_statement: >
+  Attempt tracking guidance only.
+
+applies_to:
+  - game.word-builder
+  - tag:word-builder
+
+depends_on:
+  - mechanic.word-validation
+
+provides:
+  - submission_attempt_state
+
+binds_components:
+  - component.submit-word-control
+  - component.word-feedback-panel
+
+inputs:
+  - candidate_word: string
+  - submitted_words: array of strings
+
+outputs:
+  - isDuplicate: boolean
+  - attemptCount: number
+
+guidance:
+  - "Increment attempt count on each submit action"
+  - "Track set of successfully submitted valid words"
+  - "Reject duplicate valid submissions with feedback and no score change"
+  - "Allow retry after invalid submission"
+
+validation_notes:
+  - validator.duplicate-submission-blocking
+
+risk_notes:
+  - Duplicate valid word scores twice
+  - Invalid submit clears slots incorrectly
+
+state_model:
+  fields:
+    - name: submittedWords
+      type: array
+    - name: attemptCount
+      type: number
+  events:
+    - submit_word
+    - reject_duplicate
+    - record_invalid_attempt
+
+common_failure_modes:
+  - "Same valid word submitted twice adds score"
+  - "Attempt count not incremented"
+
+test_ideas:
+  - "First valid submit recorded"
+  - "Second submit of same word rejected"
+
+reusable_across:
+  - game.word-builder

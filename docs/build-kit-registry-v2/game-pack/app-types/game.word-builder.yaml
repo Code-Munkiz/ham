@@ -1,0 +1,226 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: game.word-builder
+kind: app_type
+name: Word builder spelling challenge
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  A browser-based word-building game where the player receives a finite letter pool,
+  arranges or selects letters into word slots, validates submitted words against a
+  static accepted word set, scores correct words, prevents invalid and duplicate
+  submissions, and reaches level/progression or result state. Uses static in-memory
+  word list for MVP. Output is always custom-generated from the user prompt plus
+  composed playbook modules — never cloned from a starter project.
+
+non_template_statement: >
+  This app type does not reference checked-in word lists, live dictionary APIs, or
+  clone baselines. It defines generative guidance only.
+
+legacy_v1_fallback: generic
+
+safety_constraints:
+  - no-network-egress-for-mvp
+  - no-eval
+  - no-user-accounts-for-mvp
+  - no-multiplayer-for-mvp
+  - static-word-list-for-mvp
+  - no-external-word-api-for-mvp
+  - no-real-money-economy
+  - dom-native-ui-only-for-mvp
+
+applies_to:
+  - tag:word-builder
+  - tag:dom-casual-game
+
+inputs:
+  - user_prompt: natural language theme for word-builder UI copy
+  - optional_letter_pool_size: number — default 7–12
+  - optional_word_category: string — theme hint for accepted word set
+
+outputs:
+  - runnable_vite_react_app: single-page DOM word-builder game
+  - composed_build_recipe: ids of mechanics, contracts, validators, recovery modules
+  - normie_plan_summary: phased build description for chat/activity stream
+
+guidance:
+  - "React state; static accepted word set embedded in generated source"
+  - "Finite letter pool per round or level; track remaining letter counts"
+  - "Player selects, taps, or drags letters into word slots"
+  - "Validate submitted words deterministically against accepted set"
+  - "Block duplicate valid submissions from scoring twice"
+  - "Prevent using more letters than available in pool"
+  - "Optional lightweight hints: letter, category, length, or target count"
+  - "DOM/React only; no live dictionary API for MVP"
+
+validation_notes:
+  - Run composed validators after scaffold and submit handler edits
+  - Preview must boot without console errors before success copy
+
+risk_notes:
+  - Letter pool counts drift from slot assignments
+  - Invalid words accepted or valid words rejected
+  - Duplicate submissions score twice
+
+user_prompt_examples:
+  - "Build a word builder game with letter tiles"
+  - "Make a spelling challenge where I form words from letters"
+  - "Create a word building game with score and hints"
+  - "Build a game where I arrange letters into valid words"
+
+intent_signals:
+  - "\\bword\\s+build(er|ing)\\b"
+  - "\\b(build|make|form)\\b.{0,80}\\bwords?\\b.{0,80}\\b(letters?|tiles?|pool)\\b"
+  - "\\bspelling\\s+challenge\\b"
+
+clarifying_questions:
+  - when: intent_confidence_low
+    ask: "Letter pool size per round — default eight letters?"
+  - when: input_ambiguous
+    ask: "Tap-to-slot, drag-and-drop, or type-into-slots interaction?"
+  - when: theme_ambiguous
+    ask: "Any word category — animals, food, general vocabulary?"
+
+default_assumptions:
+  - "Static embedded accepted word set; finite letter pool per round"
+  - "Minimum word length of three letters"
+  - "Score per valid unique word submission"
+  - "Local-only session state"
+  - "DOM/React UI; mobile-friendly at 360px width"
+
+hard_constraints:
+  - no-real-money-economy
+  - no-template-cloning
+  - no-runtime-llm-generation-for-mvp
+  - no-external-api-for-mvp
+  - no-user-secrets-or-credentials
+  - preserve-safe-local-mvp-scope
+  - static-word-list-for-mvp
+  - dom-native-ui-only-for-mvp
+
+soft_defaults:
+  - static accepted word list
+  - finite letter pool
+  - local-only state
+  - simple score per valid word
+  - duplicate submissions do not score twice
+  - lightweight hints
+
+user_overridable:
+  - theme and copy tone
+  - word category
+  - letter pool size
+  - minimum word length
+  - scoring rules
+  - hint count
+  - level count
+  - result copy tone
+
+clarify_if_changed:
+  - requiring live dictionary API
+  - allowing generated word lists at runtime
+  - replacing word building with Wordle-style guessing
+  - replacing word building with hangman letter guessing
+  - adding multiplayer
+  - adding backend leaderboard
+
+out_of_scope_unless_explicit:
+  - user accounts or cloud sync
+  - backend persistence
+  - global leaderboards
+  - multiplayer
+  - live dictionary API
+  - generated word engine
+  - social sharing integrations
+  - custom dictionary upload
+
+conflict_policy:
+  user_explicit_overrides_soft_defaults: true
+  safety_constraints_override_user_request: true
+  core_loop_conflicts_require_clarification: true
+  out_of_scope_items_require_explicit_request: true
+  fallback_to_v1_or_generic_when_recipe_no_longer_fits: true
+
+stack_kit_id: stack.dom-game-minimal
+
+compose_order_ref: pack.game#compose_defaults.compose_order
+
+composed_modules:
+  stack_kit_id: stack.dom-game-minimal
+  mechanics:
+    - mechanic.letter-pool
+    - mechanic.word-slot-construction
+    - mechanic.word-validation
+    - mechanic.submission-attempts
+    - mechanic.word-builder-scoring
+    - mechanic.hint-reveal-lite
+    - mechanic.level-progression
+    - mechanic.word-builder-result-state
+  component_contracts:
+    - component.game-shell
+    - component.letter-pool-panel
+    - component.word-slot-board
+    - component.submit-word-control
+    - component.word-feedback-panel
+    - component.word-score-display
+    - component.word-builder-results-panel
+  validators:
+    - validator.letter-pool-integrity
+    - validator.word-slot-state-consistency
+    - validator.word-validation-rules
+    - validator.duplicate-submission-blocking
+    - validator.word-builder-scoring-consistency
+    - validator.word-builder-completion
+  recovery_playbooks:
+    - recovery.broken-letter-pool
+    - recovery.invalid-word-slot-state
+    - recovery.bad-word-validation
+    - recovery.duplicate-word-submission
+  progress_labels: progress.word-builder
+  learning_hooks: learning.word-builder
+
+build_phases:
+  - id: phase.understand
+    title: Understand the word builder idea
+    order: 1
+    modules_used: [app_type]
+  - id: phase.compose
+    title: Compose mechanics and UI contracts
+    order: 2
+    modules_used: [mechanics, component_contracts]
+  - id: phase.generate
+    title: Generate custom word builder code
+    order: 3
+    modules_used: [stack_kit_id, guidance]
+  - id: phase.validate
+    title: Check letter pool and word validation rules
+    order: 4
+    modules_used: [validators]
+  - id: phase.preview
+    title: Prepare Workbench preview
+    order: 5
+    modules_used: []
+  - id: phase.recover
+    title: Fix known failure modes if needed
+    order: 6
+    optional: true
+    modules_used: [recovery_playbooks]
+
+acceptance_criteria:
+  - "Game loads in preview without runtime console errors"
+  - "Player can place letters into word slots via tap, drag, or equivalent"
+  - "Submitted words validate against static accepted set"
+  - "Invalid submissions show feedback without scoring"
+  - "Duplicate valid submissions do not score twice"
+  - "Letter pool counts cannot go negative"
+  - "Score, attempts, hints, and level/result state update deterministically"
+  - "UI readable on mobile-width viewport"
+
+out_of_scope:
+  - Multiplayer or real-time race modes
+  - Global leaderboards or user accounts
+  - Live dictionary API or runtime-generated word lists
+  - Custom dictionary upload or user-submitted dictionary editor
+  - Monetized prizes or Web3/token rewards
+  - Canvas, Phaser, or physics engines

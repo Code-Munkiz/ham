@@ -1,0 +1,69 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.word-slot-construction
+kind: mechanic
+name: Word slot construction
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Manages word slots where the player arranges selected letters into a candidate word.
+
+non_template_statement: >
+  Slot construction guidance only. Not a drag-and-drop library.
+
+applies_to:
+  - game.word-builder
+  - tag:word-builder
+
+depends_on:
+  - mechanic.letter-pool
+
+provides:
+  - slot_construction_state
+
+binds_components:
+  - component.word-slot-board
+
+inputs:
+  - max_slots: number
+  - min_word_length: number — default 3
+
+outputs:
+  - slotLetters: array
+  - currentWord: string
+
+guidance:
+  - "Support tap-to-slot or drag-from-pool interactions"
+  - "Allow clearing slots and returning letters to pool"
+  - "Build currentWord from ordered non-empty slots"
+  - "Enforce max slot count and minimum word length on submit"
+
+validation_notes:
+  - validator.word-slot-state-consistency
+
+risk_notes:
+  - Slots accept more letters than pool allows
+  - currentWord out of sync with slotLetters
+
+state_model:
+  fields:
+    - name: slotLetters
+      type: array
+    - name: currentWord
+      type: string
+  events:
+    - place_letter
+    - remove_letter
+    - clear_slots
+
+common_failure_modes:
+  - "Orphan letters not returned to pool"
+  - "Slot order does not match displayed word"
+
+test_ideas:
+  - "Placing letter updates slotLetters and currentWord"
+  - "Removing letter returns count to pool"
+
+reusable_across:
+  - game.word-builder
