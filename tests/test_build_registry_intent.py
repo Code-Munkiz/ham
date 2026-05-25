@@ -10,6 +10,7 @@ from src.ham.builder_chat_scaffold import _maybe_llm_scaffold_replace
 from src.ham.builder_llm_scaffold import ScaffoldResult, _build_scaffold_messages
 from src.ham.builder_plan import Plan, Step
 from src.ham.build_registry.intent import (
+    BRANCHING_NARRATIVE_APP_TYPE,
     IDLE_INCREMENTAL_APP_TYPE,
     TRIVIA_TIMER_APP_TYPE,
     enrich_plan_metadata_with_registry_v2,
@@ -55,14 +56,35 @@ _TRIVIA_NEGATIVE_PROMPTS = (
     "Build a form with multiple choice questions",
     "Make a trading dashboard",
     "Build a memory card game",
-    "Build a branching story game",
+)
+
+_BRANCHING_POSITIVE_PROMPTS = (
+    "Build me a branching story game",
+    "Make a choose your own adventure game",
+    "Create an interactive fiction game",
+    "Build a dialogue choice RPG",
+    "Make a story game where choices change the ending",
+    "Create a narrative game with multiple endings",
+    "Build a text adventure with inventory and choices",
+)
+
+_BRANCHING_NEGATIVE_PROMPTS = (
+    "Build me a blog",
+    "Make a chatbot",
+    "Create a writing app",
+    "Build an AI dungeon with live generated story text",
+    "Build a SaaS dashboard",
+    "Make a generic RPG",
+    "Create a landing page for my book",
 )
 
 _CROSS_EXCLUSION_PROMPTS = (
     ("build me an idle clicker game", IDLE_INCREMENTAL_APP_TYPE),
     ("Build me a trivia quiz with a timer", TRIVIA_TIMER_APP_TYPE),
+    ("Build me a branching story game", BRANCHING_NARRATIVE_APP_TYPE),
     ("make a cookie clicker style game", IDLE_INCREMENTAL_APP_TYPE),
     ("Make a timed multiple choice quiz game", TRIVIA_TIMER_APP_TYPE),
+    ("Make a choose your own adventure game", BRANCHING_NARRATIVE_APP_TYPE),
 )
 
 
@@ -83,8 +105,16 @@ class TestSelectRegistryV2AppTypeForPrompt:
     def test_rejects_non_trivia_prompts(self, prompt: str):
         assert select_registry_v2_app_type_for_prompt(prompt) is None
 
+    @pytest.mark.parametrize("prompt", _BRANCHING_POSITIVE_PROMPTS)
+    def test_matches_branching_narrative_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) == BRANCHING_NARRATIVE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _BRANCHING_NEGATIVE_PROMPTS)
+    def test_rejects_non_branching_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) is None
+
     @pytest.mark.parametrize("prompt,expected", _CROSS_EXCLUSION_PROMPTS)
-    def test_idle_and_trivia_do_not_steal_each_other(self, prompt: str, expected: str):
+    def test_recipes_do_not_steal_each_other(self, prompt: str, expected: str):
         assert select_registry_v2_app_type_for_prompt(prompt) == expected
 
     def test_idle_prompt_does_not_route_to_trivia(self):
@@ -95,6 +125,22 @@ class TestSelectRegistryV2AppTypeForPrompt:
         assert (
             select_registry_v2_app_type_for_prompt("Build an idle clicker game")
             != TRIVIA_TIMER_APP_TYPE
+        )
+
+    def test_branching_prompt_does_not_route_to_idle_or_trivia(self):
+        prompt = "Build me a branching story game"
+        assert select_registry_v2_app_type_for_prompt(prompt) == BRANCHING_NARRATIVE_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != IDLE_INCREMENTAL_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != TRIVIA_TIMER_APP_TYPE
+
+    def test_trivia_and_idle_prompts_do_not_route_to_branching(self):
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a trivia quiz with a timer")
+            == TRIVIA_TIMER_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("build me an idle clicker game")
+            == IDLE_INCREMENTAL_APP_TYPE
         )
 
 
@@ -113,6 +159,15 @@ class TestEnrichPlanMetadataWithRegistryV2:
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "generic"},
             "Build me a trivia quiz with a timer",
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
+
+    def test_flag_disabled_branching_prompt_does_not_add_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            "Build me a branching story game",
         )
         assert "registry_v2_app_type" not in metadata
         assert metadata["template_kind"] == "generic"
@@ -137,6 +192,16 @@ class TestEnrichPlanMetadataWithRegistryV2:
         assert metadata["template_kind"] == "generic"
         assert metadata["originated_from"] == "builder_chat_scaffold"
 
+    def test_flag_enabled_branching_prompt_adds_registry_metadata(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic", "originated_from": "builder_chat_scaffold"},
+            "Build me a branching story game",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        assert metadata["registry_v2_app_type"] == BRANCHING_NARRATIVE_APP_TYPE
+        assert metadata["template_kind"] == "generic"
+        assert metadata["originated_from"] == "builder_chat_scaffold"
+
     def test_flag_enabled_non_idle_prompt_leaves_registry_metadata_absent(self):
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "landing-page"},
@@ -150,6 +215,15 @@ class TestEnrichPlanMetadataWithRegistryV2:
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "generic"},
             "Make a flashcard app",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "1"},
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
+
+    def test_flag_enabled_non_branching_prompt_leaves_registry_metadata_absent(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            "Make a chatbot",
             env={"HAM_BUILD_REGISTRY_V2_ENABLED": "1"},
         )
         assert "registry_v2_app_type" not in metadata
@@ -216,6 +290,12 @@ class TestChatScaffoldSyntheticPlanMetadata:
         assert metadata.get("template_kind") == "generic"
         assert "registry_v2_app_type" not in metadata
 
+    def test_flag_disabled_branching_prompt_has_no_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = _synthetic_plan_metadata("Build me a branching story game")
+        assert metadata.get("template_kind") == "generic"
+        assert "registry_v2_app_type" not in metadata
+
     def test_flag_enabled_idle_prompt_adds_registry_metadata(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
         metadata = _synthetic_plan_metadata("build me an idle clicker game")
@@ -227,6 +307,12 @@ class TestChatScaffoldSyntheticPlanMetadata:
         metadata = _synthetic_plan_metadata("Build me a trivia quiz with a timer")
         assert metadata.get("template_kind") == "generic"
         assert metadata.get("registry_v2_app_type") == TRIVIA_TIMER_APP_TYPE
+
+    def test_flag_enabled_branching_prompt_adds_registry_metadata(self, monkeypatch):
+        monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
+        metadata = _synthetic_plan_metadata("Build me a branching story game")
+        assert metadata.get("template_kind") == "generic"
+        assert metadata.get("registry_v2_app_type") == BRANCHING_NARRATIVE_APP_TYPE
 
     def test_flag_enabled_non_idle_prompt_has_no_registry_metadata(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
@@ -287,6 +373,34 @@ class TestEndToEndScaffoldMessages:
         assert "Builder Kit context:" not in content
         assert content.count("Builder Kit:") == 0
 
+    def test_flag_enabled_branching_prompt_produces_v2_context(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            "Build me a branching story game",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_branching_e2e",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message="Build me a branching story game",
+            steps=[Step(title="Scaffold game", description="Create branching story files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(
+            plan,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )[1]["content"]
+        assert "Build Registry v2 playbook context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" in content
+        assert "game.branching-narrative" in content
+        assert "stack.dom-game-minimal" in content
+        assert "validator.story-graph-reachability" in content
+        assert "validator.no-dead-end-choice" in content
+        assert "Builder Kit context:" not in content
+        assert content.count("Builder Kit:") == 0
+
     def test_flag_disabled_idle_prompt_produces_v1_context_only(self, monkeypatch):
         monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
         metadata = enrich_plan_metadata_with_registry_v2(
@@ -318,6 +432,25 @@ class TestEndToEndScaffoldMessages:
             project_id="proj_test",
             user_message="Build me a trivia quiz with a timer",
             steps=[Step(title="Scaffold game", description="Create trivia quiz files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(plan)[1]["content"]
+        assert "Builder Kit context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" not in content
+
+    def test_flag_disabled_branching_prompt_produces_v1_context_only(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            "Build me a branching story game",
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_branching_v1",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message="Build me a branching story game",
+            steps=[Step(title="Scaffold game", description="Create branching story files")],
             planner_confidence="high",
             metadata=metadata,
         )

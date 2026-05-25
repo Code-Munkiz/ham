@@ -11,6 +11,7 @@ from typing import Any
 
 IDLE_INCREMENTAL_APP_TYPE = "game.idle-incremental"
 TRIVIA_TIMER_APP_TYPE = "game.trivia-timer"
+BRANCHING_NARRATIVE_APP_TYPE = "game.branching-narrative"
 
 _GLOBAL_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(dashboard|landing\s*page|saas|calculator|todo|to[-\s]?do|crm)\b",
@@ -67,6 +68,35 @@ _TRIVIA_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bhistory\s+trivia\b",
 )
 
+_BRANCHING_NARRATIVE_NEGATIVE_PATTERNS: tuple[str, ...] = (
+    r"\b(idle|incremental|clicker|tycoon)\b",
+    r"\bcookie\s+clicker\b",
+    r"\bpassive\s+income\b",
+    r"\b(trivia|quiz)\b",
+    r"\bmemory\s+(card|match)\b",
+    r"\b(blog|chatbot)\b",
+    r"\bwriting\s+app\b",
+    r"\bai\s+dungeon\b",
+    r"\blive\s+generated\b.{0,80}\bstory\b",
+    r"\bgeneric\s+rpg\b",
+    r"\bsurvey\b",
+    r"\bflashcard\b",
+    r"\beducation\s+website\b",
+)
+
+_BRANCHING_NARRATIVE_POSITIVE_PATTERNS: tuple[str, ...] = (
+    r"\bbranching\s+story\b.{0,80}\bgame\b",
+    r"\bgame\b.{0,80}\bbranching\s+story\b",
+    r"\bchoose\s+your\s+own\s+adventure\b",
+    r"\binteractive\s+fiction\b",
+    r"\bdialogue\s+choice\b.{0,80}\brpg\b",
+    r"\bstory\s+game\b.{0,100}\b(choices?|choice|ending)\b",
+    r"\b(choices?|choice)\b.{0,100}\b(story|ending|narrative)\b",
+    r"\bnarrative\s+game\b.{0,100}\b(multiple\s+endings?|endings?)\b",
+    r"\btext\s+adventure\b.{0,100}\b(inventory|choices?|choice)\b",
+    r"\bbranching\s+narrative\b",
+)
+
 
 def _normalized_prompt(prompt: str) -> str:
     return re.sub(r"\s+", " ", str(prompt or "").strip().lower())
@@ -90,6 +120,14 @@ def _matches_idle(text: str) -> bool:
     return _matches_recipe(text, negatives=_IDLE_NEGATIVE_PATTERNS, positives=_IDLE_POSITIVE_PATTERNS)
 
 
+def _matches_branching_narrative(text: str) -> bool:
+    return _matches_recipe(
+        text,
+        negatives=_BRANCHING_NARRATIVE_NEGATIVE_PATTERNS,
+        positives=_BRANCHING_NARRATIVE_POSITIVE_PATTERNS,
+    )
+
+
 def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
     """Return a Game Pack app type id for clear prompt matches, else ``None``."""
     text = _normalized_prompt(prompt)
@@ -97,11 +135,13 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
         return None
     if _matches_any(text, _GLOBAL_NEGATIVE_PATTERNS):
         return None
-    # Trivia is checked before idle so quiz/trivia prompts are not blocked by idle negatives.
+    # Precedence: trivia → idle → branching narrative (most specific game archetypes first).
     if _matches_trivia(text):
         return TRIVIA_TIMER_APP_TYPE
     if _matches_idle(text):
         return IDLE_INCREMENTAL_APP_TYPE
+    if _matches_branching_narrative(text):
+        return BRANCHING_NARRATIVE_APP_TYPE
     return None
 
 
