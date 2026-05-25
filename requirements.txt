@@ -19,7 +19,7 @@ google-cloud-run>=0.16.0
 google-cloud-tasks>=2.16.0
 google-cloud-container>=2.40.0
 kubernetes>=29.0.0
-pypdf>=4.0.0
+pypdf>=6.12.1
 python-docx>=1.2.0
 openpyxl>=3.1.0
 # Windows: ConPTY for /api/workspace/terminal
