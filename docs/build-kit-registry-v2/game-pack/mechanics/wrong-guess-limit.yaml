@@ -1,0 +1,67 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.wrong-guess-limit
+kind: mechanic
+name: Wrong guess limit
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Counts wrong letter guesses and enforces a configurable maximum before loss.
+
+non_template_statement: >
+  Wrong-count guidance only.
+
+applies_to:
+  - game.hangman-lite
+  - tag:hangman-lite
+
+depends_on:
+  - mechanic.reveal-state
+  - mechanic.duplicate-guess-prevention
+
+provides:
+  - wrong_guess_count
+
+binds_components:
+  - component.wrong-guess-meter
+
+inputs:
+  - max_wrong: number — default 6
+  - wrong_count: number
+
+outputs:
+  - wrongCount: number
+  - atLimit: boolean
+
+guidance:
+  - "Increment wrongCount only on new wrong letters"
+  - "Do not increment on duplicate guesses"
+  - "Default six wrong guesses for MVP"
+
+validation_notes:
+  - validator.wrong-guess-limit-enforcement
+
+risk_notes:
+  - Wrong count exceeds max without loss
+
+state_model:
+  fields:
+    - name: wrongCount
+      type: number
+    - name: maxWrong
+      type: number
+  events:
+    - increment_wrong
+    - check_limit
+
+common_failure_modes:
+  - "Duplicate wrong guess increments counter"
+  - "Loss not triggered at limit"
+
+test_ideas:
+  - "Six unique wrong letters sets atLimit"
+  - "Duplicate does not increment"
+
+reusable_across:
+  - game.hangman-lite

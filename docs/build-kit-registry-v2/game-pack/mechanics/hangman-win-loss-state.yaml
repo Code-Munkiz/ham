@@ -1,0 +1,67 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.hangman-win-loss-state
+kind: mechanic
+name: Hangman win loss state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Determines win when all letters revealed or loss when wrong guess limit reached;
+  pauses further guesses at terminal state.
+
+non_template_statement: >
+  Terminal state guidance only.
+
+applies_to:
+  - game.hangman-lite
+  - tag:hangman-lite
+
+depends_on:
+  - mechanic.reveal-state
+  - mechanic.wrong-guess-limit
+
+provides:
+  - terminal_state
+
+binds_components:
+  - component.hangman-result-panel
+
+inputs:
+  - all_revealed: boolean
+  - at_wrong_limit: boolean
+  - target_word: string
+
+outputs:
+  - phase: playing | won | lost
+  - terminalReason: string | null
+
+guidance:
+  - "Win when allRevealed; loss when atLimit"
+  - "Block new guesses when phase not playing"
+  - "Show result panel with target word on terminal"
+
+validation_notes:
+  - validator.hangman-win-loss-detection
+
+risk_notes:
+  - Win and loss both fire
+
+state_model:
+  fields:
+    - name: phase
+      type: string
+  events:
+    - evaluate_terminal
+    - reset_round
+
+common_failure_modes:
+  - "Guesses accepted after win"
+  - "Loss before wrong limit reached"
+
+test_ideas:
+  - "Full reveal sets won"
+  - "Max wrong sets lost"
+
+reusable_across:
+  - game.hangman-lite

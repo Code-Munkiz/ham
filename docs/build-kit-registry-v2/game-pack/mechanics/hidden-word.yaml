@@ -1,0 +1,64 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.hidden-word
+kind: mechanic
+name: Hidden word target
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Defines the hidden target word for one hangman round from a static in-memory list.
+
+non_template_statement: >
+  Behavioral recipe for target word only. Not a checked-in dictionary file.
+
+applies_to:
+  - game.hangman-lite
+  - tag:hangman-lite
+
+depends_on: []
+
+provides:
+  - hidden_word_state
+
+binds_components:
+  - component.hidden-word-display
+
+inputs:
+  - target_word: string
+  - allowed_words: array of strings — static list for MVP
+  - word_category: string | null — optional theme filter
+
+outputs:
+  - targetWord: string
+  - wordLength: number
+
+guidance:
+  - "One target word per round from embedded list"
+  - "Normalize letters to uppercase for comparison"
+  - "Do not expose targetWord in DOM until win/loss"
+
+validation_notes:
+  - targetWord non-empty and alphabetic for MVP
+
+risk_notes:
+  - Target leaked in console or DOM
+
+state_model:
+  fields:
+    - name: targetWord
+      type: string
+  events:
+    - set_target
+    - new_round
+
+common_failure_modes:
+  - "Empty or non-alphabetic target"
+  - "Target visible before game end"
+
+test_ideas:
+  - "Target selected from allowed list"
+  - "Word length matches display slots"
+
+reusable_across:
+  - game.hangman-lite

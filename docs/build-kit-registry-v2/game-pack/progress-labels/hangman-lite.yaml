@@ -1,0 +1,59 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: progress.hangman-lite
+kind: progress_label
+name: Hangman lite build progress
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Normie-friendly phase labels for chat and Workbench activity stream during a hangman
+  lite Game Pack build.
+
+non_template_statement: >
+  Progress copy module only. Not emitted by runtime today.
+
+source_phase_owner: game.hangman-lite
+
+applies_to:
+  - game.hangman-lite
+
+inputs:
+  - current_phase_id: from game.hangman-lite build_phases
+  - recovery_active: boolean
+
+outputs:
+  - activity_title: short string for feed
+  - activity_message: one sentence for feed or chat ack
+
+guidance:
+  - "Avoid internal words: scaffold, template_kind, OpenRouter, kit_id"
+  - "Use hangman plain language"
+  - "Phase ids and order come from source_phase_owner build_phases only"
+
+validation_notes:
+  - Each mapped phase id exists on source_phase_owner build_phases
+  - Each phase has a unique normie message
+
+risk_notes:
+  - Over-long messages clutter activity stream
+
+phase_message_map:
+  phase.understand:
+    title: "Getting your hangman game idea"
+    message: "I'm turning your description into a hangman word game plan."
+  phase.compose:
+    title: "Planning the game pieces"
+    message: "I'm lining up letter guessing, reveals, and wrong-guess rules."
+  phase.generate:
+    title: "Building your hangman game"
+    message: "I'm creating the custom code for your hangman preview."
+  phase.validate:
+    title: "Checking the hangman rules"
+    message: "I'm verifying letter reveals, duplicates, and win/loss detection."
+  phase.preview:
+    title: "Opening your hangman preview"
+    message: "Your hangman game is almost ready to play in preview."
+  phase.recover:
+    title: "Fixing a hangman issue"
+    message: "I'm correcting a letter or win/loss issue so the game runs cleanly."

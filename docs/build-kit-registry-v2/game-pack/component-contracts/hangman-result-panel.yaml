@@ -1,0 +1,39 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.hangman-result-panel
+kind: component_contract
+name: Hangman result panel
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Win or loss summary showing outcome copy and revealed target word.
+
+non_template_statement: >
+  UI contract only.
+
+applies_to:
+  - game.hangman-lite
+
+binds_mechanics:
+  - mechanic.hangman-win-loss-state
+
+required_props:
+  - phase: won | lost
+  - targetWord: string
+
+optional_props:
+  - onPlayAgain: callback
+
+accessibility:
+  - "Terminal state announced to screen readers"
+
+guidance:
+  - "Show only when phase is won or lost"
+  - "Include target word in summary"
+
+validation_notes:
+  - validator.hangman-win-loss-detection
+
+risk_notes:
+  - Panel shown during playing phase

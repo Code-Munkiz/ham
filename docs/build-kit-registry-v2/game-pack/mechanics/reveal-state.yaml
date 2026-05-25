@@ -1,0 +1,70 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.reveal-state
+kind: mechanic
+name: Letter reveal state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Maintains per-position revealed letters; reveals all matching positions when a
+  correct letter is guessed.
+
+non_template_statement: >
+  Reveal state guidance only.
+
+applies_to:
+  - game.hangman-lite
+  - tag:hangman-lite
+
+depends_on:
+  - mechanic.hidden-word
+  - mechanic.letter-guessing
+  - mechanic.duplicate-guess-prevention
+
+provides:
+  - reveal_state
+
+binds_components:
+  - component.hidden-word-display
+
+inputs:
+  - target_word: string
+  - revealed: array of char | null per position
+  - letter: string — correct guess to apply
+
+outputs:
+  - revealed: array
+  - allRevealed: boolean
+
+guidance:
+  - "Reveal every position matching guessed letter"
+  - "Immutable update pattern for revealed array"
+  - "Show blanks for unrevealed positions"
+
+validation_notes:
+  - validator.letter-reveal-correctness
+
+risk_notes:
+  - Only first occurrence revealed when target has duplicates
+
+state_model:
+  fields:
+    - name: revealed
+      type: array
+    - name: allRevealed
+      type: boolean
+  events:
+    - reveal_letter
+    - reset_reveal
+
+common_failure_modes:
+  - "Partial reveal for repeated letters"
+  - "Stale reveal array reference"
+
+test_ideas:
+  - "HELLO + guess L reveals both L positions"
+  - "allRevealed true when every slot filled"
+
+reusable_across:
+  - game.hangman-lite

@@ -1,0 +1,62 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.wrong-guess-limit-enforcement
+kind: validator
+name: Wrong guess limit enforcement
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Ensures wrong guess count respects max limit and increments only on new wrong letters.
+
+non_template_statement: >
+  Conceptual limit check.
+
+applies_to:
+  - game.hangman-lite
+  - tag:hangman-lite
+
+depends_on:
+  - mechanic.wrong-guess-limit
+
+validates_modules:
+  - mechanic.wrong-guess-limit
+  - component.wrong-guess-meter
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - wrong_count: number
+  - max_wrong: number
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "wrongCount never exceeds maxWrong"
+  - "Only new wrong letters increment counter"
+
+validation_notes:
+  - Exhaust wrong letters in smoke test
+
+risk_notes:
+  - Loss before limit reached
+
+validation_goal: >
+  Wrong guess counting is deterministic and bounded.
+
+pass_conditions:
+  - "At limit triggers loss path"
+  - "Duplicates do not increment"
+
+fail_conditions:
+  - "Count exceeds max"
+  - "Correct guess increments wrong count"
+
+suggested_failure_message: >
+  Wrong guess counting was off. I'll enforce the limit and count only new wrong letters.
+
+recovery_playbooks:
+  - recovery.invalid-hangman-end-state

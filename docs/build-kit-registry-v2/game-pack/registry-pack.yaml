@@ -9,7 +9,7 @@ description: >
   Root manifest for the Build Kit Registry v2 Game Pack schema pilot. Indexes all
   proposed modules for DOM-native casual games, starting with game.idle-incremental,
   game.trivia-timer, game.branching-narrative, game.memory-match, game.word-daily,
-  game.daily-puzzle-grid, and game.resource-management-sim (Wave 2 schema-only).
+  game.daily-puzzle-grid, game.resource-management-sim, and game.hangman-lite (Wave 2 schema-only).
   Used for cross-reference validation and future composer defaults — not loaded by HAM
   at runtime today.
 
@@ -27,6 +27,7 @@ module_index:
     - game.word-daily
     - game.daily-puzzle-grid
     - game.resource-management-sim
+    - game.hangman-lite
   stack_kits:
     - stack.dom-game-minimal
   mechanics:
@@ -71,6 +72,12 @@ module_index:
     - mechanic.upgrade-path
     - mechanic.event-modifier
     - mechanic.goal-and-failure-state
+    - mechanic.hidden-word
+    - mechanic.letter-guessing
+    - mechanic.duplicate-guess-prevention
+    - mechanic.reveal-state
+    - mechanic.wrong-guess-limit
+    - mechanic.hangman-win-loss-state
   component_contracts:
     - component.game-shell
     - component.resource-counter
@@ -107,6 +114,11 @@ module_index:
     - component.upgrade-panel
     - component.event-log
     - component.goal-status
+    - component.hidden-word-display
+    - component.letter-bank
+    - component.wrong-guess-meter
+    - component.guess-input
+    - component.hangman-result-panel
   validators:
     - validator.no-negative-currency
     - validator.passive-income-tick
@@ -135,6 +147,10 @@ module_index:
     - validator.capacity-limit-enforcement
     - validator.goal-state-detection
     - validator.tick-loop-stability
+    - validator.letter-reveal-correctness
+    - validator.duplicate-guess-blocking
+    - validator.wrong-guess-limit-enforcement
+    - validator.hangman-win-loss-detection
   recovery_playbooks:
     - recovery.stale-interval-or-bad-tick-loop
     - recovery.invalid-local-storage-json
@@ -156,6 +172,9 @@ module_index:
     - recovery.invalid-production-chain
     - recovery.runaway-tick-loop
     - recovery.unreachable-goal-state
+    - recovery.broken-letter-reveal
+    - recovery.duplicate-guess-state
+    - recovery.invalid-hangman-end-state
   progress_labels:
     - progress.idle-incremental
     - progress.trivia-timer
@@ -164,6 +183,7 @@ module_index:
     - progress.word-daily
     - progress.daily-puzzle-grid
     - progress.resource-management-sim
+    - progress.hangman-lite
   learning_hooks:
     - learning.idle-incremental
     - learning.trivia-timer
@@ -172,6 +192,7 @@ module_index:
     - learning.word-daily
     - learning.daily-puzzle-grid
     - learning.resource-management-sim
+    - learning.hangman-lite
 
 compose_defaults:
   compose_order:

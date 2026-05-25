@@ -1,0 +1,39 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.wrong-guess-meter
+kind: component_contract
+name: Wrong guess meter
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Visual indicator of wrong guesses used versus maximum allowed.
+
+non_template_statement: >
+  UI contract only.
+
+applies_to:
+  - game.hangman-lite
+
+binds_mechanics:
+  - mechanic.wrong-guess-limit
+
+required_props:
+  - wrongCount: number
+  - maxWrong: number
+
+optional_props:
+  - showHangmanFigure: boolean — default false for lite MVP
+
+accessibility:
+  - "Meter announces wrong count and remaining guesses"
+
+guidance:
+  - "Show numeric or simple progress toward limit"
+  - "Optional minimal hangman figure only if user requests"
+
+validation_notes:
+  - validator.wrong-guess-limit-enforcement
+
+risk_notes:
+  - Count out of sync with state

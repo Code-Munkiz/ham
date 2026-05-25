@@ -1,0 +1,40 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.guess-input
+kind: component_contract
+name: Guess input
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Handles physical keyboard letter input alongside optional letter bank.
+
+non_template_statement: >
+  UI contract only. Hangman-specific; not word-daily keyboard grid semantics.
+
+applies_to:
+  - game.hangman-lite
+
+binds_mechanics:
+  - mechanic.letter-guessing
+
+required_props:
+  - onLetterKey: callback
+  - disabled: boolean
+
+optional_props:
+  - allowPhysicalKeyboard: boolean — default true
+
+accessibility:
+  - "Keyboard input works when letter bank focused or game area active"
+
+guidance:
+  - "Listen for A-Z keydown when playing"
+  - "Ignore when disabled or duplicate"
+  - "Do not reuse word-daily guess-row semantics"
+
+validation_notes:
+  - Single letter per key event
+
+risk_notes:
+  - Key events fire after terminal state

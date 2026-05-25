@@ -1,0 +1,40 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.hidden-word-display
+kind: component_contract
+name: Hidden word display
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Shows revealed letters and blank slots for unrevealed positions in the target word.
+
+non_template_statement: >
+  UI contract only.
+
+applies_to:
+  - game.hangman-lite
+
+binds_mechanics:
+  - mechanic.hidden-word
+  - mechanic.reveal-state
+
+required_props:
+  - revealed: array of char | null per position
+  - wordLength: number
+
+optional_props:
+  - phase: playing | won | lost
+
+accessibility:
+  - "Each slot has accessible label for revealed letter or blank"
+
+guidance:
+  - "Blanks for unrevealed; show letter when revealed"
+  - "On win/loss optionally show full word"
+
+validation_notes:
+  - Slot count matches wordLength
+
+risk_notes:
+  - Target word visible in DOM before terminal

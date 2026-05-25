@@ -1,0 +1,64 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.duplicate-guess-prevention
+kind: mechanic
+name: Duplicate guess prevention
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Tracks guessed letters and blocks duplicate submissions from changing game state.
+
+non_template_statement: >
+  Duplicate guard guidance only.
+
+applies_to:
+  - game.hangman-lite
+  - tag:hangman-lite
+
+depends_on:
+  - mechanic.letter-guessing
+
+provides:
+  - guessed_letters
+
+binds_components:
+  - component.letter-bank
+
+inputs:
+  - guessed_letters: set of strings
+  - new_guess: string
+
+outputs:
+  - isDuplicate: boolean
+  - guessedLetters: array
+
+guidance:
+  - "Maintain set of guessed letters"
+  - "Reject duplicate with no wrong-count or reveal change"
+  - "Disable or mark used letters in letter bank"
+
+validation_notes:
+  - validator.duplicate-guess-blocking
+
+risk_notes:
+  - Duplicate guess increments wrong count
+
+state_model:
+  fields:
+    - name: guessedLetters
+      type: array
+  events:
+    - add_guess
+    - reject_duplicate
+
+common_failure_modes:
+  - "Same letter guessed twice changes score"
+  - "Letter bank allows re-click"
+
+test_ideas:
+  - "Second guess of same letter rejected"
+  - "guessedLetters grows only on new letters"
+
+reusable_across:
+  - game.hangman-lite

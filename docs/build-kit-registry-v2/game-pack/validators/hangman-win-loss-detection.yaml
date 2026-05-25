@@ -1,0 +1,65 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.hangman-win-loss-detection
+kind: validator
+name: Hangman win loss detection
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Verifies win and loss terminal states fire correctly and block further guesses.
+
+non_template_statement: >
+  Conceptual terminal state check.
+
+applies_to:
+  - game.hangman-lite
+  - tag:hangman-lite
+
+depends_on:
+  - mechanic.hangman-win-loss-state
+
+validates_modules:
+  - mechanic.hangman-win-loss-state
+  - component.hangman-result-panel
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - phase: string
+  - all_revealed: boolean
+  - at_wrong_limit: boolean
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "Win when all letters revealed"
+  - "Loss when wrong limit reached"
+  - "No guesses after terminal"
+
+validation_notes:
+  - Play through win and loss in preview
+
+risk_notes:
+  - Both win and loss simultaneously
+
+validation_goal: >
+  Terminal hangman states detect correctly and pause input.
+
+pass_conditions:
+  - "Full reveal sets phase won"
+  - "Max wrong sets phase lost"
+  - "Input disabled after terminal"
+
+fail_conditions:
+  - "Guesses accepted after win/loss"
+  - "Win never fires when word complete"
+
+suggested_failure_message: >
+  The win or loss state did not trigger correctly. I'll fix terminal detection.
+
+recovery_playbooks:
+  - recovery.invalid-hangman-end-state

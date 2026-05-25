@@ -2,7 +2,7 @@
 
 **Status:** Non-runtime schema pilot only. **Schema version:** `0.1`
 
-This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: **`game.idle-incremental`**, **`game.trivia-timer`**, **`game.branching-narrative`**, **`game.memory-match`**, **`game.word-daily`**, **`game.daily-puzzle-grid`**, and **`game.resource-management-sim`** (Wave 2 — schema-only, not routed).
+This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: **`game.idle-incremental`**, **`game.trivia-timer`**, **`game.branching-narrative`**, **`game.memory-match`**, **`game.word-daily`**, **`game.daily-puzzle-grid`**, **`game.resource-management-sim`**, and **`game.hangman-lite`** (Wave 2 — hangman schema-only, not routed).
 
 ## Root manifest
 
@@ -99,7 +99,7 @@ Use vocabulary: **module**, **playbook**, **contract**, **mechanic**. Avoid “t
 | **Distinct mechanics** | Puzzle seed, grid state, constraint rules, cell interaction, mistake tracking, hints, completion check. |
 | **Explicit MVP bounds** | Static in-memory puzzle definitions; deterministic daily seed; no accounts, leaderboard, or live puzzle API. |
 
-### `game.resource-management-sim` (Wave 2 — schema-only, not routed)
+### `game.resource-management-sim` (Wave 2)
 
 | Reason | Detail |
 |--------|--------|
@@ -108,6 +108,16 @@ Use vocabulary: **module**, **playbook**, **contract**, **mechanic**. Avoid “t
 | **Shared reuse** | Reuses `component.game-shell`, `stack.dom-game-minimal`. Does not reuse idle `mechanic.economy` or `mechanic.score`. |
 | **Distinct mechanics** | Resource pool, capacity limits, production chains, allocation decisions, turn/tick loop, upgrades, bounded events, goal/failure state. |
 | **Explicit MVP bounds** | Static in-memory sim data; 2–4 resources; local-only state; no accounts, multiplayer economy, or live market APIs. |
+
+### `game.hangman-lite` (Wave 2 — schema-only, not routed)
+
+| Reason | Detail |
+|--------|--------|
+| **Eighth recipe shape** | Proves the pack supports hangman-style letter guessing — distinct from Wordle-style word-daily feedback grids. |
+| **DOM-native hangman UI** | Hidden word display, letter bank, wrong-guess meter, result panel — no Canvas or external word API for MVP. |
+| **Shared reuse** | Reuses `component.game-shell`, `stack.dom-game-minimal`. Does not reuse `mechanic.word-target`, `mechanic.letter-feedback`, or word-daily keyboard grid semantics. |
+| **Distinct mechanics** | Hidden word, letter guessing, duplicate prevention, reveal state, wrong-guess limit, hangman win/loss. |
+| **Explicit MVP bounds** | Static in-memory word list; one target word per round; local-only state; no accounts, leaderboard, or live word API. |
 | **Routing** | Schema-only — not routed behind `HAM_BUILD_REGISTRY_V2_ENABLED` until explicitly approved. |
 
 ## Pilot module layout
@@ -124,13 +134,14 @@ docs/build-kit-registry-v2/game-pack/
   app-types/game.word-daily.yaml
   app-types/game.daily-puzzle-grid.yaml
   app-types/game.resource-management-sim.yaml
+  app-types/game.hangman-lite.yaml
   stack-kits/dom-game-minimal.yaml
-  mechanics/{score,economy,upgrades,save-load,question-set,timer,answer-validation,progression,story-node-graph,story-flags,inventory-lite,choice-resolution,ending-resolution,card-pair-set,card-flip-state,interaction-lock,match-detection,move-counter,victory-detection,word-target,daily-seed,guess-grid,keyboard-input,letter-feedback,attempt-limit,win-loss-state,puzzle-seed,grid-state,constraint-rules,cell-interaction,mistake-tracking,hint-system-lite,completion-check,resource-pool,capacity-limit,production-chain,allocation-decision,turn-or-tick-loop,upgrade-path,event-modifier,goal-and-failure-state}.yaml
-  component-contracts/{game-shell,resource-counter,upgrade-card,save-status,question-card,choice-list,timer-display,results-summary,story-panel,choice-card,story-state-summary,inventory-panel,ending-screen,card-grid,memory-card,move-counter,match-progress,victory-screen,word-grid,guess-row,letter-tile,on-screen-keyboard,word-result-panel,puzzle-grid,grid-cell,rule-panel,puzzle-status-bar,hint-button,completion-modal,resource-dashboard,allocation-control,production-panel,upgrade-panel,event-log,goal-status}.yaml
-  validators/{no-negative-currency,passive-income-tick,local-storage-roundtrip,timer-cleanup,score-calculation,question-progression,story-graph-reachability,no-dead-end-choice,story-state-consistency,card-pair-integrity,flip-lock-prevents-third-card,match-completion,duplicate-letter-feedback,guess-length-and-attempts,daily-seed-stability,keyboard-input-guardrails,grid-dimensions,constraint-consistency,cell-state-transitions,puzzle-seed-stability,completion-detection,no-negative-resources,production-chain-consistency,allocation-bounds,capacity-limit-enforcement,goal-state-detection,tick-loop-stability}.yaml
-  recovery-playbooks/{stale-interval-or-bad-tick-loop,invalid-local-storage-json,stale-timer-or-uncleared-timeout,broken-question-progression,broken-story-graph,inconsistent-story-state,broken-card-flip-state,mismatched-card-pairs,stuck-interaction-lock,broken-duplicate-letter-feedback,unstable-daily-seed,invalid-guess-state,broken-grid-state,inconsistent-constraint-rules,unstable-puzzle-seed,bad-completion-check,broken-resource-accounting,invalid-production-chain,runaway-tick-loop,unreachable-goal-state}.yaml
-  progress-labels/{idle-incremental,trivia-timer,branching-narrative,memory-match,word-daily,daily-puzzle-grid,resource-management-sim}.yaml
-  learning-hooks/{idle-incremental,trivia-timer,branching-narrative,memory-match,word-daily,daily-puzzle-grid,resource-management-sim}.yaml
+  mechanics/{score,economy,upgrades,save-load,question-set,timer,answer-validation,progression,story-node-graph,story-flags,inventory-lite,choice-resolution,ending-resolution,card-pair-set,card-flip-state,interaction-lock,match-detection,move-counter,victory-detection,word-target,daily-seed,guess-grid,keyboard-input,letter-feedback,attempt-limit,win-loss-state,puzzle-seed,grid-state,constraint-rules,cell-interaction,mistake-tracking,hint-system-lite,completion-check,resource-pool,capacity-limit,production-chain,allocation-decision,turn-or-tick-loop,upgrade-path,event-modifier,goal-and-failure-state,hidden-word,letter-guessing,duplicate-guess-prevention,reveal-state,wrong-guess-limit,hangman-win-loss-state}.yaml
+  component-contracts/{game-shell,resource-counter,upgrade-card,save-status,question-card,choice-list,timer-display,results-summary,story-panel,choice-card,story-state-summary,inventory-panel,ending-screen,card-grid,memory-card,move-counter,match-progress,victory-screen,word-grid,guess-row,letter-tile,on-screen-keyboard,word-result-panel,puzzle-grid,grid-cell,rule-panel,puzzle-status-bar,hint-button,completion-modal,resource-dashboard,allocation-control,production-panel,upgrade-panel,event-log,goal-status,hidden-word-display,letter-bank,wrong-guess-meter,guess-input,hangman-result-panel}.yaml
+  validators/{no-negative-currency,passive-income-tick,local-storage-roundtrip,timer-cleanup,score-calculation,question-progression,story-graph-reachability,no-dead-end-choice,story-state-consistency,card-pair-integrity,flip-lock-prevents-third-card,match-completion,duplicate-letter-feedback,guess-length-and-attempts,daily-seed-stability,keyboard-input-guardrails,grid-dimensions,constraint-consistency,cell-state-transitions,puzzle-seed-stability,completion-detection,no-negative-resources,production-chain-consistency,allocation-bounds,capacity-limit-enforcement,goal-state-detection,tick-loop-stability,letter-reveal-correctness,duplicate-guess-blocking,wrong-guess-limit-enforcement,hangman-win-loss-detection}.yaml
+  recovery-playbooks/{stale-interval-or-bad-tick-loop,invalid-local-storage-json,stale-timer-or-uncleared-timeout,broken-question-progression,broken-story-graph,inconsistent-story-state,broken-card-flip-state,mismatched-card-pairs,stuck-interaction-lock,broken-duplicate-letter-feedback,unstable-daily-seed,invalid-guess-state,broken-grid-state,inconsistent-constraint-rules,unstable-puzzle-seed,bad-completion-check,broken-resource-accounting,invalid-production-chain,runaway-tick-loop,unreachable-goal-state,broken-letter-reveal,duplicate-guess-state,invalid-hangman-end-state}.yaml
+  progress-labels/{idle-incremental,trivia-timer,branching-narrative,memory-match,word-daily,daily-puzzle-grid,resource-management-sim,hangman-lite}.yaml
+  learning-hooks/{idle-incremental,trivia-timer,branching-narrative,memory-match,word-daily,daily-puzzle-grid,resource-management-sim,hangman-lite}.yaml
 ```
 
 ## Conceptual composition example
@@ -256,6 +267,23 @@ validators:   validator.no-negative-resources, validator.production-chain-consis
 recovery:     recovery.broken-resource-accounting, recovery.invalid-production-chain, recovery.runaway-tick-loop, recovery.unreachable-goal-state
 progress:     progress.resource-management-sim
 learning:     learning.resource-management-sim
+```
+
+### Conceptual composition — `game.hangman-lite`
+
+When a user says *“Build a hangman word game where I guess letters”*, a **future** composer would assemble:
+
+```txt
+registry_pack: pack.game
+schema_version: 0.1
+app_type:     game.hangman-lite
+stack_kit:    stack.dom-game-minimal
+mechanics:    mechanic.hidden-word → mechanic.letter-guessing → mechanic.duplicate-guess-prevention → mechanic.reveal-state → mechanic.wrong-guess-limit → mechanic.hangman-win-loss-state
+contracts:    component.game-shell, component.hidden-word-display, component.letter-bank, component.guess-input, component.wrong-guess-meter, component.hangman-result-panel
+validators:   validator.letter-reveal-correctness, validator.duplicate-guess-blocking, validator.wrong-guess-limit-enforcement, validator.hangman-win-loss-detection
+recovery:     recovery.broken-letter-reveal, recovery.duplicate-guess-state, recovery.invalid-hangman-end-state
+progress:     progress.hangman-lite
+learning:     learning.hangman-lite
 ```
 
 **Note:** This recipe is **schema-only** today — not routed until explicitly approved.

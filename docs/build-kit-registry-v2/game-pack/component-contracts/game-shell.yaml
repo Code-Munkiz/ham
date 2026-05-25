@@ -21,6 +21,7 @@ applies_to:
   - game.word-daily
   - game.daily-puzzle-grid
   - game.resource-management-sim
+  - game.hangman-lite
   - tag:dom-game-layout
 
 depends_on: []

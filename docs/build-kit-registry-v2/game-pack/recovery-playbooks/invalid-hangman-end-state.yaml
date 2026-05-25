@@ -1,0 +1,84 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.invalid-hangman-end-state
+kind: recovery_playbook
+name: Fix invalid hangman end state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs win/loss detection, wrong limit enforcement, or guesses after terminal state.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.hangman-lite
+  - tag:hangman-lite
+
+depends_on:
+  - mechanic.hangman-win-loss-state
+  - mechanic.wrong-guess-limit
+  - validator.hangman-win-loss-detection
+  - validator.wrong-guess-limit-enforcement
+
+repairs_validators:
+  - validator.hangman-win-loss-detection
+  - validator.wrong-guess-limit-enforcement
+
+inputs:
+  - failure_context: validator result
+  - current_source: terminal and guess handlers (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.hangman-win-loss-detection
+
+guidance:
+  - "Evaluate terminal after each guess"
+  - "Gate all input on phase === playing"
+
+validation_notes:
+  - Re-run hangman-win-loss-detection after repair
+
+risk_notes:
+  - Win fires before word complete
+
+failure_signals:
+  - validator.hangman-win-loss-detection fail
+  - validator.wrong-guess-limit-enforcement fail
+
+diagnosis_steps:
+  - "Check evaluate_terminal runs after reveal and wrong increment"
+  - "Verify input disabled when not playing"
+
+steps:
+  - id: step.hook_evaluate
+    action: hook_evaluate
+    detail: "Run terminal check after each valid guess"
+  - id: step.gate_input
+    action: gate_input
+    detail: "Disable keyboard and letter bank when phase not playing"
+  - id: step.limit_wrong
+    action: limit_wrong
+    detail: "Enforce max wrong before loss transition"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.hangman-win-loss-detection"
+
+repair_strategy:
+  - action: hook_evaluate
+    detail: "Correct terminal timing"
+  - action: gate_input
+    detail: "Stop post-game guesses"
+  - action: re_validate
+    target: validator.hangman-win-loss-detection
+
+guardrails:
+  - max_attempts: 2
+  - preserve: "User-facing result copy tone"
+
+user_facing_summary: >
+  I fixed the win and loss detection so the game ends at the right time.

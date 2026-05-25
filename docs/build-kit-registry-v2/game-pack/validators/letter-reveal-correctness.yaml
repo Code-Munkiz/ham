@@ -1,0 +1,64 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.letter-reveal-correctness
+kind: validator
+name: Letter reveal correctness
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Verifies correct letter guesses reveal all matching positions in the target word.
+
+non_template_statement: >
+  Conceptual reveal check. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.hangman-lite
+  - tag:hangman-lite
+
+depends_on:
+  - mechanic.reveal-state
+  - mechanic.hidden-word
+
+validates_modules:
+  - mechanic.reveal-state
+  - component.hidden-word-display
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - target_word: string
+  - revealed: array
+  - guess: string
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "All indices where target equals guess must be revealed"
+  - "No incorrect positions revealed"
+
+validation_notes:
+  - Test words with duplicate letters
+
+risk_notes:
+  - Partial reveal for repeated letters
+
+validation_goal: >
+  Letter reveal state matches target word after each correct guess.
+
+pass_conditions:
+  - "Duplicate letters all revealed on single correct guess"
+  - "Wrong guess does not change reveal array"
+
+fail_conditions:
+  - "Only first matching position revealed"
+  - "Incorrect slot revealed"
+
+suggested_failure_message: >
+  A correct letter did not reveal all matching spots. I'll fix the reveal logic.
+
+recovery_playbooks:
+  - recovery.broken-letter-reveal

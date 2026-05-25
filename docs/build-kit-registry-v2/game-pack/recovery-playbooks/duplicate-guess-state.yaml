@@ -1,0 +1,77 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.duplicate-guess-state
+kind: recovery_playbook
+name: Fix duplicate guess state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs duplicate letter guesses that incorrectly mutate wrong count or reveal state.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.hangman-lite
+  - tag:hangman-lite
+
+depends_on:
+  - mechanic.duplicate-guess-prevention
+  - validator.duplicate-guess-blocking
+
+repairs_validators:
+  - validator.duplicate-guess-blocking
+
+inputs:
+  - failure_context: validator result
+  - current_source: guess handler (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.duplicate-guess-blocking
+
+guidance:
+  - "Early return when letter already in guessedLetters"
+  - "Disable letter bank buttons for used letters"
+
+validation_notes:
+  - Re-run duplicate-guess-blocking after repair
+
+risk_notes:
+  - Guard placed after side effects
+
+failure_signals:
+  - validator.duplicate-guess-blocking fail
+
+diagnosis_steps:
+  - "Check guess handler order — guard before increment"
+  - "Verify letter bank disabled state"
+
+steps:
+  - id: step.early_return
+    action: early_return
+    detail: "Return before state changes when letter already guessed"
+  - id: step.disable_bank
+    action: disable_bank
+    detail: "Mark used letters disabled in letter bank"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.duplicate-guess-blocking"
+
+repair_strategy:
+  - action: early_return
+    detail: "Block duplicate side effects"
+  - action: disable_bank
+    detail: "UI reflects guessed letters"
+  - action: re_validate
+    target: validator.duplicate-guess-blocking
+
+guardrails:
+  - max_attempts: 2
+  - preserve: "Current round target word"
+
+user_facing_summary: >
+  I fixed duplicate letter guesses so they no longer change the score.

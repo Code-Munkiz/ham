@@ -1,0 +1,43 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: learning.hangman-lite
+kind: learning_hook
+name: Hangman lite learning hooks
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Future Hermes evolution signals for hangman lite builds — outcome facts and critique
+  prompts. Not wired at runtime.
+
+non_template_statement: >
+  Learning hook schema only. Hermes integration deferred per ADR-0018.
+
+applies_to:
+  - game.hangman-lite
+
+source_phase_owner: game.hangman-lite
+
+signal_categories:
+  - letter_reveal_correctness
+  - duplicate_guess_blocking
+  - wrong_limit_enforcement
+  - win_loss_detection
+  - preview_boot_success
+
+outcome_fact_fields:
+  - preview_boot_success: boolean
+  - duplicate_guess_mutated_state: boolean
+  - win_loss_fires_correctly: boolean
+  - validator_failures: array of validator id
+
+guidance:
+  - "Capture bounded text evidence from preview console and validator results"
+  - "Do not persist user prompts containing secrets"
+  - "Align with OUTCOME_FACTS.md when Hermes loop lands"
+
+validation_notes:
+  - Categories map to composed validators and acceptance_criteria
+
+risk_notes:
+  - Premature wiring could leak PII from user prompts

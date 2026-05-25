@@ -1,0 +1,61 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.duplicate-guess-blocking
+kind: validator
+name: Duplicate guess blocking
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Ensures duplicate letter guesses do not change wrong count or reveal state.
+
+non_template_statement: >
+  Conceptual duplicate guard check.
+
+applies_to:
+  - game.hangman-lite
+  - tag:hangman-lite
+
+depends_on:
+  - mechanic.duplicate-guess-prevention
+
+validates_modules:
+  - mechanic.duplicate-guess-prevention
+  - component.letter-bank
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - guessed_letters: array
+  - duplicate_guess: string
+
+outputs:
+  - pass | fail
+
+guidance:
+  - "Second submit of same letter is no-op"
+  - "Letter bank disables used letters"
+
+validation_notes:
+  - Replay duplicate guess in preview
+
+risk_notes:
+  - Duplicate increments wrong count
+
+validation_goal: >
+  Duplicate guesses are rejected without side effects.
+
+pass_conditions:
+  - "guessedLetters unchanged on duplicate attempt"
+  - "wrongCount unchanged on duplicate"
+
+fail_conditions:
+  - "Duplicate guess mutates state"
+
+suggested_failure_message: >
+  Guessing the same letter twice changed the game. I'll block duplicate guesses.
+
+recovery_playbooks:
+  - recovery.duplicate-guess-state

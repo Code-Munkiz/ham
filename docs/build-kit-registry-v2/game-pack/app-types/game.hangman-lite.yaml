@@ -1,0 +1,213 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: game.hangman-lite
+kind: app_type
+name: Hangman lite word game
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  A browser-based hangman-style word game where the player guesses letters, reveals
+  matching positions in a hidden word, tracks wrong guesses, prevents duplicate guesses,
+  and reaches win or loss state. Uses static in-memory word list for MVP. Output is
+  always custom-generated from the user prompt plus composed playbook modules — never
+  cloned from a starter project.
+
+non_template_statement: >
+  This app type does not reference checked-in word lists, dictionary APIs, or clone
+  baselines. It defines generative guidance only.
+
+legacy_v1_fallback: generic
+
+safety_constraints:
+  - no-network-egress-for-mvp
+  - no-eval
+  - no-user-accounts-for-mvp
+  - no-multiplayer-for-mvp
+  - static-word-list-for-mvp
+  - no-external-word-api-for-mvp
+  - no-real-money-economy
+  - dom-native-ui-only-for-mvp
+
+applies_to:
+  - tag:hangman-lite
+  - tag:dom-casual-game
+
+inputs:
+  - user_prompt: natural language theme for word game UI copy
+  - optional_wrong_guess_limit: number — default 6
+  - optional_word_category: string — theme hint for word list selection
+
+outputs:
+  - runnable_vite_react_app: single-page DOM hangman game
+  - composed_build_recipe: ids of mechanics, contracts, validators, recovery modules
+  - normie_plan_summary: phased build description for chat/activity stream
+
+guidance:
+  - "React state; static word list embedded in generated source"
+  - "One target word per round selected from in-memory list"
+  - "Reveal all matching letter positions on correct guess"
+  - "Track wrong guesses; block duplicate letter guesses"
+  - "Win when all letters revealed; loss when wrong limit reached"
+  - "Physical keyboard and/or on-screen letter bank"
+  - "DOM/React only; no external dictionary API for MVP"
+
+validation_notes:
+  - Run composed validators after scaffold and guess handler edits
+  - Preview must boot without console errors before success copy
+
+risk_notes:
+  - Letter reveal misses duplicate positions in target word
+  - Duplicate guesses still increment wrong count
+  - Win/loss fires before game logically complete
+
+user_prompt_examples:
+  - "Build a hangman word game"
+  - "Make a simple hangman game with letter guessing"
+  - "Create a hangman-style game with six wrong guesses"
+  - "Build a word game where I guess letters to reveal a hidden word"
+
+intent_signals:
+  - "\\bhangman(-style)?\\b"
+  - "\\b(guess\\s+letters?|letter\\s+guessing)\\b.{0,80}\\b(hidden\\s+word|word\\s+game)\\b"
+  - "\\bwrong\\s+guesses?\\b.{0,80}\\bhangman\\b"
+
+clarifying_questions:
+  - when: intent_confidence_low
+    ask: "How many wrong guesses before loss — default six?"
+  - when: input_ambiguous
+    ask: "On-screen letter bank, physical keyboard only, or both?"
+  - when: theme_ambiguous
+    ask: "Any word category or theme — animals, countries, general?"
+
+default_assumptions:
+  - "Static embedded word list; one target word per round"
+  - "Six wrong guesses before loss"
+  - "On-screen letter bank plus physical keyboard"
+  - "Local-only session state"
+  - "DOM/React UI; mobile-friendly at 360px width"
+
+hard_constraints:
+  - no-real-money-economy
+  - no-template-cloning
+  - no-runtime-llm-generation-for-mvp
+  - no-external-api-for-mvp
+  - no-user-secrets-or-credentials
+  - preserve-safe-local-mvp-scope
+  - static-word-list-for-mvp
+  - dom-native-ui-only-for-mvp
+
+soft_defaults:
+  - static word list
+  - six wrong guesses
+  - one target word per round
+  - local-only state
+  - on-screen letter bank
+
+user_overridable:
+  - theme and copy tone
+  - word category
+  - word length preference
+  - wrong guess limit
+  - keyboard style
+  - result copy tone
+
+clarify_if_changed:
+  - removing wrong guess limit
+  - allowing duplicate guesses to count as wrong
+  - replacing letter guessing with full-word guessing
+  - adding live word API
+  - adding multiplayer
+
+out_of_scope_unless_explicit:
+  - user accounts or cloud sync
+  - backend persistence
+  - global leaderboards
+  - live word API
+  - generated word engine at runtime
+  - social sharing integrations
+  - custom dictionary upload
+  - multiplayer
+
+conflict_policy:
+  user_explicit_overrides_soft_defaults: true
+  safety_constraints_override_user_request: true
+  core_loop_conflicts_require_clarification: true
+  out_of_scope_items_require_explicit_request: true
+  fallback_to_v1_or_generic_when_recipe_no_longer_fits: true
+
+stack_kit_id: stack.dom-game-minimal
+
+compose_order_ref: pack.game#compose_defaults.compose_order
+
+composed_modules:
+  stack_kit_id: stack.dom-game-minimal
+  mechanics:
+    - mechanic.hidden-word
+    - mechanic.letter-guessing
+    - mechanic.duplicate-guess-prevention
+    - mechanic.reveal-state
+    - mechanic.wrong-guess-limit
+    - mechanic.hangman-win-loss-state
+  component_contracts:
+    - component.game-shell
+    - component.hidden-word-display
+    - component.letter-bank
+    - component.guess-input
+    - component.wrong-guess-meter
+    - component.hangman-result-panel
+  validators:
+    - validator.letter-reveal-correctness
+    - validator.duplicate-guess-blocking
+    - validator.wrong-guess-limit-enforcement
+    - validator.hangman-win-loss-detection
+  recovery_playbooks:
+    - recovery.broken-letter-reveal
+    - recovery.duplicate-guess-state
+    - recovery.invalid-hangman-end-state
+  progress_labels: progress.hangman-lite
+  learning_hooks: learning.hangman-lite
+
+build_phases:
+  - id: phase.understand
+    title: Understand the hangman game idea
+    order: 1
+    modules_used: [app_type]
+  - id: phase.compose
+    title: Compose mechanics and UI contracts
+    order: 2
+    modules_used: [mechanics, component_contracts]
+  - id: phase.generate
+    title: Generate custom hangman game code
+    order: 3
+    modules_used: [stack_kit_id, guidance]
+  - id: phase.validate
+    title: Check letter reveal and win/loss rules
+    order: 4
+    modules_used: [validators]
+  - id: phase.preview
+    title: Prepare Workbench preview
+    order: 5
+    modules_used: []
+  - id: phase.recover
+    title: Fix known failure modes if needed
+    order: 6
+    optional: true
+    modules_used: [recovery_playbooks]
+
+acceptance_criteria:
+  - "Game loads in preview without runtime console errors"
+  - "Player can guess letters via keyboard or letter bank"
+  - "Correct letters reveal all matching positions"
+  - "Duplicate guesses blocked without state change"
+  - "Wrong guess count increments only on new wrong letters"
+  - "Win when word fully revealed; loss at wrong guess limit"
+  - "UI readable on mobile-width viewport"
+
+out_of_scope:
+  - Multiplayer or real-time race modes
+  - Global leaderboards or user accounts
+  - Live word API or runtime-generated word lists
+  - Custom dictionary upload
+  - Monetized prizes or Web3/token rewards
+  - Canvas, Phaser, or physics engines

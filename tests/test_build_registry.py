@@ -82,6 +82,15 @@ EXPECTED_RESOURCE_MANAGEMENT_SIM_MECHANIC_ORDER = (
     "mechanic.goal-and-failure-state",
 )
 
+EXPECTED_HANGMAN_LITE_MECHANIC_ORDER = (
+    "mechanic.hidden-word",
+    "mechanic.letter-guessing",
+    "mechanic.duplicate-guess-prevention",
+    "mechanic.reveal-state",
+    "mechanic.wrong-guess-limit",
+    "mechanic.hangman-win-loss-state",
+)
+
 WAVE_1_APP_TYPES = (
     "game.idle-incremental",
     "game.trivia-timer",
@@ -117,7 +126,7 @@ class TestHappyPath:
         pack = load_registry_pack(game_pack_root)
         assert pack.pack_id == "pack.game"
         assert pack.schema_version == "0.1"
-        assert len(pack.modules) == 145
+        assert len(pack.modules) == 166
 
     def test_validate_docs_game_pack(self, game_pack_root: Path):
         pack = load_registry_pack(game_pack_root)
@@ -450,6 +459,72 @@ class TestResourceManagementSimRecipe:
         assert memory.mechanic_ids == EXPECTED_MEMORY_MATCH_MECHANIC_ORDER
         assert word.mechanic_ids == EXPECTED_WORD_DAILY_MECHANIC_ORDER
         assert puzzle.mechanic_ids == EXPECTED_DAILY_PUZZLE_GRID_MECHANIC_ORDER
+
+
+class TestHangmanLiteRecipe:
+    def test_compose_hangman_lite(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        validate_registry_pack(pack)
+        recipe = compose_build_recipe(pack, "game.hangman-lite")
+        assert recipe.app_type_id == "game.hangman-lite"
+        assert recipe.stack_kit_id == "stack.dom-game-minimal"
+        assert recipe.mechanic_ids == EXPECTED_HANGMAN_LITE_MECHANIC_ORDER
+
+    def test_render_hangman_lite_includes_key_ids(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        recipe = compose_build_recipe(pack, "game.hangman-lite")
+        rendered = render_playbook_context(recipe)
+        assert "game.hangman-lite" in rendered
+        assert "stack.dom-game-minimal" in rendered
+        assert "mechanic.hidden-word" in rendered
+        assert "mechanic.letter-guessing" in rendered
+        assert "mechanic.reveal-state" in rendered
+        assert "mechanic.wrong-guess-limit" in rendered
+        assert "validator.letter-reveal-correctness" in rendered
+        assert "validator.duplicate-guess-blocking" in rendered
+        assert "validator.hangman-win-loss-detection" in rendered
+        assert "static-word-list-for-mvp" in rendered
+
+    def test_render_hangman_lite_under_default_budget(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        recipe = compose_build_recipe(pack, "game.hangman-lite")
+        rendered = render_playbook_context(recipe)
+        assert len(rendered) <= 12_000
+        assert rendered.startswith("Build Kit Registry v2 — BuildRecipe\n")
+
+    def test_hangman_lite_adaptive_policy_fields(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        app = pack.module_data("game.hangman-lite")
+        for field in WAVE_1_ADAPTIVE_POLICY_LIST_FIELDS:
+            value = app.get(field)
+            assert isinstance(value, list), f"game.hangman-lite: {field} must be a list"
+            assert value, f"game.hangman-lite: {field} must be non-empty"
+
+        conflict_policy = app.get("conflict_policy")
+        assert isinstance(conflict_policy, dict)
+        for key in WAVE_1_CONFLICT_POLICY_KEYS:
+            assert key in conflict_policy
+            assert conflict_policy[key] is True
+
+    def test_existing_seven_recipes_still_compose_after_hangman_lite_added(
+        self, game_pack_root: Path
+    ):
+        pack = load_registry_pack(game_pack_root)
+        validate_registry_pack(pack)
+        idle = compose_build_recipe(pack, "game.idle-incremental")
+        trivia = compose_build_recipe(pack, "game.trivia-timer")
+        branching = compose_build_recipe(pack, "game.branching-narrative")
+        memory = compose_build_recipe(pack, "game.memory-match")
+        word = compose_build_recipe(pack, "game.word-daily")
+        puzzle = compose_build_recipe(pack, "game.daily-puzzle-grid")
+        sim = compose_build_recipe(pack, "game.resource-management-sim")
+        assert idle.mechanic_ids == EXPECTED_MECHANIC_ORDER
+        assert trivia.mechanic_ids == EXPECTED_TRIVIA_MECHANIC_ORDER
+        assert branching.mechanic_ids == EXPECTED_BRANCHING_NARRATIVE_MECHANIC_ORDER
+        assert memory.mechanic_ids == EXPECTED_MEMORY_MATCH_MECHANIC_ORDER
+        assert word.mechanic_ids == EXPECTED_WORD_DAILY_MECHANIC_ORDER
+        assert puzzle.mechanic_ids == EXPECTED_DAILY_PUZZLE_GRID_MECHANIC_ORDER
+        assert sim.mechanic_ids == EXPECTED_RESOURCE_MANAGEMENT_SIM_MECHANIC_ORDER
 
 
 class TestWave1AdaptivePolicyFields:

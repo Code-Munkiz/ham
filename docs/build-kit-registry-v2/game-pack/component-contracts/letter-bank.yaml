@@ -1,0 +1,41 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.letter-bank
+kind: component_contract
+name: Letter bank
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  On-screen A-Z buttons for letter guesses with used/disabled state.
+
+non_template_statement: >
+  UI contract only.
+
+applies_to:
+  - game.hangman-lite
+
+binds_mechanics:
+  - mechanic.letter-guessing
+  - mechanic.duplicate-guess-prevention
+
+required_props:
+  - guessedLetters: array of string
+  - onGuess: callback
+  - disabled: boolean
+
+optional_props:
+  - layout: row | grid
+
+accessibility:
+  - "Used letters visually distinct and disabled"
+
+guidance:
+  - "Disable letters already guessed"
+  - "Disable entire bank when phase not playing"
+
+validation_notes:
+  - validator.duplicate-guess-blocking
+
+risk_notes:
+  - Used letter still clickable

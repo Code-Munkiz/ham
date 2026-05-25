@@ -1,0 +1,66 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.letter-guessing
+kind: mechanic
+name: Letter guessing
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Accepts single-letter guesses from keyboard or letter bank and classifies each as
+  correct or wrong against the hidden word.
+
+non_template_statement: >
+  Guess handling guidance only. Not a keyboard library.
+
+applies_to:
+  - game.hangman-lite
+  - tag:hangman-lite
+
+depends_on:
+  - mechanic.hidden-word
+
+provides:
+  - guess_evaluation
+
+binds_components:
+  - component.guess-input
+  - component.letter-bank
+
+inputs:
+  - guess: single letter A-Z
+  - target_word: string
+
+outputs:
+  - isCorrect: boolean
+  - letter: string
+
+guidance:
+  - "Accept A-Z only; ignore case differences"
+  - "Correct if letter appears anywhere in target"
+  - "Route to reveal-state on correct; increment wrong on incorrect"
+
+validation_notes:
+  - validator.letter-reveal-correctness
+
+risk_notes:
+  - Non-letter input accepted
+
+state_model:
+  fields:
+    - name: lastGuess
+      type: string
+  events:
+    - submit_guess
+    - evaluate_guess
+
+common_failure_modes:
+  - "Multi-character input treated as guess"
+  - "Wrong classification for repeated letters in target"
+
+test_ideas:
+  - "Correct letter when present in target"
+  - "Wrong letter when absent"
+
+reusable_across:
+  - game.hangman-lite
