@@ -7,9 +7,8 @@ Practical snapshot of where Build Kit Registry v2 stands. For authoring rules se
 ## 1. Current status
 
 - **Build Registry v2 exists and is tested** — loader, composer, renderer, opt-in scaffold wiring, and narrow prompt routing are in place.
-- **Game Pack has six recipes** — five Wave 1 recipes (routed when flag on) plus **`game.daily-puzzle-grid`** (Wave 2, **schema-only / not routed**). **118 indexed modules** total.
-- **All five Wave 1 Game Pack recipes are narrowly routable** behind `HAM_BUILD_REGISTRY_V2_ENABLED` when prompt intent clearly matches idle/incremental/clicker/tycoon, timed trivia/quiz game, branching/choice/story, memory card matching, or daily word guessing / Wordle-style patterns. **Wave 1 is complete** from schema + routing perspective.
-- **`game.daily-puzzle-grid` is schema-only** — composed and validated in tests/docs; **not** routed in `intent.py` until explicitly approved.
+- **Game Pack has six recipes** — **118 indexed modules** total.
+- **All six current Game Pack recipes are narrowly routable** behind `HAM_BUILD_REGISTRY_V2_ENABLED` when prompt intent clearly matches idle/incremental/clicker/tycoon, timed trivia/quiz game, branching/choice/story, memory card matching, daily word guessing / Wordle-style patterns, or daily/grid/logic puzzle patterns. **Wave 1 is complete** from schema + routing perspective; **Wave 2 has started** with **`game.daily-puzzle-grid`** (schema + routing complete).
 - **Default behavior remains v1** — when the flag is unset or false, Lane A uses existing Builder Kit JSON (`src/ham/data/builder_kits/`).
 - **No templates or starter source files** — recipes are generative playbooks only; HAM does not clone checked-in starter trees per kit.
 - **Adaptive policy fields on all Wave 1 app types** — `hard_constraints`, `soft_defaults`, `user_overridable`, `clarify_if_changed`, `out_of_scope_unless_explicit`, and `conflict_policy` document override precedence (schema only; not interpreted at runtime yet).
@@ -22,7 +21,7 @@ Practical snapshot of where Build Kit Registry v2 stands. For authoring rules se
 |-------|----------|
 | **ADRs** | [0016](../adr/0016-generative-build-kit-registry-v2.md) (registry design), [0017](../adr/0017-build-registry-v2-opt-in-scaffold-wiring.md) (opt-in scaffold wiring), [0018](../adr/0018-build-kit-evolution-loop-with-hermes.md) (future Hermes evolution loop) |
 | **Authoring Guide** | [AUTHORING_GUIDE.md](AUTHORING_GUIDE.md) |
-| **Game Pack** | [game-pack/](game-pack/) — **6 recipes** (5 Wave 1 routed, 1 Wave 2 schema-only), **118 modules** |
+| **Game Pack** | [game-pack/](game-pack/) — **6 recipes** (all routed when flag on), **118 modules** |
 | **Outcome facts / evolution loop docs** | [OUTCOME_FACTS.md](OUTCOME_FACTS.md), [examples/outcome-facts/](examples/outcome-facts/), [examples/hermes-critique-prompt.md](examples/hermes-critique-prompt.md) |
 | **Validation script** | `scripts/validate_game_pack_registry.py` |
 | **Internal package** | `src/ham/build_registry/` (`loader`, `validate`, `compose`, `render`, `scaffold_context`, `intent`) |
@@ -40,9 +39,9 @@ Practical snapshot of where Build Kit Registry v2 stands. For authoring rules se
 | `game.branching-narrative` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow branching/choice/story intent | ~10.3k chars | Conservative branching narrative / CYOA / interactive-fiction routing; v1 fallback preserved |
 | `game.memory-match` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow memory card matching intent | ~10.0k chars | Conservative memory card / pair matching / flip-card routing; v1 fallback preserved |
 | `game.word-daily` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow daily word guessing / Wordle-style intent | ~10.9k chars | Conservative daily word / Wordle-style routing; generic “word game” excluded; v1 fallback preserved |
-| `game.daily-puzzle-grid` | Validated | **No** | Not routed — schema-only (Wave 2) | ~11.4k chars | Daily grid logic puzzle; constraint-based completion; DOM-native; no Canvas or live puzzle API |
+| `game.daily-puzzle-grid` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow daily/grid/logic puzzle intent | ~11.4k chars | Conservative daily/grid/logic/cell/rule/clue routing; generic “grid”, “puzzle”, and “daily game” excluded; v1 fallback preserved |
 
-All Wave 1 renders are under the 12k default budget. `game.daily-puzzle-grid` composes and validates; render length checked in tests.
+All six renders are under the 12k default budget.
 
 ---
 
@@ -58,6 +57,7 @@ All Wave 1 renders are under the 12k default budget. `game.daily-puzzle-grid` co
 - **Flag on + branching/choice/story prompt:** routing adds `registry_v2_app_type: game.branching-narrative` when the prompt clearly matches conservative branching narrative / CYOA / interactive-fiction intent (blogs, chatbots, generic writing apps, generic RPGs, and live AI dungeon prompts are excluded).
 - **Flag on + memory card matching prompt:** routing adds `registry_v2_app_type: game.memory-match` when the prompt clearly matches conservative memory card / pair matching / flip-card intent (card battlers, trading cards, flashcards, poker, solitaire, and generic card games without memory signals are excluded).
 - **Flag on + daily word guessing / Wordle-style prompt:** routing adds `registry_v2_app_type: game.word-daily` when the prompt clearly matches conservative daily word guessing / Wordle-style intent (crossword, word search, flashcards, typing games, dictionary apps, and generic “word game” without guessing/feedback signals are excluded).
+- **Flag on + daily/grid/logic puzzle prompt:** routing adds `registry_v2_app_type: game.daily-puzzle-grid` when the prompt clearly matches conservative daily/grid/logic puzzle intent (dashboard grids, CSS layouts, data tables, crossword, word search, Tetris, Minesweeper, and generic “grid”, “puzzle”, or “daily game” without cell/rule/clue signals are excluded).
 - **Flag on + non-matching prompt:** no v2 metadata from routing — v1 kit context is used.
 - **Bad v2 app types fall back to v1** — load/validate/compose/render failures silently use the app type’s `legacy_v1_fallback` kit (pilot: `generic`).
 
@@ -136,7 +136,7 @@ python3 scripts/validate_game_pack_registry.py \
 - **No starter source trees** per app type.
 - **No autonomous recipe mutation** — YAML changes are normal human-reviewed git commits only ([ADR-0018](../adr/0018-build-kit-evolution-loop-with-hermes.md)).
 - **No auto-merge** of recipe or routing changes.
-- **No default v2 routing** — flag off by default; all five Wave 1 Game Pack recipes are routed when flag is on. **`game.daily-puzzle-grid` is schema-only (not routed).** Future recipes still start schema-only until explicitly approved for routing.
+- **No default v2 routing** — flag off by default; all six current Game Pack recipes are routed when flag is on. **No current Game Pack recipes remain schema-only.** Future recipes still start schema-only until explicitly approved for routing.
 - **No user-facing kit picker** for registry v2 app types.
 - **No validator/recovery execution yet** — validator and recovery modules are conceptual (`runner: conceptual`); not executed at build time.
 - **Hermes may critique/propose future changes only** through reviewed patches — no runtime recipe editing today.
@@ -159,13 +159,14 @@ Follow [AUTHORING_GUIDE.md](AUTHORING_GUIDE.md). Summary:
 ## 8. How routing works today
 
 - **Module:** `src/ham/build_registry/intent.py`
-- **`select_registry_v2_app_type_for_prompt(prompt)`** — pure regex; returns `game.idle-incremental`, `game.trivia-timer`, `game.branching-narrative`, `game.memory-match`, `game.word-daily`, or `None`.
+- **`select_registry_v2_app_type_for_prompt(prompt)`** — pure regex; returns `game.idle-incremental`, `game.trivia-timer`, `game.branching-narrative`, `game.memory-match`, `game.word-daily`, `game.daily-puzzle-grid`, or `None`.
 - **`enrich_plan_metadata_with_registry_v2(metadata, prompt, env=...)`** — copies metadata and sets `registry_v2_app_type` only when flag + intent match.
-- **Routed app types today:** `game.idle-incremental`, `game.trivia-timer`, `game.branching-narrative`, `game.memory-match`, and `game.word-daily` (precedence: trivia → idle → branching narrative → memory match → word daily).
+- **Routed app types today:** `game.idle-incremental`, `game.trivia-timer`, `game.branching-narrative`, `game.memory-match`, `game.word-daily`, and `game.daily-puzzle-grid` (precedence: trivia → idle → branching narrative → memory match → word daily → daily puzzle grid).
 - **Trivia routing is conservative** — requires game-like or timed trivia/quiz/challenge signals; avoids survey/forms/flashcards and generic quiz unless clearly game-like/timed trivia.
 - **Branching narrative routing is conservative** — requires branching/choice/story/CYOA/interactive-fiction signals; avoids blogs, chatbots, generic writing apps, generic RPGs, and live AI dungeon prompts.
 - **Memory match routing is conservative** — requires memory/matching/pair/flip/concentration signals; avoids card battlers, trading cards, flashcards, poker, solitaire, and generic card games.
 - **Word daily routing is conservative** — requires daily word guessing / Wordle-style / letter-feedback / attempt-limit signals; avoids crossword, word search, flashcards, typing games, dictionary apps, and generic “word game” without clear guessing intent.
+- **Daily puzzle grid routing is conservative** — requires daily/grid/logic/cell/row/column/rule/clue signals; avoids dashboard grids, CSS layouts, data tables, crossword, word search, Tetris, Minesweeper, and generic “grid”, “puzzle”, or “daily game” without clear grid-logic intent.
 - **All routing remains narrow and flag-gated** — global negative patterns block SaaS, dashboard, trading, etc.; recipe-specific negatives prevent cross-recipe false positives.
 - **Adding a recipe does not automatically route it** — new app types require explicit intent logic and approval per [ROUTING_STRATEGY.md](ROUTING_STRATEGY.md), ADR-0017, and Authoring Guide routing policy.
 
@@ -179,12 +180,11 @@ Outcome facts format, manual example reports, and Hermes critique prompt are **a
 
 Possible next steps:
 
-1. **Consider manual outcome report examples for trivia, branching narrative, memory match, and word-daily** (idle success example exists under [examples/outcome-facts/](examples/outcome-facts/)).
-2. **Consider CI ratchet later** if registry usage increases (today warning-only for idle app-type validation + registry tests).
-3. **Add recipe #7 only after choosing the next game pattern** — new recipes still land schema-only first; routing is a separate approval step.
-4. **Consider a Wave 1 retrospective / checkpoint doc** if useful for operator handoff.
+1. **Choose the next Wave 2 recipe candidate** — candidate options include `game.hangman-lite`, `game.word-builder`, and `game.resource-management-sim`.
+2. **Continue schema-first, route-after-approval rhythm** — new recipes land as validated schema; routing is a separate explicit step.
+3. **Consider manual outcome report examples for non-idle routed recipes** (idle success example exists under [examples/outcome-facts/](examples/outcome-facts/)).
+4. **Consider CI ratchet later** if registry usage increases (today warning-only for idle app-type validation + registry tests).
 5. **Later:** outcome facts → Hermes critique report → proposed patch workflow (no auto-apply).
-6. **When ready:** approve routing for `game.daily-puzzle-grid` (separate from schema landing).
 
 Routing policy: [ROUTING_STRATEGY.md](ROUTING_STRATEGY.md).
 
@@ -196,6 +196,8 @@ Build Registry v2–related commits on `main` (newest first):
 
 | Commit | Subject |
 |--------|---------|
+| `9ab97766` | feat(builder): route daily puzzle grid prompts to registry v2 |
+| `d294b294` | docs(builder): add daily puzzle grid recipe |
 | `47dcfe59` | feat(builder): route daily word prompts to registry v2 |
 | `61a128aa` | docs(builder): add daily word game recipe |
 | `c9c73c25` | feat(builder): route memory match prompts to registry v2 |
