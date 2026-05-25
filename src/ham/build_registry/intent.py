@@ -16,6 +16,18 @@ MEMORY_MATCH_APP_TYPE = "game.memory-match"
 WORD_DAILY_APP_TYPE = "game.word-daily"
 DAILY_PUZZLE_GRID_APP_TYPE = "game.daily-puzzle-grid"
 RESOURCE_MANAGEMENT_SIM_APP_TYPE = "game.resource-management-sim"
+HANGMAN_LITE_APP_TYPE = "game.hangman-lite"
+
+_HANGMAN_LITE_CROSS_RECIPE_NEGATIVES: tuple[str, ...] = (
+    r"\bhangman(-style)?\b",
+    r"\bhangman\b.{0,80}\b(word\s+game|letter\s+guessing|wrong\s+guesses?|game)\b",
+    r"\b(word\s+game|letter\s+guessing|game)\b.{0,80}\bhangman\b",
+    r"\bguess\s+letters?\b.{0,100}\b(hidden\s+word|reveal)\b",
+    r"\b(hidden\s+word|reveal)\b.{0,100}\bguess\s+letters?\b",
+    r"\bletter\s+guessing\b.{0,80}\b(word\s+game|game|hidden\s+word)\b",
+    r"\bwrong\s+guesses?\b.{0,80}\bhangman\b",
+    r"\bhangman\b.{0,80}\bwrong\s+guesses?\b",
+)
 
 _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES: tuple[str, ...] = (
     r"\bresource\s+management\b.{0,80}\b(sim|simulation|game)\b",
@@ -45,7 +57,7 @@ _IDLE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES
 
 _TRIVIA_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(idle|incremental|clicker|tycoon)\b",
@@ -64,7 +76,7 @@ _TRIVIA_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES
 
 _IDLE_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\b(idle|incremental|clicker|tycoon)\b",
@@ -110,7 +122,7 @@ _BRANCHING_NARRATIVE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES
 
 _BRANCHING_NARRATIVE_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bbranching\s+story\b.{0,80}\bgame\b",
@@ -144,7 +156,7 @@ _MEMORY_MATCH_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES
 
 _MEMORY_MATCH_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bmemory\s+(card|match)\b",
@@ -181,7 +193,7 @@ _WORD_DAILY_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
     r"\bfill\s+cells\b.{0,80}\b(clue|row|column|constraint)\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES
 
 _WORD_DAILY_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bwordle(-style)?\b",
@@ -225,7 +237,7 @@ _DAILY_PUZZLE_GRID_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\beducation\s+website\b",
     r"\b(blog|chatbot)\b",
     r"\bwriting\s+app\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES
 
 _DAILY_PUZZLE_GRID_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bdaily\s+puzzle\s+grid\b",
@@ -273,6 +285,49 @@ _RESOURCE_MANAGEMENT_SIM_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\breal[-\s]?time\s+combat\b",
     r"\bcity\s+builder\b.{0,100}\bcombat\b",
     r"\bgeneric\s+dashboard\b",
+) + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES
+
+_HANGMAN_LITE_NEGATIVE_PATTERNS: tuple[str, ...] = (
+    r"\b(idle|incremental|clicker|tycoon)\b",
+    r"\bcookie\s+clicker\b",
+    r"\bpassive\s+income\b",
+    r"\b(trivia|quiz)\b",
+    r"\bmemory\s+(card|match)\b",
+    r"\bbranching\s+story\b",
+    r"\bchoose\s+your\s+own\s+adventure\b",
+    r"\binteractive\s+fiction\b",
+    r"\b(wordle|daily\s+word|wordle-style)\b",
+    r"\bdaily\s+word\b.{0,100}\b(guess(ing)?|game|puzzle)\b",
+    r"\bword\s+guess(ing)?\b.{0,100}\b(game|puzzle|challenge)\b",
+    r"\b(green|yellow|gray|grey)\b.{0,120}\b(feedback|letter\s+feedback)\b",
+    r"\bletter\s+feedback\b",
+    r"\bduplicate-letter\b",
+    r"\bcrossword\b",
+    r"\bword\s+search\b",
+    r"\bflashcard\b",
+    r"\btyping\s+(speed|test|game)\b",
+    r"\b(dashboard|landing\s*page|saas)\b",
+    r"\b(nonogram|picross|sudoku|minesweeper)\b",
+    r"\blogic\s+grid\s+puzzle\b",
+    r"\bdaily\s+puzzle\s+grid\b",
+    r"\bsurvey\b",
+    r"\beducation\s+website\b",
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES
+
+_HANGMAN_LITE_POSITIVE_PATTERNS: tuple[str, ...] = (
+    r"\bhangman(-style)?\b",
+    r"\bhangman\b.{0,80}\b(word\s+game|game|letter)\b",
+    r"\b(word\s+game|game)\b.{0,80}\bhangman\b",
+    r"\bguess\s+letters?\b.{0,100}\b(hidden\s+word|reveal|word)\b",
+    r"\b(hidden\s+word|word)\b.{0,100}\bguess\s+letters?\b",
+    r"\bletter\s+guessing\b.{0,80}\b(word\s+game|game|hangman)\b",
+    r"\bword\s+game\b.{0,80}\bletter\s+guessing\b",
+    r"\bwrong\s+guesses?\b.{0,80}\bhangman\b",
+    r"\bhangman\b.{0,80}\bwrong\s+guesses?\b",
+    r"\bhangman\s+game\b",
+    r"\bsimple\s+hangman\b",
+    r"\bbuild\b.{0,40}\bhangman\b",
+    r"\bmake\b.{0,40}\bhangman\b",
 )
 
 _RESOURCE_MANAGEMENT_SIM_POSITIVE_PATTERNS: tuple[str, ...] = (
@@ -359,6 +414,14 @@ def _matches_resource_management_sim(text: str) -> bool:
     )
 
 
+def _matches_hangman_lite(text: str) -> bool:
+    return _matches_recipe(
+        text,
+        negatives=_HANGMAN_LITE_NEGATIVE_PATTERNS,
+        positives=_HANGMAN_LITE_POSITIVE_PATTERNS,
+    )
+
+
 def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
     """Return a Game Pack app type id for clear prompt matches, else ``None``."""
     text = _normalized_prompt(prompt)
@@ -367,7 +430,7 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
     if _matches_any(text, _GLOBAL_NEGATIVE_PATTERNS):
         return None
     # Precedence: trivia → idle → branching narrative → memory match → word daily
-    # → daily puzzle grid → resource management sim.
+    # → daily puzzle grid → resource management sim → hangman lite.
     if _matches_trivia(text):
         return TRIVIA_TIMER_APP_TYPE
     if _matches_idle(text):
@@ -382,6 +445,8 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
         return DAILY_PUZZLE_GRID_APP_TYPE
     if _matches_resource_management_sim(text):
         return RESOURCE_MANAGEMENT_SIM_APP_TYPE
+    if _matches_hangman_lite(text):
+        return HANGMAN_LITE_APP_TYPE
     return None
 
 
