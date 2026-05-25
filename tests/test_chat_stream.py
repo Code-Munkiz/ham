@@ -1082,7 +1082,10 @@ def test_chat_stream_stale_lock_release_does_not_clear_reclaimed_lock(
     from src.api import chat as chat_mod
 
     chat_mod._reset_active_stream_sessions_for_testing()
-    monkeypatch.setattr(chat_mod, "_stream_lock_ttl_sec", lambda: 0.05)
+    # Generous TTL/sleep margins — CI runners can delay between lock claim and first yield.
+    lock_ttl_sec = 1.0
+    stale_after_sec = lock_ttl_sec + 0.15
+    monkeypatch.setattr(chat_mod, "_stream_lock_ttl_sec", lambda: lock_ttl_sec)
 
     stream_started_old = threading.Event()
     stream_started_new = threading.Event()
@@ -1098,8 +1101,8 @@ def test_chat_stream_stale_lock_release_does_not_clear_reclaimed_lock(
             assert allow_old_finish.wait(timeout=2.0)
             yield "old-done"
             return
-        yield "new "
         stream_started_new.set()
+        yield "new "
         assert allow_new_finish.wait(timeout=2.0)
         yield "new-done"
 
@@ -1116,8 +1119,8 @@ def test_chat_stream_stale_lock_release_does_not_clear_reclaimed_lock(
 
     old_thread = threading.Thread(target=lambda: run_stream("old"), daemon=True)
     old_thread.start()
-    assert stream_started_old.wait(timeout=1.0)
-    time.sleep(0.08)
+    assert stream_started_old.wait(timeout=2.0)
+    time.sleep(stale_after_sec)
 
     reclaim_holder: dict[str, int] = {}
 
@@ -1126,7 +1129,7 @@ def test_chat_stream_stale_lock_release_does_not_clear_reclaimed_lock(
 
     reclaim_thread = threading.Thread(target=run_reclaim, daemon=True)
     reclaim_thread.start()
-    assert stream_started_new.wait(timeout=1.0)
+    assert stream_started_new.wait(timeout=2.0)
 
     still_blocked = client.post(
         "/api/chat/stream",
