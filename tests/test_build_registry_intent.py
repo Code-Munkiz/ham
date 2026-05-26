@@ -20,6 +20,7 @@ from src.ham.build_registry.intent import (
     TYPING_SPEED_RACER_APP_TYPE,
     WORD_BUILDER_APP_TYPE,
     WORD_DAILY_APP_TYPE,
+    CARD_DECK_TURN_BASED_APP_TYPE,
     enrich_plan_metadata_with_registry_v2,
     select_registry_v2_app_type_for_prompt,
 )
@@ -295,6 +296,52 @@ _WORD_BUILDER_CROSS_RECIPE_NEGATIVE_PROMPTS = (
     "Build a SaaS dashboard",
 )
 
+_CARD_DECK_TURN_BASED_POSITIVE_PROMPTS = (
+    "Build a simple turn-based card battle game with a draw pile, hand, discard pile, and health points.",
+    "Build a browser card game where the player draws cards, plays one card per turn, and tries to defeat a simple enemy.",
+    "Build a solitaire-like strategy card game with a deck, hand, discard pile, and score.",
+    "Make a turn-based card game with shuffle, draw, and discard mechanics.",
+    "Create a card battle game where I play one card per turn from my hand.",
+    "Build a card game with draw pile, hand, discard, card effects, and a simple enemy.",
+    "Make a browser game with shuffle deck, draw hand, play cards, and track victory.",
+)
+
+_CARD_DECK_TURN_BASED_NEGATIVE_PROMPTS = (
+    "Build a poker game",
+    "Make a blackjack app",
+    "Build a casino betting game with chips and odds",
+    "Create an NFT trading card marketplace",
+    "Build a buy and sell collectible cards app",
+    "Make a flashcard study deck",
+    "Build spaced repetition cards for studying",
+    "Create a pitch deck generator",
+    "Build an investor slide deck",
+    "Make a dashboard with cards",
+    "Build a kanban board with cards",
+    "Create pricing cards for a SaaS landing page",
+    "Build a credit card app",
+    "Make a business card designer",
+    "Build a deck builder",
+    "Build a card deck app",
+    "Build something with cards",
+    "Build a deck",
+    "Build a card app",
+    "Build a card layout for my dashboard",
+)
+
+_CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVE_PROMPTS = (
+    "Build me a trivia quiz with a timer",
+    "Build an idle clicker game",
+    "Build me a memory card matching game",
+    "Build me a daily word guessing game",
+    "Build me a daily puzzle grid game",
+    "Build me a resource management sim",
+    "Build a hangman word game",
+    "Build me a typing speed game",
+    "Build me a word builder game",
+    "Build a SaaS dashboard",
+)
+
 _CROSS_EXCLUSION_PROMPTS = (
     ("build me an idle clicker game", IDLE_INCREMENTAL_APP_TYPE),
     ("Build me a trivia quiz with a timer", TRIVIA_TIMER_APP_TYPE),
@@ -316,6 +363,14 @@ _CROSS_EXCLUSION_PROMPTS = (
     ("Make a typing speed racer", TYPING_SPEED_RACER_APP_TYPE),
     ("Build me a word builder game", WORD_BUILDER_APP_TYPE),
     ("Make a spelling challenge game", WORD_BUILDER_APP_TYPE),
+    (
+        "Build a simple turn-based card battle game with a draw pile, hand, discard pile, and health points.",
+        CARD_DECK_TURN_BASED_APP_TYPE,
+    ),
+    (
+        "Build a browser card game where the player draws cards, plays one card per turn, and tries to defeat a simple enemy.",
+        CARD_DECK_TURN_BASED_APP_TYPE,
+    ),
 )
 
 
@@ -421,6 +476,18 @@ class TestSelectRegistryV2AppTypeForPrompt:
     @pytest.mark.parametrize("prompt", _WORD_BUILDER_CROSS_RECIPE_NEGATIVE_PROMPTS)
     def test_other_recipe_prompts_do_not_route_to_word_builder_param(self, prompt: str):
         assert select_registry_v2_app_type_for_prompt(prompt) != WORD_BUILDER_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _CARD_DECK_TURN_BASED_POSITIVE_PROMPTS)
+    def test_matches_card_deck_turn_based_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) == CARD_DECK_TURN_BASED_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _CARD_DECK_TURN_BASED_NEGATIVE_PROMPTS)
+    def test_rejects_non_card_deck_turn_based_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != CARD_DECK_TURN_BASED_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVE_PROMPTS)
+    def test_other_recipe_prompts_do_not_route_to_card_deck_turn_based_param(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != CARD_DECK_TURN_BASED_APP_TYPE
 
     @pytest.mark.parametrize("prompt,expected", _CROSS_EXCLUSION_PROMPTS)
     def test_recipes_do_not_steal_each_other(self, prompt: str, expected: str):
@@ -782,6 +849,74 @@ class TestSelectRegistryV2AppTypeForPrompt:
         assert select_registry_v2_app_type_for_prompt(prompt) == WORD_BUILDER_APP_TYPE
         assert select_registry_v2_app_type_for_prompt(prompt) != WORD_DAILY_APP_TYPE
 
+    def test_card_deck_prompt_does_not_route_to_other_recipes(self):
+        prompt = (
+            "Build a simple turn-based card battle game with a draw pile, hand, "
+            "discard pile, and health points."
+        )
+        assert select_registry_v2_app_type_for_prompt(prompt) == CARD_DECK_TURN_BASED_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != IDLE_INCREMENTAL_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != TRIVIA_TIMER_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != BRANCHING_NARRATIVE_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != MEMORY_MATCH_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != WORD_DAILY_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != DAILY_PUZZLE_GRID_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != RESOURCE_MANAGEMENT_SIM_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != HANGMAN_LITE_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != TYPING_SPEED_RACER_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != WORD_BUILDER_APP_TYPE
+
+    def test_memory_match_prompt_still_routes_to_memory_not_card_deck(self):
+        prompt = "Build me a memory card matching game"
+        assert select_registry_v2_app_type_for_prompt(prompt) == MEMORY_MATCH_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != CARD_DECK_TURN_BASED_APP_TYPE
+
+    def test_other_recipe_prompts_do_not_route_to_card_deck_turn_based(self):
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a trivia quiz with a timer")
+            != CARD_DECK_TURN_BASED_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("build me an idle clicker game")
+            != CARD_DECK_TURN_BASED_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a branching story game")
+            != CARD_DECK_TURN_BASED_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a memory card matching game")
+            != CARD_DECK_TURN_BASED_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Make a Wordle-style game")
+            != CARD_DECK_TURN_BASED_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a daily puzzle grid game")
+            != CARD_DECK_TURN_BASED_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a resource management sim")
+            != CARD_DECK_TURN_BASED_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build a hangman word game")
+            != CARD_DECK_TURN_BASED_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a typing speed game")
+            != CARD_DECK_TURN_BASED_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a word builder game")
+            != CARD_DECK_TURN_BASED_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build a SaaS dashboard")
+            != CARD_DECK_TURN_BASED_APP_TYPE
+        )
+
 
 class TestEnrichPlanMetadataWithRegistryV2:
     def test_flag_disabled_does_not_add_registry_metadata(self, monkeypatch):
@@ -876,6 +1011,18 @@ class TestEnrichPlanMetadataWithRegistryV2:
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "generic"},
             "Build me a word builder game",
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
+
+    def test_flag_disabled_card_deck_prompt_does_not_add_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            (
+                "Build a simple turn-based card battle game with a draw pile, hand, "
+                "discard pile, and health points."
+            ),
         )
         assert "registry_v2_app_type" not in metadata
         assert metadata["template_kind"] == "generic"
@@ -980,6 +1127,19 @@ class TestEnrichPlanMetadataWithRegistryV2:
         assert metadata["template_kind"] == "generic"
         assert metadata["originated_from"] == "builder_chat_scaffold"
 
+    def test_flag_enabled_card_deck_turn_based_prompt_adds_registry_metadata(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic", "originated_from": "builder_chat_scaffold"},
+            (
+                "Build a simple turn-based card battle game with a draw pile, hand, "
+                "discard pile, and health points."
+            ),
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        assert metadata["registry_v2_app_type"] == CARD_DECK_TURN_BASED_APP_TYPE
+        assert metadata["template_kind"] == "generic"
+        assert metadata["originated_from"] == "builder_chat_scaffold"
+
     def test_flag_enabled_non_idle_prompt_leaves_registry_metadata_absent(self):
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "landing-page"},
@@ -1071,6 +1231,15 @@ class TestEnrichPlanMetadataWithRegistryV2:
         )
         assert metadata.get("registry_v2_app_type") == WORD_DAILY_APP_TYPE
         assert metadata.get("registry_v2_app_type") != WORD_BUILDER_APP_TYPE
+
+    def test_flag_enabled_non_card_deck_turn_based_prompt_leaves_registry_metadata_absent(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            "Build a poker game",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "1"},
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
 
 
 def _byo_actor() -> HamActor:
@@ -1183,6 +1352,15 @@ class TestChatScaffoldSyntheticPlanMetadata:
         assert metadata.get("template_kind") == "generic"
         assert "registry_v2_app_type" not in metadata
 
+    def test_flag_disabled_card_deck_prompt_has_no_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = _synthetic_plan_metadata(
+            "Build a simple turn-based card battle game with a draw pile, hand, "
+            "discard pile, and health points."
+        )
+        assert metadata.get("template_kind") == "generic"
+        assert "registry_v2_app_type" not in metadata
+
     def test_flag_enabled_idle_prompt_adds_registry_metadata(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
         metadata = _synthetic_plan_metadata("build me an idle clicker game")
@@ -1244,6 +1422,17 @@ class TestChatScaffoldSyntheticPlanMetadata:
         metadata = _synthetic_plan_metadata("Build me a word builder game")
         assert metadata.get("template_kind") == "generic"
         assert metadata.get("registry_v2_app_type") == WORD_BUILDER_APP_TYPE
+
+    def test_flag_enabled_card_deck_turn_based_prompt_adds_registry_metadata_synthetic(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
+        metadata = _synthetic_plan_metadata(
+            "Build a simple turn-based card battle game with a draw pile, hand, "
+            "discard pile, and health points."
+        )
+        assert metadata.get("template_kind") == "generic"
+        assert metadata.get("registry_v2_app_type") == CARD_DECK_TURN_BASED_APP_TYPE
 
     def test_flag_enabled_non_idle_prompt_has_no_registry_metadata(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
@@ -1727,5 +1916,63 @@ class TestEndToEndScaffoldMessages:
             metadata=metadata,
         )
         content = _build_scaffold_messages(plan)[1]["content"]
+        assert "Builder Kit context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" not in content
+
+    def test_flag_enabled_card_deck_turn_based_prompt_produces_v2_context(self):
+        prompt = (
+            "Build a simple turn-based card battle game with a draw pile, hand, "
+            "discard pile, and health points."
+        )
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            prompt,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_card_deck_e2e",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message=prompt,
+            steps=[Step(title="Scaffold game", description="Create card battle game files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(
+            plan,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )[1]["content"]
+        assert metadata["registry_v2_app_type"] == CARD_DECK_TURN_BASED_APP_TYPE
+        assert "Build Registry v2 playbook context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" in content
+        assert "game.card-deck-turn-based" in content
+        assert "mechanic.deck-draw-pile" in content
+        assert "mechanic.hand-state" in content
+        assert "mechanic.discard-pile" in content
+        assert "validator.deck-zone-integrity" in content
+        assert "Builder Kit context:" not in content
+        assert content.count("Builder Kit:") == 0
+
+    def test_flag_disabled_card_deck_turn_based_prompt_produces_v1_context_only(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        prompt = (
+            "Build a simple turn-based card battle game with a draw pile, hand, "
+            "discard pile, and health points."
+        )
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            prompt,
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_card_deck_v1",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message=prompt,
+            steps=[Step(title="Scaffold game", description="Create card battle game files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(plan)[1]["content"]
+        assert "registry_v2_app_type" not in metadata
         assert "Builder Kit context:" in content
         assert "Build Kit Registry v2 — BuildRecipe" not in content

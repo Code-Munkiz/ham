@@ -756,11 +756,12 @@ class TestCardDeckTurnBasedRecipe:
             assert key in conflict_policy
             assert conflict_policy[key] is True
 
-    def test_card_deck_schema_only_not_routed_in_intent(self):
+    def test_card_deck_routed_in_intent_module(self):
         import src.ham.build_registry.intent as intent_module
 
         source = Path(intent_module.__file__).read_text(encoding="utf-8")
-        assert "game.card-deck-turn-based" not in source
+        assert "game.card-deck-turn-based" in source
+        assert "CARD_DECK_TURN_BASED_APP_TYPE" in source
 
     def test_existing_ten_routed_recipes_still_compose_after_card_deck_added(
         self, game_pack_root: Path
