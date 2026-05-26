@@ -1441,6 +1441,577 @@ class TestTacticsScaffoldQuality:
         assert "tactics_action_not_wired" in codes or "tactics_grid_not_wired" in codes
 
 
+_CITY_BUILDER_GATE_PROMPT = (
+    "Build a browser city-building game on a small 5x5 grid where the player "
+    "places houses, farms, wells, and power buildings, advances days to produce "
+    "food and coins, grows population and happiness, wins by reaching a population "
+    "goal by day 10, loses if food runs out, and can restart the city."
+)
+
+_CITY_SHELL_APP = """
+const initialState = {
+  grid: Array(5).fill(null).map(() => Array(5).fill(null)),
+  food: 10, coins: 10, day: 1, population: 0, happiness: 100,
+};
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'PLACE_BUILDING': {
+      const newGrid = [...state.grid];
+      newGrid[action.payload.row][action.payload.col] = action.payload.building;
+      return { ...state, grid: newGrid };
+    }
+    case 'END_DAY': {
+      const newFood = state.food - state.grid.flat().filter(b => b === 'farm').length;
+      const newCoins = state.coins + state.grid.flat().filter(b => b !== null).length;
+      return { ...state, food: newFood, coins: newCoins, day: state.day + 1 };
+    }
+    case 'RESTART':
+      return initialState;
+    default:
+      return state;
+  }
+};
+"""
+
+_CITY_SHELL_GRID = """
+const CityGridBoard = ({ dispatch }) => {
+  const handlePlaceBuilding = (row, col) => {
+    dispatch({ type: 'PLACE_BUILDING', payload: { row, col, building: 'house' } });
+  };
+  return <div onClick={() => handlePlaceBuilding(0, 0)} />;
+};
+"""
+
+_CITY_PALETTE_GOOD = """
+const BUILDING_TYPES = ['house', 'farm', 'well', 'power'];
+const [selectedBuilding, setSelectedBuilding] = useState('house');
+const BuildingPalette = () => (
+  <>
+    <button onClick={() => setSelectedBuilding('house')}>House</button>
+    <button onClick={() => setSelectedBuilding('farm')}>Farm</button>
+    <button onClick={() => setSelectedBuilding('well')}>Well</button>
+    <button onClick={() => setSelectedBuilding('power')}>Power</button>
+  </>
+);
+dispatch({ type: 'PLACE_BUILDING', payload: { row, col, building: selectedBuilding } });
+"""
+
+_CITY_PLACEMENT_NO_GUARD = _CITY_SHELL_APP
+
+_CITY_PLACEMENT_GUARD_GOOD = """
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'PLACE_BUILDING': {
+      if (state.grid[action.payload.row][action.payload.col] !== null) {
+        return state;
+      }
+      const newGrid = [...state.grid];
+      newGrid[action.payload.row][action.payload.col] = action.payload.building;
+      return { ...state, grid: newGrid };
+    }
+    default:
+      return state;
+  }
+};
+"""
+
+_CITY_PLACEMENT_UI_GUARD_GOOD = """
+const CityGridBoard = () => {
+  return row.map((cell, colIndex) => (
+    <div onClick={() => {
+      if (!cell) {
+        dispatch({ type: 'PLACE_BUILDING', payload: { rowIndex, colIndex } });
+      } else {
+        alert('Invalid placement! Cell is already occupied.');
+      }
+    }}></div>
+  ));
+};
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'PLACE_BUILDING':
+      const newGrid = [...state.grid];
+      newGrid[action.payload.rowIndex][action.payload.colIndex] = state.selectedBuilding;
+      return { ...state, grid: newGrid };
+    default:
+      return state;
+  }
+};
+"""
+
+_CITY_PRODUCTION_HELPER_GOOD = """
+const cityReducer = (state, action) => {
+  switch (action.type) {
+    case 'END_DAY':
+      return produceDayResults(state);
+    default:
+      return state;
+  }
+};
+const produceDayResults = (state) => {
+  const farms = state.grid.flat().filter(b => b === 'farm').length;
+  const wells = state.grid.flat().filter(b => b === 'well').length;
+  return {
+    ...state,
+    food: state.food + farms * 2,
+    coins: state.coins + state.grid.flat().filter(b => b !== null).length,
+    population: state.population + state.grid.flat().filter(b => b === 'house').length,
+    happiness: state.happiness + wells * 2,
+    day: state.day + 1,
+  };
+};
+"""
+
+_CITY_PRODUCTION_DISPLAY_ONLY = """
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'END_DAY':
+      return { ...state, day: state.day + 1 };
+    default:
+      return state;
+  }
+};
+const ResourceStatus = () => <div>Food: {state.food} Coins: {state.coins}</div>;
+"""
+
+_CITY_PRODUCTION_GOOD = """
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'END_DAY': {
+      const farms = state.grid.flat().filter(b => b === 'farm').length;
+      const buildings = state.grid.flat().filter(b => b !== null).length;
+      return {
+        ...state,
+        food: state.food + farms * 2 - state.population,
+        coins: state.coins + buildings,
+        day: state.day + 1,
+      };
+    }
+    default:
+      return state;
+  }
+};
+"""
+
+_CITY_PRODUCTION_HARDCODED = """
+const endDay = () => {
+  let newFood = resources.food - Math.floor(population / 5);
+  setResources({ ...resources, food: newFood });
+  setDay(day + 1);
+};
+"""
+
+_CITY_PRODUCTION_CATALOG_UNUSED = """
+const BUILDING_PRODUCTION = {
+  farm: { food: 2, coins: 0 },
+  house: { food: 0, coins: 1 },
+  well: { food: 1, coins: 0 },
+  power: { food: 0, coins: 2 },
+};
+const endDay = () => {
+  setResources({ ...resources, food: resources.food + 1, coins: resources.coins + 1 });
+  setDay(day + 1);
+};
+"""
+
+_CITY_POPULATION_STATIC = _CITY_SHELL_APP + """
+const ResourceStatus = ({ population, happiness }) => (
+  <div>Population: {population} Happiness: {happiness}</div>
+);
+"""
+
+_CITY_POPULATION_WIRED = """
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'END_DAY': {
+      const houses = state.grid.flat().filter(b => b === 'house').length;
+      const wells = state.grid.flat().filter(b => b === 'well').length;
+      return {
+        ...state,
+        population: state.population + houses,
+        happiness: Math.min(100, state.happiness + wells * 2),
+        day: state.day + 1,
+      };
+    }
+    default:
+      return state;
+  }
+};
+"""
+
+_CITY_HAPPINESS_ABSENT = """
+const [population, setPopulation] = useState(0);
+const ResourceStatus = () => <div>Population: {population}</div>;
+const endDay = () => setPopulation(population + 1);
+"""
+
+_CITY_HAPPINESS_WIRED = """
+const [happiness, setHappiness] = useState(50);
+const endDay = () => {
+  const wells = grid.flat().filter((cell) => cell === 'well').length;
+  const farms = grid.flat().filter((cell) => cell === 'farm').length;
+  setHappiness(Math.min(100, happiness + wells * 2 + farms));
+  setResources({ ...resources, food: resources.food + farms * 2, coins: resources.coins + 1 });
+};
+const ResourceStatus = () => <div>Happiness: {happiness}</div>;
+"""
+
+_CITY_HAPPINESS_HARDCODED_ONE = """
+const produceDayResults = (state) => {
+  const farms = state.grid.flat().filter(b => b === 'farm').length;
+  const happinessChange = 1;
+  const newHappiness = state.happiness + happinessChange;
+  return { ...state, food: state.food + farms, happiness: newHappiness, day: state.day + 1 };
+};
+const cityReducer = (state, action) => {
+  switch (action.type) {
+    case 'END_DAY':
+      return produceDayResults(state);
+    default:
+      return state;
+  }
+};
+"""
+
+_CITY_HAPPINESS_SET_PLUS_ONE = """
+const [happiness, setHappiness] = useState(50);
+const endDay = () => {
+  setHappiness(happiness + 1);
+};
+"""
+
+_CITY_HAPPINESS_WELLS_DERIVED = """
+const produceDayResults = (state) => {
+  const wells = state.grid.flat().filter(b => b === 'well').length;
+  const power = state.grid.flat().filter(b => b === 'power').length;
+  return {
+    ...state,
+    happiness: state.happiness + wells * 3 + power * 2,
+    day: state.day + 1,
+  };
+};
+"""
+
+_CITY_HAPPINESS_FOOD_PRESSURE = """
+const endDay = () => {
+  const farms = grid.flat().filter((cell) => cell === 'farm').length;
+  const newFood = resources.food + farms - population;
+  const happinessDelta = newFood <= 0 ? -10 : wells * 2;
+  setHappiness(Math.max(0, happiness + happinessDelta));
+};
+const wells = grid.flat().filter((cell) => cell === 'well').length;
+"""
+
+_CITY_GOAL_MISSING = _CITY_SHELL_APP + """
+useEffect(() => {
+  if (state.day > 10 || state.food <= 0) setGameOver(true);
+}, [state.day, state.food]);
+"""
+
+_CITY_GOAL_WIRED = """
+const POPULATION_GOAL = 20;
+if (state.population >= POPULATION_GOAL && state.day <= 10) {
+  setGameState('win');
+}
+if (state.food <= 0) {
+  setGameState('lose');
+}
+"""
+
+_CITY_FOOD_FAIL_MISSING = """
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'END_DAY':
+      return { ...state, day: state.day + 1, food: state.food - 1 };
+    default:
+      return state;
+  }
+};
+useEffect(() => {
+  if (state.day > 10) setGameOver(true);
+}, [state.day]);
+"""
+
+_CITY_FOOD_FAIL_WIRED = """
+useEffect(() => {
+  if (state.food <= 0) setGameOver(true);
+}, [state.food]);
+"""
+
+_CITY_RESTART_NOOP = """
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'INIT':
+      return { ...state };
+    case 'RESTART':
+      return reducer(state, { type: 'INIT' });
+    default:
+      return state;
+  }
+};
+const ResultsPanel = ({ dispatch }) => (
+  <button onClick={() => dispatch({ type: 'RESTART' })}>New City</button>
+);
+"""
+
+_CITY_POPULATION_USESTATE_GOOD = """
+const [population, setPopulation] = useState(0);
+const endDay = () => {
+  let newPopulation = population + 2;
+  setPopulation(newPopulation);
+};
+"""
+
+_CITY_RESTART_GOOD = """
+const initialState = {
+  grid: Array(5).fill(null).map(() => Array(5).fill(null)),
+  food: 10, coins: 10, day: 1, population: 0, happiness: 100,
+};
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'RESTART':
+      return initialState;
+    default:
+      return state;
+  }
+};
+"""
+
+
+_CITY_RESTART_USESTATE_GOOD = """
+const restartGame = () => {
+  setGrid(Array(5).fill(null).map(() => Array(5).fill(null)));
+  setResources(INITIAL_RESOURCES);
+  setDay(1);
+  setPopulation(0);
+  setGameResult(null);
+};
+<button onClick={restartGame}>New City</button>
+"""
+
+
+class TestCityBuilderScaffoldQuality:
+    def _files(self, *pairs):
+        return list(pairs)
+
+    def _plan(self):
+        plan = _plan()
+        plan.user_message = _CITY_BUILDER_GATE_PROMPT
+        return plan
+
+    def test_missing_palette_and_single_house_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(
+                ("src/App.tsx", _CITY_SHELL_APP),
+                ("src/components/CityGridBoard.tsx", _CITY_SHELL_GRID),
+            ),
+            plan=self._plan(),
+        )
+        codes = {i.code for i in issues}
+        assert "city_missing_building_palette" in codes
+        assert "city_single_building_only" in codes
+
+    def test_selectable_building_palette_accepted(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(
+                ("src/App.tsx", _CITY_PALETTE_GOOD),
+                ("src/components/BuildingPalette.tsx", _CITY_PALETTE_GOOD),
+            ),
+            plan=self._plan(),
+        )
+        assert not any(i.code == "city_missing_building_palette" for i in issues)
+        assert not any(i.code == "city_single_building_only" for i in issues)
+
+    def test_placement_overwrite_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(("src/App.tsx", _CITY_PLACEMENT_NO_GUARD)),
+            plan=self._plan(),
+        )
+        assert any(i.code == "city_invalid_placement_not_blocked" for i in issues)
+
+    def test_occupied_cell_guard_accepted(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(("src/App.tsx", _CITY_PLACEMENT_GUARD_GOOD)),
+            plan=self._plan(),
+        )
+        assert not any(i.code == "city_invalid_placement_not_blocked" for i in issues)
+
+    def test_ui_placement_guard_accepted(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(
+                ("src/App.tsx", _CITY_PLACEMENT_UI_GUARD_GOOD),
+                ("src/components/CityGridBoard.tsx", _CITY_PLACEMENT_UI_GUARD_GOOD),
+            ),
+            plan=self._plan(),
+        )
+        assert not any(i.code == "city_invalid_placement_not_blocked" for i in issues)
+
+    def test_end_day_helper_production_accepted(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(("src/state/cityState.tsx", _CITY_PRODUCTION_HELPER_GOOD)),
+            plan=self._plan(),
+        )
+        assert not any(i.code == "city_production_not_wired" for i in issues)
+        assert not any(i.code == "city_population_not_wired" for i in issues)
+        assert not any(i.code == "city_happiness_not_wired" for i in issues)
+
+    def test_end_day_display_only_resources_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(("src/App.tsx", _CITY_PRODUCTION_DISPLAY_ONLY)),
+            plan=self._plan(),
+        )
+        assert any(
+            i.code in {"city_production_not_wired", "city_resources_display_only"} for i in issues
+        )
+
+    def test_end_day_grid_production_accepted(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(("src/App.tsx", _CITY_PRODUCTION_GOOD)),
+            plan=self._plan(),
+        )
+        assert not any(i.code == "city_production_not_wired" for i in issues)
+        assert not any(i.code == "city_resources_display_only" for i in issues)
+
+    def test_end_day_hardcoded_production_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(("src/App.tsx", _CITY_PRODUCTION_HARDCODED)),
+            plan=self._plan(),
+        )
+        assert any(i.code == "city_production_not_wired" for i in issues)
+
+    def test_unused_building_production_catalog_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(("src/App.tsx", _CITY_PRODUCTION_CATALOG_UNUSED)),
+            plan=self._plan(),
+        )
+        assert any(i.code == "city_production_not_wired" for i in issues)
+
+    def test_population_happiness_display_only_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(("src/App.tsx", _CITY_POPULATION_STATIC)),
+            plan=self._plan(),
+        )
+        assert any(i.code == "city_population_not_wired" for i in issues)
+        assert any(i.code == "city_happiness_not_wired" for i in issues)
+
+    def test_happiness_absent_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(("src/App.tsx", _CITY_HAPPINESS_ABSENT)),
+            plan=self._plan(),
+        )
+        assert any(i.code == "city_happiness_not_wired" for i in issues)
+
+    def test_happiness_and_grid_production_accepted(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(("src/App.tsx", _CITY_HAPPINESS_WIRED)),
+            plan=self._plan(),
+        )
+        assert not any(i.code == "city_happiness_not_wired" for i in issues)
+        assert not any(i.code == "city_production_not_wired" for i in issues)
+
+    def test_hardcoded_happiness_change_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(("src/state/cityState.tsx", _CITY_HAPPINESS_HARDCODED_ONE)),
+            plan=self._plan(),
+        )
+        assert any(i.code == "city_happiness_not_wired" for i in issues)
+
+    def test_set_happiness_plus_one_without_grid_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(("src/App.tsx", _CITY_HAPPINESS_SET_PLUS_ONE)),
+            plan=self._plan(),
+        )
+        assert any(i.code == "city_happiness_not_wired" for i in issues)
+
+    def test_happiness_from_wells_power_grid_accepted(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(("src/state/cityState.tsx", _CITY_HAPPINESS_WELLS_DERIVED)),
+            plan=self._plan(),
+        )
+        assert not any(i.code == "city_happiness_not_wired" for i in issues)
+
+    def test_happiness_from_food_pressure_accepted(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(("src/App.tsx", _CITY_HAPPINESS_FOOD_PRESSURE)),
+            plan=self._plan(),
+        )
+        assert not any(i.code == "city_happiness_not_wired" for i in issues)
+
+    def test_population_happiness_mutation_accepted(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(("src/App.tsx", _CITY_POPULATION_WIRED)),
+            plan=self._plan(),
+        )
+        assert not any(i.code == "city_population_not_wired" for i in issues)
+        assert not any(i.code == "city_happiness_not_wired" for i in issues)
+
+    def test_missing_population_goal_win_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(("src/App.tsx", _CITY_GOAL_MISSING)),
+            plan=self._plan(),
+        )
+        assert any(i.code == "city_goal_not_wired" for i in issues)
+
+    def test_missing_food_loss_fail_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(("src/App.tsx", _CITY_FOOD_FAIL_MISSING)),
+            plan=self._plan(),
+        )
+        assert any(i.code == "city_fail_condition_not_wired" for i in issues)
+
+    def test_population_goal_and_food_fail_accepted(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(("src/App.tsx", _CITY_GOAL_WIRED + _CITY_FOOD_FAIL_WIRED)),
+            plan=self._plan(),
+        )
+        assert not any(i.code == "city_goal_not_wired" for i in issues)
+        assert not any(i.code == "city_fail_condition_not_wired" for i in issues)
+
+    def test_population_usestate_mutation_accepted(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(("src/App.tsx", _CITY_POPULATION_USESTATE_GOOD)),
+            plan=self._plan(),
+        )
+        assert not any(i.code == "city_population_not_wired" for i in issues)
+
+    def test_restart_usestate_reseed_accepted(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(("src/App.tsx", _CITY_RESTART_USESTATE_GOOD)),
+            plan=self._plan(),
+        )
+        assert not any(i.code == "city_restart_not_seeded" for i in issues)
+
+    def test_restart_noop_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(("src/App.tsx", _CITY_RESTART_NOOP)),
+            plan=self._plan(),
+        )
+        assert any(i.code == "city_restart_not_seeded" for i in issues)
+
+    def test_restart_reseeds_city_accepted(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(("src/App.tsx", _CITY_RESTART_GOOD)),
+            plan=self._plan(),
+        )
+        assert not any(i.code == "city_restart_not_seeded" for i in issues)
+
+    def test_initial_shell_flags_multiple_city_issues(self):
+        issues = inspect_generated_scaffold_quality(
+            self._files(
+                ("src/App.tsx", _CITY_SHELL_APP),
+                ("src/components/CityGridBoard.tsx", _CITY_SHELL_GRID),
+            ),
+            plan=self._plan(),
+        )
+        codes = {i.code for i in issues}
+        assert "city_missing_building_palette" in codes
+        assert "city_single_building_only" in codes
+        assert "city_invalid_placement_not_blocked" in codes
+        assert "city_population_not_wired" in codes
+        assert "city_happiness_not_wired" in codes
+        assert "city_goal_not_wired" in codes
+
+
 class TestBuildScaffoldRepairPrompt:
     def test_repair_prompt_includes_detected_issues_and_mutation_guidance(self):
         issues = [
@@ -1638,6 +2209,59 @@ class TestBuildScaffoldRepairPrompt:
         assert "enemy-turn range logic alone is insufficient" in body.lower()
         assert "immutably" in body.lower()
         assert "init/reset must not be no-op" in body.lower()
+
+    def test_repair_prompt_adds_city_builder_focus_when_city_builder_issue_present(self):
+        issues = [
+            ScaffoldQualityIssue(
+                code="city_missing_building_palette",
+                message="no palette",
+                path="src/App.tsx",
+            ),
+            ScaffoldQualityIssue(
+                code="city_goal_not_wired",
+                message="no population goal",
+                path="src/App.tsx",
+            ),
+        ]
+        plan = _plan()
+        plan.user_message = _CITY_BUILDER_GATE_PROMPT
+        messages = build_scaffold_repair_prompt(
+            plan,
+            [("src/App.tsx", _CITY_SHELL_APP)],
+            issues,
+            base_system_prompt="BASE",
+        )
+        body = messages[0]["content"]
+        assert "City-builder repair focus" in body
+        assert "valid JSON" in body
+        assert "building palette" in body.lower()
+        assert "occupied grid cells" in body.lower()
+        assert "count placed farms" in body.lower() or "grid state" in body.lower()
+        assert "happiness" in body.lower()
+        assert "restart" in body.lower() or "new city" in body.lower()
+
+    def test_repair_prompt_adds_happiness_derivation_focus(self):
+        issues = [
+            ScaffoldQualityIssue(
+                code="city_happiness_not_wired",
+                message="hardcoded happiness",
+                path="src/state/cityState.tsx",
+            ),
+        ]
+        plan = _plan()
+        plan.user_message = _CITY_BUILDER_GATE_PROMPT
+        messages = build_scaffold_repair_prompt(
+            plan,
+            [("src/state/cityState.tsx", _CITY_HAPPINESS_HARDCODED_ONE)],
+            issues,
+            base_system_prompt="BASE",
+        )
+        body = messages[0]["content"]
+        assert "City-builder happiness repair focus" in body
+        assert "hardcoded happiness" in body.lower() or "happinessChange = 1" in body
+        assert "derive" in body.lower() or "derived" in body.lower()
+        assert "wells/power" in body.lower() or "wells" in body.lower()
+        assert "valid JSON" in body or "json/file_changes" in body.lower()
 
 
 class TestMaybeRepairGeneratedScaffold:

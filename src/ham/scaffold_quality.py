@@ -209,6 +209,121 @@ _PROMPT_TACTICS_RESTART = re.compile(
     re.IGNORECASE,
 )
 
+_PROMPT_CITY_BUILDER_GAME = re.compile(
+    r"city[- ]building|city building|building game|"
+    r"place(?:s|d)?\s+(?:houses?|farms?|wells?|power\s+buildings?)|"
+    r"\b(?:houses?|farms?|wells?|power)\s+buildings?\b|"
+    r"building palette|grow(?:s|ing)?\s+population|"
+    r"advances?\s+days?\s+to\s+produce",
+    re.IGNORECASE,
+)
+
+_PROMPT_CITY_BUILDING_TYPES = re.compile(
+    r"\b(?:houses?|farms?|wells?|power\s+buildings?|power)\b",
+    re.IGNORECASE,
+)
+
+_PROMPT_CITY_POPULATION_GOAL = re.compile(
+    r"population\s+goal|reaching\s+a\s+population|reach(?:ing)?\s+population",
+    re.IGNORECASE,
+)
+
+_PROMPT_CITY_FOOD_LOSS = re.compile(
+    r"food\s+runs?\s+out|loses?\s+if\s+food|running\s+out\s+of\s+food",
+    re.IGNORECASE,
+)
+
+_PROMPT_CITY_POPULATION_HAPPINESS = re.compile(
+    r"population\s+and\s+happiness|grows?\s+population|happiness",
+    re.IGNORECASE,
+)
+
+_PROMPT_CITY_RESTART = re.compile(
+    r"restart\s+the\s+city|new\s+city|restart",
+    re.IGNORECASE,
+)
+
+_BUILDING_PALETTE_MARKERS = re.compile(
+    r"BuildingPalette|building-palette|buildingPalette|"
+    r"selectedBuilding|selectedBuildingType|activeBuilding|currentBuilding|"
+    r"setSelectedBuilding|buildingTypes\s*=|BUILDING_TYPES|buildingCatalog|"
+    r"buildingOptions|paletteBuildings",
+    re.IGNORECASE,
+)
+
+_HARDCODED_HOUSE_PLACEMENT = re.compile(
+    r"building:\s*['\"]house['\"]|payload:\s*\{[^}]*building:\s*['\"]house['\"]",
+    re.IGNORECASE,
+)
+
+_OCCUPIED_CELL_GUARD = re.compile(
+    r"!(?:state\.)?grid|(?:state\.)?grid\[[^\]]+\]\s*!==?\s*null|"
+    r"(?:state\.)?grid\[[^\]]+\]\s*===?\s*null|cell\s*!==?\s*null|"
+    r"occupied|already\s+built|isEmpty|empty\s+cell|cannot\s+place|"
+    r"invalid\s+placement|if\s*\(\s*!(?:state\.)?grid",
+    re.IGNORECASE,
+)
+
+_POPULATION_GOAL_WIN = re.compile(
+    r"(?:new)?[Pp]opulation\s*>=\s*(?:POPULATION_GOAL|goal|target|\d+)|"
+    r"populationGoal|POPULATION_GOAL|goalPopulation|"
+    r"(?:win|wins|victory)\s+(?:when|if)[^;{]{0,120}population|"
+    r"reached\s+(?:the\s+)?population\s+goal|population\s+goal\s+reached|"
+    r"setGameResult\s*\(\s*['\"]You win",
+    re.IGNORECASE,
+)
+
+_FOOD_FAIL_CONDITION = re.compile(
+    r"food\s*<=?\s*0|food\s*===?\s*0|outOfFood|foodDepleted|food\s+runs?\s+out",
+    re.IGNORECASE,
+)
+
+_BUILDING_PRODUCTION_CATALOG = re.compile(
+    r"(?:const|let|var)\s+(BUILDING_(?:PRODUCTION|EFFECTS|STATS)|buildingProduction|"
+    r"BUILDING_CATALOG|buildingCatalog)\s*=",
+    re.IGNORECASE,
+)
+
+_GRID_BUILDING_COUNT = re.compile(
+    r"grid|flat\s*\(|\.filter\s*\(|cells|placedBuildings|countBuildings|"
+    r"buildingType|['\"](?:farm|house|well|power|Farm|House|Well|Power)['\"]",
+    re.IGNORECASE,
+)
+
+_POPULATION_ONLY_FOOD_FORMULA = re.compile(
+    r"(?:resources\.)?food\s*[-=][^;]{0,120}population|"
+    r"Math\.floor\s*\(\s*population\s*/|population\s*/\s*\d",
+    re.IGNORECASE,
+)
+
+_HARDCODED_HAPPINESS_DELTA = re.compile(
+    r"happinessChange\s*=\s*\d+\b"
+    r"|setHappiness\s*\(\s*happiness\s*\+\s*\d+\s*\)"
+    r"|setHappiness\s*\(\s*Math\.min\s*\(\s*\d+\s*,\s*happiness\s*\+\s*\d+\s*\)"
+    r"|happiness\s*:\s*state\.happiness\s*\+\s*\d+\b",
+    re.IGNORECASE,
+)
+
+_HAPPINESS_DERIVED_FROM_CITY = re.compile(
+    r"happiness(?:Change|Delta)?\s*=\s*[^;{]+(?:grid|flat\s*\(|well|power|farm|house|building|food|resources|population|coins)"
+    r"|happiness\s*:\s*[^;{]+(?:well|power|farm|house|grid|flat\s*\(|food|resources|population|coins)"
+    r"|setHappiness\s*\([^)]*(?:grid|flat\s*\(|well|power|farm|house|food|resources|population|coins|happinessDelta|happinessChange)"
+    r"|newHappiness\s*=\s*[^;{]+(?:grid|flat\s*\(|well|power|farm|house|food|resources|population|coins)",
+    re.IGNORECASE,
+)
+
+_CITY_DAY_TICK_FUNCTION = re.compile(
+    r"(?:const|function)\s+(?:endDay|nextDay|advanceDay|handleEndDay)\w*\s*="
+    r"(?:\s*(?:async\s*)?\([^)]*\)\s*)?(?:=>)?\s*\{",
+    re.IGNORECASE,
+)
+
+_CITY_DAY_ACTIONS = frozenset({"END_DAY", "NEXT_DAY", "ADVANCE_DAY"})
+_CITY_PLACE_ACTIONS = frozenset({"PLACE_BUILDING", "PLACE", "BUILD", "BUILD_ON_CELL"})
+_CITY_RESTART_ACTIONS = frozenset(
+    {"RESTART", "NEW_CITY", "RESET", "RESTART_GAME", "NEW_GAME", "INIT", "INIT_GAME"}
+)
+
 _PLAYER_UNIT_MARKER = re.compile(
     r"isPlayer:\s*true|team:\s*['\"]player['\"]|owner:\s*['\"]player['\"]|"
     r"type:\s*['\"]player['\"]|"
@@ -667,6 +782,8 @@ def _inspect_missing_result_state(
         return []
     if _prompt_is_tactics_game(plan.user_message):
         return []
+    if _prompt_is_city_builder_game(plan.user_message):
+        return []
     combined = _combined_js_source(file_changes)
     if _RESULT_STATE_MARKERS.search(combined):
         return []
@@ -718,6 +835,8 @@ def _prompt_requires_deck_builder_run(prompt: str | None) -> bool:
         return False
     if _prompt_is_tactics_game(prompt):
         return False
+    if _prompt_is_city_builder_game(prompt):
+        return False
     return bool(_PROMPT_DECK_BUILDER_RUN.search(prompt))
 
 
@@ -725,6 +844,14 @@ def _prompt_is_tactics_game(prompt: str | None) -> bool:
     if not prompt:
         return False
     return bool(_PROMPT_TACTICS_GAME.search(prompt))
+
+
+def _prompt_is_city_builder_game(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    if _prompt_is_tactics_game(prompt):
+        return False
+    return bool(_PROMPT_CITY_BUILDER_GAME.search(prompt))
 
 
 def _has_playable_card_seed(combined: str) -> bool:
@@ -1749,6 +1876,592 @@ def _inspect_tactics_battle_result_and_restart(
     return issues
 
 
+def _has_building_palette(combined: str) -> bool:
+    if _BUILDING_PALETTE_MARKERS.search(combined):
+        return True
+    building_buttons = len(
+        re.findall(
+            r"['\"](?:house|farm|well|power|shop)['\"][^;]{0,120}(?:onClick|setSelectedBuilding|setActiveBuilding)",
+            combined,
+            re.IGNORECASE,
+        )
+    )
+    return building_buttons >= 2
+
+
+def _hardcoded_single_building_placement(combined: str) -> bool:
+    if not _HARDCODED_HOUSE_PLACEMENT.search(combined):
+        return False
+    if _has_building_palette(combined):
+        return False
+    if re.search(
+        r"building:\s*(?:selectedBuilding|activeBuilding|currentBuilding|buildingType)",
+        combined,
+        re.IGNORECASE,
+    ):
+        return False
+    return True
+
+
+def _place_case_blocks_occupied_cells(body: str) -> bool:
+    if not body.strip():
+        return False
+    if _OCCUPIED_CELL_GUARD.search(body):
+        return True
+    if re.search(
+        r"if\s*\([^)]*(?:null|undefined|empty|occupied)[^)]*\)\s*return",
+        body,
+        re.IGNORECASE,
+    ):
+        return True
+    return bool(
+        re.search(
+            r"if\s*\([^)]*grid\[[^\]]+\][^)]*\)\s*\{[^}]*return\s+(?:state|\{\s*\.\.\.state)",
+            body,
+            re.IGNORECASE | re.DOTALL,
+        )
+    )
+
+
+def _extract_brace_block(combined: str, open_brace_index: int) -> str:
+    depth = 0
+    for index in range(open_brace_index, len(combined)):
+        char = combined[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return combined[open_brace_index : index + 1]
+    return ""
+
+
+def _expand_tick_bodies_with_helpers(combined: str, tick_bodies: list[str]) -> list[str]:
+    expanded = list(tick_bodies)
+    helper_names: set[str] = set()
+    for body in tick_bodies:
+        for match in re.finditer(
+            r"return\s+(\w*(?:Day|Production|Tick|Results)\w*)\s*\(",
+            body,
+            re.IGNORECASE,
+        ):
+            helper_names.add(match.group(1))
+    for name in helper_names:
+        match = re.search(
+            rf"(?:const|function)\s+{re.escape(name)}\s*=\s*(?:\([^)]*\)\s*)?(?:=>)?\s*\{{",
+            combined,
+            re.IGNORECASE,
+        )
+        if not match:
+            continue
+        block = _extract_brace_block(combined, match.end() - 1)
+        if block:
+            expanded.append(block)
+    return expanded
+
+
+def _collect_day_tick_bodies(combined: str, reducer_actions: dict[str, str]) -> list[str]:
+    bodies: list[str] = []
+    for action in _CITY_DAY_ACTIONS:
+        body = reducer_actions.get(action, "")
+        if body:
+            bodies.append(body)
+    for match in _CITY_DAY_TICK_FUNCTION.finditer(combined):
+        block = _extract_brace_block(combined, match.end() - 1)
+        if block:
+            bodies.append(block)
+    return _expand_tick_bodies_with_helpers(combined, bodies)
+
+
+def _tick_body_mutates_resources(body: str) -> bool:
+    return bool(
+        re.search(
+            r"food|coins|setResources|newFood|newCoins|resources\.food|resources\.coins",
+            body,
+            re.IGNORECASE,
+        )
+    )
+
+
+def _end_day_derives_production_from_grid(body: str) -> bool:
+    if not body.strip():
+        return False
+    if not re.search(r"food|coins|resource|production", body, re.IGNORECASE):
+        return False
+    if not _GRID_BUILDING_COUNT.search(body):
+        return False
+    if _POPULATION_ONLY_FOOD_FORMULA.search(body) and not re.search(
+        r"grid|flat\s*\(|filter\s*\(",
+        body,
+        re.IGNORECASE,
+    ):
+        return False
+    return True
+
+
+def _has_unused_building_production_catalog(
+    combined: str,
+    tick_bodies: list[str],
+) -> bool:
+    if not _BUILDING_PRODUCTION_CATALOG.search(combined):
+        return False
+    tick_text = "\n".join(tick_bodies)
+    for match in _BUILDING_PRODUCTION_CATALOG.finditer(combined):
+        catalog_name = match.group(1)
+        if not re.search(
+            rf"\b{re.escape(catalog_name)}\b|Object\.values\s*\(\s*{re.escape(catalog_name)}\s*\)",
+            tick_text,
+            re.IGNORECASE,
+        ):
+            return True
+    return False
+
+
+def _prompt_requests_happiness(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    return bool(re.search(r"\bhappiness\b", prompt, re.IGNORECASE))
+
+
+def _happiness_present_in_state(combined: str) -> bool:
+    return bool(
+        re.search(
+            r"\bhappiness\b|setHappiness\s*\(",
+            combined,
+            re.IGNORECASE,
+        )
+    )
+
+
+def _has_hardcoded_happiness_delta(search_text: str) -> bool:
+    for match in _HARDCODED_HAPPINESS_DELTA.finditer(search_text):
+        window = search_text[max(0, match.start() - 120) : match.end() + 120]
+        if _HAPPINESS_DERIVED_FROM_CITY.search(window):
+            continue
+        return True
+    for match in re.finditer(
+        r"setHappiness\s*\(\s*happiness\s*\+\s*(\w+)\s*\)",
+        search_text,
+        re.IGNORECASE,
+    ):
+        var_name = match.group(1)
+        if var_name.isdigit():
+            window = search_text[max(0, match.start() - 120) : match.end() + 120]
+            if not _HAPPINESS_DERIVED_FROM_CITY.search(window):
+                return True
+            continue
+        derived_var = re.search(
+            rf"\b{re.escape(var_name)}\s*=\s*[^;{{]+(?:grid|flat\s*\(|well|power|farm|house|food|resources|population|coins)",
+            search_text,
+            re.IGNORECASE,
+        )
+        if derived_var or _HAPPINESS_DERIVED_FROM_CITY.search(search_text):
+            continue
+        return True
+    return False
+
+
+def _happiness_wired_from_city_system(
+    combined: str,
+    reducer_actions: dict[str, str],
+    tick_bodies: list[str],
+) -> bool:
+    if not _happiness_present_in_state(combined):
+        return False
+    search_text = "\n".join(tick_bodies) if tick_bodies else combined
+    if not search_text.strip():
+        search_text = combined
+    if _has_hardcoded_happiness_delta(search_text):
+        return False
+    return bool(_HAPPINESS_DERIVED_FROM_CITY.search(search_text))
+
+
+def _population_wired_from_city_system(
+    combined: str,
+    reducer_actions: dict[str, str],
+    tick_bodies: list[str],
+) -> bool:
+    if _city_field_mutated(combined, reducer_actions, "population"):
+        return True
+    search_text = "\n".join(tick_bodies) + "\n" + combined
+    return bool(
+        re.search(
+            r"(?:newPopulation|population\s*:)[^;{]{0,200}(?:grid|flat\s*\(|farm|house|well|power|building)",
+            search_text,
+            re.IGNORECASE | re.DOTALL,
+        )
+    )
+
+
+def _placement_blocked_or_explained(
+    combined: str,
+    reducer_actions: dict[str, str],
+) -> bool:
+    for action in sorted(_CITY_PLACE_ACTIONS):
+        body = reducer_actions.get(action, "")
+        if body and _place_case_blocks_occupied_cells(body):
+            return True
+    if re.search(
+        r"if\s*\(\s*!cell[^)]*\)\s*\{[^}]*dispatch\s*\(\s*\{\s*type:\s*['\"](?:PLACE_BUILDING|PLACE|BUILD)",
+        combined,
+        re.IGNORECASE | re.DOTALL,
+    ):
+        return True
+    if re.search(
+        r"Invalid placement|already occupied|occupied cell|cannot place",
+        combined,
+        re.IGNORECASE,
+    ):
+        return True
+    return False
+
+
+def _canonical_field_mutated(reducer_actions: dict[str, str], field: str) -> bool:
+    mutation = re.compile(
+        rf"{field}\s*:\s*(?:state\.{field}\s*[+\-]|Math\.|calculate|housing|"
+        rf"(?!state\.{field}\s*[,}}\s])[^,\s{{])",
+        re.IGNORECASE,
+    )
+    setter = re.compile(rf"set{field.title()}\s*\(|{field}\s*\+=|-=", re.IGNORECASE)
+    for action, body in reducer_actions.items():
+        if action.upper() in _CITY_RESTART_ACTIONS:
+            continue
+        if mutation.search(body) or setter.search(body):
+            return True
+    return False
+
+
+def _city_field_mutated(
+    combined: str,
+    reducer_actions: dict[str, str],
+    field: str,
+) -> bool:
+    if _canonical_field_mutated(reducer_actions, field):
+        return True
+    setter_name = field.title()
+    if re.search(
+        rf"set{setter_name}\s*\(\s*(?:prev\s*=>|new{setter_name}|[^0\s)])",
+        combined,
+        re.IGNORECASE,
+    ):
+        return True
+    if re.search(
+        rf"let\s+new{setter_name}\s*=|const\s+new{setter_name}\s*=",
+        combined,
+        re.IGNORECASE,
+    ) and re.search(rf"set{setter_name}\s*\(\s*new{setter_name}", combined, re.IGNORECASE):
+        return True
+    return False
+
+
+def _restart_reseeds_city(combined: str, reducer_actions: dict[str, str]) -> bool:
+    for action_type, body in reducer_actions.items():
+        if action_type.upper() not in _CITY_RESTART_ACTIONS:
+            continue
+        if re.search(r"return\s+initial(?:Game)?State\b", body, re.IGNORECASE):
+            if re.search(r"grid:\s*Array|grid:\s*\[", combined, re.IGNORECASE):
+                return True
+        if re.search(r"return\s*\{[^}]*grid\s*:", body, re.IGNORECASE | re.DOTALL):
+            if re.search(r"food:|coins:|day:", body, re.IGNORECASE):
+                return True
+        if _NOOP_RETURN.search(body.strip()):
+            return False
+    if re.search(
+        r"(?:restartGame|restartCity|handleRestart|resetCity)\s*=\s*\([^)]*\)\s*=>\s*\{",
+        combined,
+        re.IGNORECASE,
+    ):
+        if re.search(
+            r"setGrid\s*\(|setResources\s*\(|setDay\s*\(\s*1|setPopulation\s*\(\s*0|setGameResult\s*\(\s*null",
+            combined,
+            re.IGNORECASE,
+        ):
+            return True
+    if re.search(
+        r"onRestart[^;{]{0,160}dispatch\s*\(\s*\{\s*type:\s*['\"](?:RESTART|NEW_CITY|RESET)['\"]",
+        combined,
+        re.IGNORECASE | re.DOTALL,
+    ):
+        restart_body = ""
+        for action_type, body in reducer_actions.items():
+            if action_type.upper() in {"RESTART", "NEW_CITY", "RESET"}:
+                restart_body = body
+                break
+        if restart_body and re.search(
+            r"return\s+initial(?:Game)?State\b", restart_body, re.IGNORECASE
+        ):
+            return True
+    return False
+
+
+def _inspect_city_building_palette(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_is_city_builder_game(plan.user_message):
+        return []
+    if not _PROMPT_CITY_BUILDING_TYPES.search(plan.user_message):
+        return []
+    combined = _combined_js_source(file_changes)
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"Palette|Grid|App|reducer|Game",
+    )
+    issues: list[ScaffoldQualityIssue] = []
+    if not _has_building_palette(combined):
+        issues.append(
+            ScaffoldQualityIssue(
+                code="city_missing_building_palette",
+                message=(
+                    "City-builder prompt expects multiple building types but no "
+                    "selectable building palette or catalog exists"
+                ),
+                path=path,
+            )
+        )
+    if _hardcoded_single_building_placement(combined):
+        issues.append(
+            ScaffoldQualityIssue(
+                code="city_single_building_only",
+                message=(
+                    "City-builder placement hardcodes a single building type (e.g. house) "
+                    "instead of using a selected palette choice"
+                ),
+                path=path,
+            )
+        )
+    return issues
+
+
+def _inspect_city_placement_validity(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_is_city_builder_game(plan.user_message):
+        return []
+    combined = _combined_js_source(file_changes)
+    reducer_actions = _collect_reducer_actions(file_changes)
+    path = _first_path_matching(_js_sources(file_changes), r"PLACE|Grid|reducer|Game")
+    has_place_case = any(reducer_actions.get(action) for action in _CITY_PLACE_ACTIONS)
+    if not has_place_case:
+        return []
+    if _placement_blocked_or_explained(combined, reducer_actions):
+        return []
+    return [
+        ScaffoldQualityIssue(
+            code="city_invalid_placement_not_blocked",
+            message=(
+                "City-builder placement overwrites grid cells without rejecting "
+                "occupied cells or showing invalid placement feedback"
+            ),
+            path=path,
+        )
+    ]
+
+
+def _inspect_city_production_tick(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_is_city_builder_game(plan.user_message):
+        return []
+    if not re.search(
+        r"day|turn|produce|production|food|coins|farm|house|well|power",
+        plan.user_message,
+        re.I,
+    ):
+        return []
+    combined = _combined_js_source(file_changes)
+    reducer_actions = _collect_reducer_actions(file_changes)
+    tick_bodies = _collect_day_tick_bodies(combined, reducer_actions)
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"END_DAY|NEXT_DAY|endDay|nextDay|reducer|Game|App",
+    )
+    issues: list[ScaffoldQualityIssue] = []
+
+    if not tick_bodies:
+        if re.search(r"food|coins", combined, re.I):
+            issues.append(
+                ScaffoldQualityIssue(
+                    code="city_production_not_wired",
+                    message=(
+                        "City-builder prompt expects day/turn production but no END_DAY/endDay "
+                        "tick mutates resources from placed buildings"
+                    ),
+                    path=path,
+                )
+            )
+        return issues
+
+    resource_bodies = [body for body in tick_bodies if _tick_body_mutates_resources(body)]
+    if not resource_bodies and re.search(r"food|coins", combined, re.I):
+        issues.append(
+            ScaffoldQualityIssue(
+                code="city_resources_display_only",
+                message=(
+                    "City-builder resource counters exist but day/turn tick does not "
+                    "mutate food/coins from grid building production"
+                ),
+                path=path,
+            )
+        )
+        return issues
+
+    grid_derived = all(
+        _end_day_derives_production_from_grid(body) for body in resource_bodies
+    )
+    if not grid_derived:
+        issues.append(
+            ScaffoldQualityIssue(
+                code="city_production_not_wired",
+                message=(
+                    "City-builder day/turn production uses hardcoded or population-only deltas "
+                    "instead of counting placed farms/houses/wells/power on the grid"
+                ),
+                path=path,
+            )
+        )
+    elif _has_unused_building_production_catalog(combined, tick_bodies):
+        issues.append(
+            ScaffoldQualityIssue(
+                code="city_production_not_wired",
+                message=(
+                    "City-builder building production catalog exists but END_DAY/endDay "
+                    "does not apply it to food/coins from grid building counts"
+                ),
+                path=path,
+            )
+        )
+    return issues
+
+
+def _inspect_city_population_happiness(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_is_city_builder_game(plan.user_message):
+        return []
+    combined = _combined_js_source(file_changes)
+    reducer_actions = _collect_reducer_actions(file_changes)
+    tick_bodies = _collect_day_tick_bodies(combined, reducer_actions)
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"population|happiness|Resource|reducer|Game|App",
+    )
+    issues: list[ScaffoldQualityIssue] = []
+
+    if _PROMPT_CITY_POPULATION_HAPPINESS.search(plan.user_message or ""):
+        if re.search(r"population", combined, re.I) and not _population_wired_from_city_system(
+            combined, reducer_actions, tick_bodies
+        ):
+            issues.append(
+                ScaffoldQualityIssue(
+                    code="city_population_not_wired",
+                    message=(
+                        "City-builder population is displayed but never mutated by placement "
+                        "or day/turn production rules"
+                    ),
+                    path=path,
+                )
+            )
+
+    if _prompt_requests_happiness(plan.user_message):
+        if not _happiness_present_in_state(combined):
+            issues.append(
+                ScaffoldQualityIssue(
+                    code="city_happiness_not_wired",
+                    message=(
+                        "City-builder prompt requests happiness but canonical state/UI "
+                        "has no happiness counter or field"
+                    ),
+                    path=path,
+                )
+            )
+        elif not _happiness_wired_from_city_system(combined, reducer_actions, tick_bodies):
+            issues.append(
+                ScaffoldQualityIssue(
+                    code="city_happiness_not_wired",
+                    message=(
+                        "City-builder happiness must be derived from canonical grid/building/"
+                        "resource state on day/turn ticks — not hardcoded deltas such as "
+                        "happinessChange = 1 or setHappiness(happiness + 1)"
+                    ),
+                    path=path,
+                )
+            )
+    return issues
+
+
+def _inspect_city_goal_fail_restart(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_is_city_builder_game(plan.user_message):
+        return []
+    combined = _combined_js_source(file_changes)
+    reducer_actions = _collect_reducer_actions(file_changes)
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"result|Game|reducer|Restart|App",
+    )
+    issues: list[ScaffoldQualityIssue] = []
+    if _PROMPT_CITY_POPULATION_GOAL.search(plan.user_message) and not _POPULATION_GOAL_WIN.search(
+        combined
+    ):
+        issues.append(
+            ScaffoldQualityIssue(
+                code="city_goal_not_wired",
+                message=(
+                    "City-builder prompt requires population goal win by day limit but "
+                    "code lacks population threshold win handling"
+                ),
+                path=path,
+            )
+        )
+    if _PROMPT_CITY_FOOD_LOSS.search(plan.user_message) and not _FOOD_FAIL_CONDITION.search(
+        combined
+    ):
+        issues.append(
+            ScaffoldQualityIssue(
+                code="city_fail_condition_not_wired",
+                message=(
+                    "City-builder prompt requires food-loss fail condition but code "
+                    "does not check food <= 0 or equivalent"
+                ),
+                path=path,
+            )
+        )
+    if _PROMPT_CITY_RESTART.search(plan.user_message) and re.search(
+        r"RESTART|New City|restart", combined, re.IGNORECASE
+    ):
+        if not _restart_reseeds_city(combined, reducer_actions):
+            issues.append(
+                ScaffoldQualityIssue(
+                    code="city_restart_not_seeded",
+                    message=(
+                        "City-builder restart/new city control does not reseed grid, "
+                        "resources, day, and result state"
+                    ),
+                    path=path,
+                )
+            )
+    return issues
+
+
+def _inspect_city_builder_quality(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    issues: list[ScaffoldQualityIssue] = []
+    issues.extend(_inspect_city_building_palette(plan, file_changes))
+    issues.extend(_inspect_city_placement_validity(plan, file_changes))
+    issues.extend(_inspect_city_production_tick(plan, file_changes))
+    issues.extend(_inspect_city_population_happiness(plan, file_changes))
+    issues.extend(_inspect_city_goal_fail_restart(plan, file_changes))
+    return issues
+
+
 def _inspect_tactics_quality(
     plan: Plan | None,
     file_changes: list[tuple[str, str]],
@@ -1831,6 +2544,7 @@ def inspect_generated_scaffold_quality(
         issues.extend(_inspect_missing_victory_wiring(plan, file_changes))
         issues.extend(_inspect_ignored_seed_payload(plan, file_changes))
         issues.extend(_inspect_tactics_quality(plan, file_changes))
+        issues.extend(_inspect_city_builder_quality(plan, file_changes))
     issues.extend(_inspect_import_export(file_changes))
     issues.extend(_inspect_dispatch_reducer_mismatch(file_changes))
     # De-dupe by (code, path, message)
@@ -1999,6 +2713,56 @@ def build_scaffold_repair_prompt(
             "- Restart/new battle must reseed grid, player units, enemy units, turn state, selected unit, "
             "and result state; INIT/RESET must not be no-op.\n"
             "- Do not leave reducer cases for SELECT/MOVE/ATTACK/END_TURN that are never dispatched.\n"
+        )
+    city_builder_codes = issue_codes & {
+        "city_missing_building_palette",
+        "city_single_building_only",
+        "city_invalid_placement_not_blocked",
+        "city_production_not_wired",
+        "city_resources_display_only",
+        "city_population_not_wired",
+        "city_happiness_not_wired",
+        "city_goal_not_wired",
+        "city_fail_condition_not_wired",
+        "city_restart_not_seeded",
+        "noop_reducer_action",
+        "dispatch_reducer_mismatch",
+    }
+    if city_builder_codes and _prompt_is_city_builder_game(plan.user_message):
+        repair_system += (
+            "\nCity-builder repair focus:\n"
+            "- Output ONLY valid JSON matching the original scaffold schema (file_changes array). "
+            "No markdown, prose, or commentary outside JSON.\n"
+            "- Keep existing file paths and architecture when possible; patch gameplay loops only.\n"
+            "- Provide 3–5 building types (house, farm, well, power or prompt equivalents) "
+            "in a selectable building palette/catalog.\n"
+            "- Track selectedBuilding/buildingType in state; placement must use the selected type.\n"
+            "- Reject occupied grid cells with a guarded no-op or visible invalid placement feedback; "
+            "never silently overwrite existing buildings.\n"
+            "- END_DAY/endDay/nextDay must count placed farms/houses/wells/power from canonical "
+            "grid state and derive food/coins/production from those counts — avoid hardcoded daily "
+            "deltas that ignore the grid.\n"
+            "- Keep happiness in canonical state with a visible counter; on each day/turn tick "
+            "derive next happiness from placed wells/power/service buildings, food/resources, "
+            "and population/housing pressure — never use hardcoded happinessChange = 1.\n"
+            "- Mutate population from housing/building effects on the grid.\n"
+            "- Win when population goal is reached by the day limit; fail when food runs out or "
+            "goal is missed.\n"
+            "- Show result state with win/loss reason; New City/restart reseeds grid, resources, "
+            "day, selected building, happiness, and result state.\n"
+        )
+    if (
+        "city_happiness_not_wired" in issue_codes
+        and _prompt_is_city_builder_game(plan.user_message)
+    ):
+        repair_system += (
+            "\nCity-builder happiness repair focus:\n"
+            "- Replace hardcoded happiness deltas (happinessChange = 1, setHappiness(happiness + 1), "
+            "state.happiness + 1) with calculations derived from canonical city state.\n"
+            "- Count placed wells/power/service buildings from the grid on END_DAY/endDay.\n"
+            "- Factor food shortage, resource pressure, and population/housing into next happiness.\n"
+            "- Compute nextHappiness from those counts and update happiness together with day production.\n"
+            "- Output ONLY valid JSON/file_changes — no prose outside JSON.\n"
         )
     user_content = (
         f"User request: {plan.user_message}\n\n"
