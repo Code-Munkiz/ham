@@ -1,0 +1,47 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: learning.reaction-time-challenge
+kind: learning_hook
+name: Reaction time challenge learning hooks
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Future Hermes evolution signals for reaction-time challenge builds — outcome
+  facts and critique prompts. Not wired at runtime.
+
+non_template_statement: >
+  Learning hook schema only. Hermes integration deferred per ADR-0018.
+
+applies_to:
+  - game.reaction-time-challenge
+  - tag:reaction-time-challenge
+
+source_phase_owner: game.reaction-time-challenge
+
+signal_categories:
+  - reaction_state_transitions
+  - false_start_enforcement
+  - reaction_timer_bounds
+  - reaction_score_consistency
+  - input_cleanup
+  - preview_boot_success
+
+outcome_fact_fields:
+  - preview_boot_success: boolean
+  - false_start_detected: boolean
+  - negative_reaction_ms: boolean
+  - best_score_inconsistent: boolean
+  - stale_timeout_detected: boolean
+  - validator_failures: array of validator id
+
+guidance:
+  - "Capture bounded text evidence from preview console and validator results"
+  - "Do not persist user prompts containing secrets"
+  - "Align with OUTCOME_FACTS.md when Hermes loop lands"
+
+validation_notes:
+  - Categories map to composed validators and acceptance_criteria
+
+risk_notes:
+  - Premature wiring could leak PII from user prompts

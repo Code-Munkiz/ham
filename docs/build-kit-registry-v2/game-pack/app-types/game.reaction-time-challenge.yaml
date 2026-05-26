@@ -1,0 +1,259 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: game.reaction-time-challenge
+kind: app_type
+name: Reaction time challenge
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  A DOM-native, local-only reaction-time game: wait for a signal after a random
+  delay, respond with click/tap/keyboard as fast as possible, penalize early clicks
+  as false starts, show millisecond feedback, track best/average scores, and
+  support retry rounds. Custom-generated from prompt plus playbook — never cloned
+  from a starter project.
+
+non_template_statement: >
+  This app type does not reference checked-in reaction test assets, medical
+  assessment tools, or clone baselines. It defines generative guidance only.
+
+legacy_v1_fallback: generic
+
+safety_constraints:
+  - no-network-egress-for-mvp
+  - no-eval
+  - no-user-accounts-for-mvp
+  - no-multiplayer-for-mvp
+  - no-real-money-economy
+  - dom-native-ui-only-for-mvp
+  - no-gambling-betting-for-mvp
+  - no-medical-biometric-claims-for-mvp
+  - no-productivity-timer-app-for-mvp
+  - no-typing-speed-game-for-mvp
+  - no-rhythm-music-game-for-mvp
+
+applies_to:
+  - tag:reaction-time-challenge
+  - tag:dom-casual-game
+
+inputs:
+  - user_prompt: natural language theme for reaction UI copy
+  - optional_min_delay_ms: number — default 1000
+  - optional_max_delay_ms: number — default 5000
+  - optional_round_count: number — default unlimited retries
+
+outputs:
+  - runnable_vite_react_app: single-page DOM reaction-time game
+  - composed_build_recipe: ids of mechanics, contracts, validators, recovery modules
+  - normie_plan_summary: phased build description for chat/activity stream
+
+guidance:
+  - "React state machine: idle → waiting → ready/signal → result"
+  - "Random delay before signal; block input during wait except false-start detection"
+  - "Measure reaction ms from signal timestamp to valid input"
+  - "False start on early click; show retry without recording score"
+  - "Track best and optional rolling average locally"
+  - "Keyboard (Space/Enter) and pointer support; DOM only"
+
+validation_notes:
+  - Run composed validators after scaffold and input handler edits
+  - Preview must boot without console errors before success copy
+
+risk_notes:
+  - Timer starts before signal visible
+  - False start not detected on early click
+  - Stale timeout fires after unmount
+  - Confusion with Pomodoro, stopwatch, or typing speed games
+
+user_prompt_examples:
+  - "Build a browser reaction-time game where the player waits for the screen to turn green, clicks as fast as possible, and sees their reaction time."
+  - "Build a reflex challenge where clicking too early counts as a false start and players can retry for a better score."
+  - "Build a local reaction-speed game with random delays, best score tracking, and a play-again button."
+  - "Build a simple reaction test game where the user presses space when the signal appears and gets millisecond feedback."
+
+negative_prompt_examples:
+  - "Build a Pomodoro timer."
+  - "Build a typing speed test."
+  - "Build a rhythm tap game."
+  - "Build a stopwatch app."
+  - "Build a dashboard for response times."
+  - "Build a medical reflex test."
+  - "Build an accessibility reaction assessment."
+  - "Build a game with physics collisions."
+  - "Build a gambling game with reaction bets."
+
+intent_signals:
+  - "\\breaction[- ]time\\b.{0,80}\\b(click|tap|game|test|challenge)\\b"
+  - "\\b(false\\s+start|too\\s+early)\\b.{0,80}\\b(click|tap|reaction|reflex)\\b"
+  - "\\bwait\\s+for\\s+(the\\s+)?(signal|green|go)\\b.{0,80}\\b(click|tap|fast)\\b"
+  - "\\breflex\\s+(challenge|test|game)\\b.{0,80}\\b(reaction|millisecond|ms)\\b"
+
+clarifying_questions:
+  - when: intent_confidence_low
+    ask: "Random delay range — default 1–5 seconds before the signal?"
+  - when: input_ambiguous
+    ask: "Click/tap only, or keyboard (Space) support too?"
+  - when: scoring_ambiguous
+    ask: "Track best time only, or best plus average over rounds?"
+
+default_assumptions:
+  - "Random delay 1–5 seconds before signal"
+  - "False start on click during wait phase"
+  - "Millisecond reaction time on valid response"
+  - "Best score persisted in session state only"
+  - "Play again resets round without page reload"
+  - "DOM/React UI; mobile-friendly at 360px width"
+
+hard_constraints:
+  - no-real-money-economy
+  - no-template-cloning
+  - no-runtime-llm-generation-for-mvp
+  - no-external-api-for-mvp
+  - no-user-secrets-or-credentials
+  - preserve-safe-local-mvp-scope
+  - dom-native-ui-only-for-mvp
+  - no-gambling-betting-for-mvp
+  - no-medical-biometric-claims-for-mvp
+  - no-productivity-timer-app-for-mvp
+  - no-typing-speed-game-for-mvp
+  - no-rhythm-music-game-for-mvp
+
+soft_defaults:
+  - random delay one to five seconds
+  - false start penalty with retry
+  - millisecond reaction feedback
+  - best score tracking in session
+  - optional average over last N rounds
+  - local-only state
+  - no leaderboard
+
+user_overridable:
+  - theme and visual tone
+  - signal color or copy (wait / go)
+  - delay range min and max
+  - false-start message copy
+  - keyboard key binding
+  - number of rounds before summary
+  - result copy tone
+
+clarify_if_changed:
+  - replacing reaction game with Pomodoro or productivity timer
+  - replacing reaction game with typing speed or WPM challenge
+  - replacing reaction game with rhythm or music tap game
+  - adding medical, clinical, or biometric assessment claims
+  - adding gambling, betting, or odds mechanics
+  - requiring Canvas, WebGL, or physics engine
+  - adding multiplayer race or global leaderboard
+  - replacing wait-and-click with continuous stopwatch mode
+
+out_of_scope_unless_explicit:
+  - user accounts or cloud sync
+  - backend persistence or analytics pipeline
+  - global leaderboards
+  - multiplayer head-to-head reaction race
+  - medical clinical reflex assessment
+  - accessibility certification or diagnostic tooling
+  - productivity Pomodoro or focus timers
+  - typing speed WPM games
+  - rhythm or music tap games
+  - gambling betting or reaction wagers
+  - Canvas physics or collision games
+  - dashboard or admin response-time analytics
+
+conflict_policy:
+  user_explicit_overrides_soft_defaults: true
+  safety_constraints_override_user_request: true
+  core_loop_conflicts_require_clarification: true
+  out_of_scope_items_require_explicit_request: true
+  fallback_to_v1_or_generic_when_recipe_no_longer_fits: true
+
+adaptive_policy_note: >
+  User prompt is source of truth. Build Kit is expert playbook. Hard constraints
+  are non-negotiable. Soft defaults may be overridden. If the prompt asks for
+  excluded semantics (Pomodoro, typing test, medical assessment, gambling), the
+  generated plan should clarify or fall back rather than forcing this recipe.
+  Weak terms like timer, reaction, speed, or button alone are not enough for
+  future routing.
+
+stack_kit_id: stack.dom-game-minimal
+
+compose_order_ref: pack.game#compose_defaults.compose_order
+
+composed_modules:
+  stack_kit_id: stack.dom-game-minimal
+  mechanics:
+    - mechanic.reaction-state-machine
+    - mechanic.random-signal-delay
+    - mechanic.false-start-handling
+    - mechanic.reaction-timer
+    - mechanic.reaction-input-response
+    - mechanic.reaction-time-scoring
+    - mechanic.reaction-round-progression
+    - mechanic.reaction-result-state
+  component_contracts:
+    - component.game-shell
+    - component.reaction-signal-panel
+    - component.reaction-timer-display
+    - component.false-start-panel
+    - component.reaction-round-controls
+    - component.reaction-score-tracker
+    - component.reaction-results-panel
+  validators:
+    - validator.reaction-state-transitions
+    - validator.false-start-enforcement
+    - validator.reaction-timer-bounds
+    - validator.reaction-score-consistency
+    - validator.reaction-input-cleanup
+  recovery_playbooks:
+    - recovery.stuck-reaction-state
+    - recovery.invalid-reaction-timer
+    - recovery.broken-false-start-logic
+    - recovery.stale-reaction-timeout
+  progress_labels: progress.reaction-time-challenge
+  learning_hooks: learning.reaction-time-challenge
+
+build_phases:
+  - id: phase.understand
+    title: Understand the reaction challenge idea
+    order: 1
+    modules_used: [app_type]
+  - id: phase.compose
+    title: Compose mechanics and UI contracts
+    order: 2
+    modules_used: [mechanics, component_contracts]
+  - id: phase.generate
+    title: Generate custom reaction game code
+    order: 3
+    modules_used: [stack_kit_id, guidance]
+  - id: phase.validate
+    title: Check signal, timer, and false-start rules
+    order: 4
+    modules_used: [validators]
+  - id: phase.preview
+    title: Prepare Workbench preview
+    order: 5
+    modules_used: []
+  - id: phase.recover
+    title: Fix known failure modes if needed
+    order: 6
+    optional: true
+    modules_used: [recovery_playbooks]
+
+acceptance_criteria:
+  - "Game loads in preview without runtime console errors"
+  - "Player sees wait state then signal after random delay"
+  - "Early click during wait registers false start with retry path"
+  - "Valid click after signal records reaction time in milliseconds"
+  - "Best score updates when new personal best achieved"
+  - "Play again starts a new round with fresh random delay"
+  - "Keyboard and pointer input both work when implemented"
+  - "UI readable on mobile-width viewport"
+
+out_of_scope:
+  - Multiplayer, accounts, or leaderboards
+  - Medical, clinical, or biometric assessment claims
+  - Pomodoro, productivity, or stopwatch apps
+  - Typing speed, WPM, or rhythm/music tap games
+  - Gambling, betting, or reaction wagers
+  - Canvas, Phaser, or physics engines
+  - Dashboard or admin analytics for response times

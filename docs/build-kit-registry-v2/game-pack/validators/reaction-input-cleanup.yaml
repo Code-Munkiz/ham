@@ -1,0 +1,64 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.reaction-input-cleanup
+kind: validator
+name: Reaction input cleanup
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Ensures signal delay timeouts and listeners are cleared on unmount, false start,
+  and play again.
+
+non_template_statement: >
+  Validation rule definition only. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.reaction-time-challenge
+  - tag:reaction-time-challenge
+
+depends_on:
+  - mechanic.random-signal-delay
+  - mechanic.reaction-input-response
+
+validates_modules:
+  - mechanic.random-signal-delay
+  - mechanic.reaction-input-response
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - scheduledTimeouts: conceptual
+  - effectCleanups: conceptual
+
+outputs:
+  - pass | fail with reason code
+
+guidance:
+  - "useEffect cleanup clears setTimeout"
+  - "No signal after component unmount"
+
+validation_notes:
+  - Run after delay and effect handler edits
+
+risk_notes:
+  - Stale timeout shows signal on wrong screen
+
+validation_goal: >
+  Protect timeout and listener cleanup.
+
+pass_conditions:
+  - "Delay timeout cleared on unmount and round reset"
+  - "No duplicate timers on rapid play again"
+
+fail_conditions:
+  - "Multiple concurrent signal timeouts"
+  - "Signal fires after play again without new round"
+
+suggested_failure_message: >
+  Reaction timers aren't cleaning up correctly. I'll fix timeout lifecycle.
+
+recovery_playbooks:
+  - recovery.stale-reaction-timeout

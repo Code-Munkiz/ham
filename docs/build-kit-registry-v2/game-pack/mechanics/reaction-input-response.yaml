@@ -1,0 +1,65 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.reaction-input-response
+kind: mechanic
+name: Reaction input response
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Pointer click/tap and keyboard (Space/Enter) handlers gated by phase. Routes early
+  input to false-start path and valid input to reaction timer.
+
+non_template_statement: >
+  Input handling recipe only. Not typing-speed input stream.
+
+applies_to:
+  - game.reaction-time-challenge
+  - tag:reaction-time-challenge
+
+depends_on:
+  - mechanic.false-start-handling
+  - mechanic.reaction-timer
+
+provides:
+  - reaction_input_state
+
+binds_components:
+  - component.reaction-signal-panel
+  - component.reaction-round-controls
+
+inputs:
+  - enable_keyboard: boolean — default true
+  - enable_pointer: boolean — default true
+
+outputs:
+  - lastInputType: pointer | keyboard | null
+
+guidance:
+  - "Large hit target on signal panel for mobile"
+  - "Keyboard: Space or Enter when signal panel focused"
+  - "Prevent double-fire from touch + click"
+
+validation_notes:
+  - validator.false-start-enforcement
+  - validator.reaction-input-cleanup
+
+risk_notes:
+  - Keyboard works during wait without false start
+  - Touch delay inflates reaction unfairly without debounce guard
+
+state_model:
+  fields:
+    - name: lastInputType
+      type: string
+  events:
+    - pointer_down
+    - key_down
+    - input_blocked
+
+common_failure_modes:
+  - "Click during wait records reaction time"
+  - "Input ignored during signal phase"
+
+reusable_across:
+  - game.reaction-time-challenge

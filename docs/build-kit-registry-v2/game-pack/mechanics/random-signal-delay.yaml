@@ -1,0 +1,64 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.random-signal-delay
+kind: mechanic
+name: Random signal delay
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Randomized delay between round start and signal appearance. Uses setTimeout with
+  cleanup on unmount and round cancel.
+
+non_template_statement: >
+  Delay timing recipe only. Distinct from trivia per-question timer.
+
+applies_to:
+  - game.reaction-time-challenge
+  - tag:reaction-time-challenge
+
+depends_on:
+  - mechanic.reaction-state-machine
+
+provides:
+  - signal_delay_state
+
+binds_components:
+  - component.reaction-signal-panel
+
+inputs:
+  - min_delay_ms: number — default 1000
+  - max_delay_ms: number — default 5000
+
+outputs:
+  - delayMs: number | null
+  - signalScheduled: boolean
+
+guidance:
+  - "Random int in [min, max] inclusive"
+  - "Clear timeout on unmount, false start, and new round"
+  - "Do not show signal before delay elapses"
+
+validation_notes:
+  - validator.reaction-input-cleanup
+  - validator.reaction-state-transitions
+
+risk_notes:
+  - Predictable fixed delay every round
+  - Stale timeout fires after round ended
+
+state_model:
+  fields:
+    - name: delayMs
+      type: number
+  events:
+    - schedule_signal
+    - cancel_signal
+    - signal_fired
+
+common_failure_modes:
+  - "Timeout not cleared on unmount"
+  - "Signal shown immediately without delay"
+
+reusable_across:
+  - game.reaction-time-challenge

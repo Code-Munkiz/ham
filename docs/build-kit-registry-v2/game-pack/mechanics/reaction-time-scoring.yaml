@@ -1,0 +1,68 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.reaction-time-scoring
+kind: mechanic
+name: Reaction time scoring
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Records per-round reaction milliseconds, updates session best, and optional
+  rolling average over recent rounds.
+
+non_template_statement: >
+  Scoring recipe only. Not WPM or accuracy scoring.
+
+applies_to:
+  - game.reaction-time-challenge
+  - tag:reaction-time-challenge
+
+depends_on:
+  - mechanic.reaction-timer
+  - mechanic.reaction-input-response
+
+provides:
+  - reaction_score_state
+
+binds_components:
+  - component.reaction-score-tracker
+  - component.reaction-results-panel
+
+inputs:
+  - track_average: boolean — default true
+  - average_window: number — default 5
+
+outputs:
+  - lastReactionMs: number | null
+  - bestReactionMs: number | null
+  - averageReactionMs: number | null
+  - roundCount: number
+
+guidance:
+  - "Best = min valid reactionMs this session"
+  - "Average over last N valid rounds when enabled"
+  - "False starts do not affect best or average"
+
+validation_notes:
+  - validator.reaction-score-consistency
+
+risk_notes:
+  - Best score increases on slower time
+  - Average includes false-start rounds
+
+state_model:
+  fields:
+    - name: bestReactionMs
+      type: number
+    - name: averageReactionMs
+      type: number
+  events:
+    - record_valid_round
+    - reset_session_scores
+
+common_failure_modes:
+  - "Best not updated on new personal best"
+  - "Invalid ms stored from false start"
+
+reusable_across:
+  - game.reaction-time-challenge

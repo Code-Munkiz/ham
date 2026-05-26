@@ -1,0 +1,42 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.reaction-score-tracker
+kind: component_contract
+name: Reaction score tracker
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  HUD for best reaction time and optional session average.
+
+non_template_statement: >
+  UI contract only. Not WPM or accuracy meter.
+
+applies_to:
+  - game.reaction-time-challenge
+
+depends_on:
+  - mechanic.reaction-time-scoring
+
+binds_mechanics:
+  - mechanic.reaction-time-scoring
+
+required_props:
+  - bestReactionMs: number | null
+
+optional_props:
+  - averageReactionMs: number | null
+  - roundCount: number
+
+accessibility:
+  - "Best and average values readable with units"
+
+guidance:
+  - "Show em dash or placeholder before first valid round"
+  - "Lower ms is better for reaction time"
+
+validation_notes:
+  - validator.reaction-score-consistency
+
+risk_notes:
+  - Best shows slower time than last

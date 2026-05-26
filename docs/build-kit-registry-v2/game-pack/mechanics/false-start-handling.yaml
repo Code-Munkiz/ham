@@ -1,0 +1,66 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.false-start-handling
+kind: mechanic
+name: False start handling
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Detects early click/tap/keyboard during wait phase, transitions to false-start
+  state, cancels pending signal timer, and offers retry without recording reaction.
+
+non_template_statement: >
+  False-start behavior recipe only. Not a medical assessment module.
+
+applies_to:
+  - game.reaction-time-challenge
+  - tag:reaction-time-challenge
+
+depends_on:
+  - mechanic.reaction-state-machine
+  - mechanic.random-signal-delay
+
+provides:
+  - false_start_state
+
+binds_components:
+  - component.false-start-panel
+  - component.reaction-round-controls
+
+inputs:
+  - penalize_early_click: boolean — default true
+
+outputs:
+  - isFalseStart: boolean
+  - falseStartCount: number
+
+guidance:
+  - "Input during waiting → false_start phase"
+  - "Cancel scheduled signal timeout on false start"
+  - "Show retry CTA; do not update best score"
+
+validation_notes:
+  - validator.false-start-enforcement
+
+risk_notes:
+  - Early click ignored instead of penalized
+  - False start during signal phase incorrectly
+
+state_model:
+  fields:
+    - name: isFalseStart
+      type: boolean
+    - name: falseStartCount
+      type: number
+  events:
+    - early_input
+    - dismiss_false_start
+    - retry_round
+
+common_failure_modes:
+  - "Wait phase accepts reaction timing"
+  - "False start still records reaction ms"
+
+reusable_across:
+  - game.reaction-time-challenge

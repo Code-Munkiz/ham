@@ -1,0 +1,81 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.stale-reaction-timeout
+kind: recovery_playbook
+name: Fix stale reaction timeout
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs uncleared setTimeout callbacks that fire after unmount, false start, or
+  play again.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.reaction-time-challenge
+  - tag:reaction-time-challenge
+
+depends_on:
+  - mechanic.random-signal-delay
+  - validator.reaction-input-cleanup
+
+repairs_validators:
+  - validator.reaction-input-cleanup
+
+inputs:
+  - failure_context: validator result
+  - current_source: delay effects (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.reaction-input-cleanup
+
+guidance:
+  - "Store timeout id in ref; clear in cleanup"
+  - "Clear before scheduling new delay"
+
+validation_notes:
+  - Re-run reaction-input-cleanup after repair
+
+risk_notes:
+  - Clearing too aggressively prevents signal from ever showing
+
+failure_signals:
+  - validator.reaction-input-cleanup fail
+  - Signal appears after play again without new start
+  - Double signal in one round
+
+diagnosis_steps:
+  - "Check useEffect return clears timeout"
+  - "Check play again clears pending timeout id"
+
+steps:
+  - id: step.track_timeout_id
+    action: track_timeout_id
+    detail: "Ref holds active timeout; clear before reschedule"
+  - id: step.add_unmount_cleanup
+    action: add_unmount_cleanup
+    detail: "useEffect cleanup clears timeout"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.reaction-input-cleanup"
+
+repair_strategy:
+  - action: track_timeout_id
+    detail: "Single active delay timer"
+  - action: add_unmount_cleanup
+    detail: "Cleanup on unmount"
+  - action: re_validate
+    target: validator.reaction-input-cleanup
+
+guardrails:
+  - max_attempts: 2
+  - do_not: "Introduce network calls or eval"
+  - preserve: "Random delay range behavior"
+
+user_facing_summary: >
+  I fixed timer cleanup so signals appear at the right time without ghost delays.

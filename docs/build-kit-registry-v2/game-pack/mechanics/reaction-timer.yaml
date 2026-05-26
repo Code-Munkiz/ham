@@ -1,0 +1,64 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.reaction-timer
+kind: mechanic
+name: Reaction timer
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  High-resolution reaction interval measurement from signal timestamp to valid
+  input timestamp. Stops after first valid response per round.
+
+non_template_statement: >
+  Reaction interval recipe only. Not a Pomodoro or stopwatch app timer.
+
+applies_to:
+  - game.reaction-time-challenge
+  - tag:reaction-time-challenge
+
+depends_on:
+  - mechanic.reaction-state-machine
+  - mechanic.random-signal-delay
+
+provides:
+  - reaction_interval_state
+
+binds_components:
+  - component.reaction-timer-display
+
+inputs:
+  - use_performance_now: boolean — default true
+
+outputs:
+  - signalAtMs: number | null
+  - respondedAtMs: number | null
+  - reactionMs: number | null
+
+guidance:
+  - "Set signalAtMs when signal shown"
+  - "On valid input: reactionMs = respondedAtMs - signalAtMs"
+  - "Ignore duplicate inputs after reaction recorded"
+
+validation_notes:
+  - validator.reaction-timer-bounds
+
+risk_notes:
+  - Timer starts before signal visible
+  - Negative reaction time from clock skew
+
+state_model:
+  fields:
+    - name: reactionMs
+      type: number
+  events:
+    - mark_signal
+    - mark_response
+    - reset_timer
+
+common_failure_modes:
+  - "Reaction measured from round start not signal"
+  - "Multiple responses overwrite best in same round"
+
+reusable_across:
+  - game.reaction-time-challenge

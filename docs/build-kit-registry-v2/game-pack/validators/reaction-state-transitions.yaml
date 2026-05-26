@@ -1,0 +1,66 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.reaction-state-transitions
+kind: validator
+name: Reaction state transitions
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Ensures phase transitions follow idle → waiting → signal → result flow and
+  false_start is reachable from waiting only.
+
+non_template_statement: >
+  Validation rule definition only. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.reaction-time-challenge
+  - tag:reaction-time-challenge
+
+depends_on:
+  - mechanic.reaction-state-machine
+  - mechanic.reaction-round-progression
+
+validates_modules:
+  - mechanic.reaction-state-machine
+  - mechanic.reaction-round-progression
+  - component.reaction-signal-panel
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - phase: string
+  - handlers: conceptual state transitions
+
+outputs:
+  - pass | fail with reason code
+
+guidance:
+  - "No direct idle → signal without waiting"
+  - "result → waiting via play again only"
+
+validation_notes:
+  - Run after scaffold and reducer/handler edits
+
+risk_notes:
+  - Illegal phase skips break false-start detection
+
+validation_goal: >
+  Protect reaction phase machine integrity.
+
+pass_conditions:
+  - "Phase enum covers all UI states"
+  - "Illegal transitions rejected or unreachable"
+
+fail_conditions:
+  - "Signal shown while phase still waiting without transition"
+  - "Result accepts new reaction without reset"
+
+suggested_failure_message: >
+  The reaction game state flow looks broken. I'll fix wait, signal, and result
+  transitions.
+
+recovery_playbooks:
+  - recovery.stuck-reaction-state

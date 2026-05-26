@@ -1,0 +1,66 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.false-start-enforcement
+kind: validator
+name: False start enforcement
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Ensures early input during wait registers false start, cancels signal timer, and
+  does not record reaction time.
+
+non_template_statement: >
+  Validation rule definition only. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.reaction-time-challenge
+  - tag:reaction-time-challenge
+
+depends_on:
+  - mechanic.false-start-handling
+  - mechanic.reaction-input-response
+
+validates_modules:
+  - mechanic.false-start-handling
+  - mechanic.reaction-input-response
+  - component.false-start-panel
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - phase: string
+  - reactionMs: number | null
+  - isFalseStart: boolean
+
+outputs:
+  - pass | fail with reason code
+
+guidance:
+  - "Wait-phase input → isFalseStart true"
+  - "No reactionMs recorded on false start"
+
+validation_notes:
+  - Run after input handler edits
+
+risk_notes:
+  - False start path missing entirely
+
+validation_goal: >
+  Protect false-start penalty behavior.
+
+pass_conditions:
+  - "Early click sets false_start phase"
+  - "Best score unchanged on false start"
+
+fail_conditions:
+  - "Wait-phase click records reactionMs"
+  - "Signal timer not cancelled on false start"
+
+suggested_failure_message: >
+  Early clicks aren't handled correctly. I'll fix false-start detection and retry.
+
+recovery_playbooks:
+  - recovery.broken-false-start-logic

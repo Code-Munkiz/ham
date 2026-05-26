@@ -11,7 +11,8 @@ description: >
   game.trivia-timer, game.branching-narrative, game.memory-match, game.word-daily,
   game.daily-puzzle-grid, game.resource-management-sim, game.hangman-lite,
   game.typing-speed-racer (Wave 2 routed), game.word-builder (Wave 2 schema-only),
-  and game.card-deck-turn-based (Wave 3 schema-only).
+  game.card-deck-turn-based (Wave 3 routed), and game.reaction-time-challenge
+  (Wave 3 schema-only, not routed).
   Used for cross-reference validation and future composer defaults — not loaded by HAM
   at runtime today.
 
@@ -33,6 +34,7 @@ module_index:
     - game.typing-speed-racer
     - game.word-builder
     - game.card-deck-turn-based
+    - game.reaction-time-challenge
   stack_kits:
     - stack.dom-game-minimal
   mechanics:
@@ -107,6 +109,14 @@ module_index:
     - mechanic.opponent-challenge-state
     - mechanic.card-battle-scoring
     - mechanic.card-battle-result-state
+    - mechanic.reaction-state-machine
+    - mechanic.random-signal-delay
+    - mechanic.false-start-handling
+    - mechanic.reaction-timer
+    - mechanic.reaction-input-response
+    - mechanic.reaction-time-scoring
+    - mechanic.reaction-round-progression
+    - mechanic.reaction-result-state
   component_contracts:
     - component.game-shell
     - component.resource-counter
@@ -167,6 +177,12 @@ module_index:
     - component.turn-action-bar
     - component.card-battle-event-log
     - component.card-battle-results-panel
+    - component.reaction-signal-panel
+    - component.reaction-timer-display
+    - component.false-start-panel
+    - component.reaction-round-controls
+    - component.reaction-score-tracker
+    - component.reaction-results-panel
   validators:
     - validator.no-negative-currency
     - validator.passive-income-tick
@@ -216,6 +232,11 @@ module_index:
     - validator.turn-loop-alternation
     - validator.card-effect-resolution-order
     - validator.card-battle-win-loss-detection
+    - validator.reaction-state-transitions
+    - validator.false-start-enforcement
+    - validator.reaction-timer-bounds
+    - validator.reaction-score-consistency
+    - validator.reaction-input-cleanup
   recovery_playbooks:
     - recovery.stale-interval-or-bad-tick-loop
     - recovery.invalid-local-storage-json
@@ -252,6 +273,10 @@ module_index:
     - recovery.invalid-hand-state
     - recovery.stuck-turn-loop
     - recovery.invalid-card-battle-end-state
+    - recovery.stuck-reaction-state
+    - recovery.invalid-reaction-timer
+    - recovery.broken-false-start-logic
+    - recovery.stale-reaction-timeout
   progress_labels:
     - progress.idle-incremental
     - progress.trivia-timer
@@ -264,6 +289,7 @@ module_index:
     - progress.typing-speed-racer
     - progress.word-builder
     - progress.card-deck-turn-based
+    - progress.reaction-time-challenge
   learning_hooks:
     - learning.idle-incremental
     - learning.trivia-timer
@@ -276,6 +302,7 @@ module_index:
     - learning.typing-speed-racer
     - learning.word-builder
     - learning.card-deck-turn-based
+    - learning.reaction-time-challenge
 
 compose_defaults:
   compose_order:

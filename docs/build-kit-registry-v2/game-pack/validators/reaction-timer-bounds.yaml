@@ -1,0 +1,65 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.reaction-timer-bounds
+kind: validator
+name: Reaction timer bounds
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Ensures reactionMs is non-negative, recorded only after signal, and within
+  plausible human bounds for MVP.
+
+non_template_statement: >
+  Validation rule definition only. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.reaction-time-challenge
+  - tag:reaction-time-challenge
+
+depends_on:
+  - mechanic.reaction-timer
+
+validates_modules:
+  - mechanic.reaction-timer
+  - component.reaction-timer-display
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - reactionMs: number | null
+  - signalAtMs: number | null
+  - respondedAtMs: number | null
+
+outputs:
+  - pass | fail with reason code
+
+guidance:
+  - "reactionMs >= 0 when set"
+  - "respondedAtMs >= signalAtMs when both set"
+  - "Optional upper bound sanity check (e.g. 10000ms)"
+
+validation_notes:
+  - Run after timer handler edits
+
+risk_notes:
+  - Negative reaction times displayed
+
+validation_goal: >
+  Protect reaction interval measurement correctness.
+
+pass_conditions:
+  - "Reaction computed from signal to response timestamps"
+  - "No reaction recorded before signal"
+
+fail_conditions:
+  - "Negative reactionMs"
+  - "reactionMs set while phase still waiting"
+
+suggested_failure_message: >
+  Reaction timing looks wrong. I'll fix when the timer starts and stops.
+
+recovery_playbooks:
+  - recovery.invalid-reaction-timer

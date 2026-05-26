@@ -2,7 +2,7 @@
 
 **Status:** Non-runtime schema pilot only. **Schema version:** `0.1`
 
-This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: ten routed Wave 1–2 recipes plus **`game.card-deck-turn-based`** (Wave 3 schema-only, not routed). See [STATUS.md](../STATUS.md) for the full recipe list.
+This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: eleven routed Wave 1–3 recipes plus **`game.reaction-time-challenge`** (Wave 3 schema-only, not routed). See [STATUS.md](../STATUS.md) for the full recipe list.
 
 ## Root manifest
 

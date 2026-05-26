@@ -1,0 +1,80 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.stuck-reaction-state
+kind: recovery_playbook
+name: Fix stuck reaction state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs phase machine stuck in waiting or signal without valid transitions to
+  result or false start.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.reaction-time-challenge
+  - tag:reaction-time-challenge
+
+depends_on:
+  - mechanic.reaction-state-machine
+  - validator.reaction-state-transitions
+
+repairs_validators:
+  - validator.reaction-state-transitions
+
+inputs:
+  - failure_context: validator result
+  - current_source: phase handlers (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.reaction-state-transitions
+
+guidance:
+  - "Single phase enum drives all UI"
+  - "Every handler updates phase atomically"
+
+validation_notes:
+  - Re-run reaction-state-transitions after repair
+
+risk_notes:
+  - Over-reset loses session best score
+
+failure_signals:
+  - validator.reaction-state-transitions fail
+  - UI stuck on wait or go color
+
+diagnosis_steps:
+  - "Check signal timeout calls show_signal transition"
+  - "Check play again resets phase to waiting"
+
+steps:
+  - id: step.unify_phase_enum
+    action: unify_phase_enum
+    detail: "Replace scattered booleans with single phase state"
+  - id: step.fix_transitions
+    action: fix_transitions
+    detail: "Wire idle/waiting/signal/result/false_start handlers"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.reaction-state-transitions"
+
+repair_strategy:
+  - action: unify_phase_enum
+    detail: "Consolidate phase state"
+  - action: fix_transitions
+    detail: "Legal transition graph"
+  - action: re_validate
+    target: validator.reaction-state-transitions
+
+guardrails:
+  - max_attempts: 2
+  - do_not: "Introduce network calls or eval"
+  - preserve: "User-facing theme and copy"
+
+user_facing_summary: >
+  I fixed the reaction game flow so wait, signal, and result states transition correctly.
