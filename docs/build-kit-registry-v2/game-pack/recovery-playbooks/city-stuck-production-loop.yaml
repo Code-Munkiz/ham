@@ -1,0 +1,21 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.city-stuck-production-loop
+kind: recovery_playbook
+name: Fix stuck production tick
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Repair end-day handler that no-ops or fails to advance day counter.
+non_template_statement: Recovery spec only — not auto-applied today.
+max_attempts: 2
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+depends_on:
+  - mechanic.city-production-tick
+repairs_validators:
+  - validator.city-production-mutation
+steps:
+  - id: step.wire_production_tick
+    action: wire_production_tick
+    detail: "End Day mutates pools from buildings on grid and increments day"

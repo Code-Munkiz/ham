@@ -1,0 +1,17 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.building-palette
+kind: component_contract
+name: Building palette
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Select building type before placement; shows costs and upgrade hints.
+non_template_statement: Palette contract only — not a tech tree panel.
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+depends_on:
+  - mechanic.city-building-catalog
+  - mechanic.city-upgrade-choice
+guidance:
+  - "3–5 building buttons; highlight selected type; disable when unaffordable"

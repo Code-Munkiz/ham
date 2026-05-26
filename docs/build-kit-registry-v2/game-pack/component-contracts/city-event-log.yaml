@@ -1,0 +1,16 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.city-event-log
+kind: component_contract
+name: City event log
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Scrollable log of placement, production, and day events.
+non_template_statement: Event log contract only — not a spreadsheet or audit dashboard.
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+depends_on:
+  - mechanic.city-production-tick
+guidance:
+  - "Append lines on placement and end-day production; cap length"

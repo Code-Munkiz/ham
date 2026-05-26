@@ -1,0 +1,17 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.city-grid-board
+kind: component_contract
+name: City grid board
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Renders fixed city grid cells with building markers and placement feedback.
+non_template_statement: Grid board contract only — not a map editor UI.
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+depends_on:
+  - mechanic.city-grid-state
+  - mechanic.city-placement-rules
+guidance:
+  - "Click cell to place selected building; show invalid placement feedback"

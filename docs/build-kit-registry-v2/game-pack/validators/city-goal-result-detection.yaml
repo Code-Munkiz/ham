@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.city-goal-result-detection
+kind: validator
+name: City goal result detection
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Win, fail, and result phase trigger at defined thresholds; restart clears result.
+non_template_statement: Validator spec only — not executable today.
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+depends_on:
+  - mechanic.city-goal-result-state
+validates_modules:
+  - mechanic.city-goal-result-state
+severity: blocking
+runner: conceptual
+check_type: conceptual
+pass_conditions:
+  - "win goal triggers result when threshold met"
+  - "optional fail constraint triggers result when breached"
+  - "restart reseeds city and clears result phase"
+recovery_playbooks:
+  - recovery.city-missing-goal-result

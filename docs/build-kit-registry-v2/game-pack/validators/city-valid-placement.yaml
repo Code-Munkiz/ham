@@ -1,0 +1,27 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.city-valid-placement
+kind: validator
+name: City valid placement
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Placement rejects occupied cells, out-of-bounds clicks, and unaffordable builds.
+non_template_statement: Validator spec only — not executable today.
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+depends_on:
+  - mechanic.city-placement-rules
+  - mechanic.city-building-catalog
+validates_modules:
+  - mechanic.city-placement-rules
+  - mechanic.city-building-catalog
+severity: blocking
+runner: conceptual
+check_type: conceptual
+pass_conditions:
+  - "occupied cell placement rejected"
+  - "out-of-bounds placement rejected"
+  - "insufficient resources block placement"
+recovery_playbooks:
+  - recovery.city-invalid-placement-accepted

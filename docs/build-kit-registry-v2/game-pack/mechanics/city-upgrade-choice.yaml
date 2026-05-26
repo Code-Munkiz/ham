@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.city-upgrade-choice
+kind: mechanic
+name: City upgrade choice
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Lightweight build or upgrade choice from palette — no tech tree.
+non_template_statement: Upgrade choice recipe only — not campaign progression.
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+depends_on:
+  - mechanic.city-building-catalog
+  - mechanic.city-resource-pools
+provides:
+  - upgrade_choice_state
+binds_components:
+  - component.building-palette
+guidance:
+  - "Select building type before placement; optional simple upgrade if resources allow"
+reusable_across:
+  - game.city-builder-lite

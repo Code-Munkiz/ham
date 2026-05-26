@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.city-production-mutation
+kind: validator
+name: City production mutation
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: End day/tick applies building production rules and advances day counter.
+non_template_statement: Validator spec only — not executable today.
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+depends_on:
+  - mechanic.city-production-tick
+validates_modules:
+  - mechanic.city-production-tick
+severity: blocking
+runner: conceptual
+check_type: conceptual
+pass_conditions:
+  - "end day mutates resource pools per building rules"
+  - "day counter increments once per tick"
+  - "production does not no-op when buildings exist"
+recovery_playbooks:
+  - recovery.city-stuck-production-loop

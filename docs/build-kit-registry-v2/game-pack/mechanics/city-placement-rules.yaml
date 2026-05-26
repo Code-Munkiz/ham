@@ -1,0 +1,27 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.city-placement-rules
+kind: mechanic
+name: City placement rules
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Validates building placement on grid cells; rejects invalid occupancy and bounds.
+non_template_statement: Placement rules recipe only — not pathfinding or zoning simulation.
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+depends_on:
+  - mechanic.city-grid-state
+  - mechanic.city-building-catalog
+provides:
+  - placement_rules
+binds_components:
+  - component.city-grid-board
+guidance:
+  - "Reject occupied cells and out-of-bounds placement with visible feedback"
+validation_notes:
+  - validator.city-valid-placement
+recovery_playbooks:
+  - recovery.city-invalid-placement-accepted
+reusable_across:
+  - game.city-builder-lite

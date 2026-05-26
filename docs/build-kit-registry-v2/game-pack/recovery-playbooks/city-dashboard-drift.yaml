@@ -1,0 +1,21 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.city-dashboard-drift
+kind: recovery_playbook
+name: Fix dashboard drift from playable city loop
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Repair scaffold that became a static resource dashboard without grid placement loop.
+non_template_statement: Recovery spec only — not auto-applied today.
+max_attempts: 2
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+depends_on:
+  - mechanic.city-grid-state
+  - mechanic.city-building-catalog
+  - mechanic.city-placement-rules
+steps:
+  - id: step.restore_playable_loop
+    action: restore_playable_loop
+    detail: "Wire grid board, palette, placement, end-day tick, and goal — not spreadsheet UI"

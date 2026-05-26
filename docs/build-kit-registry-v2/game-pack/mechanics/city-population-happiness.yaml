@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.city-population-happiness
+kind: mechanic
+name: City population happiness
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Lightweight population or happiness metric derived from buildings and resources.
+non_template_statement: Population/happiness recipe only — not a full citizen simulation.
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+depends_on:
+  - mechanic.city-resource-pools
+  - mechanic.city-production-tick
+provides:
+  - population_happiness_state
+binds_components:
+  - component.resource-status-panel
+guidance:
+  - "Simple housing vs population or happiness threshold — optional but bounded"
+reusable_across:
+  - game.city-builder-lite

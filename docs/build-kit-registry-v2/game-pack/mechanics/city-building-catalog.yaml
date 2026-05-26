@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.city-building-catalog
+kind: mechanic
+name: City building catalog
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Palette of 3–5 building types with cost, production, and placement metadata.
+non_template_statement: Building catalog recipe only — not a tech tree or asset pack.
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+depends_on: []
+provides:
+  - building_catalog
+binds_components:
+  - component.building-palette
+guidance:
+  - "Define house, farm, well, power, shop — keep count small"
+validation_notes:
+  - validator.city-valid-placement
+reusable_across:
+  - game.city-builder-lite

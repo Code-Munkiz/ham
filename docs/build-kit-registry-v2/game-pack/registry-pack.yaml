@@ -13,7 +13,8 @@ description: >
   game.typing-speed-racer (Wave 2 routed), game.word-builder (Wave 2 routed),
   game.card-deck-turn-based (Wave 3 routed), game.reaction-time-challenge
   (Wave 3 routed), game.rhythm-tap-lite (Wave 3 routed), game.deck-builder-lite
-  (Wave 3 routed), and game.turn-based-tactics-lite (Wave 4 schema-only, not routed).
+  (Wave 3 routed), game.turn-based-tactics-lite (Wave 4 routed), and
+  game.city-builder-lite (Wave 4 candidate schema-only, not routed).
   Used for cross-reference validation and future composer defaults — not loaded by HAM
   at runtime today.
 
@@ -39,6 +40,7 @@ module_index:
     - game.rhythm-tap-lite
     - game.deck-builder-lite
     - game.turn-based-tactics-lite
+    - game.city-builder-lite
   stack_kits:
     - stack.dom-game-minimal
   mechanics:
@@ -143,6 +145,14 @@ module_index:
     - mechanic.tactics-turn-loop
     - mechanic.tactics-enemy-response
     - mechanic.tactics-battle-result-state
+    - mechanic.city-grid-state
+    - mechanic.city-building-catalog
+    - mechanic.city-placement-rules
+    - mechanic.city-resource-pools
+    - mechanic.city-production-tick
+    - mechanic.city-population-happiness
+    - mechanic.city-upgrade-choice
+    - mechanic.city-goal-result-state
   component_contracts:
     - component.game-shell
     - component.resource-counter
@@ -226,6 +236,12 @@ module_index:
     - component.tactics-action-bar
     - component.tactics-event-log
     - component.tactics-results-panel
+    - component.city-grid-board
+    - component.building-palette
+    - component.resource-status-panel
+    - component.city-action-bar
+    - component.city-event-log
+    - component.city-results-panel
   validators:
     - validator.no-negative-currency
     - validator.passive-income-tick
@@ -295,6 +311,11 @@ module_index:
     - validator.tactics-attack-resolution
     - validator.tactics-enemy-response-mutates-state
     - validator.tactics-battle-result-detection
+    - validator.city-seeded-grid
+    - validator.city-valid-placement
+    - validator.city-production-mutation
+    - validator.city-resource-bounds
+    - validator.city-goal-result-detection
   recovery_playbooks:
     - recovery.stale-interval-or-bad-tick-loop
     - recovery.invalid-local-storage-json
@@ -348,6 +369,11 @@ module_index:
     - recovery.tactics-stuck-turn-phase
     - recovery.tactics-invalid-movement-accepted
     - recovery.tactics-missing-battle-result
+    - recovery.city-empty-grid
+    - recovery.city-invalid-placement-accepted
+    - recovery.city-stuck-production-loop
+    - recovery.city-missing-goal-result
+    - recovery.city-dashboard-drift
   progress_labels:
     - progress.idle-incremental
     - progress.trivia-timer
@@ -364,6 +390,7 @@ module_index:
     - progress.rhythm-tap-lite
     - progress.deck-builder-lite
     - progress.turn-based-tactics-lite
+    - progress.city-builder-lite
   learning_hooks:
     - learning.idle-incremental
     - learning.trivia-timer
@@ -380,6 +407,7 @@ module_index:
     - learning.rhythm-tap-lite
     - learning.deck-builder-lite
     - learning.turn-based-tactics-lite
+    - learning.city-builder-lite
 
 compose_defaults:
   compose_order:

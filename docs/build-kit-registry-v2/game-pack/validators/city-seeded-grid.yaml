@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.city-seeded-grid
+kind: validator
+name: City seeded grid
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: City start has expected grid dimensions and seeded empty or partial state.
+non_template_statement: Validator spec only — not executable today.
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+depends_on:
+  - mechanic.city-grid-state
+validates_modules:
+  - mechanic.city-grid-state
+severity: blocking
+runner: conceptual
+check_type: conceptual
+pass_conditions:
+  - "grid has expected rows and cols (5x5 or 6x6)"
+  - "cells array length matches rows * cols"
+  - "starting buildings if any are within bounds"
+recovery_playbooks:
+  - recovery.city-empty-grid

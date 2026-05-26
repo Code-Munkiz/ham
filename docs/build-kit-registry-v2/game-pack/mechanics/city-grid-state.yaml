@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.city-grid-state
+kind: mechanic
+name: City grid state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Fixed city grid with rows, cols, and per-cell building occupancy.
+non_template_statement: Grid state recipe only — not a map editor or checked-in city layout.
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+depends_on: []
+provides:
+  - city_grid_state
+binds_components:
+  - component.city-grid-board
+guidance:
+  - "Initialize 5x5 or 6x6 grid; track building id per occupied cell"
+validation_notes:
+  - validator.city-seeded-grid
+reusable_across:
+  - game.city-builder-lite

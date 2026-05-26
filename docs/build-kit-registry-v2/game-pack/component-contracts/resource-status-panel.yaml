@@ -1,0 +1,17 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.resource-status-panel
+kind: component_contract
+name: Resource status panel
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Displays 2–4 resource pools and optional population/happiness readout.
+non_template_statement: Status panel contract only — not an analytics dashboard.
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+depends_on:
+  - mechanic.city-resource-pools
+  - mechanic.city-population-happiness
+guidance:
+  - "Compact counters for coins, food, power, population or happiness"

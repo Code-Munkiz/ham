@@ -1,0 +1,28 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.city-goal-result-state
+kind: mechanic
+name: City goal result state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Win, fail, and result phases from population, happiness, or day goal.
+non_template_statement: Goal/result recipe only — not open-ended sandbox sim.
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+depends_on:
+  - mechanic.city-population-happiness
+  - mechanic.city-production-tick
+  - mechanic.city-resource-pools
+provides:
+  - goal_result_state
+binds_components:
+  - component.city-results-panel
+guidance:
+  - "One clear win goal; optional fail constraint; restart reseeds city"
+validation_notes:
+  - validator.city-goal-result-detection
+recovery_playbooks:
+  - recovery.city-missing-goal-result
+reusable_across:
+  - game.city-builder-lite

@@ -1,0 +1,16 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.city-action-bar
+kind: component_contract
+name: City action bar
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: End Day/Turn control and optional undo/restart shortcuts.
+non_template_statement: Action bar contract only — not a settings or finance panel.
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+depends_on:
+  - mechanic.city-production-tick
+guidance:
+  - "End Day button advances tick; disable during result phase"

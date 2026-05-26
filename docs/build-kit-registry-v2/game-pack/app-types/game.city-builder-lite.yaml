@@ -1,0 +1,260 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: game.city-builder-lite
+kind: app_type
+name: City builder lite
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  DOM-native local city-building game: fixed grid, building palette, placement rules,
+  resource pools, day/tick production, population or happiness-lite, goal/result, restart.
+  Custom-generated from prompt — never cloned.
+
+non_template_statement: >
+  Generative guidance only — no checked-in city maps, SimCity clones, or templates.
+
+legacy_v1_fallback: generic
+
+safety_constraints:
+  - no-network-egress-for-mvp
+  - no-eval
+  - no-user-accounts-for-mvp
+  - no-multiplayer-for-mvp
+  - no-real-money-economy
+  - dom-native-ui-only-for-mvp
+  - no-canvas-or-physics-for-mvp
+  - no-map-editor-for-mvp
+  - no-factory-automation-for-mvp
+  - no-rts-or-tower-defense-for-mvp
+  - no-tactics-battle-for-mvp
+  - no-puzzle-grid-only-for-mvp
+  - no-resource-dashboard-for-mvp
+  - no-finance-spreadsheet-for-mvp
+  - no-tech-tree-or-campaign-for-mvp
+
+applies_to:
+  - tag:city-builder-lite
+  - tag:dom-casual-game
+
+inputs:
+  - user_prompt: natural language city theme and building names
+  - optional_grid_size: number — default 5 or 6
+  - optional_building_count: number — default 3–5 types
+  - optional_resource_count: number — default 2–4 pools
+  - optional_day_limit: number — default win/fail by day N
+
+outputs:
+  - runnable_vite_react_app: single-page DOM city builder
+  - composed_build_recipe: ids of mechanics, contracts, validators, recovery modules
+  - normie_plan_summary: phased build description for chat/activity stream
+
+guidance:
+  - "Phases: select building → place on grid → End Day → production → check goal"
+  - "Fixed 5x5 or 6x6 grid; 3–5 buildings; 2–4 resources; one clear win goal"
+  - "DOM click/tap only; no Canvas, pathfinding, or backend"
+
+validation_notes:
+  - Run composed validators after scaffold and placement/tick handler edits
+  - Preview must boot without console errors before success copy
+
+risk_notes:
+  - Static dashboard with counters but no grid placement loop
+  - Grid and resource state diverge after placement or tick
+  - Drift into resource sim without placement, puzzle grid, tactics, or map editor scope
+  - Weak city/builder/grid/resource terms alone are insufficient for future routing
+
+user_prompt_examples:
+  - "Build a browser city-building game where the player places houses and farms on a small grid, advances days, produces food and coins, and wins by reaching a population goal."
+  - "Build a local city-builder with a 5x5 grid, building palette, resource counters, day button, placement rules, happiness, and restart."
+  - "Build a tiny DOM city sim where buildings produce resources each turn and the player must meet a city goal by day 10."
+  - "Build a small city-building game with houses, farms, wells, power, resource production, population growth, and a result screen."
+
+negative_prompt_examples:
+  - "Build a resource analytics dashboard."
+  - "Build a resource management sim with no building placement."
+  - "Build a city planning spreadsheet."
+  - "Build a real estate dashboard."
+  - "Build a map editor."
+  - "Build a level editor."
+  - "Build a factory automation game."
+  - "Build a tower defense game."
+  - "Build an RTS."
+  - "Build a tactics grid battle."
+  - "Build a daily puzzle grid."
+  - "Build a multiplayer city game."
+  - "Build a finance dashboard."
+
+intent_signals:
+  - "\\bcity[- ]build(ing|er)\\b.{0,80}\\b(grid|buildings|place|day|turn)\\b"
+  - "\\b(place|build)\\s+(houses|farms|buildings)\\b.{0,80}\\b(grid|city)\\b"
+  - "\\bsmall\\s+(grid|city)\\b.{0,80}\\b(resource|population|happiness|day)\\b"
+  - "\\bbuilding\\s+palette\\b.{0,80}\\b(end\\s+day|production|goal)\\b"
+
+clarifying_questions:
+  - when: intent_confidence_low
+    ask: "Grid size — default 5x5 or 6x6?"
+  - when: building_count_ambiguous
+    ask: "How many building types — default 3–5 (house, farm, well, shop)?"
+  - when: goal_ambiguous
+    ask: "Win condition — population target, happiness, or survive to day N?"
+
+default_assumptions:
+  - "5x5 or 6x6 grid; 3–5 building types; 2–4 resource pools"
+  - "End Day advances production; population or happiness-lite optional"
+  - "One clear win goal; optional fail by day limit or resource bankruptcy"
+  - "Local-only DOM/React at 360px width"
+
+hard_constraints:
+  - no-real-money-economy
+  - no-template-cloning
+  - no-runtime-llm-generation-for-mvp
+  - no-external-api-for-mvp
+  - no-user-secrets-or-credentials
+  - preserve-safe-local-mvp-scope
+  - dom-native-ui-only-for-mvp
+  - no-canvas-or-physics-for-mvp
+  - no-map-editor-for-mvp
+  - no-factory-automation-for-mvp
+  - no-rts-or-tower-defense-for-mvp
+  - no-tactics-battle-for-mvp
+  - no-puzzle-grid-only-for-mvp
+  - no-resource-dashboard-for-mvp
+  - no-finance-spreadsheet-for-mvp
+  - no-tech-tree-or-campaign-for-mvp
+
+soft_defaults:
+  - five by five or six by six grid
+  - three to five building types in palette
+  - two to four named resource pools
+  - end day discrete tick
+  - lightweight population or happiness rule
+  - one clear win goal with optional fail constraint
+  - new city restart reseeds all state
+
+user_overridable:
+  - theme and visual tone
+  - building names and costs
+  - resource names and starting quantities
+  - production rates per building
+  - goal threshold and day limit
+  - result copy tone
+
+clarify_if_changed:
+  - removing grid placement and keeping resource allocation only
+  - adding map or level editor
+  - adding factory belts, logistics, or automation chains
+  - adding RTS, tower defense, or tactics combat
+  - adding tech tree, campaign, or multiplayer
+  - converting into analytics dashboard or finance spreadsheet
+  - requiring Canvas, physics, or backend persistence
+
+out_of_scope_unless_explicit:
+  - user accounts or cloud sync
+  - backend persistence or leaderboards
+  - multiplayer or shared cities
+  - map editor or level editor
+  - factory automation, belts, or logistics sim
+  - RTS, tower defense, or tactics battles
+  - daily puzzle grid semantics
+  - resource analytics dashboard without playable loop
+  - real estate or urban planning business tools
+  - tech tree or campaign progression
+  - Canvas, physics, or pathfinding libraries
+
+conflict_policy:
+  user_explicit_overrides_soft_defaults: true
+  safety_constraints_override_user_request: true
+  core_loop_conflicts_require_clarification: true
+  out_of_scope_items_require_explicit_request: true
+  fallback_to_v1_or_generic_when_recipe_no_longer_fits: true
+
+adaptive_policy_note: >
+  User prompt is source of truth. Build Kit is expert playbook. Hard constraints are
+  non-negotiable; soft defaults may be overridden. Excluded semantics (dashboard,
+  resource sim without placement, map editor, factory automation, RTS, tactics, puzzle
+  grid, finance spreadsheet) should clarify or fall back. Weak terms like city, builder,
+  grid, resources, buildings, population, map, planning, simulation, dashboard, or
+  management alone are not enough for future routing.
+
+stack_kit_id: stack.dom-game-minimal
+
+compose_order_ref: pack.game#compose_defaults.compose_order
+
+composed_modules:
+  stack_kit_id: stack.dom-game-minimal
+  mechanics:
+    - mechanic.city-grid-state
+    - mechanic.city-building-catalog
+    - mechanic.city-resource-pools
+    - mechanic.city-placement-rules
+    - mechanic.city-upgrade-choice
+    - mechanic.city-production-tick
+    - mechanic.city-population-happiness
+    - mechanic.city-goal-result-state
+  component_contracts:
+    - component.game-shell
+    - component.city-grid-board
+    - component.building-palette
+    - component.resource-status-panel
+    - component.city-action-bar
+    - component.city-event-log
+    - component.city-results-panel
+  validators:
+    - validator.city-seeded-grid
+    - validator.city-valid-placement
+    - validator.city-production-mutation
+    - validator.city-resource-bounds
+    - validator.city-goal-result-detection
+  recovery_playbooks:
+    - recovery.city-empty-grid
+    - recovery.city-invalid-placement-accepted
+    - recovery.city-stuck-production-loop
+    - recovery.city-missing-goal-result
+    - recovery.city-dashboard-drift
+  progress_labels: progress.city-builder-lite
+  learning_hooks: learning.city-builder-lite
+
+build_phases:
+  - id: phase.understand
+    title: Understand idea
+    order: 1
+    modules_used: [app_type]
+  - id: phase.compose
+    title: Compose modules
+    order: 2
+    modules_used: [mechanics, component_contracts]
+  - id: phase.generate
+    title: Generate code
+    order: 3
+    modules_used: [stack_kit_id, guidance]
+  - id: phase.validate
+    title: Validate rules
+    order: 4
+    modules_used: [validators]
+  - id: phase.preview
+    title: Preview
+    order: 5
+    modules_used: []
+  - id: phase.recover
+    title: Recover
+    order: 6
+    optional: true
+    modules_used: [recovery_playbooks]
+
+acceptance_criteria:
+  - "Game loads in preview without runtime console errors"
+  - "Grid renders with seeded empty or partial city state"
+  - "Player selects building type and places on valid cells with feedback"
+  - "End Day applies production and increments day counter"
+  - "Resource pools update; bounds respected"
+  - "Population or happiness-lite updates when enabled"
+  - "Win or fail triggers result; New City reseeds all state"
+  - "UI readable on mobile-width viewport"
+
+out_of_scope:
+  - Multiplayer, accounts, leaderboards, backend
+  - Map editor, level editor, Canvas, physics
+  - Factory automation, belts, logistics, RTS, tower defense
+  - Tactics battles, daily puzzle grids, finance dashboards
+  - Tech tree, campaign, real estate business tools

@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.city-resource-pools
+kind: mechanic
+name: City resource pools
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Tracks 2–4 canonical resource pools such as coins, food, power, and water.
+non_template_statement: Resource pool recipe only — not a finance dashboard or spreadsheet.
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+depends_on: []
+provides:
+  - resource_pools
+binds_components:
+  - component.resource-status-panel
+guidance:
+  - "Keep pools small; mutate immutably on spend and production"
+validation_notes:
+  - validator.city-resource-bounds
+reusable_across:
+  - game.city-builder-lite

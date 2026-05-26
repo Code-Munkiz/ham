@@ -1,0 +1,32 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: progress.city-builder-lite
+kind: progress_label
+name: City builder lite progress
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Phase labels for city builder lite builds.
+non_template_statement: Progress copy only — not emitted at runtime.
+source_phase_owner: game.city-builder-lite
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+phase_message_map:
+  phase.understand:
+    title: Plan
+    message: Planning your city.
+  phase.compose:
+    title: Compose
+    message: Grid, buildings, resources.
+  phase.generate:
+    title: Build
+    message: Generating preview.
+  phase.validate:
+    title: Check
+    message: Verifying city loop.
+  phase.preview:
+    title: Preview
+    message: Ready to play.
+  phase.recover:
+    title: Fix
+    message: Repairing wiring.

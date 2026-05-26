@@ -1,0 +1,29 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.city-production-tick
+kind: mechanic
+name: City production tick
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: End day/turn applies building production rules to resource pools.
+non_template_statement: Production tick recipe only — not factory automation or belt logistics.
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+depends_on:
+  - mechanic.city-resource-pools
+  - mechanic.city-building-catalog
+  - mechanic.city-grid-state
+provides:
+  - production_tick
+binds_components:
+  - component.city-action-bar
+  - component.city-event-log
+guidance:
+  - "End Day button runs tick; buildings on grid modify pools"
+validation_notes:
+  - validator.city-production-mutation
+recovery_playbooks:
+  - recovery.city-stuck-production-loop
+reusable_across:
+  - game.city-builder-lite

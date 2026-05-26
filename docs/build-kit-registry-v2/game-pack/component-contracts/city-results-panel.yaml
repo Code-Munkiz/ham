@@ -1,0 +1,16 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.city-results-panel
+kind: component_contract
+name: City results panel
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Win, fail, or stalemate summary with New City restart control.
+non_template_statement: Results panel contract only — not a campaign summary dashboard.
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+depends_on:
+  - mechanic.city-goal-result-state
+guidance:
+  - "Show goal outcome copy; New City reseeds grid, resources, day, and result"

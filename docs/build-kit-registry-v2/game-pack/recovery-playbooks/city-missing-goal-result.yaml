@@ -1,0 +1,21 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.city-missing-goal-result
+kind: recovery_playbook
+name: Fix missing goal or result state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Repair goal detection or result panel that never triggers or clears on restart.
+non_template_statement: Recovery spec only — not auto-applied today.
+max_attempts: 2
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+depends_on:
+  - mechanic.city-goal-result-state
+repairs_validators:
+  - validator.city-goal-result-detection
+steps:
+  - id: step.wire_goal_result
+    action: wire_goal_result
+    detail: "Check thresholds after tick; show result; New City reseeds all state"

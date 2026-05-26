@@ -1,0 +1,21 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.city-invalid-placement-accepted
+kind: recovery_playbook
+name: Fix invalid placement accepted
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Repair placement handler that accepts occupied or out-of-bounds cells.
+non_template_statement: Recovery spec only — not auto-applied today.
+max_attempts: 2
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+depends_on:
+  - mechanic.city-placement-rules
+repairs_validators:
+  - validator.city-valid-placement
+steps:
+  - id: step.enforce_placement_rules
+    action: enforce_placement_rules
+    detail: "Reject occupied, OOB, and unaffordable placement with feedback"

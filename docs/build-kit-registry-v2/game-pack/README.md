@@ -2,7 +2,7 @@
 
 **Status:** Non-runtime schema pilot only. **Schema version:** `0.1`
 
-This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: fourteen routed Wave 1–3 recipes plus **`game.turn-based-tactics-lite`** (Wave 4 schema-only, not routed). See [STATUS.md](../STATUS.md) for the full recipe list.
+This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: fifteen routed Wave 1–4 recipes plus **`game.city-builder-lite`** (Wave 4 candidate schema-only, not routed). See [STATUS.md](../STATUS.md) for the full recipe list.
 
 ## Root manifest
 
@@ -432,6 +432,36 @@ validators:   validator.tactics-seeded-units-on-grid, validator.tactics-valid-mo
 recovery:     recovery.tactics-empty-grid-no-units, recovery.tactics-no-selected-unit, recovery.tactics-stuck-turn-phase, recovery.tactics-invalid-movement-accepted, recovery.tactics-missing-battle-result
 progress:     progress.turn-based-tactics-lite
 learning:     learning.turn-based-tactics-lite
+```
+
+**Note:** This recipe is **schema-only** today — not routed until explicitly approved.
+
+### `game.city-builder-lite` (Wave 4 — schema-only, not routed)
+
+| Reason | Detail |
+|--------|--------|
+| **Sixteenth recipe shape** | Proves the pack supports DOM city-building with grid placement — distinct from resource sim without placement, puzzle grids, and tactics battles. |
+| **DOM-native city UI** | Grid board, building palette, resource status, action bar, event log, results panel — no Canvas or backend for MVP. |
+| **Shared reuse** | Reuses `component.game-shell`, `stack.dom-game-minimal`. Does not reuse resource-sim allocation dashboard or puzzle-grid completion semantics. |
+| **Distinct mechanics** | Grid state, building catalog, placement rules, resource pools, production tick, population/happiness-lite, upgrade choice, goal/result. |
+| **Explicit MVP bounds** | Fixed 5×5–6×6 grid; 3–5 buildings; 2–4 resources; end-day tick; one clear goal; local-only; no map editor or tech tree. |
+| **Routing** | Schema-only — not routed behind `HAM_BUILD_REGISTRY_V2_ENABLED` until explicitly approved. See [CITY_BUILDER_LITE_READINESS_REVIEW.md](../CITY_BUILDER_LITE_READINESS_REVIEW.md). |
+
+### Conceptual composition — `game.city-builder-lite`
+
+When a user says *"Build a browser city-building game where the player places houses and farms on a small grid, advances days, produces food and coins, and wins by reaching a population goal"*, a **future** composer would assemble:
+
+```txt
+registry_pack: pack.game
+schema_version: 0.1
+app_type:     game.city-builder-lite
+stack_kit:    stack.dom-game-minimal
+mechanics:    mechanic.city-grid-state → mechanic.city-building-catalog → mechanic.city-resource-pools → mechanic.city-placement-rules → mechanic.city-upgrade-choice → mechanic.city-production-tick → mechanic.city-population-happiness → mechanic.city-goal-result-state
+contracts:    component.game-shell, component.city-grid-board, component.building-palette, component.resource-status-panel, component.city-action-bar, component.city-event-log, component.city-results-panel
+validators:   validator.city-seeded-grid, validator.city-valid-placement, validator.city-production-mutation, validator.city-resource-bounds, validator.city-goal-result-detection
+recovery:     recovery.city-empty-grid, recovery.city-invalid-placement-accepted, recovery.city-stuck-production-loop, recovery.city-missing-goal-result, recovery.city-dashboard-drift
+progress:     progress.city-builder-lite
+learning:     learning.city-builder-lite
 ```
 
 **Note:** This recipe is **schema-only** today — not routed until explicitly approved.

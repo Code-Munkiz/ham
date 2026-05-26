@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.city-resource-bounds
+kind: validator
+name: City resource bounds
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Resource pools stay within defined bounds; no negative quantities unless designed.
+non_template_statement: Validator spec only — not executable today.
+applies_to:
+  - game.city-builder-lite
+  - tag:city-builder-lite
+depends_on:
+  - mechanic.city-resource-pools
+validates_modules:
+  - mechanic.city-resource-pools
+severity: blocking
+runner: conceptual
+check_type: conceptual
+pass_conditions:
+  - "resource quantities never negative unless explicit fail rule"
+  - "spend on placement deducts correct cost"
+  - "production adds bounded amounts per building type"
