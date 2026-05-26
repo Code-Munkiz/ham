@@ -8,7 +8,7 @@ Practical snapshot of where Build Kit Registry v2 stands. For authoring rules se
 
 - **Build Registry v2 exists and is tested** — loader, composer, renderer, opt-in scaffold wiring, and narrow prompt routing are in place.
 - **Game Pack has ten recipes** — **219 indexed modules** total.
-- **Nine current Game Pack recipes are narrowly routable** behind `HAM_BUILD_REGISTRY_V2_ENABLED` when prompt intent clearly matches idle/incremental/clicker/tycoon, timed trivia/quiz game, branching/choice/story, memory card matching, daily word guessing / Wordle-style patterns, daily/grid/logic puzzle patterns, resource-management simulation game patterns, hangman / hidden-word / letter-guessing patterns, or typing speed / WPM / typing challenge patterns. **Wave 2 includes** **`game.daily-puzzle-grid`**, **`game.resource-management-sim`**, **`game.hangman-lite`**, and **`game.typing-speed-racer`** (schema + routing complete). **`game.word-builder`** is **schema-only (not routed)** — final planned Wave 2 recipe candidate.
+- **All ten current Game Pack recipes are narrowly routable** behind `HAM_BUILD_REGISTRY_V2_ENABLED` when prompt intent clearly matches idle/incremental/clicker/tycoon, timed trivia/quiz game, branching/choice/story, memory card matching, daily word guessing / Wordle-style patterns, daily/grid/logic puzzle patterns, resource-management simulation game patterns, hangman / hidden-word / letter-guessing patterns, typing speed / WPM / typing challenge patterns, or word-building / spelling / letter-pool patterns. **Wave 2 includes** **`game.daily-puzzle-grid`**, **`game.resource-management-sim`**, **`game.hangman-lite`**, **`game.typing-speed-racer`**, and **`game.word-builder`** (schema + routing complete).
 - **Default behavior remains v1** — when the flag is unset or false, Lane A uses existing Builder Kit JSON (`src/ham/data/builder_kits/`).
 - **No templates or starter source files** — recipes are generative playbooks only; HAM does not clone checked-in starter trees per kit.
 - **Adaptive policy fields on all Wave 1 app types** — `hard_constraints`, `soft_defaults`, `user_overridable`, `clarify_if_changed`, `out_of_scope_unless_explicit`, and `conflict_policy` document override precedence (schema only; not interpreted at runtime yet).
@@ -21,7 +21,7 @@ Practical snapshot of where Build Kit Registry v2 stands. For authoring rules se
 |-------|----------|
 | **ADRs** | [0016](../adr/0016-generative-build-kit-registry-v2.md) (registry design), [0017](../adr/0017-build-registry-v2-opt-in-scaffold-wiring.md) (opt-in scaffold wiring), [0018](../adr/0018-build-kit-evolution-loop-with-hermes.md) (future Hermes evolution loop) |
 | **Authoring Guide** | [AUTHORING_GUIDE.md](AUTHORING_GUIDE.md) |
-| **Game Pack** | [game-pack/](game-pack/) — **10 recipes** (9 routed when flag on, 1 schema-only), **219 modules** |
+| **Game Pack** | [game-pack/](game-pack/) — **10 recipes** (all routed when flag on), **219 modules** |
 | **Outcome facts / evolution loop docs** | [OUTCOME_FACTS.md](OUTCOME_FACTS.md), [examples/outcome-facts/](examples/outcome-facts/), [examples/hermes-critique-prompt.md](examples/hermes-critique-prompt.md) |
 | **Validation script** | `scripts/validate_game_pack_registry.py` |
 | **Internal package** | `src/ham/build_registry/` (`loader`, `validate`, `compose`, `render`, `scaffold_context`, `intent`) |
@@ -43,7 +43,7 @@ Practical snapshot of where Build Kit Registry v2 stands. For authoring rules se
 | `game.resource-management-sim` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow resource-management simulation game intent | ~10.9k chars | Conservative resource/allocation/production/colony/factory/farm management sim routing; dashboards, inventory apps, finance/trading/spreadsheets excluded; v1 fallback preserved |
 | `game.hangman-lite` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow hangman / hidden-word / letter-guessing intent | ~8.8k chars | Conservative hangman / hidden-word / letter-guessing routing; Wordle/daily-word routes to `game.word-daily`; crossword, word search, typing, flashcard, trivia, memory, idle, dashboard prompts excluded; v1 fallback preserved |
 | `game.typing-speed-racer` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow typing speed / WPM / typing challenge intent | ~10.4k chars | Conservative typing speed / WPM / accuracy / timer challenge routing; generic typing app, typing tutor, and dashboard prompts excluded; v1 fallback preserved |
-| `game.word-builder` | Proposed (schema-only) | No | — | ~11.2k chars | Wave 2 word-building / spelling challenge; static accepted word set, letter pool, slot validation; **not routed** until explicit approval |
+| `game.word-builder` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow word-building / spelling / letter-pool intent | ~11.2k chars | Conservative word-builder / spelling / letter-pool / letter-tile / word-slot routing; generic “word game” alone excluded; v1 fallback preserved |
 
 Ten recipe renders are under the 12k default budget.
 
@@ -65,6 +65,7 @@ Ten recipe renders are under the 12k default budget.
 - **Flag on + resource-management simulation game prompt:** routing adds `registry_v2_app_type: game.resource-management-sim` when the prompt clearly matches conservative resource-management / allocation / production-chain / colony / factory / farm sim intent (SaaS dashboards, inventory apps, finance dashboards, trading apps, spreadsheets, live markets, multiplayer economy, idle clickers, and generic “management app” without game/sim signals are excluded).
 - **Flag on + hangman / hidden-word / letter-guessing prompt:** routing adds `registry_v2_app_type: game.hangman-lite` when the prompt clearly matches conservative hangman / hidden-word / letter-guessing intent (Wordle/daily-word routes to `game.word-daily`; crossword, word search, typing speed/WPM/challenge, flashcard, trivia, memory, idle, dashboard, dictionary, and writing-app prompts are excluded).
 - **Flag on + typing speed / WPM / typing challenge prompt:** routing adds `registry_v2_app_type: game.typing-speed-racer` when the prompt clearly matches conservative typing speed / WPM / accuracy / timer / streak challenge intent (Wordle, hangman, crossword, word search, flashcards, trivia, dictionary apps, writing apps, text editors, typing tutor, generic typing app, and dashboard prompts are excluded).
+- **Flag on + word-builder / spelling / letter-pool prompt:** routing adds `registry_v2_app_type: game.word-builder` when the prompt clearly matches conservative word-building / spelling / letter-pool / letter-tile / word-slot intent (Wordle/daily-word routes to `game.word-daily`; hangman, typing speed/WPM/challenge, crossword, word search, flashcards, dictionary apps, writing apps, trivia, memory, idle, dashboard prompts, and generic “word game” without builder signals are excluded).
 - **Flag on + non-matching prompt:** no v2 metadata from routing — v1 kit context is used.
 - **Bad v2 app types fall back to v1** — load/validate/compose/render failures silently use the app type’s `legacy_v1_fallback` kit (pilot: `generic`).
 
@@ -150,7 +151,7 @@ python3 scripts/validate_game_pack_registry.py \
 - **No starter source trees** per app type.
 - **No autonomous recipe mutation** — YAML changes are normal human-reviewed git commits only ([ADR-0018](../adr/0018-build-kit-evolution-loop-with-hermes.md)).
 - **No auto-merge** of recipe or routing changes.
-- **No default v2 routing** — flag off by default; nine current Game Pack recipes are routed when flag is on. **`game.word-builder` is schema-only (not routed).** Future recipes still start schema-only until explicitly approved for routing.
+- **No default v2 routing** — flag off by default; all ten current Game Pack recipes are routed when flag is on. **No current Game Pack recipes are schema-only anymore.** Future recipes still start schema-only until explicitly approved for routing. Recipe creation still does not imply routing.
 - **No user-facing kit picker** for registry v2 app types.
 - **No validator/recovery execution yet** — validator and recovery modules are conceptual (`runner: conceptual`); not executed at build time.
 - **Hermes may critique/propose future changes only** through reviewed patches — no runtime recipe editing today.
@@ -173,9 +174,9 @@ Follow [AUTHORING_GUIDE.md](AUTHORING_GUIDE.md). Summary:
 ## 8. How routing works today
 
 - **Module:** `src/ham/build_registry/intent.py`
-- **`select_registry_v2_app_type_for_prompt(prompt)`** — pure regex; returns `game.idle-incremental`, `game.trivia-timer`, `game.branching-narrative`, `game.memory-match`, `game.word-daily`, `game.daily-puzzle-grid`, `game.resource-management-sim`, `game.hangman-lite`, `game.typing-speed-racer`, or `None`.
+- **`select_registry_v2_app_type_for_prompt(prompt)`** — pure regex; returns `game.idle-incremental`, `game.trivia-timer`, `game.branching-narrative`, `game.memory-match`, `game.word-daily`, `game.daily-puzzle-grid`, `game.resource-management-sim`, `game.hangman-lite`, `game.typing-speed-racer`, `game.word-builder`, or `None`.
 - **`enrich_plan_metadata_with_registry_v2(metadata, prompt, env=...)`** — copies metadata and sets `registry_v2_app_type` only when flag + intent match.
-- **Routed app types today:** `game.idle-incremental`, `game.trivia-timer`, `game.branching-narrative`, `game.memory-match`, `game.word-daily`, `game.daily-puzzle-grid`, `game.resource-management-sim`, `game.hangman-lite`, and `game.typing-speed-racer` (precedence: trivia → idle → branching narrative → memory match → word daily → daily puzzle grid → resource management sim → hangman lite → typing speed racer).
+- **Routed app types today:** `game.idle-incremental`, `game.trivia-timer`, `game.branching-narrative`, `game.memory-match`, `game.word-daily`, `game.daily-puzzle-grid`, `game.resource-management-sim`, `game.hangman-lite`, `game.typing-speed-racer`, and `game.word-builder` (precedence: trivia → idle → branching narrative → memory match → word daily → daily puzzle grid → resource management sim → hangman lite → typing speed racer → word builder).
 - **Trivia routing is conservative** — requires game-like or timed trivia/quiz/challenge signals; avoids survey/forms/flashcards and generic quiz unless clearly game-like/timed trivia.
 - **Branching narrative routing is conservative** — requires branching/choice/story/CYOA/interactive-fiction signals; avoids blogs, chatbots, generic writing apps, generic RPGs, and live AI dungeon prompts.
 - **Memory match routing is conservative** — requires memory/matching/pair/flip/concentration signals; avoids card battlers, trading cards, flashcards, poker, solitaire, and generic card games.
@@ -183,7 +184,8 @@ Follow [AUTHORING_GUIDE.md](AUTHORING_GUIDE.md). Summary:
 - **Daily puzzle grid routing is conservative** — requires daily/grid/logic/cell/row/column/rule/clue signals; avoids dashboard grids, CSS layouts, data tables, crossword, word search, Tetris, Minesweeper, and generic “grid”, “puzzle”, or “daily game” without clear grid-logic intent.
 - **Resource management sim routing is conservative** — requires game/sim signals plus resource/allocation/production/colony/factory/farm management signals; avoids SaaS dashboards, inventory apps, finance dashboards, trading apps, spreadsheets, live markets, multiplayer economy, idle clickers, and generic “management app” without clear simulation-game intent.
 - **Hangman lite routing is conservative** — requires hangman / hidden-word / letter-guessing signals; Wordle/daily-word routes to `game.word-daily`; excludes crossword, word search, typing speed/WPM/challenge, flashcard, trivia, memory, idle, dashboard, dictionary, and writing-app prompts.
-- **Typing speed racer routing is conservative** — requires typing speed / WPM / accuracy / timer / streak / keyboard-speed / type-prompts-fast challenge signals; lowest precedence after hangman lite; generic typing app, typing tutor, text editor, and dashboard prompts do not route to `game.typing-speed-racer`.
+- **Typing speed racer routing is conservative** — requires typing speed / WPM / accuracy / timer / streak / keyboard-speed / type-prompts-fast challenge signals; generic typing app, typing tutor, text editor, and dashboard prompts do not route to `game.typing-speed-racer`.
+- **Word builder routing is conservative** — requires word-building / spelling / letter-pool / letter-tile / word-slot / valid-submission signals; lowest precedence after typing speed racer; generic “word game” alone does not route to `game.word-builder`.
 - **All routing remains narrow and flag-gated** — global negative patterns block SaaS, dashboard, trading, etc.; recipe-specific negatives prevent cross-recipe false positives.
 - **Adding a recipe does not automatically route it** — new app types require explicit intent logic and approval per [ROUTING_STRATEGY.md](ROUTING_STRATEGY.md), ADR-0017, and Authoring Guide routing policy. Recipe creation still does not imply routing.
 
@@ -197,11 +199,11 @@ Outcome facts format, manual example reports, and Hermes critique prompt are **a
 
 Possible next steps:
 
-1. **Route `game.word-builder`** when prompt patterns are approved (separate from schema landing).
-2. **Consider `game.card-deck-turn-based` only after a routing ambiguity review**
-3. **Continue schema-first, route-after-approval rhythm** — new recipes land as validated schema; routing is a separate explicit step
-4. **Consider manual outcome report examples for non-idle routed recipes** (idle success example exists under [examples/outcome-facts/](examples/outcome-facts/))
-5. **Consider CI ratchet later** if registry usage increases (today warning-only for idle app-type validation + registry tests)
+1. **Create a Wave 2 retrospective/checkpoint doc** — summarize schema + routing completion for the five Wave 2 recipes.
+2. **Summarize Wave 2 as schema + routing complete** for `game.daily-puzzle-grid`, `game.resource-management-sim`, `game.hangman-lite`, `game.typing-speed-racer`, and `game.word-builder`.
+3. **Consider manual outcome report examples for non-idle routed recipes** (idle success example exists under [examples/outcome-facts/](examples/outcome-facts/))
+4. **Consider CI ratchet later** if registry usage increases (today warning-only for idle app-type validation + registry tests)
+5. **Defer `game.card-deck-turn-based` until ambiguity review** — continue schema-first, route-after-approval rhythm for any new recipe
 6. **Later:** outcome facts → Hermes critique report → proposed patch workflow (no auto-apply)
 
 Routing policy: [ROUTING_STRATEGY.md](ROUTING_STRATEGY.md).
@@ -214,6 +216,8 @@ Build Registry v2–related commits on `main` (newest first):
 
 | Commit | Subject |
 |--------|---------|
+| `cbac76c8` | feat(builder): route word builder prompts to registry v2 |
+| `d118fe34` | docs(builder): add word builder game recipe |
 | `ca8c2727` | feat(builder): route typing speed prompts to registry v2 |
 | `13e094e9` | docs(builder): add typing speed racer recipe |
 | `6d15516e` | feat(builder): route hangman prompts to registry v2 |
