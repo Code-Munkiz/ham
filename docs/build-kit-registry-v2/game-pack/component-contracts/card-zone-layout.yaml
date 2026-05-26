@@ -1,0 +1,72 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.card-zone-layout
+kind: component_contract
+name: Card zone layout
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Layout regions for deck (draw pile), discard pile, and optional shared table
+  zone. Shows pile counts and face-down deck / face-up discard top.
+
+non_template_statement: >
+  Zone layout contract only. Not a copy-paste card table component.
+
+applies_to:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based
+
+depends_on:
+  - mechanic.deck-draw-pile
+  - mechanic.discard-pile
+
+provides:
+  - card_zone_layout
+
+binds_mechanics:
+  - mechanic.deck-draw-pile
+  - mechanic.discard-pile
+
+inputs:
+  - show_deck_count: boolean — default true
+  - show_discard_top: boolean — default true
+
+outputs:
+  - regions: deckZone, discardZone
+
+guidance:
+  - "Deck and discard adjacent with counts; vertical stack on mobile"
+  - "Face-down deck; optional face-up discard top"
+
+validation_notes:
+  - validator.deck-zone-integrity
+
+risk_notes:
+  - Zone counts desync from state
+
+purpose: >
+  Stable mount points for draw and discard piles in generated card battle UI.
+
+expected_props:
+  - deckCount: number
+  - discardCount: number
+  - topDiscardCard: object | null
+  - onDrawDeck: optional callback for debug or explicit draw
+
+states:
+  - default: zones visible
+  - deck_empty: deck count zero — optional empty indicator
+  - discard_empty: no top card
+
+accessibility_notes:
+  - "Deck and discard counts exposed to screen readers"
+  - "Regions labeled Draw pile and Discard pile"
+
+responsive_notes:
+  - "Compact pile badges on narrow viewports"
+  - "Minimum 44px tap targets if zones are interactive"
+
+styling_guidance:
+  - "Clear visual separation between deck, discard, and hand"
+  - "Subtle card-back styling for deck stack"

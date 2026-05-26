@@ -1,0 +1,69 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.turn-action-bar
+kind: component_contract
+name: Turn action bar
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Primary turn controls: play selected card (if not tap-to-play), end turn, and
+  optional draw button when not auto-draw. Shows whose turn is active.
+
+non_template_statement: >
+  Action bar contract only. Not a prebuilt toolbar component.
+
+applies_to:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based
+
+depends_on:
+  - mechanic.card-turn-loop
+
+provides:
+  - turn_action_ui
+
+binds_mechanics:
+  - mechanic.card-turn-loop
+
+inputs:
+  - tap_to_play: boolean — default true (play on card tap)
+  - show_end_turn: boolean — default true
+
+outputs:
+  - end_turn_event
+  - draw_event: optional
+
+guidance:
+  - "End Turn when player active; disable when enemy or terminal"
+
+validation_notes:
+  - validator.turn-loop-alternation
+
+risk_notes:
+  - End turn enabled during enemy turn
+
+purpose: >
+  Explicit turn progression affordances beyond tap-to-play on cards.
+
+expected_props:
+  - activeSide: player | enemy
+  - canEndTurn: boolean
+  - canPlay: boolean
+  - "onEndTurn: () => void"
+  - onDraw: optional callback
+
+states:
+  - player_turn: end turn enabled
+  - enemy_turn: controls disabled
+  - terminal: hidden or disabled
+
+accessibility_notes:
+  - "End Turn button has clear accessible name"
+  - "Turn state announced when side switches"
+
+responsive_notes:
+  - "Full-width End Turn on mobile"
+
+styling_guidance:
+  - "Fixed bar above hand or footer; high contrast primary action"

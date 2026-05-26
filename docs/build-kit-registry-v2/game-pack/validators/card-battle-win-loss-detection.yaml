@@ -1,0 +1,72 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.card-battle-win-loss-detection
+kind: validator
+name: Card battle win loss detection
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Verifies win, loss, and optional draw terminal states fire correctly, block
+  further play, and show results panel with restart.
+
+non_template_statement: >
+  Validation rule definition only. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based
+
+depends_on:
+  - mechanic.card-battle-result-state
+  - mechanic.card-battle-scoring
+
+validates_modules:
+  - mechanic.card-battle-result-state
+  - mechanic.card-battle-scoring
+  - component.card-battle-results-panel
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - phase: playing | won | lost | draw
+  - enemyHp: number
+  - playerHp: number
+  - victory_mode: string
+
+outputs:
+  - pass | fail with reason code
+
+guidance:
+  - "Win when enemyHp <= 0 in defeat_enemy mode"
+  - "Loss when playerHp <= 0"
+  - "No play or end turn after terminal"
+  - "Restart resets piles, hand, HP, and phase to playing"
+
+validation_notes:
+  - Play through win and loss paths in preview
+  - Does not execute at runtime today
+
+risk_notes:
+  - Both win and loss simultaneously
+
+validation_goal: >
+  Terminal battle states must detect correctly and pause the turn loop.
+
+pass_conditions:
+  - "enemyHp <= 0 sets phase won; playerHp <= 0 sets phase lost"
+  - "Input disabled after terminal; restart resets battle state"
+
+fail_conditions:
+  - "Play accepted after win or loss"
+  - "Win never fires when enemy defeated"
+  - "Restart leaves stale hand or piles"
+
+suggested_failure_message: >
+  The win or loss state didn't trigger correctly. I'll fix battle end detection and
+  restart.
+
+recovery_playbooks:
+  - recovery.invalid-card-battle-end-state

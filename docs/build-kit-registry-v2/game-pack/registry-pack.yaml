@@ -10,7 +10,8 @@ description: >
   proposed modules for DOM-native casual games, starting with game.idle-incremental,
   game.trivia-timer, game.branching-narrative, game.memory-match, game.word-daily,
   game.daily-puzzle-grid, game.resource-management-sim, game.hangman-lite,
-  game.typing-speed-racer (Wave 2 routed), and game.word-builder (Wave 2 schema-only).
+  game.typing-speed-racer (Wave 2 routed), game.word-builder (Wave 2 schema-only),
+  and game.card-deck-turn-based (Wave 3 schema-only).
   Used for cross-reference validation and future composer defaults — not loaded by HAM
   at runtime today.
 
@@ -31,6 +32,7 @@ module_index:
     - game.hangman-lite
     - game.typing-speed-racer
     - game.word-builder
+    - game.card-deck-turn-based
   stack_kits:
     - stack.dom-game-minimal
   mechanics:
@@ -97,6 +99,14 @@ module_index:
     - mechanic.hint-reveal-lite
     - mechanic.level-progression
     - mechanic.word-builder-result-state
+    - mechanic.deck-draw-pile
+    - mechanic.hand-state
+    - mechanic.discard-pile
+    - mechanic.card-turn-loop
+    - mechanic.card-effect-resolution
+    - mechanic.opponent-challenge-state
+    - mechanic.card-battle-scoring
+    - mechanic.card-battle-result-state
   component_contracts:
     - component.game-shell
     - component.resource-counter
@@ -150,6 +160,13 @@ module_index:
     - component.word-feedback-panel
     - component.word-score-display
     - component.word-builder-results-panel
+    - component.card-zone-layout
+    - component.playable-card
+    - component.hand-panel
+    - component.opponent-status-panel
+    - component.turn-action-bar
+    - component.card-battle-event-log
+    - component.card-battle-results-panel
   validators:
     - validator.no-negative-currency
     - validator.passive-income-tick
@@ -193,6 +210,12 @@ module_index:
     - validator.duplicate-submission-blocking
     - validator.word-builder-scoring-consistency
     - validator.word-builder-completion
+    - validator.deck-zone-integrity
+    - validator.hand-size-bounds
+    - validator.draw-discard-consistency
+    - validator.turn-loop-alternation
+    - validator.card-effect-resolution-order
+    - validator.card-battle-win-loss-detection
   recovery_playbooks:
     - recovery.stale-interval-or-bad-tick-loop
     - recovery.invalid-local-storage-json
@@ -225,6 +248,10 @@ module_index:
     - recovery.invalid-word-slot-state
     - recovery.bad-word-validation
     - recovery.duplicate-word-submission
+    - recovery.broken-deck-state
+    - recovery.invalid-hand-state
+    - recovery.stuck-turn-loop
+    - recovery.invalid-card-battle-end-state
   progress_labels:
     - progress.idle-incremental
     - progress.trivia-timer
@@ -236,6 +263,7 @@ module_index:
     - progress.hangman-lite
     - progress.typing-speed-racer
     - progress.word-builder
+    - progress.card-deck-turn-based
   learning_hooks:
     - learning.idle-incremental
     - learning.trivia-timer
@@ -247,6 +275,7 @@ module_index:
     - learning.hangman-lite
     - learning.typing-speed-racer
     - learning.word-builder
+    - learning.card-deck-turn-based
 
 compose_defaults:
   compose_order:

@@ -1,0 +1,75 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.card-effect-resolution
+kind: mechanic
+name: Card effect resolution
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Resolves deterministic card effects in fixed order: damage, heal, draw, block,
+  or score modifiers. Applies effects to player, enemy, or piles without random
+  runtime generation for MVP.
+
+non_template_statement: >
+  Effect resolution recipe only. Not a prebuilt effect scripting engine.
+
+applies_to:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based
+
+depends_on:
+  - mechanic.card-turn-loop
+  - mechanic.hand-state
+  - mechanic.deck-draw-pile
+
+provides:
+  - effect_resolution
+
+binds_components:
+  - component.card-battle-event-log
+  - component.playable-card
+
+inputs:
+  - effect_types: array — damage | heal | draw | block | score
+  - resolution_order: fixed pipeline per effect type
+
+outputs:
+  - lastResolvedEffect: { cardId, effectType, value, target }
+  - pendingEffects: array — empty after sync resolution
+
+guidance:
+  - "Sync resolve on play: damage/heal/draw from static card metadata"
+  - "Log each resolution; no async queue for MVP"
+
+validation_notes:
+  - validator.card-effect-resolution-order
+  - validator.draw-discard-consistency
+
+risk_notes:
+  - Effects applied out of order
+  - Draw effect bypasses hand limit
+
+state_model:
+  fields:
+    - name: lastResolvedEffect
+      type: object
+  events:
+    - resolve_play
+    - apply_damage
+    - apply_heal
+    - apply_draw
+
+common_failure_modes:
+  - "Damage applied before card leaves hand"
+  - "Draw effect does not check hand limit"
+  - "Effect fires twice on single play"
+
+test_ideas:
+  - "Damage card reduces enemy HP by effectValue"
+  - "Heal card increases player HP"
+  - "Draw effect adds one card when hand allows"
+
+reusable_across:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based

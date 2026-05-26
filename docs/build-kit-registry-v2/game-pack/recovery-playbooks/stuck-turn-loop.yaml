@@ -1,0 +1,84 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.stuck-turn-loop
+kind: recovery_playbook
+name: Fix stuck turn loop
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs turn alternation failures, cards-per-turn limit bypass, enemy turn never
+  firing, or play/end-turn enabled on wrong active side.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based
+
+depends_on:
+  - mechanic.card-turn-loop
+  - validator.turn-loop-alternation
+  - validator.card-effect-resolution-order
+
+repairs_validators:
+  - validator.turn-loop-alternation
+  - validator.card-effect-resolution-order
+
+inputs:
+  - failure_context: validator result
+  - current_source: turn handlers (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.turn-loop-alternation
+
+guidance:
+  - "endTurn toggles activeSide and resets cardsPlayedThisTurn"
+  - "Gate play on activeSide === player and phase === playing"
+  - "Run enemy turn handler after player end turn"
+
+validation_notes:
+  - Re-run turn-loop-alternation after repair
+
+risk_notes:
+  - Enemy turn infinite loop
+
+failure_signals:
+  - validator.turn-loop-alternation fail
+  - End turn button no effect
+  - Multiple plays when limit is one
+
+diagnosis_steps:
+  - "Trace endTurn state updates for activeSide flip"
+  - "Check cardsPlayedThisTurn increment and reset"
+  - "Verify enemy turn scheduled or synchronous"
+
+steps:
+  - id: step.fix_end_turn
+    action: fix_end_turn
+    detail: "Toggle activeSide; reset cardsPlayedThisTurn; trigger enemy step"
+  - id: step.gate_play_by_turn
+    action: gate_play_by_turn
+    detail: "Disable play when wrong side or at per-turn limit"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.turn-loop-alternation"
+
+repair_strategy:
+  - action: fix_end_turn
+    detail: "Restore turn alternation"
+  - action: gate_play_by_turn
+    detail: "Enforce per-turn play limit"
+  - action: re_validate
+    target: validator.turn-loop-alternation
+
+guardrails:
+  - max_attempts: 2
+  - preserve: "cardsPerTurn default unless user specified otherwise"
+
+user_facing_summary: >
+  I fixed the turn order so player and enemy turns alternate and play limits work.

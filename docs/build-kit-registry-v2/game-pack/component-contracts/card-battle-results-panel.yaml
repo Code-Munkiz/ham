@@ -1,0 +1,67 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.card-battle-results-panel
+kind: component_contract
+name: Card battle results panel
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Win, loss, or draw summary with outcome copy, final HP/score, and restart or
+  play again action.
+
+non_template_statement: >
+  Results panel contract only. Not a prebuilt modal component.
+
+applies_to:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based
+
+depends_on:
+  - mechanic.card-battle-result-state
+
+provides:
+  - battle_results_ui
+
+binds_mechanics:
+  - mechanic.card-battle-result-state
+
+inputs:
+  - show_final_stats: boolean — default true
+
+outputs:
+  - restart_event
+
+guidance:
+  - "Show on won/lost/draw with Play again and final HP"
+
+validation_notes:
+  - validator.card-battle-win-loss-detection
+
+risk_notes:
+  - Panel visible during playing phase
+
+purpose: >
+  Terminal battle UX with clear restart path.
+
+expected_props:
+  - phase: won | lost | draw
+  - playerHp: number
+  - enemyHp: number
+  - score: number | optional
+  - "onRestart: () => void"
+
+states:
+  - won
+  - lost
+  - draw
+
+accessibility_notes:
+  - "Outcome announced to screen readers"
+  - "Restart focusable and keyboard activatable"
+
+responsive_notes:
+  - "Centered overlay or inline panel on mobile"
+
+styling_guidance:
+  - "Distinct win/loss color accents; readable headline copy"

@@ -1,0 +1,71 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.playable-card
+kind: component_contract
+name: Playable card
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Single card UI unit: title, effect summary, cost or type badge, and play/select
+  action. Used in hand and optionally as discard top preview.
+
+non_template_statement: >
+  Card tile contract only. Not a prebuilt card component library.
+
+applies_to:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based
+
+depends_on:
+  - mechanic.card-effect-resolution
+
+provides:
+  - playable_card_ui
+
+binds_mechanics:
+  - mechanic.card-effect-resolution
+  - mechanic.hand-state
+
+inputs:
+  - card: { id, title, effectType, effectValue, description }
+  - playable: boolean
+
+outputs:
+  - play_event: cardId on successful play
+
+guidance:
+  - "Plain-language effect; dim when unplayable"
+  - "Text/emoji faces for MVP — no image URLs"
+
+validation_notes:
+  - validator.card-effect-resolution-order
+
+risk_notes:
+  - Double-click fires play twice
+
+purpose: >
+  Consistent card presentation and play affordance across hand and discard preview.
+
+expected_props:
+  - id: string
+  - title: string
+  - effectSummary: string
+  - playable: boolean
+  - "onPlay: (id) => void"
+
+states:
+  - playable
+  - disabled
+  - selected: optional highlight before confirm
+
+accessibility_notes:
+  - "Button or role=button with name including title and effect"
+  - "Disabled state exposed when not playable"
+
+responsive_notes:
+  - "Hand cards scroll horizontally or wrap on mobile"
+  - "Minimum 44px tap height"
+
+styling_guidance:
+  - "Card border, title, effect line, subtle hover when playable"

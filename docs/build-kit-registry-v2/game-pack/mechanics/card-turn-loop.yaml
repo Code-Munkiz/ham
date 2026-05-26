@@ -1,0 +1,82 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.card-turn-loop
+kind: mechanic
+name: Card turn loop
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Alternates player and enemy (or challenge) turns with a default of one card played
+  per turn. Gates play and end-turn actions by active side and turn phase.
+
+non_template_statement: >
+  Turn loop guidance only. Not a turn-based engine framework.
+
+applies_to:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based
+
+depends_on:
+  - mechanic.deck-draw-pile
+  - mechanic.hand-state
+  - mechanic.discard-pile
+
+provides:
+  - turn_loop_state
+
+binds_components:
+  - component.turn-action-bar
+  - component.card-battle-event-log
+
+inputs:
+  - cards_per_turn: number — default 1
+  - draw_at_turn_start: boolean — default true
+  - active_side: player | enemy — default player first
+
+outputs:
+  - turnNumber: number
+  - activeSide: player | enemy
+  - cardsPlayedThisTurn: number
+  - phase: playing | resolving | terminal
+
+guidance:
+  - "Player turn: optional draw, play up to limit, end turn"
+  - "Enemy turn: scripted damage or one card; block wrong-side play"
+  - "Increment turnNumber on side switch"
+
+validation_notes:
+  - validator.turn-loop-alternation
+  - validator.draw-discard-consistency
+
+risk_notes:
+  - Turn stuck on one side
+  - Multiple cards played beyond per-turn limit
+
+state_model:
+  fields:
+    - name: turnNumber
+      type: number
+    - name: activeSide
+      type: string
+    - name: cardsPlayedThisTurn
+      type: number
+  events:
+    - start_turn
+    - play_card
+    - end_turn
+    - enemy_turn
+
+common_failure_modes:
+  - "End turn never switches activeSide"
+  - "Player plays during enemy turn"
+  - "cardsPlayedThisTurn not reset on new turn"
+
+test_ideas:
+  - "End turn alternates player and enemy"
+  - "Second play blocked when cards_per_turn is 1"
+  - "Turn counter increments on full round"
+
+reusable_across:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based

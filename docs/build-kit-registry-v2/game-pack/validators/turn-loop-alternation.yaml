@@ -1,0 +1,69 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.turn-loop-alternation
+kind: validator
+name: Turn loop alternation
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Verifies player and enemy turns alternate correctly, cards-per-turn limit is
+  enforced, and turn actions blocked on wrong active side.
+
+non_template_statement: >
+  Validation rule definition only. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based
+
+depends_on:
+  - mechanic.card-turn-loop
+
+validates_modules:
+  - mechanic.card-turn-loop
+  - component.turn-action-bar
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - activeSide: player | enemy
+  - cardsPlayedThisTurn: number
+  - cardsPerTurn: number
+  - phase: playing | terminal
+
+outputs:
+  - pass | fail with reason code
+
+guidance:
+  - "End turn switches activeSide"
+  - "Play blocked when cardsPlayedThisTurn >= cardsPerTurn"
+  - "Player controls disabled on enemy turn"
+
+validation_notes:
+  - Play through full player-enemy round in preview
+  - Does not execute at runtime today
+
+risk_notes:
+  - Turn stuck on player after end turn
+
+validation_goal: >
+  Turn alternation and per-turn play limits define the card battle loop.
+
+pass_conditions:
+  - "activeSide toggles after end turn"
+  - "Second play blocked when cardsPerTurn is 1"
+
+fail_conditions:
+  - "End turn does not switch side"
+  - "Player plays during enemy turn"
+  - "Unlimited plays per turn when limit is 1"
+
+suggested_failure_message: >
+  The turn order or play limit isn't working correctly. I'll fix turn alternation
+  and one-card-per-turn rules.
+
+recovery_playbooks:
+  - recovery.stuck-turn-loop

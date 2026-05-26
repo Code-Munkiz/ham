@@ -1,0 +1,88 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.invalid-card-battle-end-state
+kind: recovery_playbook
+name: Fix invalid card battle end state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs win/loss detection timing, play after terminal state, missing results
+  panel, or incomplete restart reset.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based
+
+depends_on:
+  - mechanic.card-battle-result-state
+  - mechanic.card-battle-scoring
+  - validator.card-battle-win-loss-detection
+
+repairs_validators:
+  - validator.card-battle-win-loss-detection
+
+inputs:
+  - failure_context: validator result
+  - current_source: terminal and restart handlers (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.card-battle-win-loss-detection
+
+guidance:
+  - "evaluateTerminal after each HP change and effect resolution"
+  - "Gate all play and end turn when phase !== playing"
+  - "Restart re-inits deck, hand, discard, HP, turnNumber, activeSide"
+
+validation_notes:
+  - Re-run card-battle-win-loss-detection after repair
+
+risk_notes:
+  - Win fires before enemy actually defeated
+
+failure_signals:
+  - validator.card-battle-win-loss-detection fail
+  - Play works after battle ended
+  - Restart leaves old hand cards
+
+diagnosis_steps:
+  - "Check evaluateTerminal hooked after damage/heal"
+  - "Verify input disabled when phase terminal"
+  - "Confirm restart calls full battle init"
+
+steps:
+  - id: step.hook_evaluate_terminal
+    action: hook_evaluate_terminal
+    detail: "Run terminal check after HP and scoring updates"
+  - id: step.gate_terminal_input
+    action: gate_terminal_input
+    detail: "Disable play and end turn when not playing"
+  - id: step.fix_restart
+    action: fix_restart
+    detail: "Reset all battle state on play again"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.card-battle-win-loss-detection"
+
+repair_strategy:
+  - action: hook_evaluate_terminal
+    detail: "Correct win/loss timing"
+  - action: gate_terminal_input
+    detail: "Stop post-battle actions"
+  - action: fix_restart
+    detail: "Full state reset on restart"
+  - action: re_validate
+    target: validator.card-battle-win-loss-detection
+
+guardrails:
+  - max_attempts: 2
+  - preserve: "User-facing result copy tone"
+
+user_facing_summary: >
+  I fixed win and loss detection so the battle ends correctly and you can restart cleanly.

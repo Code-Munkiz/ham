@@ -1,0 +1,67 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.card-battle-event-log
+kind: component_contract
+name: Card battle event log
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Scrollable or capped list of turn feedback: card played, damage dealt, heals,
+  draws, and turn changes. Gives players deterministic audit of battle flow.
+
+non_template_statement: >
+  Event log contract only. Not a prebuilt log component file.
+
+applies_to:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based
+
+depends_on:
+  - mechanic.card-turn-loop
+  - mechanic.card-effect-resolution
+
+provides:
+  - battle_event_log_ui
+
+binds_mechanics:
+  - mechanic.card-effect-resolution
+  - mechanic.card-turn-loop
+
+inputs:
+  - max_entries: number — default 20–50
+  - newest_first: boolean — default false
+
+outputs:
+  - log_entries: array of { message, turnNumber }
+
+guidance:
+  - "Append on effects and turn switches; cap oldest entries"
+
+validation_notes:
+  - validator.card-effect-resolution-order
+
+risk_notes:
+  - Log grows unbounded
+  - Missing entries after effects
+
+purpose: >
+  Turn feedback so players understand card effects without reading console.
+
+expected_props:
+  - entries: array of { id, message, turnNumber }
+  - maxEntries: number
+
+states:
+  - default: entries listed
+  - empty: optional placeholder before first action
+
+accessibility_notes:
+  - "Log region labeled Battle log"
+  - "New entries optionally announced in live region"
+
+responsive_notes:
+  - "Fixed height with scroll on mobile"
+
+styling_guidance:
+  - "Monospace or compact list; muted timestamps optional"

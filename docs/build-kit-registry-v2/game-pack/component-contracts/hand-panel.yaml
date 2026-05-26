@@ -1,0 +1,67 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.hand-panel
+kind: component_contract
+name: Hand panel
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Player hand region listing playable cards with hand count and hand-limit indicator.
+
+non_template_statement: >
+  Hand panel contract only. Not a checked-in React hand component.
+
+applies_to:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based
+
+depends_on:
+  - mechanic.hand-state
+  - component.playable-card
+
+provides:
+  - hand_panel_ui
+
+binds_mechanics:
+  - mechanic.hand-state
+
+inputs:
+  - hand: array of card objects
+  - handLimit: number
+  - canPlay: boolean
+
+outputs:
+  - play_from_hand: cardId
+
+guidance:
+  - "Hand N/limit label; one playable-card per entry"
+
+validation_notes:
+  - validator.hand-size-bounds
+
+risk_notes:
+  - Hand renders cards not in state
+
+purpose: >
+  Primary interaction surface for playing cards from the player's hand.
+
+expected_props:
+  - cards: array
+  - handLimit: number
+  - canPlay: boolean
+  - "onPlayCard: (id) => void"
+
+states:
+  - default: cards listed
+  - empty: no cards in hand
+  - at_limit: hand full indicator
+
+accessibility_notes:
+  - "Hand region labeled; card count announced"
+
+responsive_notes:
+  - "Horizontal scroll for many cards on mobile"
+
+styling_guidance:
+  - "Hand anchored bottom or center-main; clear separation from zones"

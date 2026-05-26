@@ -1,0 +1,86 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.broken-deck-state
+kind: recovery_playbook
+name: Fix broken deck state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs inconsistent draw pile, discard pile, or card conservation after bad
+  draw/play mutations, duplicate cards across zones, or desynced counts.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based
+
+depends_on:
+  - mechanic.deck-draw-pile
+  - mechanic.discard-pile
+  - validator.deck-zone-integrity
+  - validator.draw-discard-consistency
+
+repairs_validators:
+  - validator.deck-zone-integrity
+  - validator.draw-discard-consistency
+
+inputs:
+  - failure_context: validator result
+  - current_source: pile state and handlers (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.deck-zone-integrity
+
+guidance:
+  - "Single source of truth arrays for drawPile and discardPile"
+  - "Derive deckCount and discardCount from array length"
+  - "Atomic transfer: remove from source zone then add to target"
+
+validation_notes:
+  - Re-run deck-zone-integrity and draw-discard-consistency after repair
+
+risk_notes:
+  - Over-aggressive reset wipes in-progress battle
+
+failure_signals:
+  - validator.deck-zone-integrity fail
+  - validator.draw-discard-consistency fail
+  - Deck count UI mismatches state
+
+diagnosis_steps:
+  - "Check draw handler removes from drawPile before hand push"
+  - "Check play handler removes from hand before discard push"
+  - "Verify counts derived from .length not separate counters"
+
+steps:
+  - id: step.unify_pile_arrays
+    action: unify_pile_arrays
+    detail: "Use drawPile/discards as authoritative; sync display counts"
+  - id: step.atomic_transfers
+    action: atomic_transfers
+    detail: "Remove-then-add in single state update for draw and play"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.deck-zone-integrity"
+
+repair_strategy:
+  - action: unify_pile_arrays
+    detail: "Fix count desync from arrays"
+  - action: atomic_transfers
+    detail: "Fix card conservation on draw/play"
+  - action: re_validate
+    target: validator.deck-zone-integrity
+
+guardrails:
+  - max_attempts: 2
+  - do_not: "Introduce network calls or eval"
+  - preserve: "User-facing card definitions and battle theme"
+
+user_facing_summary: >
+  I fixed the deck and discard piles so cards move correctly between zones.

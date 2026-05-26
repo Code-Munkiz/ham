@@ -1,0 +1,74 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.opponent-challenge-state
+kind: mechanic
+name: Opponent challenge state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Simple enemy or challenge target with HP, name, and optional scripted turn
+  actions. Supports solo score-challenge mode when no named enemy is required.
+
+non_template_statement: >
+  Opponent state recipe only. Not a prebuilt AI or enemy asset pack.
+
+applies_to:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based
+
+depends_on: []
+
+provides:
+  - opponent_state
+
+binds_components:
+  - component.opponent-status-panel
+
+inputs:
+  - opponent_name: string — default Enemy
+  - starting_hp: number — default 20–30
+  - player_starting_hp: number — default 20–30
+  - enemy_turn_script: optional simple play/damage pattern
+
+outputs:
+  - enemyHp: number
+  - playerHp: number
+  - enemyName: string
+
+guidance:
+  - "Show enemy and player HP; clamp display at zero"
+  - "Enemy turn: one deterministic card or flat damage"
+
+validation_notes:
+  - validator.card-battle-win-loss-detection
+
+risk_notes:
+  - Enemy acts during player turn
+  - HP desync from effect resolution
+
+state_model:
+  fields:
+    - name: enemyHp
+      type: number
+    - name: playerHp
+      type: number
+    - name: enemyName
+      type: string
+  events:
+    - damage_enemy
+    - damage_player
+    - heal_player
+    - enemy_action
+
+common_failure_modes:
+  - "Enemy HP negative in state"
+  - "Player and enemy HP updated by wrong target"
+
+test_ideas:
+  - "Damage card reduces enemyHp"
+  - "Enemy turn reduces playerHp when scripted"
+
+reusable_across:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based

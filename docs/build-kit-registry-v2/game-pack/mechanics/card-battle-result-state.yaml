@@ -1,0 +1,70 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.card-battle-result-state
+kind: mechanic
+name: Card battle result state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Terminal win, loss, or draw states; blocks further play and end-turn actions;
+  supports restart or new battle flow.
+
+non_template_statement: >
+  Terminal result state guidance only. Not a results screen component file.
+
+applies_to:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based
+
+depends_on:
+  - mechanic.card-battle-scoring
+  - mechanic.card-turn-loop
+
+provides:
+  - battle_result_state
+
+binds_components:
+  - component.card-battle-results-panel
+
+inputs:
+  - allow_draw: boolean — default false
+  - show_restart: boolean — default true
+
+outputs:
+  - phase: playing | won | lost | draw
+  - terminalReason: string | null
+
+guidance:
+  - "Terminal won/lost/draw blocks play, draw, end turn"
+  - "Results panel with restart; reset deck, hand, HP"
+
+validation_notes:
+  - validator.card-battle-win-loss-detection
+
+risk_notes:
+  - Win and loss both fire
+  - Play accepted after terminal
+
+state_model:
+  fields:
+    - name: phase
+      type: string
+    - name: terminalReason
+      type: string
+  events:
+    - evaluate_terminal
+    - restart_battle
+
+common_failure_modes:
+  - "Turn loop continues after win"
+  - "Restart does not reset deck, hand, and HP"
+
+test_ideas:
+  - "Enemy HP zero sets won"
+  - "Player HP zero sets lost"
+  - "Restart returns to playing with fresh deck"
+
+reusable_across:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based

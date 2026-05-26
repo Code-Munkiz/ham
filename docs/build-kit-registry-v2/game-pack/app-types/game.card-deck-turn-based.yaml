@@ -1,0 +1,236 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: game.card-deck-turn-based
+kind: app_type
+name: Turn-based card deck battle
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Browser turn-based card battle: draw pile, hand limit, discard, alternating
+  turns, deterministic card effects, HP/score, win/loss/draw. Custom-generated
+  from prompt plus playbook — never cloned from a starter project.
+
+non_template_statement: >
+  This app type does not reference checked-in card decks, casino assets, or clone
+  baselines. It defines generative guidance only.
+
+legacy_v1_fallback: generic
+
+safety_constraints:
+  - no-network-egress-for-mvp
+  - no-eval
+  - no-user-accounts-for-mvp
+  - no-multiplayer-for-mvp
+  - no-real-money-economy
+  - dom-native-ui-only-for-mvp
+  - no-gambling-casino-betting-for-mvp
+  - no-nft-or-marketplace-for-mvp
+  - no-flashcard-study-deck-for-mvp
+  - no-pitch-deck-or-presentation-for-mvp
+  - no-dashboard-card-layout-for-mvp
+
+applies_to:
+  - tag:card-deck-turn-based
+  - tag:dom-casual-game
+
+inputs:
+  - user_prompt: natural language card battle theme and copy
+  - optional_hand_limit: number — default 5–7
+  - optional_starting_hp: number — default 20–30
+  - optional_cards_per_turn: number — default 1
+
+outputs:
+  - runnable_vite_react_app: single-page DOM turn-based card game
+  - composed_build_recipe: ids of mechanics, contracts, validators, recovery modules
+  - normie_plan_summary: phased build description for chat/activity stream
+
+guidance:
+  - "React state; static embedded card definitions"
+  - "Shuffle on start; deck, hand, discard visible; one card per turn default"
+  - "Sync damage/heal/draw on play; simple enemy turn; win/loss by HP"
+  - "DOM tap/click only; no Canvas for MVP"
+
+validation_notes:
+  - Run composed validators after scaffold and play/turn handler edits
+  - Preview must boot without console errors before success copy
+
+risk_notes:
+  - Card conservation broken across draw, hand, discard
+  - Turn stuck on one side or unlimited plays per turn
+  - Win/loss fires before battle logically complete
+  - Confusion with memory-match flip-pair games
+
+user_prompt_examples:
+  - "Build a simple turn-based card battle game with a draw pile, hand, discard pile, and health points."
+  - "Build a browser card game where the player draws cards, plays one card per turn, and tries to defeat a simple enemy."
+  - "Build a solitaire-like strategy card game with a deck, hand, discard pile, and score."
+  - "Make a turn-based card game with shuffle, draw, and discard mechanics."
+  - "Create a card battle game where I play one card per turn from my hand."
+  - "Build a browser game with a draw pile, hand limit, and discard pile for playing cards."
+  - "Make a simple card duel game with HP and card effects."
+  - "Build a DOM card game where I draw from a deck and play cards against a simple opponent."
+
+intent_signals:
+  - "\\bturn[- ]based\\b.{0,80}\\bcard\\b.{0,80}\\b(game|battle|duel)\\b"
+  - "\\b(draw\\s+pile|discard\\s+pile)\\b.{0,80}\\b(hand|card)\\b"
+  - "\\bplay\\s+(a\\s+)?card\\b.{0,80}\\b(turn|hand|deck)\\b"
+  - "\\bcard\\s+battle\\b.{0,80}\\b(HP|health|enemy)\\b"
+
+clarifying_questions:
+  - when: intent_confidence_low
+    ask: "Hand size limit — default six cards?"
+  - when: enemy_ambiguous
+    ask: "Simple enemy with HP, or solo score challenge?"
+  - when: turn_pacing_ambiguous
+    ask: "One card per turn, or allow multiple plays?"
+
+default_assumptions:
+  - "Static embedded cards; shuffle on new game"
+  - "Hand limit 5–7; one card per turn; optional draw at turn start"
+  - "HP ~20–30; local-only; DOM/React at 360px"
+
+hard_constraints:
+  - no-real-money-economy
+  - no-template-cloning
+  - no-runtime-llm-generation-for-mvp
+  - no-external-api-for-mvp
+  - no-user-secrets-or-credentials
+  - preserve-safe-local-mvp-scope
+  - dom-native-ui-only-for-mvp
+  - no-gambling-casino-betting-for-mvp
+  - no-nft-or-marketplace-for-mvp
+  - no-flashcard-study-deck-for-mvp
+  - no-pitch-deck-or-presentation-for-mvp
+  - no-dashboard-card-layout-for-mvp
+
+soft_defaults:
+  - static card definitions in source
+  - hand limit five to seven
+  - one card per turn
+  - draw at player turn start
+  - defeat-enemy victory by HP
+  - simple scripted enemy turn
+  - local-only state
+
+user_overridable:
+  - theme and visual tone
+  - card names and effect copy
+  - hand limit
+  - starting HP for player and enemy
+  - cards per turn
+  - victory mode (HP vs score threshold)
+  - enemy name and difficulty
+  - result copy tone
+
+clarify_if_changed:
+  - removing draw pile or discard pile entirely
+  - replacing turn-based play with realtime action
+  - adding gambling, betting, or casino mechanics
+  - adding NFT, marketplace, or card trading
+  - replacing card game with flashcard study deck
+  - replacing card game with memory flip-pair matching
+  - adding multiplayer or live matchmaking
+  - requiring Canvas or WebGL rendering
+
+out_of_scope_unless_explicit:
+  - user accounts or cloud sync
+  - backend persistence
+  - global leaderboards
+  - multiplayer or PvP services
+  - gambling casino betting chips odds
+  - NFT collectible marketplace auction
+  - flashcard spaced repetition study
+  - pitch deck slide presentation builder
+  - dashboard kanban pricing card layouts
+  - deck-builder roguelike run map (future game.deck-builder-lite)
+  - live card API or runtime-generated decks
+
+conflict_policy:
+  user_explicit_overrides_soft_defaults: true
+  safety_constraints_override_user_request: true
+  core_loop_conflicts_require_clarification: true
+  out_of_scope_items_require_explicit_request: true
+  fallback_to_v1_or_generic_when_recipe_no_longer_fits: true
+
+stack_kit_id: stack.dom-game-minimal
+
+compose_order_ref: pack.game#compose_defaults.compose_order
+
+composed_modules:
+  stack_kit_id: stack.dom-game-minimal
+  mechanics:
+    - mechanic.deck-draw-pile
+    - mechanic.hand-state
+    - mechanic.discard-pile
+    - mechanic.opponent-challenge-state
+    - mechanic.card-turn-loop
+    - mechanic.card-effect-resolution
+    - mechanic.card-battle-scoring
+    - mechanic.card-battle-result-state
+  component_contracts:
+    - component.game-shell
+    - component.card-zone-layout
+    - component.playable-card
+    - component.hand-panel
+    - component.opponent-status-panel
+    - component.turn-action-bar
+    - component.card-battle-event-log
+    - component.card-battle-results-panel
+  validators:
+    - validator.deck-zone-integrity
+    - validator.hand-size-bounds
+    - validator.draw-discard-consistency
+    - validator.turn-loop-alternation
+    - validator.card-effect-resolution-order
+    - validator.card-battle-win-loss-detection
+  recovery_playbooks:
+    - recovery.broken-deck-state
+    - recovery.invalid-hand-state
+    - recovery.stuck-turn-loop
+    - recovery.invalid-card-battle-end-state
+  progress_labels: progress.card-deck-turn-based
+  learning_hooks: learning.card-deck-turn-based
+
+build_phases:
+  - id: phase.understand
+    title: Understand the card battle idea
+    order: 1
+    modules_used: [app_type]
+  - id: phase.compose
+    title: Compose mechanics and UI contracts
+    order: 2
+    modules_used: [mechanics, component_contracts]
+  - id: phase.generate
+    title: Generate custom card game code
+    order: 3
+    modules_used: [stack_kit_id, guidance]
+  - id: phase.validate
+    title: Check deck, hand, turns, and win/loss rules
+    order: 4
+    modules_used: [validators]
+  - id: phase.preview
+    title: Prepare Workbench preview
+    order: 5
+    modules_used: []
+  - id: phase.recover
+    title: Fix known failure modes if needed
+    order: 6
+    optional: true
+    modules_used: [recovery_playbooks]
+
+acceptance_criteria:
+  - "Game loads in preview without runtime console errors"
+  - "Player can draw from deck into hand within hand limit"
+  - "Player can play a card from hand to discard with effect applied"
+  - "Turn alternates between player and enemy with one card per turn default"
+  - "Damage and heal effects update HP deterministically"
+  - "Win when enemy defeated; loss when player HP depleted; restart works"
+  - "UI readable on mobile-width viewport"
+
+out_of_scope:
+  - Multiplayer, accounts, or leaderboards
+  - Gambling, casino, betting, poker, or blackjack
+  - NFT/marketplace/trading; flashcards; pitch decks; dashboard card UI
+  - Memory flip-pair games; deck-builder roguelike; Canvas/WebGL unless explicit
+  - Monetized prizes or Web3 rewards

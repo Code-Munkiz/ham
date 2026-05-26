@@ -1,0 +1,84 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.invalid-hand-state
+kind: recovery_playbook
+name: Fix invalid hand state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Repairs hand overflow, negative hand length, cards stuck in hand after play,
+  or hand count display desync.
+
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+
+max_attempts: 2
+
+applies_to:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based
+
+depends_on:
+  - mechanic.hand-state
+  - validator.hand-size-bounds
+  - validator.draw-discard-consistency
+
+repairs_validators:
+  - validator.hand-size-bounds
+  - validator.draw-discard-consistency
+
+inputs:
+  - failure_context: validator result
+  - current_source: hand handlers (conceptual)
+
+outputs:
+  - patched_source: conceptual
+  - revalidation_target: validator.hand-size-bounds
+
+guidance:
+  - "Guard draw when hand.length >= handLimit"
+  - "Filter hand array on play remove by card id"
+  - "handCount === hand.length in display"
+
+validation_notes:
+  - Re-run hand-size-bounds after repair
+
+risk_notes:
+  - Clamp removes valid cards
+
+failure_signals:
+  - validator.hand-size-bounds fail
+  - Hand shows more cards than limit
+  - Played card still clickable in hand
+
+diagnosis_steps:
+  - "Check draw blocked at limit"
+  - "Verify play uses filter or splice on hand array"
+  - "Confirm draw effect respects same limit"
+
+steps:
+  - id: step.enforce_hand_limit
+    action: enforce_hand_limit
+    detail: "Block draw and draw effects when at handLimit"
+  - id: step.fix_play_remove
+    action: fix_play_remove
+    detail: "Remove played card id from hand in same update as discard push"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.hand-size-bounds"
+
+repair_strategy:
+  - action: enforce_hand_limit
+    detail: "Cap hand size on draw paths"
+  - action: fix_play_remove
+    detail: "Ensure play removes from hand"
+  - action: re_validate
+    target: validator.hand-size-bounds
+
+guardrails:
+  - max_attempts: 2
+  - preserve: "Hand limit value from user prompt when set"
+
+user_facing_summary: >
+  I fixed your hand so cards play correctly and the hand size stays within the limit.

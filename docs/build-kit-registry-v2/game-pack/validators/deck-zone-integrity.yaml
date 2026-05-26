@@ -1,0 +1,71 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.deck-zone-integrity
+kind: validator
+name: Deck zone integrity
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Ensures draw pile and discard pile counts match state arrays, card ids are unique
+  across zones where required, and deck initialization produces expected deck size.
+
+non_template_statement: >
+  Validation rule definition only. Not executable until a future validator runner exists.
+
+applies_to:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based
+
+depends_on:
+  - mechanic.deck-draw-pile
+  - mechanic.discard-pile
+
+validates_modules:
+  - mechanic.deck-draw-pile
+  - mechanic.discard-pile
+  - component.card-zone-layout
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+inputs:
+  - drawPile: array
+  - discardPile: array
+  - hand: array
+  - card_definitions: array
+
+outputs:
+  - pass | fail with reason code
+
+guidance:
+  - "deckCount === drawPile.length"
+  - "No duplicate card instance across hand, draw, discard unless rules allow"
+  - "Total cards in play equals initial deck size after shuffle"
+
+validation_notes:
+  - Run after scaffold and pile mutation edits
+  - Does not execute at runtime today
+
+risk_notes:
+  - Card duplicated in two zones after play
+
+validation_goal: >
+  Protect pile integrity — lost or duplicated cards break turn-based card games.
+
+pass_conditions:
+  - "Deck and discard counts match pile array lengths"
+  - "Card conservation holds across hand, draw, discard"
+
+fail_conditions:
+  - "deckCount desync from drawPile"
+  - "Same card id in hand and discard simultaneously"
+  - "Draw from empty pile without defined behavior"
+
+suggested_failure_message: >
+  The deck or discard pile state looks inconsistent. I'll fix pile counts and card
+  movement between zones.
+
+recovery_playbooks:
+  - recovery.broken-deck-state

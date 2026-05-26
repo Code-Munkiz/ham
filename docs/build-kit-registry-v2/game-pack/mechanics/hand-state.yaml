@@ -1,0 +1,68 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.hand-state
+kind: mechanic
+name: Hand state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Tracks the player's hand: hand limit, add/remove cards on draw and play,
+  and enforces maximum hand size before end of turn.
+
+non_template_statement: >
+  Hand zone behavioral recipe only. Not a prebuilt hand component file.
+
+applies_to:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based
+
+depends_on:
+  - mechanic.deck-draw-pile
+
+provides:
+  - hand_state
+
+binds_components:
+  - component.hand-panel
+  - component.playable-card
+
+inputs:
+  - hand_limit: number — default 5–7
+  - initial_draw_count: number — default 3–5
+
+outputs:
+  - hand: array of card ids
+  - handCount: number
+  - atHandLimit: boolean
+
+guidance:
+  - "Draw adds below limit; play removes from hand"
+  - "Block draw at hand limit unless overflow allowed"
+  - "Hand as row of playable cards"
+
+validation_notes:
+  - validator.hand-size-bounds
+  - validator.draw-discard-consistency
+
+risk_notes:
+  - Hand exceeds limit after draw
+  - Played card remains in hand
+
+state_model:
+  fields:
+    - name: hand
+      type: array
+    - name: handLimit
+      type: number
+  events:
+    - add_to_hand
+    - remove_from_hand
+    - draw_to_hand
+
+common_failure_modes:
+  - "Hand exceeds limit after draw"
+  - "Played card remains in hand"
+
+reusable_across:
+  - game.card-deck-turn-based

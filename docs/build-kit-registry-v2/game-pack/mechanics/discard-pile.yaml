@@ -1,0 +1,64 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.discard-pile
+kind: mechanic
+name: Discard pile
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Accumulates played or discarded cards in a discard zone. Supports top-of-discard
+  visibility and optional reshuffle-into-deck when draw pile empties.
+
+non_template_statement: >
+  Discard zone behavioral recipe only. Not a checked-in pile template.
+
+applies_to:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based
+
+depends_on:
+  - mechanic.deck-draw-pile
+  - mechanic.hand-state
+
+provides:
+  - discard_zone_state
+
+binds_components:
+  - component.card-zone-layout
+
+inputs:
+  - face_up_top: boolean — default true
+  - allow_reshuffle_into_deck: boolean — default false for MVP
+
+outputs:
+  - discardPile: array of card ids
+  - discardCount: number
+  - topDiscardId: string | null
+
+guidance:
+  - "Played cards to discard top; show count and optional top face"
+  - "Preserve order for optional discard-to-deck reshuffle"
+
+validation_notes:
+  - validator.deck-zone-integrity
+  - validator.draw-discard-consistency
+
+risk_notes:
+  - Card removed from hand but not added to discard
+  - Discard count desync
+
+state_model:
+  fields:
+    - name: discardPile
+      type: array
+  events:
+    - discard_card
+    - play_to_discard
+    - reshuffle_discard_to_deck
+
+common_failure_modes:
+  - "Play removes from hand without pushing discard"
+
+reusable_across:
+  - game.card-deck-turn-based

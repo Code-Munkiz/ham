@@ -1,0 +1,66 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: progress.card-deck-turn-based
+kind: progress_label
+name: Card deck turn-based build progress
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Normie-friendly phase labels for chat and Workbench activity stream during a
+  turn-based card battle Game Pack build.
+
+non_template_statement: >
+  Progress copy module only. Not emitted by runtime today.
+
+source_phase_owner: game.card-deck-turn-based
+
+applies_to:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based
+
+inputs:
+  - current_phase_id: from game.card-deck-turn-based build_phases
+  - recovery_active: boolean
+
+outputs:
+  - activity_title: short string for feed
+  - activity_message: one sentence for feed or chat ack
+
+guidance:
+  - "Avoid internal words: scaffold, template_kind, OpenRouter, kit_id"
+  - "Use card battle plain language"
+  - "Phase ids and order come from source_phase_owner build_phases only"
+
+validation_notes:
+  - Each mapped phase id exists on source_phase_owner build_phases
+  - Each phase has a unique normie message
+
+risk_notes:
+  - Over-long messages clutter activity stream
+
+phase_message_map:
+  phase.understand:
+    title: "Getting your card game idea"
+    message: "Turning your description into a turn-based card battle plan."
+  phase.compose:
+    title: "Planning the game pieces"
+    message: "Lining up deck, hand, discard, turns, and battle rules."
+  phase.generate:
+    title: "Building your card game"
+    message: "Creating custom code for your card battle preview."
+  phase.validate:
+    title: "Checking the card rules"
+    message: "Verifying draw, play, turns, effects, and win/loss."
+  phase.preview:
+    title: "Opening your card game preview"
+    message: "Your turn-based card game is almost ready to play."
+  phase.recover:
+    title: "Fixing a card battle issue"
+    message: "Correcting a deck, hand, or turn issue."
+
+technical_internal_notes:
+  - "Map phase.generate to LLM scaffold step internally when wired"
+  - "phase.compose corresponds to BuildRecipe assembly — not user-visible"
+  - "phase.recover triggers recovery playbook runner — cap attempts per pack.game recovery_policy"
+  - "Do not expose module ids (mechanic.deck-draw-pile) in normie messages"

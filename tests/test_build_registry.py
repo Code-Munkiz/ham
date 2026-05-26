@@ -113,6 +113,17 @@ EXPECTED_WORD_BUILDER_MECHANIC_ORDER = (
     "mechanic.word-builder-result-state",
 )
 
+EXPECTED_CARD_DECK_TURN_BASED_MECHANIC_ORDER = (
+    "mechanic.deck-draw-pile",
+    "mechanic.hand-state",
+    "mechanic.discard-pile",
+    "mechanic.card-turn-loop",
+    "mechanic.card-effect-resolution",
+    "mechanic.opponent-challenge-state",
+    "mechanic.card-battle-scoring",
+    "mechanic.card-battle-result-state",
+)
+
 WAVE_1_APP_TYPES = (
     "game.idle-incremental",
     "game.trivia-timer",
@@ -148,7 +159,7 @@ class TestHappyPath:
         pack = load_registry_pack(game_pack_root)
         assert pack.pack_id == "pack.game"
         assert pack.schema_version == "0.1"
-        assert len(pack.modules) == 219
+        assert len(pack.modules) == 247
 
     def test_validate_docs_game_pack(self, game_pack_root: Path):
         pack = load_registry_pack(game_pack_root)
@@ -686,6 +697,96 @@ class TestWordBuilderRecipe:
         assert sim.mechanic_ids == EXPECTED_RESOURCE_MANAGEMENT_SIM_MECHANIC_ORDER
         assert hangman.mechanic_ids == EXPECTED_HANGMAN_LITE_MECHANIC_ORDER
         assert typing.mechanic_ids == EXPECTED_TYPING_SPEED_RACER_MECHANIC_ORDER
+
+
+class TestCardDeckTurnBasedRecipe:
+    def test_app_type_exists_in_game_pack(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        assert "game.card-deck-turn-based" in pack.modules
+        app = pack.module_data("game.card-deck-turn-based")
+        assert app.get("kind") == "app_type"
+
+    def test_compose_card_deck_turn_based(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        validate_registry_pack(pack)
+        recipe = compose_build_recipe(pack, "game.card-deck-turn-based")
+        assert recipe.app_type_id == "game.card-deck-turn-based"
+        assert recipe.stack_kit_id == "stack.dom-game-minimal"
+        assert recipe.mechanic_ids == EXPECTED_CARD_DECK_TURN_BASED_MECHANIC_ORDER
+
+    def test_render_card_deck_includes_key_ids(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        recipe = compose_build_recipe(pack, "game.card-deck-turn-based")
+        rendered = render_playbook_context(recipe)
+        assert "game.card-deck-turn-based" in rendered
+        assert "stack.dom-game-minimal" in rendered
+        assert "mechanic.deck-draw-pile" in rendered
+        assert "mechanic.hand-state" in rendered
+        assert "mechanic.discard-pile" in rendered
+        assert "mechanic.card-turn-loop" in rendered
+        assert "mechanic.card-effect-resolution" in rendered
+        assert "mechanic.opponent-challenge-state" in rendered
+        assert "mechanic.card-battle-scoring" in rendered
+        assert "mechanic.card-battle-result-state" in rendered
+        assert "validator.deck-zone-integrity" in rendered
+        assert "validator.turn-loop-alternation" in rendered
+        assert "no-gambling-casino-betting-for-mvp" in rendered
+        assert "no-flashcard-study-deck-for-mvp" in rendered
+        assert "no-pitch-deck-or-presentation-for-mvp" in rendered
+        assert "no-dashboard-card-layout-for-mvp" in rendered
+
+    def test_render_card_deck_under_default_budget(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        recipe = compose_build_recipe(pack, "game.card-deck-turn-based")
+        rendered = render_playbook_context(recipe)
+        assert len(rendered) <= 12_000
+        assert rendered.startswith("Build Kit Registry v2 — BuildRecipe\n")
+
+    def test_card_deck_adaptive_policy_fields(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        app = pack.module_data("game.card-deck-turn-based")
+        for field in WAVE_1_ADAPTIVE_POLICY_LIST_FIELDS:
+            value = app.get(field)
+            assert isinstance(value, list), f"game.card-deck-turn-based: {field} must be a list"
+            assert value, f"game.card-deck-turn-based: {field} must be non-empty"
+
+        conflict_policy = app.get("conflict_policy")
+        assert isinstance(conflict_policy, dict)
+        for key in WAVE_1_CONFLICT_POLICY_KEYS:
+            assert key in conflict_policy
+            assert conflict_policy[key] is True
+
+    def test_card_deck_schema_only_not_routed_in_intent(self):
+        import src.ham.build_registry.intent as intent_module
+
+        source = Path(intent_module.__file__).read_text(encoding="utf-8")
+        assert "game.card-deck-turn-based" not in source
+
+    def test_existing_ten_routed_recipes_still_compose_after_card_deck_added(
+        self, game_pack_root: Path
+    ):
+        pack = load_registry_pack(game_pack_root)
+        validate_registry_pack(pack)
+        idle = compose_build_recipe(pack, "game.idle-incremental")
+        trivia = compose_build_recipe(pack, "game.trivia-timer")
+        branching = compose_build_recipe(pack, "game.branching-narrative")
+        memory = compose_build_recipe(pack, "game.memory-match")
+        word = compose_build_recipe(pack, "game.word-daily")
+        puzzle = compose_build_recipe(pack, "game.daily-puzzle-grid")
+        sim = compose_build_recipe(pack, "game.resource-management-sim")
+        hangman = compose_build_recipe(pack, "game.hangman-lite")
+        typing = compose_build_recipe(pack, "game.typing-speed-racer")
+        word_builder = compose_build_recipe(pack, "game.word-builder")
+        assert idle.mechanic_ids == EXPECTED_MECHANIC_ORDER
+        assert trivia.mechanic_ids == EXPECTED_TRIVIA_MECHANIC_ORDER
+        assert branching.mechanic_ids == EXPECTED_BRANCHING_NARRATIVE_MECHANIC_ORDER
+        assert memory.mechanic_ids == EXPECTED_MEMORY_MATCH_MECHANIC_ORDER
+        assert word.mechanic_ids == EXPECTED_WORD_DAILY_MECHANIC_ORDER
+        assert puzzle.mechanic_ids == EXPECTED_DAILY_PUZZLE_GRID_MECHANIC_ORDER
+        assert sim.mechanic_ids == EXPECTED_RESOURCE_MANAGEMENT_SIM_MECHANIC_ORDER
+        assert hangman.mechanic_ids == EXPECTED_HANGMAN_LITE_MECHANIC_ORDER
+        assert typing.mechanic_ids == EXPECTED_TYPING_SPEED_RACER_MECHANIC_ORDER
+        assert word_builder.mechanic_ids == EXPECTED_WORD_BUILDER_MECHANIC_ORDER
 
 
 class TestWave1AdaptivePolicyFields:

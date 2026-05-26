@@ -1,0 +1,70 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.opponent-status-panel
+kind: component_contract
+name: Opponent status panel
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Displays enemy name, HP bar or numeric HP, and player HP for card battle context.
+  Optional score display when scoring mechanic enabled.
+
+non_template_statement: >
+  Status HUD contract only. Not a prebuilt health bar component file.
+
+applies_to:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based
+
+depends_on:
+  - mechanic.opponent-challenge-state
+  - mechanic.card-battle-scoring
+
+provides:
+  - opponent_status_ui
+
+binds_mechanics:
+  - mechanic.opponent-challenge-state
+  - mechanic.card-battle-scoring
+
+inputs:
+  - show_score: boolean — default false
+
+outputs:
+  - status_display: enemy and player vitals
+
+guidance:
+  - "Enemy HP above play; player HP near hand; clamp at zero"
+
+validation_notes:
+  - validator.card-battle-win-loss-detection
+
+risk_notes:
+  - HP display stale after effect
+
+purpose: >
+  Readable battle vitals so players understand damage and heal outcomes.
+
+expected_props:
+  - enemyName: string
+  - enemyHp: number
+  - enemyMaxHp: number
+  - playerHp: number
+  - playerMaxHp: number
+  - score: number | optional
+
+states:
+  - default: vitals visible
+  - enemy_defeated: enemy HP at zero styling
+  - player_low: optional warning styling below threshold
+
+accessibility_notes:
+  - "HP values available as text, not color alone"
+  - "Live region optional for HP changes after effects"
+
+responsive_notes:
+  - "Stack enemy and player rows vertically on narrow screens"
+
+styling_guidance:
+  - "Clear labels Enemy HP and Your HP; simple bar or numeric display"

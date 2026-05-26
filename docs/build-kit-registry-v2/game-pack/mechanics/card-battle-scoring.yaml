@@ -1,0 +1,69 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.card-battle-scoring
+kind: mechanic
+name: Card battle scoring
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Tracks HP, optional score points, and victory threshold conditions derived from
+  card effects and opponent state. Feeds win/loss/draw detection.
+
+non_template_statement: >
+  Scoring and victory tracking guidance only. Not a leaderboard or economy module.
+
+applies_to:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based
+
+depends_on:
+  - mechanic.opponent-challenge-state
+  - mechanic.card-effect-resolution
+
+provides:
+  - battle_score_state
+
+binds_components:
+  - component.opponent-status-panel
+
+inputs:
+  - victory_mode: defeat_enemy | score_threshold | deck_exhaustion
+  - score_threshold: number | null
+  - track_score_points: boolean — default false
+
+outputs:
+  - score: number
+  - victoryProgress: string — human-readable progress hint
+
+guidance:
+  - "Win when enemy HP <= 0 or score threshold met"
+  - "Re-evaluate after each effect; HP primary metric"
+
+validation_notes:
+  - validator.card-battle-win-loss-detection
+  - validator.card-effect-resolution-order
+
+risk_notes:
+  - Score increments without bound check
+  - Victory condition never evaluated
+
+state_model:
+  fields:
+    - name: score
+      type: number
+  events:
+    - add_score
+    - evaluate_victory_progress
+
+common_failure_modes:
+  - "Score double-counts on same card play"
+  - "Victory progress stale after HP change"
+
+test_ideas:
+  - "Defeating enemy sets victory progress to win-ready"
+  - "Score increments only on defined events"
+
+reusable_across:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based

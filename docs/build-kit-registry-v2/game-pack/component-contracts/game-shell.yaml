@@ -24,6 +24,7 @@ applies_to:
   - game.hangman-lite
   - game.typing-speed-racer
   - game.word-builder
+  - game.card-deck-turn-based
   - tag:dom-game-layout
 
 depends_on: []

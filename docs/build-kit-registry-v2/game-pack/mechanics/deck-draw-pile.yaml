@@ -1,0 +1,67 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.deck-draw-pile
+kind: mechanic
+name: Deck draw pile
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  Defines the shuffled draw pile (deck zone), draw-from-top behavior, and deck
+  exhaustion handling for a turn-based card game. Uses static in-memory card
+  definitions for MVP.
+
+non_template_statement: >
+  Behavioral recipe for deck zone only. Not a checked-in card deck asset file.
+
+applies_to:
+  - game.card-deck-turn-based
+  - tag:card-deck-turn-based
+
+depends_on: []
+
+provides:
+  - deck_zone_state
+
+binds_components:
+  - component.card-zone-layout
+
+inputs:
+  - card_definitions: array of { id, title, effectType, effectValue }
+  - shuffle_on_start: boolean — default true
+  - reshuffle_discard_into_deck: boolean — default false for MVP
+
+outputs:
+  - drawPile: array of card ids
+  - deckCount: number
+
+guidance:
+  - "Shuffle on mount/new game; draw removes top card"
+  - "Empty drawPile: reshuffle discard or end draw phase"
+  - "Deck zone visible with count; face-down in UI"
+
+validation_notes:
+  - validator.deck-zone-integrity
+  - validator.draw-discard-consistency
+
+risk_notes:
+  - Duplicate card ids in draw pile
+  - Draw from empty pile without guard
+
+state_model:
+  fields:
+    - name: drawPile
+      type: array
+    - name: deckCount
+      type: number
+  events:
+    - shuffle_deck
+    - draw_card
+    - init_deck
+
+common_failure_modes:
+  - "Draw mutates pile without removing card"
+  - "Shuffle skipped on new game"
+
+reusable_across:
+  - game.card-deck-turn-based
