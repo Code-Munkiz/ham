@@ -84,6 +84,38 @@ _NAMED_IMPORT = re.compile(
 )
 _DEFAULT_EXPORT = re.compile(r"export\s+default\s+(\w+)")
 
+_PROMPT_60_SECONDS = re.compile(
+    r"60[\s-]?second|60s\b|after\s+60\b",
+    re.IGNORECASE,
+)
+
+_EXPLICIT_60_DURATION = re.compile(
+    r"useState\s*\(\s*60\s*\)"
+    r"|\b(?:ROUND|GAME|TIMER|COUNTDOWN|DURATION|TIME_LIMIT|MAX_TIME|initial(?:Time|Seconds)|secondsLeft|timeLeft)\w*\s*=\s*60\b"
+    r"|\b60000\b"
+    r"|60\s*\*\s*1000"
+    r"|(?:elapsedSeconds|elapsedTime|secondsLeft|timeLeft|timer|countdown)\w*\s*(?:<|<=|>|>=|===|==)\s*60\b",
+    re.IGNORECASE,
+)
+
+_PROMPT_RESULT_REQUIRED = re.compile(
+    r"\bwins?\b|\bvict(?:ory|orious)\b|\bsurvive\b|health to zero|reducing.*health|"
+    r"final score|win state|game over|running out of",
+    re.IGNORECASE,
+)
+
+_RESULT_STATE_MARKERS = re.compile(
+    r"\b(?:gameWon|gameLost|isFinished|gameOver|hasWon|hasLost|showResult|resultScreen)\b"
+    r"|set(?:Result|GameOver|Win|Victory|Status)\s*\("
+    r"|['\"](?:win|won|lose|lost|victory)['\"]"
+    r"|type:\s*['\"](?:WIN|LOSE|VICTORY|GAME_OVER)['\"]"
+    r"|enemyHp\s*<=\s*0|enemyHp\s*===?\s*0"
+    r"|VictoryScreen|ResultsPanel|GameOver|GoalStatus",
+    re.IGNORECASE,
+)
+
+_JS_SOURCE_SUFFIXES = (".tsx", ".ts", ".jsx", ".js")
+
 
 @dataclass(frozen=True)
 class ScaffoldQualityIssue:
@@ -270,20 +302,86 @@ def _inspect_stale_state_win_checks(path: str, content: str) -> list[ScaffoldQua
     return issues
 
 
-def _inspect_timer_duration(plan: Plan | None, path: str, content: str) -> list[ScaffoldQualityIssue]:
-    if plan is None:
+def _js_sources(file_changes: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    return [(path, content) for path, content in file_changes if path.endswith(_JS_SOURCE_SUFFIXES)]
+
+
+def _combined_js_source(file_changes: list[tuple[str, str]]) -> str:
+    return "\n".join(content for _path, content in _js_sources(file_changes))
+
+
+def _first_path_matching(content_iter: list[tuple[str, str]], pattern: str) -> str | None:
+    rx = re.compile(pattern, re.IGNORECASE)
+    for path, content in content_iter:
+        if rx.search(content):
+            return path
+    return None
+
+
+def _has_explicit_timer_duration(content: str) -> bool:
+    return bool(_EXPLICIT_60_DURATION.search(content))
+
+
+def _prompt_requests_60_seconds(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    return bool(_PROMPT_60_SECONDS.search(prompt))
+
+
+def _prompt_requires_result_state(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    return bool(_PROMPT_RESULT_REQUIRED.search(prompt))
+
+
+def _inspect_timer_duration(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_requests_60_seconds(plan.user_message):
         return []
-    prompt = (plan.user_message or "").lower()
-    if "60 second" not in prompt and "60 seconds" not in prompt and "60s" not in prompt:
+    sources = _js_sources(file_changes)
+    combined = _combined_js_source(file_changes)
+    if not re.search(r"timer|countdown|seconds|elapsed|timeLeft|secondsLeft", combined, re.I):
         return []
-    if not re.search(r"timer|countdown|seconds|elapsed", content, re.I):
+    if _has_explicit_timer_duration(combined):
         return []
-    if re.search(r"useState\s*\(\s*60\s*\)|=\s*60\b", content):
-        return []
+    path = _first_path_matching(sources, r"timer|countdown|seconds|elapsed|timeLeft|secondsLeft")
     return [
         ScaffoldQualityIssue(
             code="timer_duration_mismatch",
-            message="Prompt requests 60-second timer but code lacks explicit 60s duration",
+            message=(
+                "Prompt requests a 60-second round but code lacks explicit "
+                "60/60000 duration constant or countdown init"
+            ),
+            path=path,
+        )
+    ]
+
+
+def _inspect_missing_result_state(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_requires_result_state(plan.user_message):
+        return []
+    combined = _combined_js_source(file_changes)
+    if _RESULT_STATE_MARKERS.search(combined):
+        return []
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"App\.|Game\.|enemyHp|playerHp|health",
+    )
+    if path is None:
+        js_sources = _js_sources(file_changes)
+        path = js_sources[0][0] if js_sources else None
+    return [
+        ScaffoldQualityIssue(
+            code="missing_result_state",
+            message=(
+                "Prompt requires win/loss/final result but code lacks visible "
+                "result or completion state handling"
+            ),
             path=path,
         )
     ]
@@ -345,7 +443,9 @@ def inspect_generated_scaffold_quality(
         issues.extend(_inspect_stub_comments(path, content))
         issues.extend(_inspect_empty_or_log_handlers(path, content))
         issues.extend(_inspect_stale_state_win_checks(path, content))
-        issues.extend(_inspect_timer_duration(plan, path, content))
+    if plan is not None:
+        issues.extend(_inspect_timer_duration(plan, file_changes))
+        issues.extend(_inspect_missing_result_state(plan, file_changes))
     issues.extend(_inspect_import_export(file_changes))
     issues.extend(_inspect_dispatch_reducer_mismatch(file_changes))
     # De-dupe by (code, path, message)
@@ -391,13 +491,31 @@ def build_scaffold_repair_prompt(
         "- Implement the missing core loop and wire controls to state transitions.\n"
         "- Remove no-op reducer cases; every declared primary action must mutate state meaningfully.\n"
         "- Verify every primary control changes canonical game state (not just logs or local UI text).\n"
+        "- Compute next state values first; derive win/loss from those next values, not stale closure reads.\n"
+        "- Do not check old HP/resources immediately after setState — use functional updates or local next values.\n"
         "- Avoid stale-state win/loss checks: compute next HP/resources before checking result conditions.\n"
-        "- When the prompt specifies a duration (e.g. 60 seconds), initialize the timer/countdown to that value.\n"
+        "- When the prompt specifies a duration (e.g. 60 seconds), use an explicit round constant "
+        "(useState(60), ROUND_SECONDS = 60, or 60000 ms) and show a final score when time expires.\n"
+        "- When the prompt requires winning/surviving/final score, add visible win/loss/result UI and restart/reset.\n"
         "- Make resource/turn loops strategically meaningful — allocations and day ticks must change resources.\n"
         "- Ensure visible feedback and result/win state where the plan requires them.\n"
         "- Fix import/export consistency (default export ↔ default import).\n"
         "- Output ONLY the same JSON object schema.\n"
     )
+    issue_codes = {issue.code for issue in issues}
+    if "timer_duration_mismatch" in issue_codes:
+        repair_system += (
+            "\nTimer repair focus:\n"
+            "- Replace elapsed-only counters (e.g. elapsedTime from 0 to >= 59) with a 60-second countdown.\n"
+            "- Initialize round duration to 60 seconds (or 60000 ms) and lock input when it reaches zero.\n"
+            "- Display final score/WPM/accuracy on expiry.\n"
+        )
+    if "missing_result_state" in issue_codes:
+        repair_system += (
+            "\nResult-state repair focus:\n"
+            "- Wire victory when enemy HP reaches zero (or survival goal met) into visible result UI.\n"
+            "- Include win/loss/completion state and a restart or play-again control.\n"
+        )
     user_content = (
         f"User request: {plan.user_message}\n\n"
         f"The previous scaffold failed automated playability checks:\n{issue_lines}\n\n"
@@ -447,6 +565,22 @@ def maybe_repair_generated_scaffold(
             timeout_sec=scaffold_timeout,
         )
         repaired = parse_result(raw)
+        remaining = inspect_generated_scaffold_quality(repaired.file_changes, plan=plan)
+        if remaining:
+            summary = ", ".join(
+                f"{issue.code}@{issue.path or '?'}" for issue in remaining[:8]
+            )
+            _LOG.warning(
+                "Scaffold quality: %d issue(s) remain after repair for plan=%s: %s",
+                len(remaining),
+                plan.plan_id,
+                summary,
+            )
+        else:
+            _LOG.info(
+                "Scaffold quality repair cleared all detected issues for plan=%s",
+                plan.plan_id,
+            )
         _LOG.info(
             "Scaffold quality repair produced %d file(s) for plan=%s",
             len(repaired.file_changes),

@@ -96,6 +96,61 @@ const App = () => {
 };
 """
 
+_CLEAN_TYPING_MS_APP = """
+const ROUND_MS = 60000;
+const App = () => {
+  const [timeLeft, setTimeLeft] = useState(ROUND_MS);
+  return <div>{timeLeft}</div>;
+};
+"""
+
+_CLEAN_TYPING_REDUCER_DURATION = """
+export const reducer = (state, action) => {
+  switch (action.type) {
+    case 'TICK':
+      if (state.elapsedSeconds < 60) {
+        return { ...state, elapsedSeconds: state.elapsedSeconds + 1 };
+      }
+      return { ...state, isFinished: true };
+    default:
+      return state;
+  }
+};
+"""
+
+_ELAPSED_ONLY_TYPING_APP = """
+const App = () => {
+  const [elapsedTime, setElapsedTime] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setElapsedTime(prev => prev + 1);
+      if (elapsedTime >= 59) setIsFinished(true);
+    }, 1000);
+  }, []);
+};
+"""
+
+_NO_RESULT_CARD_APP = """
+const Game = () => {
+  const [enemyHp, setEnemyHp] = useState(20);
+  const playCard = () => setEnemyHp(prev => prev - 5);
+  return <button onClick={playCard}>Play</button>;
+};
+"""
+
+_WITH_RESULT_CARD_APP = """
+const Game = () => {
+  const [enemyHp, setEnemyHp] = useState(20);
+  const [result, setResult] = useState(null);
+  const playCard = () => {
+    const next = Math.max(enemyHp - 5, 0);
+    setEnemyHp(next);
+    if (next <= 0) setResult('win');
+  };
+  return result ? <div>Victory!</div> : <button onClick={playCard}>Play</button>;
+};
+"""
+
 
 class TestInspectGeneratedScaffoldQuality:
     def test_detects_noop_primary_reducer_action(self):
@@ -152,6 +207,15 @@ class TestInspectGeneratedScaffoldQuality:
         )
         assert any(i.code == "timer_duration_mismatch" for i in issues)
 
+    def test_detects_elapsed_only_timer_without_explicit_60(self):
+        plan = _plan()
+        plan.user_message = "Build a 60-second typing race with a final score."
+        issues = inspect_generated_scaffold_quality(
+            [("src/App.tsx", _ELAPSED_ONLY_TYPING_APP)],
+            plan=plan,
+        )
+        assert any(i.code == "timer_duration_mismatch" for i in issues)
+
     def test_clean_typing_app_not_overflagged(self):
         plan = _plan()
         plan.user_message = "Build a typing game with a final score after 60 seconds."
@@ -161,6 +225,46 @@ class TestInspectGeneratedScaffoldQuality:
         )
         assert not any(i.code == "timer_duration_mismatch" for i in issues)
         assert not any(i.code == "empty_primary_handler" for i in issues)
+
+    def test_clean_typing_ms_duration_not_overflagged(self):
+        plan = _plan()
+        plan.user_message = "Build a typing game with a final score after 60 seconds."
+        issues = inspect_generated_scaffold_quality(
+            [("src/App.tsx", _CLEAN_TYPING_MS_APP)],
+            plan=plan,
+        )
+        assert not any(i.code == "timer_duration_mismatch" for i in issues)
+
+    def test_reducer_elapsed_less_than_60_not_overflagged(self):
+        plan = _plan()
+        plan.user_message = "Build a typing game with a final score after 60 seconds."
+        issues = inspect_generated_scaffold_quality(
+            [("src/typingReducer.ts", _CLEAN_TYPING_REDUCER_DURATION)],
+            plan=plan,
+        )
+        assert not any(i.code == "timer_duration_mismatch" for i in issues)
+
+    def test_detects_missing_result_state_for_win_prompt(self):
+        plan = _plan()
+        plan.user_message = (
+            "Build a card battle game and wins by reducing the enemy health to zero."
+        )
+        issues = inspect_generated_scaffold_quality(
+            [("src/components/Game.tsx", _NO_RESULT_CARD_APP)],
+            plan=plan,
+        )
+        assert any(i.code == "missing_result_state" for i in issues)
+
+    def test_win_prompt_with_result_state_not_overflagged(self):
+        plan = _plan()
+        plan.user_message = (
+            "Build a card battle game and wins by reducing the enemy health to zero."
+        )
+        issues = inspect_generated_scaffold_quality(
+            [("src/components/Game.tsx", _WITH_RESULT_CARD_APP)],
+            plan=plan,
+        )
+        assert not any(i.code == "missing_result_state" for i in issues)
 
 
 class TestBuildScaffoldRepairPrompt:
@@ -185,6 +289,55 @@ class TestBuildScaffoldRepairPrompt:
         assert "60 seconds" in messages[0]["content"].lower()
         assert "PLAY_CARD" in messages[1]["content"]
         assert "playability checks" in messages[1]["content"].lower()
+
+    def test_repair_prompt_adds_timer_focus_when_timer_issue_present(self):
+        issues = [
+            ScaffoldQualityIssue(
+                code="timer_duration_mismatch",
+                message="Prompt requests a 60-second round",
+                path="src/App.tsx",
+            )
+        ]
+        messages = build_scaffold_repair_prompt(
+            Plan(
+                plan_id="pln_timer",
+                workspace_id="ws",
+                project_id="p",
+                user_message="Build a typing game with a final score after 60 seconds.",
+                steps=[Step(title="Scaffold", description="Create game")],
+                planner_confidence="high",
+            ),
+            [("src/App.tsx", "const [elapsedTime, setElapsedTime] = useState(0);")],
+            issues,
+            base_system_prompt="BASE",
+        )
+        assert "Timer repair focus" in messages[0]["content"]
+        assert "60000 ms" in messages[0]["content"]
+        assert "final score" in messages[0]["content"].lower()
+
+    def test_repair_prompt_adds_result_focus_when_result_issue_present(self):
+        issues = [
+            ScaffoldQualityIssue(
+                code="missing_result_state",
+                message="Prompt requires win/loss/final result",
+                path="src/Game.tsx",
+            )
+        ]
+        messages = build_scaffold_repair_prompt(
+            Plan(
+                plan_id="pln_result",
+                workspace_id="ws",
+                project_id="p",
+                user_message="Wins by reducing the enemy health to zero.",
+                steps=[Step(title="Scaffold", description="Create game")],
+                planner_confidence="high",
+            ),
+            [("src/Game.tsx", _NO_RESULT_CARD_APP)],
+            issues,
+            base_system_prompt="BASE",
+        )
+        assert "Result-state repair focus" in messages[0]["content"]
+        assert "restart" in messages[0]["content"].lower()
 
 
 class TestMaybeRepairGeneratedScaffold:
@@ -246,6 +399,32 @@ class TestMaybeRepairGeneratedScaffold:
         assert isinstance(out, _Repaired)
         assert len(calls) == 1
         assert "repair mode" in calls[0][0]["content"].lower()
+
+    def test_logs_remaining_issues_after_repair(self, caplog):
+        import logging
+
+        class _Result:
+            file_changes = [("src/App.tsx", _NO_RESULT_CARD_APP)]
+
+        class _Repaired:
+            file_changes = [("src/components/Game.tsx", _NO_RESULT_CARD_APP)]
+
+        plan = _plan()
+        plan.user_message = "Wins by reducing the enemy health to zero."
+
+        caplog.set_level(logging.WARNING, logger="src.ham.scaffold_quality")
+
+        maybe_repair_generated_scaffold(
+            _Result(),
+            plan=plan,
+            api_key="key",
+            model="model",
+            scaffold_timeout=30.0,
+            base_system_prompt="BASE",
+            parse_result=lambda _r: _Repaired(),
+            complete_chat=lambda *_a, **_k: "{}",
+        )
+        assert any("remain after repair" in record.message for record in caplog.records)
 
     def test_repair_disabled_via_env(self):
         class _Result:
