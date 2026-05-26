@@ -1,0 +1,269 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: game.rhythm-tap-lite
+kind: app_type
+name: Rhythm tap lite
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  A DOM-native, local-only rhythm tap game: timed beat/cue sequence, tap/click/keyboard
+  input within timing windows, perfect/good/miss accuracy judgment, score and streak
+  tracking, round progression, miss feedback, and play-again results. Custom-generated
+  from prompt plus playbook — never cloned from a starter project.
+
+non_template_statement: >
+  This app type does not reference checked-in rhythm game assets, music players,
+  metronome apps, or clone baselines. It defines generative guidance only.
+
+legacy_v1_fallback: generic
+
+safety_constraints:
+  - no-network-egress-for-mvp
+  - no-eval
+  - no-user-accounts-for-mvp
+  - no-multiplayer-for-mvp
+  - no-real-money-economy
+  - dom-native-ui-only-for-mvp
+  - no-gambling-betting-for-mvp
+  - no-medical-biometric-claims-for-mvp
+  - no-productivity-timer-app-for-mvp
+  - no-typing-speed-game-for-mvp
+  - no-reaction-time-false-start-game-for-mvp
+  - no-copyrighted-music-for-mvp
+  - no-live-audio-sync-for-mvp
+
+applies_to:
+  - tag:rhythm-tap-lite
+  - tag:dom-casual-game
+
+inputs:
+  - user_prompt: natural language theme for rhythm UI copy
+  - optional_beat_count: number — default 8–16 cues per round
+  - optional_timing_window_ms: number — default perfect/good windows in ms
+  - optional_round_duration_sec: number — optional cap on round length
+
+outputs:
+  - runnable_vite_react_app: single-page DOM rhythm tap game
+  - composed_build_recipe: ids of mechanics, contracts, validators, recovery modules
+  - normie_plan_summary: phased build description for chat/activity stream
+
+guidance:
+  - "React state machine: idle → playing → result"
+  - "Beat/cue sequence advances on timer or user hits; show target timing window"
+  - "Judge tap offset vs cue timestamp: perfect, good, miss"
+  - "Score points from accuracy; track streak/combo on consecutive good+ hits"
+  - "Miss feedback without ending round unless configured"
+  - "Keyboard (Space/Enter) and pointer support; DOM only — no Canvas/WebGL"
+  - "No external audio files or live music sync required for MVP"
+
+validation_notes:
+  - Run composed validators after scaffold and input handler edits
+  - Preview must boot without console errors before success copy
+
+risk_notes:
+  - Confusion with metronome, Pomodoro, stopwatch, or reaction-time games
+  - Cues desync from displayed beat markers
+  - Miss never clears streak incorrectly
+  - Typing-speed or music-player semantics leak in
+
+user_prompt_examples:
+  - "Build a browser rhythm tap game where circles appear on beats and players press space at the right time for perfect/good/miss scores."
+  - "Build a simple tap-the-beat game with timing windows, streaks, misses, and a final score."
+  - "Build a local rhythm challenge where cues appear in sequence and the player taps when each cue reaches the target."
+  - "Build a DOM rhythm game with beat prompts, combo scoring, and a play-again results screen."
+
+negative_prompt_examples:
+  - "Build a Pomodoro timer."
+  - "Build a stopwatch app."
+  - "Build a reaction time test."
+  - "Build a typing speed game."
+  - "Build a music player."
+  - "Build a metronome."
+  - "Build a medical rhythm assessment."
+  - "Build a dashboard for music analytics."
+  - "Build a gambling game with rhythm bets."
+  - "Build a physics collision game."
+  - "Build a karaoke lyric game."
+
+intent_signals:
+  - "\\brhythm\\s+tap\\b.{0,80}\\b(beat|timing|perfect|good|miss|combo|streak)\\b"
+  - "\\btap[- ]the[- ]beat\\b.{0,80}\\b(timing|window|score|streak)\\b"
+  - "\\b(beat|cue)\\s+sequence\\b.{0,80}\\b(tap|press|click|timing)\\b"
+  - "\\brhythm\\s+(game|challenge)\\b.{0,80}\\b(perfect|good|miss|combo)\\b"
+
+clarifying_questions:
+  - when: intent_confidence_low
+    ask: "Fixed beat count per round, or continuous until timer ends?"
+  - when: input_ambiguous
+    ask: "Click/tap only, or keyboard (Space) support too?"
+  - when: scoring_ambiguous
+    ask: "Track combo streak only, or also show perfect/good/miss breakdown?"
+
+default_assumptions:
+  - "8–16 beat cues per round with visible timing target"
+  - "Perfect/good/miss windows in milliseconds around cue time"
+  - "Score increases with accuracy; streak on consecutive good+ hits"
+  - "Round ends after cue sequence or optional timer"
+  - "Play again resets round without page reload"
+  - "DOM/React UI; mobile-friendly at 360px width"
+  - "No copyrighted music or lyrics required"
+
+hard_constraints:
+  - no-real-money-economy
+  - no-template-cloning
+  - no-runtime-llm-generation-for-mvp
+  - no-external-api-for-mvp
+  - no-user-secrets-or-credentials
+  - preserve-safe-local-mvp-scope
+  - dom-native-ui-only-for-mvp
+  - no-gambling-betting-for-mvp
+  - no-medical-biometric-claims-for-mvp
+  - no-productivity-timer-app-for-mvp
+  - no-typing-speed-game-for-mvp
+  - no-reaction-time-false-start-game-for-mvp
+  - no-copyrighted-music-for-mvp
+  - no-live-audio-sync-for-mvp
+
+soft_defaults:
+  - beat cue sequence with DOM markers
+  - perfect/good/miss timing windows
+  - score and combo streak tracking
+  - miss feedback panel or inline copy
+  - local-only state
+  - no leaderboard
+
+user_overridable:
+  - theme and visual tone
+  - cue appearance (circle, bar, pulse)
+  - beat count and round duration
+  - timing window strictness
+  - keyboard key binding
+  - result copy tone
+
+clarify_if_changed:
+  - replacing rhythm game with Pomodoro or productivity timer
+  - replacing rhythm game with reaction-time false-start test
+  - replacing rhythm game with typing speed or WPM challenge
+  - replacing rhythm game with music player or streaming app
+  - adding medical, clinical, or biometric assessment claims
+  - adding gambling, betting, or odds mechanics
+  - requiring Canvas, WebGL, or physics engine
+  - requiring copyrighted song lyrics or live audio sync
+
+out_of_scope_unless_explicit:
+  - user accounts or cloud sync
+  - backend persistence or analytics pipeline
+  - global leaderboards
+  - multiplayer rhythm battles
+  - medical clinical rhythm assessment
+  - music streaming or DJ apps
+  - metronome or focus timer apps
+  - typing speed WPM games
+  - reaction-time false-start games
+  - gambling betting or rhythm wagers
+  - Canvas physics or collision games
+  - karaoke lyric games
+  - dashboard or admin music analytics
+
+conflict_policy:
+  user_explicit_overrides_soft_defaults: true
+  safety_constraints_override_user_request: true
+  core_loop_conflicts_require_clarification: true
+  out_of_scope_items_require_explicit_request: true
+  fallback_to_v1_or_generic_when_recipe_no_longer_fits: true
+
+adaptive_policy_note: >
+  User prompt is source of truth. Build Kit is expert playbook. Hard constraints
+  are non-negotiable. Soft defaults may be overridden. If the prompt asks for
+  excluded semantics (Pomodoro, reaction test, typing test, music player,
+  metronome, medical assessment, gambling), the generated plan should clarify
+  or fall back rather than forcing this recipe. Weak terms like tap, timer, beat,
+  music, rhythm, or click alone are not enough for future routing.
+
+stack_kit_id: stack.dom-game-minimal
+
+compose_order_ref: pack.game#compose_defaults.compose_order
+
+composed_modules:
+  stack_kit_id: stack.dom-game-minimal
+  mechanics:
+    - mechanic.rhythm-round-state-machine
+    - mechanic.rhythm-beat-sequence
+    - mechanic.rhythm-timing-window
+    - mechanic.rhythm-tap-input
+    - mechanic.rhythm-accuracy-scoring
+    - mechanic.rhythm-round-progression
+    - mechanic.rhythm-streak-combo
+    - mechanic.rhythm-result-state
+  component_contracts:
+    - component.game-shell
+    - component.rhythm-cue-panel
+    - component.rhythm-timing-feedback
+    - component.rhythm-score-tracker
+    - component.rhythm-streak-indicator
+    - component.rhythm-miss-panel
+    - component.rhythm-round-controls
+    - component.rhythm-results-panel
+  validators:
+    - validator.rhythm-state-transitions
+    - validator.rhythm-timing-window-bounds
+    - validator.rhythm-score-consistency
+    - validator.rhythm-input-cleanup
+    - validator.rhythm-streak-bounds
+  recovery_playbooks:
+    - recovery.stuck-rhythm-state
+    - recovery.broken-rhythm-timing
+    - recovery.invalid-rhythm-score
+    - recovery.stale-rhythm-cue
+  progress_labels: progress.rhythm-tap-lite
+  learning_hooks: learning.rhythm-tap-lite
+
+build_phases:
+  - id: phase.understand
+    title: Understand the rhythm tap idea
+    order: 1
+    modules_used: [app_type]
+  - id: phase.compose
+    title: Compose mechanics and UI contracts
+    order: 2
+    modules_used: [mechanics, component_contracts]
+  - id: phase.generate
+    title: Generate custom rhythm game code
+    order: 3
+    modules_used: [stack_kit_id, guidance]
+  - id: phase.validate
+    title: Check beat timing and scoring rules
+    order: 4
+    modules_used: [validators]
+  - id: phase.preview
+    title: Prepare Workbench preview
+    order: 5
+    modules_used: []
+  - id: phase.recover
+    title: Fix known failure modes if needed
+    order: 6
+    optional: true
+    modules_used: [recovery_playbooks]
+
+acceptance_criteria:
+  - "Game loads in preview without runtime console errors"
+  - "Player sees beat/cue sequence with clear tap targets"
+  - "Tap within timing window registers perfect/good/miss feedback"
+  - "Score and streak update from accuracy judgments"
+  - "Miss feedback visible without breaking round flow"
+  - "Round ends with result summary and score breakdown"
+  - "Play again starts a new round"
+  - "Keyboard and pointer input both work when implemented"
+  - "UI readable on mobile-width viewport"
+
+out_of_scope:
+  - Multiplayer, accounts, or leaderboards
+  - Medical, clinical, or biometric assessment claims
+  - Pomodoro, metronome, stopwatch, or productivity timers
+  - Typing speed, WPM, or reaction-time false-start games
+  - Music streaming, karaoke lyrics, or copyrighted audio
+  - Gambling, betting, or rhythm wagers
+  - Canvas, Phaser, or physics engines
+  - Live audio synchronization requirements
+  - Dashboard or admin music analytics

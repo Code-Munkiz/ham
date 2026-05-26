@@ -1,0 +1,29 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: validator.rhythm-timing-window-bounds
+kind: validator
+name: Rhythm timing window bounds
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Ensures perfect window is narrower than good window and judgments map consistently.
+non_template_statement: >
+  Validation rule definition only.
+applies_to:
+  - game.rhythm-tap-lite
+depends_on:
+  - mechanic.rhythm-timing-window
+validates_modules:
+  - mechanic.rhythm-timing-window
+severity: blocking
+runner: conceptual
+check_type: conceptual
+recovery_playbooks:
+  - recovery.broken-rhythm-timing
+validation_goal: >
+  Protect timing judgment math.
+pass_conditions:
+  - "perfectWindowMs <= goodWindowMs"
+fail_conditions:
+  - "All taps always miss due to inverted windows"

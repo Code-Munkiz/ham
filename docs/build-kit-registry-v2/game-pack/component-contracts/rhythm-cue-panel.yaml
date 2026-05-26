@@ -1,0 +1,35 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: component.rhythm-cue-panel
+kind: component_contract
+name: Rhythm cue panel
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Primary visual region showing beat/cue markers, active target, and tap zone.
+non_template_statement: >
+  UI contract only. Not a checked-in React panel component.
+applies_to:
+  - game.rhythm-tap-lite
+depends_on:
+  - mechanic.rhythm-beat-sequence
+  - mechanic.rhythm-round-state-machine
+binds_mechanics:
+  - mechanic.rhythm-tap-input
+required_props:
+  - phase: string
+  - currentCueIndex: number
+  - onTap: callback
+optional_props:
+  - cueLabel: string
+  - targetHighlight: boolean
+accessibility:
+  - "Tap target has accessible name"
+  - "Cue changes announced when practical"
+guidance:
+  - "Large tap target; visible active cue"
+validation_notes:
+  - Visual state matches phase and cue index
+risk_notes:
+  - Active cue not highlighted

@@ -1,0 +1,37 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: validator.rhythm-state-transitions
+kind: validator
+name: Rhythm state transitions
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Ensures phase transitions follow idle → playing → result and play again resets cleanly.
+non_template_statement: >
+  Validation rule definition only. Not executable until a future validator runner exists.
+applies_to:
+  - game.rhythm-tap-lite
+  - tag:rhythm-tap-lite
+depends_on:
+  - mechanic.rhythm-round-state-machine
+  - mechanic.rhythm-round-progression
+validates_modules:
+  - mechanic.rhythm-round-state-machine
+  - mechanic.rhythm-round-progression
+severity: blocking
+runner: conceptual
+check_type: conceptual
+guidance:
+  - "No direct idle → result without playing"
+  - "result → playing via play again only"
+recovery_playbooks:
+  - recovery.stuck-rhythm-state
+validation_goal: >
+  Protect rhythm phase machine integrity.
+pass_conditions:
+  - "Phase enum covers all UI states"
+fail_conditions:
+  - "Input accepted during idle or result without reset"
+suggested_failure_message: >
+  The rhythm game state flow looks broken. I'll fix playing and result transitions.

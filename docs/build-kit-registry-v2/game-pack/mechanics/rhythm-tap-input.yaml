@@ -1,0 +1,46 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: mechanic.rhythm-tap-input
+kind: mechanic
+name: Rhythm tap input
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Pointer click/tap and keyboard (Space/Enter) handlers that record tap timestamps
+  during the playing phase only.
+non_template_statement: >
+  Input handler recipe only. Not OS-level MIDI capture.
+applies_to:
+  - game.rhythm-tap-lite
+  - tag:rhythm-tap-lite
+depends_on:
+  - mechanic.rhythm-round-state-machine
+  - mechanic.rhythm-timing-window
+provides:
+  - tap_input_events
+binds_components:
+  - component.rhythm-cue-panel
+inputs:
+  - phase: string
+  - onTap: callback
+outputs:
+  - tapTimestampMs: number
+  - inputSource: pointer | keyboard
+guidance:
+  - "Ignore taps outside playing phase"
+  - "Support keyboard for accessibility"
+  - "Debounce duplicate keydown bursts"
+validation_notes:
+  - validator.rhythm-input-cleanup
+risk_notes:
+  - Input accepted during result phase
+state_model:
+  fields: []
+  events:
+    - pointer_tap
+    - key_tap
+common_failure_modes:
+  - "Keyboard handler never attached"
+reusable_across:
+  - game.rhythm-tap-lite

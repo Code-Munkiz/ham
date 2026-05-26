@@ -1,0 +1,29 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: recovery.invalid-rhythm-score
+kind: recovery_playbook
+name: Fix invalid rhythm score
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Repairs score decreasing on hits or tallies diverging from judgments.
+non_template_statement: >
+  Recovery spec only.
+max_attempts: 2
+applies_to:
+  - game.rhythm-tap-lite
+depends_on:
+  - mechanic.rhythm-accuracy-scoring
+  - validator.rhythm-score-consistency
+repairs_validators:
+  - validator.rhythm-score-consistency
+steps:
+  - id: step.fix_scoring
+    action: fix_scoring
+    detail: "Map perfect/good/miss to consistent point deltas"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.rhythm-score-consistency"
+user_facing_summary: >
+  I fixed the score tracking so hits add points and misses do not.

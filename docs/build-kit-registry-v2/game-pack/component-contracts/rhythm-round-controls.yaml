@@ -1,0 +1,22 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: component.rhythm-round-controls
+kind: component_contract
+name: Rhythm round controls
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Start round and play-again buttons.
+non_template_statement: >
+  UI contract only.
+applies_to:
+  - game.rhythm-tap-lite
+depends_on:
+  - mechanic.rhythm-round-state-machine
+required_props:
+  - phase: string
+  - onStart: callback
+  - onPlayAgain: callback
+guidance:
+  - "Start visible in idle; play again in result"

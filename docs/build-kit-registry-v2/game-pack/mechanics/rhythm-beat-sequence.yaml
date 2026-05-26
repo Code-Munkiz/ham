@@ -1,0 +1,52 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: mechanic.rhythm-beat-sequence
+kind: mechanic
+name: Rhythm beat sequence
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Ordered list of beat/cue timestamps or indices the player must respond to.
+  Drives cue display and progression through the round.
+non_template_statement: >
+  Beat sequence recipe only. Not audio asset metadata.
+applies_to:
+  - game.rhythm-tap-lite
+  - tag:rhythm-tap-lite
+depends_on:
+  - mechanic.rhythm-round-state-machine
+provides:
+  - beat_sequence_state
+binds_components:
+  - component.rhythm-cue-panel
+inputs:
+  - beatCount: number
+  - intervalMs: number
+outputs:
+  - cues: array of cue objects
+  - currentCueIndex: number
+  - isSequenceComplete: boolean
+guidance:
+  - "Generate fixed cue schedule at round start"
+  - "Advance currentCueIndex after each judged tap or auto-miss timeout"
+  - "DOM markers only — no external audio sync required"
+validation_notes:
+  - Cue index bounds checked each step
+risk_notes:
+  - Empty cue list
+  - Index skips or repeats
+state_model:
+  fields:
+    - name: currentCueIndex
+      type: number
+    - name: cues
+      type: array
+  events:
+    - generate_sequence
+    - advance_cue
+    - complete_sequence
+common_failure_modes:
+  - "Sequence never advances"
+reusable_across:
+  - game.rhythm-tap-lite

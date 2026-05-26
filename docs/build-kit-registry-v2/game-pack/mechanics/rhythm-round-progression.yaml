@@ -1,0 +1,49 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: mechanic.rhythm-round-progression
+kind: mechanic
+name: Rhythm round progression
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Advances through beat sequence, optional round timer, and triggers result when
+  sequence completes or timer expires.
+non_template_statement: >
+  Round progression recipe only. Not a metronome app.
+applies_to:
+  - game.rhythm-tap-lite
+  - tag:rhythm-tap-lite
+depends_on:
+  - mechanic.rhythm-beat-sequence
+  - mechanic.rhythm-accuracy-scoring
+provides:
+  - round_progression_state
+binds_components:
+  - component.rhythm-miss-panel
+inputs:
+  - currentCueIndex: number
+  - beatCount: number
+  - optionalRoundTimerSec: number
+outputs:
+  - roundComplete: boolean
+  - cuesRemaining: number
+guidance:
+  - "End round when cue index reaches beat count"
+  - "Optional countdown timer as secondary end condition"
+  - "Show miss feedback inline without skipping cue advance rules"
+validation_notes:
+  - validator.rhythm-state-transitions
+risk_notes:
+  - Round never completes
+state_model:
+  fields:
+    - name: roundComplete
+      type: boolean
+  events:
+    - advance_round
+    - complete_round
+common_failure_modes:
+  - "Timer and sequence end conflict unresolved"
+reusable_across:
+  - game.rhythm-tap-lite

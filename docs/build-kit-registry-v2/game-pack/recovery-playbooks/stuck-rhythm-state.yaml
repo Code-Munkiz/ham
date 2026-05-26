@@ -1,0 +1,32 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: recovery.stuck-rhythm-state
+kind: recovery_playbook
+name: Fix stuck rhythm state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Repairs phase machine stuck in playing or unable to reach result.
+non_template_statement: >
+  Executable recovery strategy spec for a future runner. Not auto-applied today.
+max_attempts: 2
+applies_to:
+  - game.rhythm-tap-lite
+depends_on:
+  - mechanic.rhythm-round-state-machine
+  - validator.rhythm-state-transitions
+repairs_validators:
+  - validator.rhythm-state-transitions
+steps:
+  - id: step.unify_phase_enum
+    action: unify_phase_enum
+    detail: "Replace scattered booleans with single phase state"
+  - id: step.fix_transitions
+    action: fix_transitions
+    detail: "Wire idle/playing/result/play_again handlers"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.rhythm-state-transitions"
+user_facing_summary: >
+  I fixed the rhythm game flow so playing and result states transition correctly.

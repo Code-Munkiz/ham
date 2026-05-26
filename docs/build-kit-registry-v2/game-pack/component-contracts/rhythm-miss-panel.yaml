@@ -1,0 +1,21 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: component.rhythm-miss-panel
+kind: component_contract
+name: Rhythm miss panel
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Miss feedback region — short copy or animation when player misses a cue.
+non_template_statement: >
+  UI contract only.
+applies_to:
+  - game.rhythm-tap-lite
+depends_on:
+  - mechanic.rhythm-round-progression
+optional_props:
+  - missMessage: string
+  - visible: boolean
+guidance:
+  - "Non-blocking miss feedback; round continues"

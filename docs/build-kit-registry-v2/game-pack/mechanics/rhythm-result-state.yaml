@@ -1,0 +1,52 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: mechanic.rhythm-result-state
+kind: mechanic
+name: Rhythm result state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Terminal state when round ends — aggregates score, streak, accuracy breakdown,
+  and locks input until play again.
+non_template_statement: >
+  End-state recipe only. Not a music analytics dashboard.
+applies_to:
+  - game.rhythm-tap-lite
+  - tag:rhythm-tap-lite
+depends_on:
+  - mechanic.rhythm-round-progression
+  - mechanic.rhythm-streak-combo
+  - mechanic.rhythm-accuracy-scoring
+provides:
+  - rhythm_result_state
+binds_components:
+  - component.rhythm-results-panel
+inputs:
+  - score: number
+  - bestStreak: number
+  - perfectCount: number
+  - goodCount: number
+  - missCount: number
+outputs:
+  - showResults: boolean
+  - summary: object
+guidance:
+  - "Transition to result when roundComplete"
+  - "Lock tap input before showing results panel"
+  - "Offer play-again without accounts or leaderboard"
+validation_notes:
+  - validator.rhythm-input-cleanup
+risk_notes:
+  - Results shown while input still active
+state_model:
+  fields:
+    - name: showResults
+      type: boolean
+  events:
+    - finish_round
+    - play_again
+common_failure_modes:
+  - "Live score changes after result shown"
+reusable_across:
+  - game.rhythm-tap-lite

@@ -1,0 +1,47 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: mechanic.rhythm-streak-combo
+kind: mechanic
+name: Rhythm streak combo
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Tracks consecutive perfect or good hits as combo/streak; resets on miss.
+non_template_statement: >
+  Streak counter recipe only. Distinct from typing-speed streak module.
+applies_to:
+  - game.rhythm-tap-lite
+  - tag:rhythm-tap-lite
+depends_on:
+  - mechanic.rhythm-accuracy-scoring
+provides:
+  - rhythm_streak_state
+binds_components:
+  - component.rhythm-streak-indicator
+inputs:
+  - judgment: perfect | good | miss
+  - currentStreak: number
+outputs:
+  - streak: number
+  - bestStreak: number
+guidance:
+  - "Increment on perfect/good; reset on miss"
+  - "Track bestStreak for results summary"
+validation_notes:
+  - validator.rhythm-streak-bounds
+risk_notes:
+  - Streak never resets on miss
+state_model:
+  fields:
+    - name: streak
+      type: number
+    - name: bestStreak
+      type: number
+  events:
+    - increment_streak
+    - reset_streak
+common_failure_modes:
+  - "Negative streak"
+reusable_across:
+  - game.rhythm-tap-lite

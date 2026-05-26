@@ -1,0 +1,29 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: recovery.broken-rhythm-timing
+kind: recovery_playbook
+name: Fix broken rhythm timing
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Repairs inverted or zero timing windows and judgment mapping.
+non_template_statement: >
+  Recovery spec only. Not auto-applied today.
+max_attempts: 2
+applies_to:
+  - game.rhythm-tap-lite
+depends_on:
+  - mechanic.rhythm-timing-window
+  - validator.rhythm-timing-window-bounds
+repairs_validators:
+  - validator.rhythm-timing-window-bounds
+steps:
+  - id: step.fix_windows
+    action: fix_timing_windows
+    detail: "Ensure perfectWindowMs <= goodWindowMs with sane defaults"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.rhythm-timing-window-bounds"
+user_facing_summary: >
+  I fixed the timing windows so perfect, good, and miss judgments work correctly.

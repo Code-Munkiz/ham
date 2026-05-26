@@ -1,0 +1,22 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: component.rhythm-streak-indicator
+kind: component_contract
+name: Rhythm streak indicator
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Combo/streak display for consecutive good+ hits.
+non_template_statement: >
+  UI contract only.
+applies_to:
+  - game.rhythm-tap-lite
+depends_on:
+  - mechanic.rhythm-streak-combo
+required_props:
+  - streak: number
+optional_props:
+  - bestStreak: number
+guidance:
+  - "Reset indicator visibly on miss"

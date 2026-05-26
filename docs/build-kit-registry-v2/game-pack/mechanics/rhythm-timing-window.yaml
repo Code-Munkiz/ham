@@ -1,0 +1,50 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: mechanic.rhythm-timing-window
+kind: mechanic
+name: Rhythm timing window
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Defines perfect, good, and miss windows in milliseconds relative to each cue
+  target time.
+non_template_statement: >
+  Timing window math recipe only. Not a physics engine.
+applies_to:
+  - game.rhythm-tap-lite
+  - tag:rhythm-tap-lite
+depends_on:
+  - mechanic.rhythm-beat-sequence
+provides:
+  - timing_window_config
+binds_components:
+  - component.rhythm-timing-feedback
+inputs:
+  - tapTimestampMs: number
+  - cueTargetMs: number
+  - perfectWindowMs: number
+  - goodWindowMs: number
+outputs:
+  - offsetMs: number
+  - judgment: perfect | good | miss
+guidance:
+  - "Compute abs(tap - cueTarget) for offset"
+  - "Perfect inside tight window; good inside wider; else miss"
+  - "Expose offset for optional HUD feedback"
+validation_notes:
+  - validator.rhythm-timing-window-bounds
+risk_notes:
+  - Windows inverted (good tighter than perfect)
+state_model:
+  fields:
+    - name: perfectWindowMs
+      type: number
+    - name: goodWindowMs
+      type: number
+  events:
+    - judge_tap
+common_failure_modes:
+  - "All taps register miss"
+reusable_across:
+  - game.rhythm-tap-lite

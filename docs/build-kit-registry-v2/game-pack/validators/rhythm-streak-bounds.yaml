@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: validator.rhythm-streak-bounds
+kind: validator
+name: Rhythm streak bounds
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Ensures streak is non-negative, resets on miss, and bestStreak >= streak.
+non_template_statement: >
+  Validation rule definition only.
+applies_to:
+  - game.rhythm-tap-lite
+depends_on:
+  - mechanic.rhythm-streak-combo
+validates_modules:
+  - mechanic.rhythm-streak-combo
+severity: warning
+runner: conceptual
+check_type: conceptual
+validation_goal: >
+  Protect combo display integrity.

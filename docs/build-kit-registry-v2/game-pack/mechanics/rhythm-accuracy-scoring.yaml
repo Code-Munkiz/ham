@@ -1,0 +1,47 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: mechanic.rhythm-accuracy-scoring
+kind: mechanic
+name: Rhythm accuracy scoring
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Maps perfect/good/miss judgments to score points and optional per-round stats.
+non_template_statement: >
+  Scoring recipe only. Not a leaderboard service.
+applies_to:
+  - game.rhythm-tap-lite
+  - tag:rhythm-tap-lite
+depends_on:
+  - mechanic.rhythm-timing-window
+  - mechanic.rhythm-tap-input
+provides:
+  - rhythm_score_state
+binds_components:
+  - component.rhythm-score-tracker
+inputs:
+  - judgment: perfect | good | miss
+  - currentScore: number
+outputs:
+  - score: number
+  - perfectCount: number
+  - goodCount: number
+  - missCount: number
+guidance:
+  - "Perfect > good > miss point values"
+  - "Increment tallies for results breakdown"
+validation_notes:
+  - validator.rhythm-score-consistency
+risk_notes:
+  - Miss adds points
+state_model:
+  fields:
+    - name: score
+      type: number
+  events:
+    - apply_judgment
+common_failure_modes:
+  - "Score decreases on perfect hit"
+reusable_across:
+  - game.rhythm-tap-lite

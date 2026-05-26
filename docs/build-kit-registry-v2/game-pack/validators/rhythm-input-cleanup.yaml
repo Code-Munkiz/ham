@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: validator.rhythm-input-cleanup
+kind: validator
+name: Rhythm input cleanup
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Ensures tap/keyboard listeners ignore input outside playing phase and cleanup on unmount.
+non_template_statement: >
+  Validation rule definition only.
+applies_to:
+  - game.rhythm-tap-lite
+depends_on:
+  - mechanic.rhythm-tap-input
+validates_modules:
+  - mechanic.rhythm-tap-input
+severity: blocking
+runner: conceptual
+check_type: conceptual
+validation_goal: >
+  Prevent stale input handlers.

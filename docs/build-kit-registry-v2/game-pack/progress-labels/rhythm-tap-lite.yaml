@@ -1,0 +1,37 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: progress.rhythm-tap-lite
+kind: progress_label
+name: Rhythm tap lite build progress
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Normie-friendly phase labels for rhythm tap lite Game Pack builds.
+non_template_statement: >
+  Progress copy module only. Not emitted by runtime today.
+source_phase_owner: game.rhythm-tap-lite
+applies_to:
+  - game.rhythm-tap-lite
+  - tag:rhythm-tap-lite
+guidance:
+  - "Avoid internal words: scaffold, template_kind, OpenRouter, kit_id"
+phase_message_map:
+  phase.understand:
+    title: "Getting your rhythm tap idea"
+    message: "Turning your description into a beat-timing tap game plan."
+  phase.compose:
+    title: "Planning the game pieces"
+    message: "Lining up beat cues, timing windows, score, and streak tracking."
+  phase.generate:
+    title: "Building your rhythm game"
+    message: "Creating custom code for your rhythm tap preview."
+  phase.validate:
+    title: "Checking the rhythm rules"
+    message: "Verifying timing windows, scoring, streaks, and round flow."
+  phase.preview:
+    title: "Opening your rhythm game preview"
+    message: "Your rhythm tap game is almost ready to play."
+  phase.recover:
+    title: "Fixing a rhythm timing issue"
+    message: "Correcting a beat, timing, or score tracking issue."

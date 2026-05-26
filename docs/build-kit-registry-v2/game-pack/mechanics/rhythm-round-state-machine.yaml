@@ -1,0 +1,50 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: mechanic.rhythm-round-state-machine
+kind: mechanic
+name: Rhythm round state machine
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Core phase machine for a rhythm tap game: idle, playing, result. Gates which
+  inputs are accepted and when cues advance.
+non_template_statement: >
+  State machine behavior recipe only. Not a checked-in React reducer file.
+applies_to:
+  - game.rhythm-tap-lite
+  - tag:rhythm-tap-lite
+depends_on: []
+provides:
+  - rhythm_phase_state
+binds_components:
+  - component.rhythm-cue-panel
+  - component.rhythm-round-controls
+inputs:
+  - initial_phase: idle | playing — default idle
+outputs:
+  - phase: idle | playing | result
+  - canAcceptTapInput: boolean
+  - canStartRound: boolean
+guidance:
+  - "Explicit enum/string phase; no ambiguous booleans alone"
+  - "Only playing phase accepts tap timing input"
+  - "Result phase locks input until play again"
+validation_notes:
+  - validator.rhythm-state-transitions
+risk_notes:
+  - Phase stuck in playing after sequence ends
+state_model:
+  fields:
+    - name: phase
+      type: string
+  events:
+    - start_round
+    - enter_playing
+    - end_round
+    - show_result
+    - play_again
+common_failure_modes:
+  - "Phase never leaves playing"
+reusable_across:
+  - game.rhythm-tap-lite

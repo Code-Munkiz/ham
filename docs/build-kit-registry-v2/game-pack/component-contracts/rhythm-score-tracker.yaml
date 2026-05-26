@@ -1,0 +1,24 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: component.rhythm-score-tracker
+kind: component_contract
+name: Rhythm score tracker
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  HUD for current score and optional perfect/good/miss tallies during play.
+non_template_statement: >
+  UI contract only.
+applies_to:
+  - game.rhythm-tap-lite
+depends_on:
+  - mechanic.rhythm-accuracy-scoring
+required_props:
+  - score: number
+optional_props:
+  - perfectCount: number
+  - goodCount: number
+  - missCount: number
+guidance:
+  - "Score updates immediately after each judgment"

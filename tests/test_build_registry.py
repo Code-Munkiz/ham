@@ -135,6 +135,17 @@ EXPECTED_REACTION_TIME_CHALLENGE_MECHANIC_ORDER = (
     "mechanic.reaction-result-state",
 )
 
+EXPECTED_RHYTHM_TAP_LITE_MECHANIC_ORDER = (
+    "mechanic.rhythm-round-state-machine",
+    "mechanic.rhythm-beat-sequence",
+    "mechanic.rhythm-timing-window",
+    "mechanic.rhythm-tap-input",
+    "mechanic.rhythm-accuracy-scoring",
+    "mechanic.rhythm-round-progression",
+    "mechanic.rhythm-streak-combo",
+    "mechanic.rhythm-result-state",
+)
+
 WAVE_1_APP_TYPES = (
     "game.idle-incremental",
     "game.trivia-timer",
@@ -170,7 +181,7 @@ class TestHappyPath:
         pack = load_registry_pack(game_pack_root)
         assert pack.pack_id == "pack.game"
         assert pack.schema_version == "0.1"
-        assert len(pack.modules) == 273
+        assert len(pack.modules) == 300
 
     def test_validate_docs_game_pack(self, game_pack_root: Path):
         pack = load_registry_pack(game_pack_root)
@@ -889,6 +900,96 @@ class TestReactionTimeChallengeRecipe:
         assert typing.mechanic_ids == EXPECTED_TYPING_SPEED_RACER_MECHANIC_ORDER
         assert word_builder.mechanic_ids == EXPECTED_WORD_BUILDER_MECHANIC_ORDER
         assert card_deck.mechanic_ids == EXPECTED_CARD_DECK_TURN_BASED_MECHANIC_ORDER
+
+
+class TestRhythmTapLiteRecipe:
+    def test_app_type_exists_in_game_pack(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        assert "game.rhythm-tap-lite" in pack.modules
+        app = pack.module_data("game.rhythm-tap-lite")
+        assert app.get("kind") == "app_type"
+
+    def test_compose_rhythm_tap_lite(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        validate_registry_pack(pack)
+        recipe = compose_build_recipe(pack, "game.rhythm-tap-lite")
+        assert recipe.app_type_id == "game.rhythm-tap-lite"
+        assert recipe.stack_kit_id == "stack.dom-game-minimal"
+        assert recipe.mechanic_ids == EXPECTED_RHYTHM_TAP_LITE_MECHANIC_ORDER
+
+    def test_render_rhythm_tap_lite_includes_key_ids(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        recipe = compose_build_recipe(pack, "game.rhythm-tap-lite")
+        rendered = render_playbook_context(recipe)
+        assert "game.rhythm-tap-lite" in rendered
+        assert "stack.dom-game-minimal" in rendered
+        assert "mechanic.rhythm-beat-sequence" in rendered
+        assert "mechanic.rhythm-timing-window" in rendered
+        assert "mechanic.rhythm-accuracy-scoring" in rendered
+        assert "mechanic.rhythm-streak-combo" in rendered
+        assert "validator.rhythm-timing-window-bounds" in rendered
+        assert "validator.rhythm-score-consistency" in rendered
+        assert "no-typing-speed-game-for-mvp" in rendered
+        assert "no-reaction-time-false-start-game-for-mvp" in rendered
+        assert "no-live-audio-sync-for-mvp" in rendered
+
+    def test_render_rhythm_tap_lite_under_default_budget(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        recipe = compose_build_recipe(pack, "game.rhythm-tap-lite")
+        rendered = render_playbook_context(recipe)
+        assert len(rendered) <= 12_000
+        assert rendered.startswith("Build Kit Registry v2 — BuildRecipe\n")
+
+    def test_rhythm_tap_lite_adaptive_policy_fields(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        app = pack.module_data("game.rhythm-tap-lite")
+        for field in WAVE_1_ADAPTIVE_POLICY_LIST_FIELDS:
+            value = app.get(field)
+            assert isinstance(value, list), f"game.rhythm-tap-lite: {field} must be a list"
+            assert value, f"game.rhythm-tap-lite: {field} must be non-empty"
+
+        conflict_policy = app.get("conflict_policy")
+        assert isinstance(conflict_policy, dict)
+        for key in WAVE_1_CONFLICT_POLICY_KEYS:
+            assert key in conflict_policy
+            assert conflict_policy[key] is True
+
+    def test_rhythm_tap_lite_not_routed_in_intent_module(self):
+        import src.ham.build_registry.intent as intent_module
+
+        source = Path(intent_module.__file__).read_text(encoding="utf-8")
+        assert "game.rhythm-tap-lite" not in source
+        assert "RHYTHM_TAP_LITE_APP_TYPE" not in source
+
+    def test_existing_twelve_routed_recipes_still_compose_after_rhythm_tap_lite_added(
+        self, game_pack_root: Path
+    ):
+        pack = load_registry_pack(game_pack_root)
+        validate_registry_pack(pack)
+        idle = compose_build_recipe(pack, "game.idle-incremental")
+        trivia = compose_build_recipe(pack, "game.trivia-timer")
+        branching = compose_build_recipe(pack, "game.branching-narrative")
+        memory = compose_build_recipe(pack, "game.memory-match")
+        word = compose_build_recipe(pack, "game.word-daily")
+        puzzle = compose_build_recipe(pack, "game.daily-puzzle-grid")
+        sim = compose_build_recipe(pack, "game.resource-management-sim")
+        hangman = compose_build_recipe(pack, "game.hangman-lite")
+        typing = compose_build_recipe(pack, "game.typing-speed-racer")
+        word_builder = compose_build_recipe(pack, "game.word-builder")
+        card_deck = compose_build_recipe(pack, "game.card-deck-turn-based")
+        reaction = compose_build_recipe(pack, "game.reaction-time-challenge")
+        assert idle.mechanic_ids == EXPECTED_MECHANIC_ORDER
+        assert trivia.mechanic_ids == EXPECTED_TRIVIA_MECHANIC_ORDER
+        assert branching.mechanic_ids == EXPECTED_BRANCHING_NARRATIVE_MECHANIC_ORDER
+        assert memory.mechanic_ids == EXPECTED_MEMORY_MATCH_MECHANIC_ORDER
+        assert word.mechanic_ids == EXPECTED_WORD_DAILY_MECHANIC_ORDER
+        assert puzzle.mechanic_ids == EXPECTED_DAILY_PUZZLE_GRID_MECHANIC_ORDER
+        assert sim.mechanic_ids == EXPECTED_RESOURCE_MANAGEMENT_SIM_MECHANIC_ORDER
+        assert hangman.mechanic_ids == EXPECTED_HANGMAN_LITE_MECHANIC_ORDER
+        assert typing.mechanic_ids == EXPECTED_TYPING_SPEED_RACER_MECHANIC_ORDER
+        assert word_builder.mechanic_ids == EXPECTED_WORD_BUILDER_MECHANIC_ORDER
+        assert card_deck.mechanic_ids == EXPECTED_CARD_DECK_TURN_BASED_MECHANIC_ORDER
+        assert reaction.mechanic_ids == EXPECTED_REACTION_TIME_CHALLENGE_MECHANIC_ORDER
 
 
 class TestWave1AdaptivePolicyFields:

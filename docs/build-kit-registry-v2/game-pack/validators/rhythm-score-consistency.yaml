@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: validator.rhythm-score-consistency
+kind: validator
+name: Rhythm score consistency
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Ensures score increases on perfect/good and not on miss; tallies match judgments.
+non_template_statement: >
+  Validation rule definition only.
+applies_to:
+  - game.rhythm-tap-lite
+depends_on:
+  - mechanic.rhythm-accuracy-scoring
+validates_modules:
+  - mechanic.rhythm-accuracy-scoring
+severity: blocking
+runner: conceptual
+check_type: conceptual
+recovery_playbooks:
+  - recovery.invalid-rhythm-score
+validation_goal: >
+  Protect score integrity.

@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: component.rhythm-results-panel
+kind: component_contract
+name: Rhythm results panel
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  End-of-round summary with score, streak, and accuracy breakdown.
+non_template_statement: >
+  UI contract only.
+applies_to:
+  - game.rhythm-tap-lite
+depends_on:
+  - mechanic.rhythm-result-state
+required_props:
+  - score: number
+  - bestStreak: number
+optional_props:
+  - perfectCount: number
+  - goodCount: number
+  - missCount: number
+guidance:
+  - "Shown only when phase is result"

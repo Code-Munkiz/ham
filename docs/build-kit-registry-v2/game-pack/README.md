@@ -2,7 +2,7 @@
 
 **Status:** Non-runtime schema pilot only. **Schema version:** `0.1`
 
-This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: eleven routed Wave 1–3 recipes plus **`game.reaction-time-challenge`** (Wave 3 schema-only, not routed). See [STATUS.md](../STATUS.md) for the full recipe list.
+This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: twelve routed Wave 1–3 recipes plus **`game.rhythm-tap-lite`** (Wave 3 schema-only, not routed). See [STATUS.md](../STATUS.md) for the full recipe list.
 
 ## Root manifest
 
@@ -342,6 +342,36 @@ validators:   validator.letter-pool-integrity, validator.word-slot-state-consist
 recovery:     recovery.broken-letter-pool, recovery.invalid-word-slot-state, recovery.bad-word-validation, recovery.duplicate-word-submission
 progress:     progress.word-builder
 learning:     learning.word-builder
+```
+
+**Note:** This recipe is **schema-only** today — not routed until explicitly approved.
+
+### `game.rhythm-tap-lite` (Wave 3 — schema-only, not routed)
+
+| Reason | Detail |
+|--------|--------|
+| **Thirteenth recipe shape** | Proves the pack supports DOM rhythm tap timing — distinct from reaction-time false-start games and typing speed tests. |
+| **DOM-native rhythm UI** | Cue panel, timing feedback, score tracker, streak indicator, miss panel, round controls, results panel — no Canvas or external audio for MVP. |
+| **Shared reuse** | Reuses `component.game-shell`, `stack.dom-game-minimal`. Does not reuse reaction-time or typing-speed mechanics. |
+| **Distinct mechanics** | Beat sequence, timing windows, tap input, accuracy scoring, streak combo, round progression, result state. |
+| **Explicit MVP bounds** | Local-only beat/cue schedule; perfect/good/miss judgment; no copyrighted music, live audio sync, or accounts. |
+| **Routing** | Schema-only — not routed behind `HAM_BUILD_REGISTRY_V2_ENABLED` until explicitly approved. |
+
+### Conceptual composition — `game.rhythm-tap-lite`
+
+When a user says *"Build a rhythm tap game where I press space on the beat for perfect/good/miss scores"*, a **future** composer would assemble:
+
+```txt
+registry_pack: pack.game
+schema_version: 0.1
+app_type:     game.rhythm-tap-lite
+stack_kit:    stack.dom-game-minimal
+mechanics:    mechanic.rhythm-round-state-machine → mechanic.rhythm-beat-sequence → mechanic.rhythm-timing-window → mechanic.rhythm-tap-input → mechanic.rhythm-accuracy-scoring → mechanic.rhythm-streak-combo → mechanic.rhythm-round-progression → mechanic.rhythm-result-state
+contracts:    component.game-shell, component.rhythm-cue-panel, component.rhythm-timing-feedback, component.rhythm-score-tracker, component.rhythm-streak-indicator, component.rhythm-miss-panel, component.rhythm-round-controls, component.rhythm-results-panel
+validators:   validator.rhythm-state-transitions, validator.rhythm-timing-window-bounds, validator.rhythm-score-consistency, validator.rhythm-input-cleanup, validator.rhythm-streak-bounds
+recovery:     recovery.stuck-rhythm-state, recovery.broken-rhythm-timing, recovery.invalid-rhythm-score, recovery.stale-rhythm-cue
+progress:     progress.rhythm-tap-lite
+learning:     learning.rhythm-tap-lite
 ```
 
 **Note:** This recipe is **schema-only** today — not routed until explicitly approved.

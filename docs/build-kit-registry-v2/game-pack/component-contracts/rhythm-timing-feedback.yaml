@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: component.rhythm-timing-feedback
+kind: component_contract
+name: Rhythm timing feedback
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Inline perfect/good/miss feedback with optional offset milliseconds display.
+non_template_statement: >
+  UI contract only. Not a checked-in component file.
+applies_to:
+  - game.rhythm-tap-lite
+depends_on:
+  - mechanic.rhythm-timing-window
+required_props:
+  - lastJudgment: string | null
+optional_props:
+  - offsetMs: number
+guidance:
+  - "Color or copy distinguishes perfect, good, miss"
+  - "Brief feedback; do not block next cue"
+risk_notes:
+  - Feedback persists and clutters UI

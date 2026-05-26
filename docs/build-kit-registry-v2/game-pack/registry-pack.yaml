@@ -11,8 +11,8 @@ description: >
   game.trivia-timer, game.branching-narrative, game.memory-match, game.word-daily,
   game.daily-puzzle-grid, game.resource-management-sim, game.hangman-lite,
   game.typing-speed-racer (Wave 2 routed), game.word-builder (Wave 2 schema-only),
-  game.card-deck-turn-based (Wave 3 routed), and game.reaction-time-challenge
-  (Wave 3 schema-only, not routed).
+  game.card-deck-turn-based (Wave 3 routed), game.reaction-time-challenge
+  (Wave 3 routed), and game.rhythm-tap-lite (Wave 3 schema-only, not routed).
   Used for cross-reference validation and future composer defaults — not loaded by HAM
   at runtime today.
 
@@ -35,6 +35,7 @@ module_index:
     - game.word-builder
     - game.card-deck-turn-based
     - game.reaction-time-challenge
+    - game.rhythm-tap-lite
   stack_kits:
     - stack.dom-game-minimal
   mechanics:
@@ -117,6 +118,14 @@ module_index:
     - mechanic.reaction-time-scoring
     - mechanic.reaction-round-progression
     - mechanic.reaction-result-state
+    - mechanic.rhythm-round-state-machine
+    - mechanic.rhythm-beat-sequence
+    - mechanic.rhythm-timing-window
+    - mechanic.rhythm-tap-input
+    - mechanic.rhythm-accuracy-scoring
+    - mechanic.rhythm-streak-combo
+    - mechanic.rhythm-round-progression
+    - mechanic.rhythm-result-state
   component_contracts:
     - component.game-shell
     - component.resource-counter
@@ -183,6 +192,13 @@ module_index:
     - component.reaction-round-controls
     - component.reaction-score-tracker
     - component.reaction-results-panel
+    - component.rhythm-cue-panel
+    - component.rhythm-timing-feedback
+    - component.rhythm-score-tracker
+    - component.rhythm-streak-indicator
+    - component.rhythm-miss-panel
+    - component.rhythm-round-controls
+    - component.rhythm-results-panel
   validators:
     - validator.no-negative-currency
     - validator.passive-income-tick
@@ -237,6 +253,11 @@ module_index:
     - validator.reaction-timer-bounds
     - validator.reaction-score-consistency
     - validator.reaction-input-cleanup
+    - validator.rhythm-state-transitions
+    - validator.rhythm-timing-window-bounds
+    - validator.rhythm-score-consistency
+    - validator.rhythm-input-cleanup
+    - validator.rhythm-streak-bounds
   recovery_playbooks:
     - recovery.stale-interval-or-bad-tick-loop
     - recovery.invalid-local-storage-json
@@ -277,6 +298,10 @@ module_index:
     - recovery.invalid-reaction-timer
     - recovery.broken-false-start-logic
     - recovery.stale-reaction-timeout
+    - recovery.stuck-rhythm-state
+    - recovery.broken-rhythm-timing
+    - recovery.invalid-rhythm-score
+    - recovery.stale-rhythm-cue
   progress_labels:
     - progress.idle-incremental
     - progress.trivia-timer
@@ -290,6 +315,7 @@ module_index:
     - progress.word-builder
     - progress.card-deck-turn-based
     - progress.reaction-time-challenge
+    - progress.rhythm-tap-lite
   learning_hooks:
     - learning.idle-incremental
     - learning.trivia-timer
@@ -303,6 +329,7 @@ module_index:
     - learning.word-builder
     - learning.card-deck-turn-based
     - learning.reaction-time-challenge
+    - learning.rhythm-tap-lite
 
 compose_defaults:
   compose_order:

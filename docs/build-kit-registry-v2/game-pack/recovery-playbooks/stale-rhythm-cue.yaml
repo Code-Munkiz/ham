@@ -1,0 +1,27 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+
+id: recovery.stale-rhythm-cue
+kind: recovery_playbook
+name: Fix stale rhythm cue
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Repairs cue index stuck or sequence not advancing after tap/miss.
+non_template_statement: >
+  Recovery spec only.
+max_attempts: 2
+applies_to:
+  - game.rhythm-tap-lite
+depends_on:
+  - mechanic.rhythm-beat-sequence
+  - mechanic.rhythm-round-progression
+steps:
+  - id: step.fix_cue_advance
+    action: fix_cue_advance
+    detail: "Advance index after each judgment or timeout"
+  - id: step.complete_round
+    action: wire_round_complete
+    detail: "Trigger result when index reaches beat count"
+user_facing_summary: >
+  I fixed the beat sequence so cues advance and the round can finish.
