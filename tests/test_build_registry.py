@@ -1060,11 +1060,13 @@ class TestDeckBuilderLiteRecipe:
             assert key in conflict_policy
             assert conflict_policy[key] is True
 
-    def test_deck_builder_lite_not_routed_in_intent_module(self):
+    def test_deck_builder_lite_routed_in_intent_module(self):
         import src.ham.build_registry.intent as intent_module
 
         source = Path(intent_module.__file__).read_text(encoding="utf-8")
-        assert "game.deck-builder-lite" not in source
+        assert "game.deck-builder-lite" in source
+        assert "DECK_BUILDER_LITE_APP_TYPE" in source
+        assert "_matches_deck_builder_lite" in source
 
     def test_existing_thirteen_routed_recipes_still_compose_after_deck_builder_lite_added(
         self, game_pack_root: Path

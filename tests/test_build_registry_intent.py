@@ -23,6 +23,7 @@ from src.ham.build_registry.intent import (
     CARD_DECK_TURN_BASED_APP_TYPE,
     REACTION_TIME_CHALLENGE_APP_TYPE,
     RHYTHM_TAP_LITE_APP_TYPE,
+    DECK_BUILDER_LITE_APP_TYPE,
     enrich_plan_metadata_with_registry_v2,
     select_registry_v2_app_type_for_prompt,
 )
@@ -436,6 +437,14 @@ _CROSS_EXCLUSION_PROMPTS = (
         "Build a simple tap-the-beat game with timing windows, streaks, misses, and a final score.",
         RHYTHM_TAP_LITE_APP_TYPE,
     ),
+    (
+        "Build a browser deck-building card game where the player starts with a small deck, fights simple encounters, and chooses a new card reward after each win.",
+        DECK_BUILDER_LITE_APP_TYPE,
+    ),
+    (
+        "Build a roguelite deck builder card game with encounters, reward choices, and deck mutation between battles.",
+        DECK_BUILDER_LITE_APP_TYPE,
+    ),
 )
 
 
@@ -481,6 +490,60 @@ _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVE_PROMPTS = (
     "Build me a daily word guessing game",
     "Build me a typing speed game",
     "Build a reflex challenge where clicking too early counts as a false start and players can retry for a better score.",
+    "Build a simple turn-based card battle game with a draw pile, hand, discard pile, and health points.",
+    "Build a browser deck-building card game where the player starts with a small deck, fights simple encounters, and chooses a new card reward after each win.",
+    "Build a SaaS dashboard",
+)
+
+
+_DECK_BUILDER_LITE_POSITIVE_PROMPTS = (
+    "Build a browser deck-building card game where the player starts with a small deck, fights simple encounters, and chooses a new card reward after each win.",
+    "Build a local deck-builder where players draw a hand, play cards against a simple enemy, discard played cards, and add one reward card to their deck.",
+    "Build a roguelite deck builder card game with encounters, reward choices, and deck mutation between battles.",
+    "Make a deck-building card game where you upgrade or remove cards between encounters and pick rewards after each win.",
+    "Build a small deck-building run with starter deck, draw hand, play cards, discard, choose rewards, and deck mutation.",
+    "Create a deck-building card game with encounter rounds, card reward offers, and add cards to deck after battles.",
+    "Build a browser game where players draw a hand, play cards in encounters, discard, and choose card rewards to improve their deck.",
+)
+
+_DECK_BUILDER_LITE_NEGATIVE_PROMPTS = (
+    "Build a deck builder",
+    "Build a deck",
+    "Build a deck app",
+    "Build a card deck",
+    "Build a card app",
+    "Build something with cards",
+    "Card rewards",
+    "Card collection",
+    "Create a pitch deck generator",
+    "Build an investor slide deck",
+    "Make a presentation deck",
+    "Make a flashcard study deck",
+    "Build spaced repetition cards for studying",
+    "Create an NFT trading card marketplace",
+    "Build a buy and sell collectible cards app",
+    "Build a card auction app",
+    "Build a poker game",
+    "Make a blackjack app",
+    "Build a casino betting game with chips and odds",
+    "Make a dashboard with cards",
+    "Build a kanban board with cards",
+    "Create pricing cards for a SaaS landing page",
+    "Build profile cards for a team page",
+    "Build a construction planning deck",
+    "Build a project planning deck",
+    "Build a music deck app",
+    "Build an audio deck app",
+)
+
+_DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVE_PROMPTS = (
+    "Build me a trivia quiz with a timer",
+    "Build an idle clicker game",
+    "Build me a memory card matching game",
+    "Build me a daily word guessing game",
+    "Build me a typing speed game",
+    "Build a reflex challenge where clicking too early counts as a false start and players can retry for a better score.",
+    "Build a browser rhythm tap game where circles appear on beats and players press space at the right time for perfect/good/miss scores.",
     "Build a simple turn-based card battle game with a draw pile, hand, discard pile, and health points.",
     "Build a SaaS dashboard",
 )
@@ -624,6 +687,18 @@ class TestSelectRegistryV2AppTypeForPrompt:
     @pytest.mark.parametrize("prompt", _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVE_PROMPTS)
     def test_other_recipe_prompts_do_not_route_to_rhythm_tap_lite_param(self, prompt: str):
         assert select_registry_v2_app_type_for_prompt(prompt) != RHYTHM_TAP_LITE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _DECK_BUILDER_LITE_POSITIVE_PROMPTS)
+    def test_matches_deck_builder_lite_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) == DECK_BUILDER_LITE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _DECK_BUILDER_LITE_NEGATIVE_PROMPTS)
+    def test_rejects_non_deck_builder_lite_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != DECK_BUILDER_LITE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVE_PROMPTS)
+    def test_other_recipe_prompts_do_not_route_to_deck_builder_lite_param(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != DECK_BUILDER_LITE_APP_TYPE
 
     @pytest.mark.parametrize("prompt,expected", _CROSS_EXCLUSION_PROMPTS)
     def test_recipes_do_not_steal_each_other(self, prompt: str, expected: str):
@@ -1132,6 +1207,41 @@ class TestSelectRegistryV2AppTypeForPrompt:
             not in {RHYTHM_TAP_LITE_APP_TYPE, TRIVIA_TIMER_APP_TYPE}
         )
 
+    def test_turn_based_card_battle_still_routes_to_card_deck_not_deck_builder(self):
+        prompt = (
+            "Build a simple turn-based card battle game with a draw pile, hand, "
+            "discard pile, and health points."
+        )
+        assert select_registry_v2_app_type_for_prompt(prompt) == CARD_DECK_TURN_BASED_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != DECK_BUILDER_LITE_APP_TYPE
+
+    def test_deck_builder_prompt_does_not_route_to_other_recipes(self):
+        prompt = (
+            "Build a browser deck-building card game where the player starts with a small deck, "
+            "fights simple encounters, and chooses a new card reward after each win."
+        )
+        assert select_registry_v2_app_type_for_prompt(prompt) == DECK_BUILDER_LITE_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != CARD_DECK_TURN_BASED_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != MEMORY_MATCH_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != RHYTHM_TAP_LITE_APP_TYPE
+
+    def test_other_recipe_prompts_do_not_route_to_deck_builder_lite(self):
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a memory card matching game")
+            == MEMORY_MATCH_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt(
+                "Build a simple turn-based card battle game with a draw pile, hand, "
+                "discard pile, and health points."
+            )
+            == CARD_DECK_TURN_BASED_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build a deck builder")
+            not in {DECK_BUILDER_LITE_APP_TYPE, CARD_DECK_TURN_BASED_APP_TYPE}
+        )
+
 
 class TestEnrichPlanMetadataWithRegistryV2:
     def test_flag_disabled_does_not_add_registry_metadata(self, monkeypatch):
@@ -1261,6 +1371,18 @@ class TestEnrichPlanMetadataWithRegistryV2:
             (
                 "Build a browser rhythm tap game where circles appear on beats and players "
                 "press space at the right time for perfect/good/miss scores."
+            ),
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
+
+    def test_flag_disabled_deck_builder_prompt_does_not_add_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            (
+                "Build a browser deck-building card game where the player starts with a small deck, "
+                "fights simple encounters, and chooses a new card reward after each win."
             ),
         )
         assert "registry_v2_app_type" not in metadata
@@ -1405,6 +1527,19 @@ class TestEnrichPlanMetadataWithRegistryV2:
         assert metadata["template_kind"] == "generic"
         assert metadata["originated_from"] == "builder_chat_scaffold"
 
+    def test_flag_enabled_deck_builder_prompt_adds_registry_metadata(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic", "originated_from": "builder_chat_scaffold"},
+            (
+                "Build a browser deck-building card game where the player starts with a small deck, "
+                "fights simple encounters, and chooses a new card reward after each win."
+            ),
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        assert metadata["registry_v2_app_type"] == DECK_BUILDER_LITE_APP_TYPE
+        assert metadata["template_kind"] == "generic"
+        assert metadata["originated_from"] == "builder_chat_scaffold"
+
     def test_flag_enabled_non_idle_prompt_leaves_registry_metadata_absent(self):
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "landing-page"},
@@ -1519,6 +1654,15 @@ class TestEnrichPlanMetadataWithRegistryV2:
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "generic"},
             "Build a metronome",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "1"},
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
+
+    def test_flag_enabled_non_deck_builder_prompt_leaves_registry_metadata_absent(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            "Build a deck builder",
             env={"HAM_BUILD_REGISTRY_V2_ENABLED": "1"},
         )
         assert "registry_v2_app_type" not in metadata
@@ -1662,6 +1806,15 @@ class TestChatScaffoldSyntheticPlanMetadata:
         assert metadata.get("template_kind") == "generic"
         assert "registry_v2_app_type" not in metadata
 
+    def test_flag_disabled_deck_builder_prompt_has_no_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = _synthetic_plan_metadata(
+            "Build a browser deck-building card game where the player starts with a small deck, "
+            "fights simple encounters, and chooses a new card reward after each win."
+        )
+        assert metadata.get("template_kind") == "generic"
+        assert "registry_v2_app_type" not in metadata
+
     def test_flag_enabled_idle_prompt_adds_registry_metadata(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
         metadata = _synthetic_plan_metadata("build me an idle clicker game")
@@ -1754,6 +1907,15 @@ class TestChatScaffoldSyntheticPlanMetadata:
         )
         assert metadata.get("template_kind") == "generic"
         assert metadata.get("registry_v2_app_type") == RHYTHM_TAP_LITE_APP_TYPE
+
+    def test_flag_enabled_deck_builder_prompt_adds_registry_metadata_synthetic(self, monkeypatch):
+        monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
+        metadata = _synthetic_plan_metadata(
+            "Build a browser deck-building card game where the player starts with a small deck, "
+            "fights simple encounters, and chooses a new card reward after each win."
+        )
+        assert metadata.get("template_kind") == "generic"
+        assert metadata.get("registry_v2_app_type") == DECK_BUILDER_LITE_APP_TYPE
 
     def test_flag_enabled_non_idle_prompt_has_no_registry_metadata(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
@@ -2413,6 +2575,66 @@ class TestEndToEndScaffoldMessages:
             project_id="proj_test",
             user_message=prompt,
             steps=[Step(title="Scaffold game", description="Create rhythm tap game files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(plan)[1]["content"]
+        assert "registry_v2_app_type" not in metadata
+        assert "Builder Kit context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" not in content
+
+    def test_flag_enabled_deck_builder_prompt_produces_v2_context(self):
+        prompt = (
+            "Build a browser deck-building card game where the player starts with a small deck, "
+            "fights simple encounters, and chooses a new card reward after each win."
+        )
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            prompt,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_deck_builder_e2e",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message=prompt,
+            steps=[Step(title="Scaffold game", description="Create deck builder game files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(
+            plan,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )[1]["content"]
+        assert metadata["registry_v2_app_type"] == DECK_BUILDER_LITE_APP_TYPE
+        assert "Build Registry v2 playbook context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" in content
+        assert "game.deck-builder-lite" in content
+        assert "mechanic.deck-builder-run-state-machine" in content
+        assert "mechanic.starter-deck-seed" in content
+        assert "mechanic.encounter-round-loop" in content
+        assert "mechanic.reward-offer-choice" in content
+        assert "mechanic.deck-mutation" in content
+        assert "mechanic.deck-builder-result-state" in content
+        assert "Builder Kit context:" not in content
+        assert content.count("Builder Kit:") == 0
+
+    def test_flag_disabled_deck_builder_prompt_produces_v1_context_only(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        prompt = (
+            "Build a browser deck-building card game where the player starts with a small deck, "
+            "fights simple encounters, and chooses a new card reward after each win."
+        )
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            prompt,
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_deck_builder_v1",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message=prompt,
+            steps=[Step(title="Scaffold game", description="Create deck builder game files")],
             planner_confidence="high",
             metadata=metadata,
         )
