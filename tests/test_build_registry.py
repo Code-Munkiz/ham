@@ -1164,11 +1164,13 @@ class TestTurnBasedTacticsLiteRecipe:
             assert key in conflict_policy
             assert conflict_policy[key] is True
 
-    def test_turn_based_tactics_lite_not_routed_in_intent_module(self):
+    def test_turn_based_tactics_lite_routed_in_intent_module(self):
         import src.ham.build_registry.intent as intent_module
 
         source = Path(intent_module.__file__).read_text(encoding="utf-8")
-        assert "game.turn-based-tactics-lite" not in source
+        assert "game.turn-based-tactics-lite" in source
+        assert "TURN_BASED_TACTICS_LITE_APP_TYPE" in source
+        assert "_matches_turn_based_tactics_lite" in source
 
     def test_existing_fourteen_routed_recipes_still_compose_after_tactics_lite_added(
         self, game_pack_root: Path

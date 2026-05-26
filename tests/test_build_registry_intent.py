@@ -24,6 +24,7 @@ from src.ham.build_registry.intent import (
     REACTION_TIME_CHALLENGE_APP_TYPE,
     RHYTHM_TAP_LITE_APP_TYPE,
     DECK_BUILDER_LITE_APP_TYPE,
+    TURN_BASED_TACTICS_LITE_APP_TYPE,
     enrich_plan_metadata_with_registry_v2,
     select_registry_v2_app_type_for_prompt,
 )
@@ -33,6 +34,11 @@ _CANONICAL_DECK_BUILDER_GATE_PROMPT = (
     "Build a browser deck-building card game where the player starts with a small deck, "
     "draws a hand, plays cards against a simple enemy, discards played cards, chooses one "
     "card reward after each win, adds it to the deck, and tries to complete a short run."
+)
+
+_CANONICAL_TACTICS_GATE_PROMPT = (
+    "Build a browser turn-based tactics game on a small grid where the player moves units, "
+    "attacks enemies, and wins by defeating all enemies."
 )
 
 _IDLE_POSITIVE_PROMPTS = (
@@ -451,6 +457,14 @@ _CROSS_EXCLUSION_PROMPTS = (
         "Build a roguelite deck builder card game with encounters, reward choices, and deck mutation between battles.",
         DECK_BUILDER_LITE_APP_TYPE,
     ),
+    (
+        _CANONICAL_TACTICS_GATE_PROMPT,
+        TURN_BASED_TACTICS_LITE_APP_TYPE,
+    ),
+    (
+        "Build a tactical battle on a 5x5 grid with movement range, attack range, player turn, enemy turn, and defeat all enemies.",
+        TURN_BASED_TACTICS_LITE_APP_TYPE,
+    ),
 )
 
 
@@ -553,6 +567,65 @@ _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVE_PROMPTS = (
     "Build a reflex challenge where clicking too early counts as a false start and players can retry for a better score.",
     "Build a browser rhythm tap game where circles appear on beats and players press space at the right time for perfect/good/miss scores.",
     "Build a simple turn-based card battle game with a draw pile, hand, discard pile, and health points.",
+    "Build a SaaS dashboard",
+)
+
+
+_TURN_BASED_TACTICS_LITE_POSITIVE_PROMPTS = (
+    _CANONICAL_TACTICS_GATE_PROMPT,
+    "Build a local tactics battle with a 5x5 grid, two player units, two enemies, move range, attack range, enemy turn, and restart.",
+    "Build a simple grid tactics game where selecting a unit shows movement options and attacking reduces enemy HP.",
+    "Build a DOM tactics battle where player and enemy units take turns moving and attacking until one side wins.",
+    "Build a turn-based tactics game where you select a unit, move it within range, attack an enemy, and end turn.",
+    "Build a tactical battle on a 5x5 grid with movement range, attack range, player turn, enemy turn, and defeat all enemies.",
+    "Build a browser game where player units and enemy units take turns on a grid with health bars and a restart battle button.",
+)
+
+_TURN_BASED_TACTICS_LITE_NEGATIVE_PROMPTS = (
+    "Build a chess game.",
+    "Build a checkers game.",
+    "Build a Go game.",
+    "Build a Sudoku puzzle grid.",
+    "Build a daily puzzle grid.",
+    "Build a city builder.",
+    "Build a resource management sim.",
+    "Build a tower defense game.",
+    "Build a real-time strategy game.",
+    "Build an RPG campaign battle system.",
+    "Build a map editor.",
+    "Build a level editor.",
+    "Build a physics combat game.",
+    "Build a collision combat game.",
+    "Build a multiplayer tactics game.",
+    "Build an online PvP tactics game.",
+    "Build a card battle game.",
+    "Build a deck-building card game.",
+    "Build a dashboard grid.",
+    "tactics",
+    "strategy",
+    "grid",
+    "units",
+    "enemies",
+    "battle",
+    "turns",
+    "move",
+    "attack",
+    "board game",
+)
+
+_TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVE_PROMPTS = (
+    "Build me a trivia quiz with a timer",
+    "Build an idle clicker game",
+    "Build me a memory card matching game",
+    "Build me a daily word guessing game",
+    "Build me a daily puzzle grid game",
+    "Build me a resource management sim",
+    "Build a hangman word game",
+    "Build me a typing speed game",
+    "Build a simple turn-based card battle game with a draw pile, hand, discard pile, and health points.",
+    "Build a browser deck-building card game where the player starts with a small deck, fights simple encounters, and chooses a new card reward after each win.",
+    "Build a browser reaction-time game where the player waits for the screen to turn green, clicks as fast as possible, and sees their reaction time.",
+    "Build a browser rhythm tap game where circles appear on beats and players press space at the right time for perfect/good/miss scores.",
     "Build a SaaS dashboard",
 )
 
@@ -707,6 +780,18 @@ class TestSelectRegistryV2AppTypeForPrompt:
     @pytest.mark.parametrize("prompt", _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVE_PROMPTS)
     def test_other_recipe_prompts_do_not_route_to_deck_builder_lite_param(self, prompt: str):
         assert select_registry_v2_app_type_for_prompt(prompt) != DECK_BUILDER_LITE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _TURN_BASED_TACTICS_LITE_POSITIVE_PROMPTS)
+    def test_matches_turn_based_tactics_lite_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) == TURN_BASED_TACTICS_LITE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _TURN_BASED_TACTICS_LITE_NEGATIVE_PROMPTS)
+    def test_rejects_non_turn_based_tactics_lite_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != TURN_BASED_TACTICS_LITE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVE_PROMPTS)
+    def test_other_recipe_prompts_do_not_route_to_turn_based_tactics_lite_param(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != TURN_BASED_TACTICS_LITE_APP_TYPE
 
     @pytest.mark.parametrize("prompt,expected", _CROSS_EXCLUSION_PROMPTS)
     def test_recipes_do_not_steal_each_other(self, prompt: str, expected: str):
@@ -1264,6 +1349,64 @@ class TestSelectRegistryV2AppTypeForPrompt:
             not in {DECK_BUILDER_LITE_APP_TYPE, CARD_DECK_TURN_BASED_APP_TYPE}
         )
 
+    def test_turn_based_tactics_prompt_does_not_route_to_other_recipes(self):
+        prompt = _CANONICAL_TACTICS_GATE_PROMPT
+        assert select_registry_v2_app_type_for_prompt(prompt) == TURN_BASED_TACTICS_LITE_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != DAILY_PUZZLE_GRID_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != RESOURCE_MANAGEMENT_SIM_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != CARD_DECK_TURN_BASED_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != DECK_BUILDER_LITE_APP_TYPE
+
+    def test_daily_puzzle_grid_still_routes_not_tactics(self):
+        prompt = "Build me a daily puzzle grid game"
+        assert select_registry_v2_app_type_for_prompt(prompt) == DAILY_PUZZLE_GRID_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != TURN_BASED_TACTICS_LITE_APP_TYPE
+
+    def test_resource_management_sim_still_routes_not_tactics(self):
+        prompt = "Build me a resource management sim"
+        assert select_registry_v2_app_type_for_prompt(prompt) == RESOURCE_MANAGEMENT_SIM_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != TURN_BASED_TACTICS_LITE_APP_TYPE
+
+    def test_card_battle_still_routes_to_card_deck_not_tactics(self):
+        prompt = (
+            "Build a simple turn-based card battle game with a draw pile, hand, "
+            "discard pile, and health points."
+        )
+        assert select_registry_v2_app_type_for_prompt(prompt) == CARD_DECK_TURN_BASED_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != TURN_BASED_TACTICS_LITE_APP_TYPE
+
+    def test_deck_builder_still_routes_not_tactics(self):
+        prompt = _CANONICAL_DECK_BUILDER_GATE_PROMPT
+        assert select_registry_v2_app_type_for_prompt(prompt) == DECK_BUILDER_LITE_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != TURN_BASED_TACTICS_LITE_APP_TYPE
+
+    def test_canonical_tactics_gate_prompt_routes_to_tactics(self):
+        assert (
+            select_registry_v2_app_type_for_prompt(_CANONICAL_TACTICS_GATE_PROMPT)
+            == TURN_BASED_TACTICS_LITE_APP_TYPE
+        )
+
+    def test_other_recipe_prompts_do_not_route_to_turn_based_tactics_lite(self):
+        assert (
+            select_registry_v2_app_type_for_prompt("Build a chess game.")
+            != TURN_BASED_TACTICS_LITE_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a daily puzzle grid game")
+            == DAILY_PUZZLE_GRID_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build a card battle game.")
+            != TURN_BASED_TACTICS_LITE_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt(
+                "Build a simple turn-based card battle game with a draw pile, hand, "
+                "discard pile, and health points."
+            )
+            == CARD_DECK_TURN_BASED_APP_TYPE
+        )
+
 
 class TestEnrichPlanMetadataWithRegistryV2:
     def test_flag_disabled_does_not_add_registry_metadata(self, monkeypatch):
@@ -1403,6 +1546,15 @@ class TestEnrichPlanMetadataWithRegistryV2:
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "generic"},
             _CANONICAL_DECK_BUILDER_GATE_PROMPT,
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
+
+    def test_flag_disabled_tactics_prompt_does_not_add_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            _CANONICAL_TACTICS_GATE_PROMPT,
         )
         assert "registry_v2_app_type" not in metadata
         assert metadata["template_kind"] == "generic"
@@ -1567,6 +1719,29 @@ class TestEnrichPlanMetadataWithRegistryV2:
         assert metadata["template_kind"] == "generic"
         assert metadata["originated_from"] == "builder_chat_scaffold"
 
+    def test_flag_enabled_canonical_tactics_gate_prompt_adds_registry_metadata(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic", "originated_from": "builder_chat_scaffold"},
+            _CANONICAL_TACTICS_GATE_PROMPT,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        assert metadata["registry_v2_app_type"] == TURN_BASED_TACTICS_LITE_APP_TYPE
+        assert metadata["template_kind"] == "generic"
+        assert metadata["originated_from"] == "builder_chat_scaffold"
+
+    def test_flag_enabled_tactics_prompt_adds_registry_metadata(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic", "originated_from": "builder_chat_scaffold"},
+            (
+                "Build a tactical battle on a 5x5 grid with movement range, attack range, "
+                "player turn, enemy turn, and defeat all enemies."
+            ),
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        assert metadata["registry_v2_app_type"] == TURN_BASED_TACTICS_LITE_APP_TYPE
+        assert metadata["template_kind"] == "generic"
+        assert metadata["originated_from"] == "builder_chat_scaffold"
+
     def test_flag_enabled_non_idle_prompt_leaves_registry_metadata_absent(self):
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "landing-page"},
@@ -1690,6 +1865,15 @@ class TestEnrichPlanMetadataWithRegistryV2:
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "generic"},
             "Build a deck builder",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "1"},
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
+
+    def test_flag_enabled_non_tactics_prompt_leaves_registry_metadata_absent(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            "tactics",
             env={"HAM_BUILD_REGISTRY_V2_ENABLED": "1"},
         )
         assert "registry_v2_app_type" not in metadata
@@ -1842,6 +2026,12 @@ class TestChatScaffoldSyntheticPlanMetadata:
         assert metadata.get("template_kind") == "generic"
         assert "registry_v2_app_type" not in metadata
 
+    def test_flag_disabled_tactics_prompt_has_no_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = _synthetic_plan_metadata(_CANONICAL_TACTICS_GATE_PROMPT)
+        assert metadata.get("template_kind") == "generic"
+        assert "registry_v2_app_type" not in metadata
+
     def test_flag_enabled_idle_prompt_adds_registry_metadata(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
         metadata = _synthetic_plan_metadata("build me an idle clicker game")
@@ -1943,6 +2133,12 @@ class TestChatScaffoldSyntheticPlanMetadata:
         )
         assert metadata.get("template_kind") == "generic"
         assert metadata.get("registry_v2_app_type") == DECK_BUILDER_LITE_APP_TYPE
+
+    def test_flag_enabled_tactics_prompt_adds_registry_metadata_synthetic(self, monkeypatch):
+        monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
+        metadata = _synthetic_plan_metadata(_CANONICAL_TACTICS_GATE_PROMPT)
+        assert metadata.get("template_kind") == "generic"
+        assert metadata.get("registry_v2_app_type") == TURN_BASED_TACTICS_LITE_APP_TYPE
 
     def test_flag_enabled_non_idle_prompt_has_no_registry_metadata(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
@@ -2662,6 +2858,62 @@ class TestEndToEndScaffoldMessages:
             project_id="proj_test",
             user_message=prompt,
             steps=[Step(title="Scaffold game", description="Create deck builder game files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(plan)[1]["content"]
+        assert "registry_v2_app_type" not in metadata
+        assert "Builder Kit context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" not in content
+
+    def test_flag_enabled_tactics_prompt_produces_v2_context(self):
+        prompt = _CANONICAL_TACTICS_GATE_PROMPT
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            prompt,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_tactics_e2e",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message=prompt,
+            steps=[Step(title="Scaffold game", description="Create tactics game files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(
+            plan,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )[1]["content"]
+        assert metadata["registry_v2_app_type"] == TURN_BASED_TACTICS_LITE_APP_TYPE
+        assert "Build Registry v2 playbook context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" in content
+        assert "game.turn-based-tactics-lite" in content
+        assert "mechanic.tactics-grid-board-state" in content
+        assert "mechanic.tactics-unit-roster" in content
+        assert "mechanic.tactics-selection-state" in content
+        assert "mechanic.tactics-movement-range" in content
+        assert "mechanic.tactics-attack-resolution" in content
+        assert "mechanic.tactics-turn-loop" in content
+        assert "mechanic.tactics-enemy-response" in content
+        assert "mechanic.tactics-battle-result-state" in content
+        assert "Builder Kit context:" not in content
+        assert content.count("Builder Kit:") == 0
+
+    def test_flag_disabled_tactics_prompt_produces_v1_context_only(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        prompt = _CANONICAL_TACTICS_GATE_PROMPT
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            prompt,
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_tactics_v1",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message=prompt,
+            steps=[Step(title="Scaffold game", description="Create tactics game files")],
             planner_confidence="high",
             metadata=metadata,
         )

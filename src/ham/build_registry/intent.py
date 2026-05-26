@@ -23,6 +23,7 @@ CARD_DECK_TURN_BASED_APP_TYPE = "game.card-deck-turn-based"
 REACTION_TIME_CHALLENGE_APP_TYPE = "game.reaction-time-challenge"
 RHYTHM_TAP_LITE_APP_TYPE = "game.rhythm-tap-lite"
 DECK_BUILDER_LITE_APP_TYPE = "game.deck-builder-lite"
+TURN_BASED_TACTICS_LITE_APP_TYPE = "game.turn-based-tactics-lite"
 
 _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES: tuple[str, ...] = (
     r"\bhangman(-style)?\b",
@@ -135,6 +136,21 @@ _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES: tuple[str, ...] = (
     r"\bdraw\b.{0,40}\bhand\b.{0,80}\b(reward|add\s+card|encounter)\b",
 )
 
+_TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES: tuple[str, ...] = (
+    r"\bturn[- ]based\b.{0,100}\btactics\b.{0,100}\b(grid|units|battle)\b",
+    r"\btactics\b.{0,100}\b(grid|units|enemies)\b.{0,100}\b(move|attack|turn)\b",
+    r"\b(grid|tile)\b.{0,100}\b(units|enemies)\b.{0,100}\b(move|attack|turn)\b",
+    r"\bselect\b.{0,60}\b(a\s+)?unit\b.{0,100}\b(move|attack)\b",
+    r"\bmove\b.{0,60}\bunits?\b.{0,100}\b(attack|enemies)\b",
+    r"\bplayer\s+turn\b.{0,100}\benemy\s+turn\b",
+    r"\benemy\s+turn\b.{0,100}\bplayer\s+turn\b",
+    r"\bmovement\s+range\b.{0,100}\b(attack\s+range|attack)\b",
+    r"\battack\s+range\b.{0,100}\b(movement\s+range|move)\b",
+    r"\bdefeat\s+all\s+enemies\b.{0,100}\b(grid|tactics|battle|units)\b",
+    r"\btactical\s+battle\b.{0,100}\b(grid|units|turn)\b",
+    r"\b(5x5|6x6|5\s*x\s*5|6\s*x\s*6)\b.{0,100}\b(grid|tactics|units|battle)\b",
+)
+
 _GLOBAL_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(dashboard|landing\s*page|saas|calculator|todo|to[-\s]?do|crm)\b",
     r"\b(crypto|trading)\s+(dashboard|app|platform)\b",
@@ -151,7 +167,7 @@ _IDLE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES
 
 _TRIVIA_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(idle|incremental|clicker|tycoon)\b",
@@ -170,7 +186,7 @@ _TRIVIA_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES
 
 _IDLE_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\b(idle|incremental|clicker|tycoon)\b",
@@ -216,7 +232,7 @@ _BRANCHING_NARRATIVE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES
 
 _BRANCHING_NARRATIVE_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bbranching\s+story\b.{0,80}\bgame\b",
@@ -250,7 +266,7 @@ _MEMORY_MATCH_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES
 
 _MEMORY_MATCH_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bmemory\s+(card|match)\b",
@@ -287,7 +303,7 @@ _WORD_DAILY_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
     r"\bfill\s+cells\b.{0,80}\b(clue|row|column|constraint)\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES
 
 _WORD_DAILY_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bwordle(-style)?\b",
@@ -331,7 +347,7 @@ _DAILY_PUZZLE_GRID_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\beducation\s+website\b",
     r"\b(blog|chatbot)\b",
     r"\bwriting\s+app\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES
 
 _DAILY_PUZZLE_GRID_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bdaily\s+puzzle\s+grid\b",
@@ -379,7 +395,7 @@ _RESOURCE_MANAGEMENT_SIM_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\breal[-\s]?time\s+combat\b",
     r"\bcity\s+builder\b.{0,100}\bcombat\b",
     r"\bgeneric\s+dashboard\b",
-) + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES
+) + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES
 
 _HANGMAN_LITE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(idle|incremental|clicker|tycoon)\b",
@@ -406,7 +422,7 @@ _HANGMAN_LITE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\bdaily\s+puzzle\s+grid\b",
     r"\bsurvey\b",
     r"\beducation\s+website\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES
 
 _HANGMAN_LITE_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bhangman(-style)?\b",
@@ -475,7 +491,7 @@ _TYPING_SPEED_RACER_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\bdaily\s+puzzle\s+grid\b",
     r"\bsurvey\b",
     r"\beducation\s+website\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES
 
 _TYPING_SPEED_RACER_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\btyping\s+speed\b.{0,80}\b(game|racer|challenge|test)\b",
@@ -705,7 +721,7 @@ _REACTION_TIME_CHALLENGE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\bsurvey\b",
     r"\beducation\s+website\b",
     r"\b(dashboard|landing\s*page|saas)\b",
-) + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES
+) + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES
 
 _REACTION_TIME_CHALLENGE_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\breaction[- ]time\b.{0,100}\b(game|click|tap|test|challenge|millisecond|ms|false\s+start)\b",
@@ -891,6 +907,88 @@ _DECK_BUILDER_LITE_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bdeck[- ]building\b.{0,100}\bcard\s+game\b",
 )
 
+_TURN_BASED_TACTICS_LITE_NEGATIVE_PATTERNS: tuple[str, ...] = (
+    r"\b(idle|incremental|clicker|tycoon)\b",
+    r"\bcookie\s+clicker\b",
+    r"\bpassive\s+income\b",
+    r"\b(trivia|quiz)\b",
+    r"\bmemory\s+(card|match)\b",
+    r"\bbranching\s+story\b",
+    r"\bchoose\s+your\s+own\s+adventure\b",
+    r"\b(wordle|daily\s+word|wordle-style)\b",
+    r"\bword\s+guess(ing)?\b",
+    r"\bhangman(-style)?\b",
+    r"\btyping\s+speed\b",
+    r"\bwpm\b",
+    r"\bword\s+build(er|ing)\b",
+    r"\breaction[- ]time\b",
+    r"\brhythm\s+tap\b",
+    r"\btap[- ]the[- ]beat\b",
+    r"\b(nonogram|picross|sudoku|minesweeper)\b",
+    r"\blogic\s+grid\s+puzzle\b",
+    r"\bdaily\s+puzzle\s+grid\b",
+    r"\bfill\s+cells\b.{0,80}\b(clue|row|column|constraint)\b",
+    r"\bchess\b",
+    r"\bcheckers\b",
+    r"\bgo\b",
+    r"\bcity\s+builder\b",
+    r"\bresource\s+management\b",
+    r"\bturn[-\s]?based\b.{0,80}\bresource\s+management\b",
+    r"\btower\s+defense\b",
+    r"\breal[- ]time\s+strategy\b",
+    r"\brts\b",
+    r"\brpg\s+campaign\b",
+    r"\bstory\s+battle\b",
+    r"\bmap\s+editor\b",
+    r"\blevel\s+editor\b",
+    r"\bphysics\b.{0,80}\b(combat|collision|game)\b",
+    r"\bcollision\b.{0,80}\b(combat|physics|game)\b",
+    r"\bmultiplayer\b.{0,80}\btactics\b",
+    r"\bonline\s+pvp\b",
+    r"\bturn[- ]based\b.{0,80}\bcard\b",
+    r"\bcard\s+battle\b",
+    r"\b(draw\s+pile|discard\s+pile)\b",
+    r"\bplay\s+(a\s+)?card\b",
+    r"\bdeck[- ]building\b",
+    r"\bdeck\s+builder\b",
+    r"\badd\s+cards?\s+to\s+(the\s+)?deck\b",
+    r"\bdashboard\s+grid\b",
+    r"\b(dashboard|data\s+table|spreadsheet)\b",
+    r"\bsurvey\b",
+    r"\beducation\s+website\b",
+    r"\b(dashboard|landing\s*page|saas)\b",
+    r"^tactics$",
+    r"^strategy$",
+    r"^grid$",
+    r"^units$",
+    r"^enemies$",
+    r"^battle$",
+    r"^turns$",
+    r"^move$",
+    r"^attack$",
+    r"^board game$",
+) + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES
+
+_TURN_BASED_TACTICS_LITE_POSITIVE_PATTERNS: tuple[str, ...] = (
+    r"\bturn[- ]based\b.{0,100}\btactics\b.{0,100}\b(grid|units|battle)\b",
+    r"\btactics\b.{0,100}\b(grid|units|enemies?)\b.{0,100}\b(mov(e|ing|ement)|attack(ing)?|turn(s)?)\b",
+    r"\b(grid|tile)\b.{0,100}\b(units?|enemies?)\b.{0,100}\b(mov(e|ing|ement)|attack(ing)?|turn(s)?)\b",
+    r"\bselect(ing)?\b.{0,60}\b(a\s+)?unit\b.{0,100}\b(mov(e|ing|ement)|attack(ing)?)\b",
+    r"\bmove\b.{0,60}\bunits?\b.{0,100}\b(attack(ing)?|enemies?)\b",
+    r"\bplayer\s+turn\b.{0,100}\benemy\s+turn\b",
+    r"\benemy\s+turn\b.{0,100}\bplayer\s+turn\b",
+    r"\bmovement\s+range\b.{0,100}\b(attack\s+range|attack)\b",
+    r"\battack\s+range\b.{0,100}\b(movement\s+range|move)\b",
+    r"\bdefeat\s+all\s+enemies\b.{0,100}\b(grid|tactics|battle|units)\b",
+    r"\btactical\s+battle\b.{0,100}\b(grid|units|turn)\b",
+    r"\b(5x5|6x6|5\s*x\s*5|6\s*x\s*6)\b.{0,100}\b(grid|tactics|units|battle)\b",
+    r"\bhealth\s+bars?\b.{0,100}\b(units?|enemies?|grid|tactics|restart|battle)\b",
+    r"\b(units?|enemies?)\b.{0,100}\b(turn(s)?|mov(e|ing)|attack(ing)?)\b.{0,100}\b(win|battle|tactics)\b",
+    r"\btactics\b.{0,100}\b(battle|grid)\b.{0,100}\b(units?|enemies?|player)\b.{0,100}\b(turn(s)?|mov(e|ing)|attack(ing)?)\b",
+    r"\b(player|enemy)\s+units?\b.{0,100}\btake\s+turns\b.{0,100}\bgrid\b",
+    r"\brestart\s+battle\b.{0,100}\b(grid|units?|tactics|health)\b",
+)
+
 
 def _normalized_prompt(prompt: str) -> str:
     return re.sub(r"\s+", " ", str(prompt or "").strip().lower())
@@ -1010,6 +1108,14 @@ def _matches_deck_builder_lite(text: str) -> bool:
     )
 
 
+def _matches_turn_based_tactics_lite(text: str) -> bool:
+    return _matches_recipe(
+        text,
+        negatives=_TURN_BASED_TACTICS_LITE_NEGATIVE_PATTERNS,
+        positives=_TURN_BASED_TACTICS_LITE_POSITIVE_PATTERNS,
+    )
+
+
 def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
     """Return a Game Pack app type id for clear prompt matches, else ``None``."""
     text = _normalized_prompt(prompt)
@@ -1020,7 +1126,7 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
     # Precedence: trivia → idle → branching narrative → memory match → word daily
     # → daily puzzle grid → resource management sim → hangman lite → typing speed racer
     # → word builder → card deck turn-based → reaction time challenge → rhythm tap lite
-    # → deck builder lite.
+    # → deck builder lite → turn-based tactics lite.
     if _matches_trivia(text):
         return TRIVIA_TIMER_APP_TYPE
     if _matches_idle(text):
@@ -1049,6 +1155,8 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
         return RHYTHM_TAP_LITE_APP_TYPE
     if _matches_deck_builder_lite(text):
         return DECK_BUILDER_LITE_APP_TYPE
+    if _matches_turn_based_tactics_lite(text):
+        return TURN_BASED_TACTICS_LITE_APP_TYPE
     return None
 
 
