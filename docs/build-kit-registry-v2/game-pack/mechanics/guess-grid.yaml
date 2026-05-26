@@ -3,77 +3,60 @@ id: mechanic.guess-grid
 kind: mechanic
 name: Guess grid state
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Tracks submitted guesses, current in-progress row, and per-row letter slots for a fixed-length word game grid.
+non_template_statement: 'Grid state recipe only. Not a prebuilt React grid component file.
 
-description: >
-  Tracks submitted guesses, current in-progress row, and per-row letter slots for a
-  fixed-length word game grid.
-
-non_template_statement: >
-  Grid state recipe only. Not a prebuilt React grid component file.
-
+  '
 applies_to:
-  - game.word-daily
-  - tag:word-daily
-
+- game.word-daily
+- tag:word-daily
 depends_on:
-  - mechanic.word-target
-
+- mechanic.word-target
 provides:
-  - guess_grid_state
-
+- guess_grid_state
 binds_components:
-  - component.word-grid
-  - component.guess-row
-  - component.letter-tile
-
+- component.word-grid
+- component.guess-row
+- component.letter-tile
 inputs:
-  - word_length: number
-  - max_attempts: number — default 6
-  - guesses: array of completed guess strings
-  - current_guess: string — in-progress row
-
+- word_length: number
+- max_attempts: number — default 6
+- guesses: array of completed guess strings
+- current_guess: string — in-progress row
 outputs:
-  - rows: array of row state
-  - currentRowIndex: number
-  - isCompleteGuess: boolean
-
+- rows: array of row state
+- currentRowIndex: number
+- isCompleteGuess: boolean
 guidance:
-  - "One row per attempt; each row has word_length slots"
-  - "current_guess length must equal word_length before submit"
-  - "Reject submit when game status is won or lost"
-  - "Append completed guess to guesses on valid submit"
-
+- One row per attempt; each row has word_length slots
+- current_guess length must equal word_length before submit
+- Reject submit when game status is won or lost
 validation_notes:
-  - guesses.length <= max_attempts
-  - Each completed guess length === word_length
-
+- guesses.length <= max_attempts
+- Each completed guess length === word_length
 risk_notes:
-  - Partial guess submitted as complete
-  - Grid allows input after game over
-
+- Partial guess submitted as complete
+- Grid allows input after game over
 state_model:
   fields:
-    - name: guesses
-      type: array
-    - name: currentGuess
-      type: string
-    - name: currentRowIndex
-      type: number
+  - name: guesses
+    type: array
+  - name: currentGuess
+    type: string
+  - name: currentRowIndex
+    type: number
   events:
-    - append_letter
-    - backspace_letter
-    - submit_guess
-    - reset_row
-
+  - append_letter
+  - backspace_letter
+  - submit_guess
+  - reset_row
 common_failure_modes:
-  - "Submit with fewer than word_length letters"
-  - "Extra row beyond max_attempts"
-
+- Submit with fewer than word_length letters
+- Extra row beyond max_attempts
 test_ideas:
-  - "Six rows max for default settings"
-  - "Submit blocked when current guess incomplete"
-
+- Six rows max for default settings
+- Submit blocked when current guess incomplete
 reusable_across:
-  - game.word-daily
+- game.word-daily

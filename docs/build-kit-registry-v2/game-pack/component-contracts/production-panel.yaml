@@ -3,37 +3,27 @@ id: component.production-panel
 kind: component_contract
 name: Production panel
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Displays active production chains, inputs/outputs, and last production result.
+non_template_statement: 'UI contract only. Not a factory layout preset.
 
-description: >
-  Displays active production chains, inputs/outputs, and last production result.
-
-non_template_statement: >
-  UI contract only. Not a factory layout preset.
-
+  '
 applies_to:
-  - game.resource-management-sim
-
+- game.resource-management-sim
 binds_mechanics:
-  - mechanic.production-chain
-
+- mechanic.production-chain
 required_props:
-  - chains: array of id, inputs, outputs, active
-  - lastProduction: object | null
-
+- chains: array of id, inputs, outputs, active
+- lastProduction: object | null
 optional_props:
-  - onToggleChain: callback
-
+- onToggleChain: callback
 accessibility:
-  - "Chain rows describe inputs and outputs in text"
-
+- Chain rows describe inputs and outputs in text
 guidance:
-  - "Reflect data-driven chains from sim definition"
-  - "Highlight chains that ran last turn"
-
+- Reflect data-driven chains from sim definition
+- Highlight chains that ran last turn
 validation_notes:
-  - validator.production-chain-consistency
-
+- validator.production-chain-consistency
 risk_notes:
-  - UI shows chains not wired to production runner
+- UI shows chains not wired to production runner

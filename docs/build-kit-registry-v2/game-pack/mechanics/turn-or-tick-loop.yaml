@@ -3,70 +3,53 @@ id: mechanic.turn-or-tick-loop
 kind: mechanic
 name: Turn or tick loop
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Advances simulation time via discrete turns or a slow deterministic tick interval. Runs production, events, and goal checks on each advance.
+non_template_statement: 'Loop timing guidance only. Not a game engine tick scheduler.
 
-description: >
-  Advances simulation time via discrete turns or a slow deterministic tick interval.
-  Runs production, events, and goal checks on each advance.
-
-non_template_statement: >
-  Loop timing guidance only. Not a game engine tick scheduler.
-
+  '
 applies_to:
-  - game.resource-management-sim
-  - tag:resource-management-sim
-
+- game.resource-management-sim
+- tag:resource-management-sim
 depends_on:
-  - mechanic.production-chain
-  - mechanic.allocation-decision
-
+- mechanic.production-chain
+- mechanic.allocation-decision
 provides:
-  - sim_clock
-
+- sim_clock
 binds_components:
-  - component.goal-status
-
+- component.goal-status
 inputs:
-  - mode: turn | slow_tick
-  - tick_interval_ms: number — when slow_tick, default 1000–3000
-  - max_turns: number | null
-
+- mode: turn | slow_tick
+- tick_interval_ms: number — when slow_tick, default 1000–3000
+- max_turns: number | null
 outputs:
-  - turn: number
-  - isPaused: boolean
-
+- turn: number
+- isPaused: boolean
 guidance:
-  - "Prefer turn-based for MVP; slow tick optional"
-  - "Single interval ref; clear on unmount for tick mode"
-  - "Advance applies committed allocations then production chains"
-  - "Pause when goal or failure reached"
-
+- Prefer turn-based for MVP; slow tick optional
+- Single interval ref; clear on unmount for tick mode
+- Advance applies committed allocations then production chains
 validation_notes:
-  - validator.tick-loop-stability
-
+- validator.tick-loop-stability
 risk_notes:
-  - Stale interval fires after unmount
-  - Multiple intervals cause runaway advances
-
+- Stale interval fires after unmount
+- Multiple intervals cause runaway advances
 state_model:
   fields:
-    - name: turn
-      type: number
-    - name: isPaused
-      type: boolean
+  - name: turn
+    type: number
+  - name: isPaused
+    type: boolean
   events:
-    - advance_turn
-    - tick_fire
-    - pause_sim
-
+  - advance_turn
+  - tick_fire
+  - pause_sim
 common_failure_modes:
-  - "Tick loop continues after terminal state"
-  - "Duplicate intervals on strict mode remount"
-
+- Tick loop continues after terminal state
+- Duplicate intervals on strict mode remount
 test_ideas:
-  - "Turn button increments turn once per click"
-  - "Interval cleared on unmount"
-
+- Turn button increments turn once per click
+- Interval cleared on unmount
 reusable_across:
-  - game.resource-management-sim
+- game.resource-management-sim

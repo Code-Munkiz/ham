@@ -3,82 +3,65 @@ id: recovery.invalid-reaction-timer
 kind: recovery_playbook
 name: Fix invalid reaction timer
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Repairs reactionMs computed from wrong start point, negative values, or best score updated incorrectly.
+non_template_statement: 'Executable recovery strategy spec for a future runner. Not auto-applied today.
 
-description: >
-  Repairs reactionMs computed from wrong start point, negative values, or best
-  score updated incorrectly.
-
-non_template_statement: >
-  Executable recovery strategy spec for a future runner. Not auto-applied today.
-
+  '
 max_attempts: 2
-
 applies_to:
-  - game.reaction-time-challenge
-  - tag:reaction-time-challenge
-
+- game.reaction-time-challenge
+- tag:reaction-time-challenge
 depends_on:
-  - mechanic.reaction-timer
-  - mechanic.reaction-time-scoring
-  - validator.reaction-timer-bounds
-  - validator.reaction-score-consistency
-
+- mechanic.reaction-timer
+- mechanic.reaction-time-scoring
+- validator.reaction-timer-bounds
+- validator.reaction-score-consistency
 repairs_validators:
-  - validator.reaction-timer-bounds
-  - validator.reaction-score-consistency
-
+- validator.reaction-timer-bounds
+- validator.reaction-score-consistency
 inputs:
-  - failure_context: validator result
-  - current_source: timer and scoring handlers (conceptual)
-
+- failure_context: validator result
+- current_source: timer and scoring handlers (conceptual)
 outputs:
-  - patched_source: conceptual
-  - revalidation_target: validator.reaction-timer-bounds
-
+- patched_source: conceptual
+- revalidation_target: validator.reaction-timer-bounds
 guidance:
-  - "Mark signalAtMs only when signal visible"
-  - "bestReactionMs = min of valid rounds"
-
+- Mark signalAtMs only when signal visible
+- bestReactionMs = min of valid rounds
 validation_notes:
-  - Re-run timer and score validators after repair
-
+- Re-run timer and score validators after repair
 risk_notes:
-  - Resetting session scores frustrates user
-
+- Resetting session scores frustrates user
 failure_signals:
-  - validator.reaction-timer-bounds fail
-  - validator.reaction-score-consistency fail
-  - Negative ms displayed
-
+- validator.reaction-timer-bounds fail
+- validator.reaction-score-consistency fail
+- Negative ms displayed
 diagnosis_steps:
-  - "Check reactionMs = respondedAtMs - signalAtMs"
-  - "Check best only updates on lower valid ms"
-
+- Check reactionMs = respondedAtMs - signalAtMs
+- Check best only updates on lower valid ms
 steps:
-  - id: step.fix_timer_markers
-    action: fix_timer_markers
-    detail: "Set signalAtMs at signal transition only"
-  - id: step.fix_best_average
-    action: fix_best_average
-    detail: "Best=min valid; average excludes false starts"
-  - id: step.re_validate
-    action: re_validate
-    detail: "Re-run validator.reaction-timer-bounds"
-
+- id: step.fix_timer_markers
+  action: fix_timer_markers
+  detail: Set signalAtMs at signal transition only
+- id: step.fix_best_average
+  action: fix_best_average
+  detail: Best=min valid; average excludes false starts
+- id: step.re_validate
+  action: re_validate
+  detail: Re-run validator.reaction-timer-bounds
 repair_strategy:
-  - action: fix_timer_markers
-    detail: "Correct interval start/end"
-  - action: fix_best_average
-    detail: "Fix score aggregation"
-  - action: re_validate
-    target: validator.reaction-timer-bounds
-
+- action: fix_timer_markers
+  detail: Correct interval start/end
+- action: fix_best_average
+  detail: Fix score aggregation
+- action: re_validate
+  target: validator.reaction-timer-bounds
 guardrails:
-  - max_attempts: 2
-  - do_not: "Introduce network calls or eval"
-  - preserve: "Millisecond display format"
+- max_attempts: 2
+- do_not: Introduce network calls or eval
+- preserve: Millisecond display format
+user_facing_summary: 'I fixed reaction timing and score tracking so milliseconds and best scores are correct.
 
-user_facing_summary: >
-  I fixed reaction timing and score tracking so milliseconds and best scores are correct.
+  '

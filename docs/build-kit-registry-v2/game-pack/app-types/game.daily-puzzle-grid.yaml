@@ -3,217 +3,190 @@ id: game.daily-puzzle-grid
 kind: app_type
 name: Daily grid logic puzzle game
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: A browser-based daily grid logic puzzle where the player fills, toggles, marks, or solves cells according to simple row/column/region constraints, receives validation feedback, and reaches a completion state when all constraints are satisfied. Uses static in-memory puzzle defini…
+non_template_statement: 'This app type does not reference checked-in puzzle libraries, Sudoku engines, or clone baselines. It defines generative guidance only.
 
-description: >
-  A browser-based daily grid logic puzzle where the player fills, toggles, marks, or
-  solves cells according to simple row/column/region constraints, receives validation
-  feedback, and reaches a completion state when all constraints are satisfied. Uses
-  static in-memory puzzle definitions and deterministic daily puzzle selection from a
-  date-based seed or stable puzzle id for MVP. Output is always custom-generated from
-  the user prompt plus composed playbook modules — never cloned from a starter project.
-
-non_template_statement: >
-  This app type does not reference checked-in puzzle libraries, Sudoku engines, or
-  clone baselines. It defines generative guidance only.
-
+  '
 legacy_v1_fallback: generic
-
 safety_constraints:
-  - no-network-egress-for-mvp
-  - no-eval
-  - no-user-accounts-for-mvp
-  - no-multiplayer-for-mvp
-  - static-puzzle-data-for-mvp
-  - no-external-puzzle-api-for-mvp
-  - no-real-money-economy
-  - dom-native-ui-only-for-mvp
-
+- no-network-egress-for-mvp
+- no-eval
+- no-user-accounts-for-mvp
+- no-multiplayer-for-mvp
+- static-puzzle-data-for-mvp
+- no-external-puzzle-api-for-mvp
+- no-real-money-economy
+- dom-native-ui-only-for-mvp
 applies_to:
-  - tag:daily-puzzle-grid
-  - tag:dom-casual-game
-
+- tag:daily-puzzle-grid
+- tag:dom-casual-game
 inputs:
-  - user_prompt: natural language theme or tone for puzzle UI copy
-  - optional_grid_size: rows x cols (default 5x5 or 6x6 depending on variant)
-  - optional_daily_seed: date string for deterministic daily puzzle (default local date)
-  - optional_puzzle_id: stable id when not using daily mode
-
+- user_prompt: natural language theme or tone for puzzle UI copy
+- optional_grid_size: rows x cols (default 5x5 or 6x6 depending on variant)
+- optional_daily_seed: date string for deterministic daily puzzle (default local date)
+- optional_puzzle_id: stable id when not using daily mode
 outputs:
-  - runnable_vite_react_app: single-page DOM grid puzzle game
-  - composed_build_recipe: ids of mechanics, contracts, validators, recovery modules
-  - normie_plan_summary: phased build description for chat/activity stream
-
+- runnable_vite_react_app: single-page DOM grid puzzle game
+- composed_build_recipe: ids of mechanics, contracts, validators, recovery modules
+- normie_plan_summary: phased build description for chat/activity stream
 guidance:
-  - "React state; static puzzle definitions embedded in source"
-  - "Daily puzzle from date seed or stable puzzle id in free-play"
-  - "Cell states: empty / filled / marked / error / locked"
-  - "Constraints as data; completion when rules satisfied"
-  - "DOM/React only; no Canvas or external puzzle API"
-
+- React state; static puzzle definitions embedded in source
+- Daily puzzle from date seed or stable puzzle id in free-play
+- 'Cell states: empty / filled / marked / error / locked'
 validation_notes:
-  - Run composed validators after scaffold and constraint handler edits
-  - Preview must boot without console errors before success copy
-
+- Run composed validators after scaffold and constraint handler edits
+- Preview must boot without console errors before success copy
 risk_notes:
-  - Constraint data inconsistent with grid dimensions breaks validation
-  - Unstable daily seed changes puzzle mid-session
-  - Completion fires before all constraints satisfied
-
+- Constraint data inconsistent with grid dimensions breaks validation
+- Unstable daily seed changes puzzle mid-session
+- Completion fires before all constraints satisfied
 user_prompt_examples:
-  - "Build a daily grid puzzle game with row and column clues"
-  - "Make a browser logic puzzle where I fill cells to satisfy constraints"
-  - "Create a daily puzzle grid like a nonogram or logic grid"
-  - "Build a simple constraint-based grid puzzle with daily challenges"
-
+- Build a daily grid puzzle game with row and column clues
+- Make a browser logic puzzle where I fill cells to satisfy constraints
+- Create a daily puzzle grid like a nonogram or logic grid
+- Build a simple constraint-based grid puzzle with daily challenges
 intent_signals:
-  - "\\b(daily\\s+puzzle|grid\\s+puzzle|logic\\s+puzzle|constraint\\s+puzzle)\\b"
-  - "\\b(nonogram|picross|sudoku|kenken|fill\\s+the\\s+grid)\\b"
-  - "\\b(row\\s+and\\s+column|cell\\s+constraints|mark\\s+cells)\\b"
-
+- \b(daily\s+puzzle|grid\s+puzzle|logic\s+puzzle|constraint\s+puzzle)\b
+- \b(nonogram|picross|sudoku|kenken|fill\s+the\s+grid)\b
+- \b(row\s+and\s+column|cell\s+constraints|mark\s+cells)\b
 clarifying_questions:
-  - when: intent_confidence_low
-    ask: "What grid size or puzzle style do you want — for example 5x5 logic grid or 9x9 constraint puzzle?"
-  - when: daily_mode_ambiguous
-    ask: "Should puzzles rotate daily from a date seed, or stay in free-play mode with selectable puzzles?"
-  - when: hint_ambiguous
-    ask: "Do you want optional hints, and should mistakes be limited or tracked?"
-
+- when: intent_confidence_low
+  ask: What grid size or puzzle style do you want — for example 5x5 logic grid or 9x9 constraint puzzle?
+- when: daily_mode_ambiguous
+  ask: Should puzzles rotate daily from a date seed, or stay in free-play mode with selectable puzzles?
+- when: hint_ambiguous
+  ask: Do you want optional hints, and should mistakes be limited or tracked?
 default_assumptions:
-  - "Small grid (5x5 or 6x6) with static embedded puzzle list"
-  - "Daily puzzle from local date seed; free-play uses stable puzzle id"
-  - "Explicit cell states with constraint-based completion"
-  - "Optional lightweight hint button; mistake tracking off by default"
-  - "DOM/React UI; mobile-friendly at 360px width"
-
+- Small grid (5x5 or 6x6) with static embedded puzzle list
+- Daily puzzle from local date seed; free-play uses stable puzzle…
+- Explicit cell states with constraint-based completion
+- Optional lightweight hint button; mistake tracking off by defau…
+- DOM/React UI; mobile-friendly at 360px width
 hard_constraints:
-  - no-real-money-economy
-  - no-template-cloning
-  - no-runtime-llm-generation-for-mvp
-  - no-external-api-for-mvp
-  - no-user-secrets-or-credentials
-  - preserve-safe-local-mvp-scope
-  - static-puzzle-data-for-mvp
-  - no-external-puzzle-api-for-mvp
-  - dom-native-ui-only-for-mvp
-
+- no-real-money-economy
+- no-template-cloning
+- no-runtime-llm-generation-for-mvp
+- no-external-api-for-mvp
+- no-user-secrets-or-credentials
+- preserve-safe-local-mvp-scope
+- static-puzzle-data-for-mvp
+- no-external-puzzle-api-for-mvp
+- dom-native-ui-only-for-mvp
 soft_defaults:
-  - small grid such as 5x5 or 6x6
-  - static in-memory puzzle list
-  - deterministic daily seed from local date
-  - local-only session state
-  - lightweight optional hint button
-  - no leaderboard
-  - mistake tracking disabled by default
-
+- small grid such as 5x5 or 6x6
+- static in-memory puzzle list
+- deterministic daily seed from local date
+- local-only session state
+- lightweight optional hint button
+- no leaderboard
+- mistake tracking disabled by default
 user_overridable:
-  - puzzle theme and copy tone
-  - grid size when user specifies explicitly
-  - cell symbols or fill markers
-  - number of hints allowed
-  - mistake limit on or off
-  - daily vs free-play mode
-  - color and style preferences
-
+- puzzle theme and copy tone
+- grid size when user specifies explicitly
+- cell symbols or fill markers
+- number of hints allowed
+- mistake limit on or off
+- daily vs free-play mode
+- color and style preferences
 clarify_if_changed:
-  - requiring generated puzzles at runtime
-  - making the recipe Sudoku-specific without general grid-logic scope
-  - adding accounts or global leaderboard
-  - changing completion from constraint-based to visual-only fill
-  - requiring multiplayer or live puzzle API
-  - removing constraint validation in favor of free-form grid editing
-
+- requiring generated puzzles at runtime
+- making the recipe Sudoku-specific without general grid-logic scope
+- adding accounts or global leaderboard
+- changing completion from constraint-based to visual-only fill
+- requiring multiplayer or live puzzle API
+- removing constraint validation in favor of free-form grid editing
 out_of_scope_unless_explicit:
-  - backend persistence or cloud sync
-  - user-submitted puzzle editor
-  - global leaderboard
-  - live puzzle API
-  - runtime-generated puzzle engine
-  - social sharing integrations
-  - custom puzzle imports
-  - user accounts
-
+- backend persistence or cloud sync
+- user-submitted puzzle editor
+- global leaderboard
+- live puzzle API
+- runtime-generated puzzle engine
+- social sharing integrations
+- custom puzzle imports
+- user accounts
 conflict_policy:
   user_explicit_overrides_soft_defaults: true
   safety_constraints_override_user_request: true
   core_loop_conflicts_require_clarification: true
   out_of_scope_items_require_explicit_request: true
   fallback_to_v1_or_generic_when_recipe_no_longer_fits: true
-
 stack_kit_id: stack.dom-game-minimal
-
 compose_order_ref: pack.game#compose_defaults.compose_order
-
 composed_modules:
   stack_kit_id: stack.dom-game-minimal
   mechanics:
-    - mechanic.puzzle-seed
-    - mechanic.grid-state
-    - mechanic.constraint-rules
-    - mechanic.cell-interaction
-    - mechanic.mistake-tracking
-    - mechanic.hint-system-lite
-    - mechanic.completion-check
+  - mechanic.puzzle-seed
+  - mechanic.grid-state
+  - mechanic.constraint-rules
+  - mechanic.cell-interaction
+  - mechanic.mistake-tracking
+  - mechanic.hint-system-lite
+  - mechanic.completion-check
   component_contracts:
-    - component.game-shell
-    - component.puzzle-grid
-    - component.grid-cell
-    - component.rule-panel
-    - component.puzzle-status-bar
-    - component.hint-button
-    - component.completion-modal
+  - component.game-shell
+  - component.puzzle-grid
+  - component.grid-cell
+  - component.rule-panel
+  - component.puzzle-status-bar
+  - component.hint-button
+  - component.completion-modal
   validators:
-    - validator.grid-dimensions
-    - validator.constraint-consistency
-    - validator.cell-state-transitions
-    - validator.puzzle-seed-stability
-    - validator.completion-detection
+  - validator.grid-dimensions
+  - validator.constraint-consistency
+  - validator.cell-state-transitions
+  - validator.puzzle-seed-stability
+  - validator.completion-detection
   recovery_playbooks:
-    - recovery.broken-grid-state
-    - recovery.inconsistent-constraint-rules
-    - recovery.unstable-puzzle-seed
-    - recovery.bad-completion-check
+  - recovery.broken-grid-state
+  - recovery.inconsistent-constraint-rules
+  - recovery.unstable-puzzle-seed
+  - recovery.bad-completion-check
   progress_labels: progress.daily-puzzle-grid
   learning_hooks: learning.daily-puzzle-grid
-
 build_phases:
-  - id: phase.understand
-    title: Understand the grid puzzle idea
-    order: 1
-    modules_used: [app_type]
-  - id: phase.compose
-    title: Compose mechanics and UI contracts
-    order: 2
-    modules_used: [mechanics, component_contracts]
-  - id: phase.generate
-    title: Generate custom grid puzzle code
-    order: 3
-    modules_used: [stack_kit_id, guidance]
-  - id: phase.validate
-    title: Check grid, constraints, and completion
-    order: 4
-    modules_used: [validators]
-  - id: phase.preview
-    title: Prepare Workbench preview
-    order: 5
-    modules_used: []
-  - id: phase.recover
-    title: Fix known failure modes if needed
-    order: 6
-    optional: true
-    modules_used: [recovery_playbooks]
-
+- id: phase.understand
+  title: Understand the grid puzzle idea
+  order: 1
+  modules_used:
+  - app_type
+- id: phase.compose
+  title: Compose mechanics and UI contracts
+  order: 2
+  modules_used:
+  - mechanics
+  - component_contracts
+- id: phase.generate
+  title: Generate custom grid puzzle code
+  order: 3
+  modules_used:
+  - stack_kit_id
+  - guidance
+- id: phase.validate
+  title: Check grid, constraints, and completion
+  order: 4
+  modules_used:
+  - validators
+- id: phase.preview
+  title: Prepare Workbench preview
+  order: 5
+  modules_used: []
+- id: phase.recover
+  title: Fix known failure modes if needed
+  order: 6
+  optional: true
+  modules_used:
+  - recovery_playbooks
 acceptance_criteria:
-  - "Game loads in preview without runtime console errors"
-  - "Player can interact with grid cells via click or tap until completion"
-  - "Cell states transition predictably (empty, filled, marked, error, locked)"
-  - "Row/column/region constraints validated against player state"
-  - "Completion triggers only when all constraints satisfied"
-  - "Daily puzzle stable for same date seed within a session"
-  - "UI readable on mobile-width viewport"
-
+- Game loads in preview without runtime console errors
+- Player can interact with grid cells via click or tap until completion
+- Cell states transition predictably (empty, filled, marked, error, locked)
+- Row/column/region constraints validated against player state
+- Completion triggers only when all constraints satisfied
+- Daily puzzle stable for same date seed within a session
+- UI readable on mobile-width viewport
 out_of_scope:
-  - Live puzzle API or runtime-generated puzzles
-  - Multiplayer, leaderboards, accounts, puzzle editor
-  - Canvas, Phaser/Kaplay, physics, monetized prizes, Web3
+- Live puzzle API or runtime-generated puzzles
+- Multiplayer, leaderboards, accounts, puzzle editor
+- Canvas, Phaser/Kaplay, physics, monetized prizes, Web3

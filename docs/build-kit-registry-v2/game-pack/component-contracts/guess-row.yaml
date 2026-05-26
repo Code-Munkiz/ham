@@ -3,70 +3,53 @@ id: component.guess-row
 kind: component_contract
 name: Guess row
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: One row of letter tiles representing a single guess attempt, with optional feedback coloring after submission.
+non_template_statement: 'Row contract only. Not a copy-paste row component.
 
-description: >
-  One row of letter tiles representing a single guess attempt, with optional feedback
-  coloring after submission.
-
-non_template_statement: >
-  Row contract only. Not a copy-paste row component.
-
+  '
 applies_to:
-  - game.word-daily
-  - tag:word-daily
-
+- game.word-daily
+- tag:word-daily
 depends_on:
-  - mechanic.guess-grid
-  - mechanic.letter-feedback
-
+- mechanic.guess-grid
+- mechanic.letter-feedback
 provides:
-  - guess_row_ui
-
+- guess_row_ui
 binds_mechanics:
-  - mechanic.guess-grid
-  - mechanic.letter-feedback
-
+- mechanic.guess-grid
+- mechanic.letter-feedback
 inputs:
-  - letters: string or array of chars
-  - feedback: array | null — per-slot after submit
-  - isActive: boolean
-  - isSubmitted: boolean
-
+- letters: string or array of chars
+- feedback: array | null — per-slot after submit
+- isActive: boolean
+- isSubmitted: boolean
 outputs:
-  - row_display: visual row
-
+- row_display: visual row
 guidance:
-  - "Active row shows in-progress letters with neutral tiles"
-  - "Submitted rows show feedback colors on tiles"
-  - "Empty future rows show placeholder slots"
-
+- Active row shows in-progress letters with neutral tiles
+- Submitted rows show feedback colors on tiles
+- Empty future rows show placeholder slots
 validation_notes:
-  - Submitted rows always have full feedback array
-
+- Submitted rows always have full feedback array
 risk_notes:
-  - Active row shows feedback before submit
+- Active row shows feedback before submit
+purpose: 'Per-attempt visual unit in the word grid.
 
-purpose: >
-  Per-attempt visual unit in the word grid.
-
+  '
 expected_props:
-  - letters: string
-  - feedback: array | null
-  - isActive: boolean
-  - isSubmitted: boolean
-
+- letters: string
+- feedback: array | null
+- isActive: boolean
+- isSubmitted: boolean
 states:
-  - empty
-  - active
-  - submitted
-
+- empty
+- active
+- submitted
 accessibility_notes:
-  - "Row status announced when submitted"
-
+- Row status announced when submitted
 responsive_notes:
-  - "Tiles equal width within row"
-
+- Tiles equal width within row
 styling_guidance:
-  - "Feedback colors: correct, present, absent — distinct and colorblind-friendly where possible"
+- 'Feedback colors: correct, present, absent — distinct and colorblind-friendly where possible'

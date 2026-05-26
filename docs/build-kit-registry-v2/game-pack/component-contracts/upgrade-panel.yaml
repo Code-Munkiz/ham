@@ -3,37 +3,27 @@ id: component.upgrade-panel
 kind: component_contract
 name: Upgrade panel
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Lists purchasable upgrades with cost, effect summary, and purchased state.
+non_template_statement: 'UI contract only. Not an upgrade shop asset pack.
 
-description: >
-  Lists purchasable upgrades with cost, effect summary, and purchased state.
-
-non_template_statement: >
-  UI contract only. Not an upgrade shop asset pack.
-
+  '
 applies_to:
-  - game.resource-management-sim
-
+- game.resource-management-sim
 binds_mechanics:
-  - mechanic.upgrade-path
-
+- mechanic.upgrade-path
 required_props:
-  - upgrades: array of id, name, cost, effect, purchased
-  - onPurchase: callback
-
+- upgrades: array of id, name, cost, effect, purchased
+- onPurchase: callback
 optional_props:
-  - disabled: boolean
-
+- disabled: boolean
 accessibility:
-  - "Purchase buttons state purchased vs available"
-
+- Purchase buttons state purchased vs available
 guidance:
-  - "Disable when unaffordable or already purchased"
-  - "Effect text matches upgrade-path data"
-
+- Disable when unaffordable or already purchased
+- Effect text matches upgrade-path data
 validation_notes:
-  - Purchase blocked when insufficient resources
-
+- Purchase blocked when insufficient resources
 risk_notes:
-  - Purchased upgrade still shown as available
+- Purchased upgrade still shown as available

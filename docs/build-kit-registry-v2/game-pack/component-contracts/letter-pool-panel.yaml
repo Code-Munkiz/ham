@@ -3,39 +3,29 @@ id: component.letter-pool-panel
 kind: component_contract
 name: Letter pool panel
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Displays available letters with remaining counts; supports tap or drag source.
+non_template_statement: 'UI contract only.
 
-description: >
-  Displays available letters with remaining counts; supports tap or drag source.
-
-non_template_statement: >
-  UI contract only.
-
+  '
 applies_to:
-  - game.word-builder
-
+- game.word-builder
 binds_mechanics:
-  - mechanic.letter-pool
-
+- mechanic.letter-pool
 required_props:
-  - availableLetters: array
-  - letterCounts: object
-  - onSelectLetter: callback
-  - disabled: boolean
-
+- availableLetters: array
+- letterCounts: object
+- onSelectLetter: callback
+- disabled: boolean
 optional_props:
-  - layout: row | grid
-
+- layout: row | grid
 accessibility:
-  - "Each letter control has accessible name with remaining count"
-
+- Each letter control has accessible name with remaining count
 guidance:
-  - "Disable letters with zero remaining count"
-  - "Visually distinct when disabled"
-
+- Disable letters with zero remaining count
+- Visually distinct when disabled
 validation_notes:
-  - validator.letter-pool-integrity
-
+- validator.letter-pool-integrity
 risk_notes:
-  - Zero-count letter still selectable
+- Zero-count letter still selectable

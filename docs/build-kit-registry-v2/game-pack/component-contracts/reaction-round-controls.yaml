@@ -3,44 +3,33 @@ id: component.reaction-round-controls
 kind: component_contract
 name: Reaction round controls
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Start round, retry after false start, and play-again after result controls.
+non_template_statement: 'UI contract only. Not trivia choice buttons.
 
-description: >
-  Start round, retry after false start, and play-again after result controls.
-
-non_template_statement: >
-  UI contract only. Not trivia choice buttons.
-
+  '
 applies_to:
-  - game.reaction-time-challenge
-
+- game.reaction-time-challenge
 depends_on:
-  - mechanic.reaction-round-progression
-  - mechanic.reaction-state-machine
-
+- mechanic.reaction-round-progression
+- mechanic.reaction-state-machine
 binds_mechanics:
-  - mechanic.reaction-round-progression
-  - mechanic.reaction-state-machine
-
+- mechanic.reaction-round-progression
+- mechanic.reaction-state-machine
 required_props:
-  - phase: string
-  - onStart: callback
-  - onPlayAgain: callback
-
+- phase: string
+- onStart: callback
+- onPlayAgain: callback
 optional_props:
-  - onRetryFalseStart: callback
-  - disabled: boolean
-
+- onRetryFalseStart: callback
+- disabled: boolean
 accessibility:
-  - "Primary actions keyboard focusable with visible labels"
-
+- Primary actions keyboard focusable with visible labels
 guidance:
-  - "Start visible in idle; Play again in result"
-  - "Disable start while waiting or signal unless design allows tap-anywhere"
-
+- Start visible in idle; Play again in result
+- Disable start while waiting or signal unless design allows tap-anyw…
 validation_notes:
-  - Actions match current phase
-
+- Actions match current phase
 risk_notes:
-  - Start button starts multiple overlapping timers
+- Start button starts multiple overlapping timers

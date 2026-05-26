@@ -3,71 +3,53 @@ id: component.puzzle-status-bar
 kind: component_contract
 name: Puzzle status bar
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: HUD strip showing puzzle id or daily date, optional mistake count, hints remaining, and high-level progress toward completion.
+non_template_statement: 'Status HUD contract only. Not a leaderboard or account profile bar.
 
-description: >
-  HUD strip showing puzzle id or daily date, optional mistake count, hints remaining,
-  and high-level progress toward completion.
-
-non_template_statement: >
-  Status HUD contract only. Not a leaderboard or account profile bar.
-
+  '
 applies_to:
-  - game.daily-puzzle-grid
-  - tag:daily-puzzle-grid
-
+- game.daily-puzzle-grid
+- tag:daily-puzzle-grid
 depends_on:
-  - mechanic.puzzle-seed
-  - mechanic.completion-check
-
+- mechanic.puzzle-seed
+- mechanic.completion-check
 provides:
-  - puzzle_status_hud
-
+- puzzle_status_hud
 binds_mechanics:
-  - mechanic.puzzle-seed
-  - mechanic.mistake-tracking
-  - mechanic.completion-check
-
+- mechanic.puzzle-seed
+- mechanic.mistake-tracking
+- mechanic.completion-check
 inputs:
-  - show_daily_label: boolean
-  - show_mistakes: boolean
-  - show_hints: boolean
-
+- show_daily_label: boolean
+- show_mistakes: boolean
+- show_hints: boolean
 outputs:
-  - status_summary: string
-
+- status_summary: string
 guidance:
-  - "Show daily date or puzzle id from puzzle-seed"
-  - "Mistake count when mistake-tracking enabled"
-  - "Hints remaining when hint-system active"
-  - "Subtle complete badge when isComplete"
-
+- Show daily date or puzzle id from puzzle-seed
+- Mistake count when mistake-tracking enabled
+- Hints remaining when hint-system active
 validation_notes:
-  - Daily label matches seedKey when in daily mode
-
+- Daily label matches seedKey when in daily mode
 risk_notes:
-  - Cluttered HUD on small screens
+- Cluttered HUD on small screens
+purpose: 'Compact session context without backend or account UI.
 
-purpose: >
-  Compact session context without backend or account UI.
-
+  '
 expected_props:
-  - seedKey: string
-  - puzzleId: string
-  - mistakeCount: number
-  - hintsRemaining: number
-  - isComplete: boolean
-
+- seedKey: string
+- puzzleId: string
+- mistakeCount: number
+- hintsRemaining: number
+- isComplete: boolean
 states:
-  - playing
-  - complete
-
+- playing
+- complete
 accessibility_notes:
-  - "Status changes announced when puzzle completes"
-
+- Status changes announced when puzzle completes
 responsive_notes:
-  - "Single row; wrap secondary stats on narrow width"
-
+- Single row; wrap secondary stats on narrow width
 styling_guidance:
-  - "Muted typography; do not compete with grid focus"
+- Muted typography; do not compete with grid focus

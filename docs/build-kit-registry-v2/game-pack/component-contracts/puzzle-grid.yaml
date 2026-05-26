@@ -3,72 +3,54 @@ id: component.puzzle-grid
 kind: component_contract
 name: Puzzle grid layout
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Responsive grid container for logic puzzle cells. Maps puzzle dimensions to rows/columns with consistent spacing, borders, and optional region grouping visuals.
+non_template_statement: 'Layout contract only. Does not provide a copy-paste grid component file.
 
-description: >
-  Responsive grid container for logic puzzle cells. Maps puzzle dimensions to rows/columns
-  with consistent spacing, borders, and optional region grouping visuals.
-
-non_template_statement: >
-  Layout contract only. Does not provide a copy-paste grid component file.
-
+  '
 applies_to:
-  - game.daily-puzzle-grid
-  - tag:daily-puzzle-grid
-
+- game.daily-puzzle-grid
+- tag:daily-puzzle-grid
 depends_on:
-  - mechanic.grid-state
-
+- mechanic.grid-state
 provides:
-  - puzzle_grid_layout
-
+- puzzle_grid_layout
 binds_mechanics:
-  - mechanic.grid-state
-  - mechanic.cell-interaction
-
+- mechanic.grid-state
+- mechanic.cell-interaction
 inputs:
-  - rows: number
-  - cols: number
-  - gap: css spacing token
-  - show_region_borders: boolean
-
+- rows: number
+- cols: number
+- gap: css spacing token
+- show_region_borders: boolean
 outputs:
-  - grid_regions: cell slots
-
+- grid_regions: cell slots
 guidance:
-  - "CSS grid; scale down on 360px width"
-  - "Optional region borders when puzzle defines regions"
-  - "Disable pointer events when complete or blocked"
-  - "Mount grid-cell per slot"
-
+- CSS grid; scale down on 360px width
+- Optional region borders when puzzle defines regions
+- Disable pointer events when complete or blocked
 validation_notes:
-  - Cell count matches rows * cols
-  - No horizontal overflow at 360px
-
+- Cell count matches rows * cols
+- No horizontal overflow at 360px
 risk_notes:
-  - Region borders misaligned with cell indices
+- Region borders misaligned with cell indices
+purpose: 'Stable layout for grid-cell components and constraint visualization.
 
-purpose: >
-  Stable layout for grid-cell components and constraint visualization.
-
+  '
 expected_props:
-  - rows: number
-  - cols: number
-  - cells: array
-  - onCellClick: "(row: number, col: number) => void"
-  - disabled: boolean
-
+- rows: number
+- cols: number
+- cells: array
+- onCellClick: '(row: number, col: number) => void'
+- disabled: boolean
 states:
-  - playing
-  - complete
-  - locked
-
+- playing
+- complete
+- locked
 accessibility_notes:
-  - "Grid uses table or grid role with row/column labels where helpful"
-
+- Grid uses table or grid role with row/column labels where helpful
 responsive_notes:
-  - "Reduce cell min-size on narrow viewports"
-
+- Reduce cell min-size on narrow viewports
 styling_guidance:
-  - "Clear cell borders; distinct locked/given cell styling"
+- Clear cell borders; distinct locked/given cell styling

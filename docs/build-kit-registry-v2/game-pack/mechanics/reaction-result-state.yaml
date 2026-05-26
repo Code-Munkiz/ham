@@ -3,63 +3,48 @@ id: mechanic.reaction-result-state
 kind: mechanic
 name: Reaction result state
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: 'Terminal result feedback after valid reaction: show ms, compare to best, and expose play-again action. Blocks duplicate scoring for same round.'
+non_template_statement: 'Result state guidance only. Not a dashboard analytics panel.
 
-description: >
-  Terminal result feedback after valid reaction: show ms, compare to best, and
-  expose play-again action. Blocks duplicate scoring for same round.
-
-non_template_statement: >
-  Result state guidance only. Not a dashboard analytics panel.
-
+  '
 applies_to:
-  - game.reaction-time-challenge
-  - tag:reaction-time-challenge
-
+- game.reaction-time-challenge
+- tag:reaction-time-challenge
 depends_on:
-  - mechanic.reaction-round-progression
-  - mechanic.reaction-time-scoring
-
+- mechanic.reaction-round-progression
+- mechanic.reaction-time-scoring
 provides:
-  - reaction_result_state
-
+- reaction_result_state
 binds_components:
-  - component.reaction-results-panel
-
+- component.reaction-results-panel
 inputs:
-  - show_best_comparison: boolean — default true
-
+- show_best_comparison: boolean — default true
 outputs:
-  - showResult: boolean
-  - isPersonalBest: boolean
-
+- showResult: boolean
+- isPersonalBest: boolean
 guidance:
-  - "Result panel after valid reaction only"
-  - "Highlight new personal best when applicable"
-  - "Play again returns to waiting phase"
-
+- Result panel after valid reaction only
+- Highlight new personal best when applicable
+- Play again returns to waiting phase
 validation_notes:
-  - validator.reaction-score-consistency
-
+- validator.reaction-score-consistency
 risk_notes:
-  - Result shown without recorded reactionMs
-  - Play again missing from result panel
-
+- Result shown without recorded reactionMs
+- Play again missing from result panel
 state_model:
   fields:
-    - name: showResult
-      type: boolean
-    - name: isPersonalBest
-      type: boolean
+  - name: showResult
+    type: boolean
+  - name: isPersonalBest
+    type: boolean
   events:
-    - show_round_result
-    - hide_result
-    - play_again
-
+  - show_round_result
+  - hide_result
+  - play_again
 common_failure_modes:
-  - "Result visible during wait phase"
-  - "No restart path after result"
-
+- Result visible during wait phase
+- No restart path after result
 reusable_across:
-  - game.reaction-time-challenge
+- game.reaction-time-challenge

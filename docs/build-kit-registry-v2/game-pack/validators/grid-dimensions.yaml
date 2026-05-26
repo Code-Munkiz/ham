@@ -3,67 +3,52 @@ id: validator.grid-dimensions
 kind: validator
 name: Grid dimensions consistency
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Verifies grid rows/cols match puzzle definition, cell array length, and constraint references stay within bounds.
+non_template_statement: 'Conceptual dimension check. Not executable until a future validator runner exists.
 
-description: >
-  Verifies grid rows/cols match puzzle definition, cell array length, and constraint
-  references stay within bounds.
-
-non_template_statement: >
-  Conceptual dimension check. Not executable until a future validator runner exists.
-
+  '
 applies_to:
-  - game.daily-puzzle-grid
-  - tag:daily-puzzle-grid
-
+- game.daily-puzzle-grid
+- tag:daily-puzzle-grid
 depends_on:
-  - mechanic.grid-state
-  - mechanic.puzzle-seed
-
+- mechanic.grid-state
+- mechanic.puzzle-seed
 validates_modules:
-  - mechanic.grid-state
-  - mechanic.puzzle-seed
-  - component.puzzle-grid
-
+- mechanic.grid-state
+- mechanic.puzzle-seed
+- component.puzzle-grid
 severity: blocking
 runner: conceptual
 check_type: conceptual
-
 inputs:
-  - puzzle_definition: object
-  - grid_state: object
-
+- puzzle_definition: object
+- grid_state: object
 outputs:
-  - pass | fail
-
+- pass | fail
 guidance:
-  - "cells.length === rows * cols"
-  - "Puzzle definition dimensions match initialized grid"
-  - "Given cell indices within bounds"
-
+- cells.length === rows * cols
+- Puzzle definition dimensions match initialized grid
+- Given cell indices within bounds
 validation_notes:
-  - Run after scaffold and grid init
-  - Does not execute at runtime today
-
+- Run after scaffold and grid init
+- Does not execute at runtime today
 risk_notes:
-  - Off-by-one in row-major indexing
+- Off-by-one in row-major indexing
+validation_goal: 'Grid dimensions align with puzzle definition and rendered layout.
 
-validation_goal: >
-  Grid dimensions align with puzzle definition and rendered layout.
-
+  '
 pass_conditions:
-  - "Row and col counts match puzzle def"
-  - "All given indices valid"
-  - "No dimension mismatch in puzzle-grid props"
-
+- Row and col counts match puzzle def
+- All given indices valid
+- No dimension mismatch in puzzle-grid props
 fail_conditions:
-  - "Cell count mismatch"
-  - "Constraint references out-of-bounds coordinates"
-  - "Puzzle def rows/cols differ from grid-state"
+- Cell count mismatch
+- Constraint references out-of-bounds coordinates
+- Puzzle def rows/cols differ from grid-state
+suggested_failure_message: 'The puzzle grid size doesn''t match the puzzle definition. I''ll align dimensions and cell layout.
 
-suggested_failure_message: >
-  The puzzle grid size doesn't match the puzzle definition. I'll align dimensions and cell layout.
-
+  '
 recovery_playbooks:
-  - recovery.broken-grid-state
+- recovery.broken-grid-state

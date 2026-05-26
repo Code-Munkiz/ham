@@ -3,68 +3,51 @@ id: mechanic.event-modifier
 kind: mechanic
 name: Bounded event modifiers
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Optional random or scheduled events that modify resources, rates, or caps within bounded explainable rules. Disabled by default for MVP simplicity.
+non_template_statement: 'Event table guidance only. Not runtime AI event generation.
 
-description: >
-  Optional random or scheduled events that modify resources, rates, or caps within
-  bounded explainable rules. Disabled by default for MVP simplicity.
-
-non_template_statement: >
-  Event table guidance only. Not runtime AI event generation.
-
+  '
 applies_to:
-  - game.resource-management-sim
-  - tag:resource-management-sim
-
+- game.resource-management-sim
+- tag:resource-management-sim
 depends_on:
-  - mechanic.upgrade-path
-  - mechanic.turn-or-tick-loop
-
+- mechanic.upgrade-path
+- mechanic.turn-or-tick-loop
 provides:
-  - event_modifiers
-
+- event_modifiers
 binds_components:
-  - component.event-log
-
+- component.event-log
 inputs:
-  - events: array — id, trigger, effect, message
-  - enabled: boolean — default false
-  - max_events_per_run: number — default 3
-
+- events: array — id, trigger, effect, message
+- enabled: boolean — default false
+- max_events_per_run: number — default 3
 outputs:
-  - eventLog: array
-  - eventsTriggered: number
-
+- eventLog: array
+- eventsTriggered: number
 guidance:
-  - "Off by default; enable when user requests"
-  - "Static event table in sim data — no runtime LLM"
-  - "Log each event in event-log component"
-  - "Effects bounded — no instant win/loss unless defined"
-
+- Off by default; enable when user requests
+- Static event table in sim data — no runtime LLM
+- Log each event in event-log component
 validation_notes:
-  - Event count capped at max_events_per_run
-
+- Event count capped at max_events_per_run
 risk_notes:
-  - Events fire every tick overwhelming player
-
+- Events fire every tick overwhelming player
 state_model:
   fields:
-    - name: eventLog
-      type: array
-    - name: eventsTriggered
-      type: number
+  - name: eventLog
+    type: array
+  - name: eventsTriggered
+    type: number
   events:
-    - roll_event
-    - apply_event_effect
-
+  - roll_event
+  - apply_event_effect
 common_failure_modes:
-  - "Events run when disabled"
-  - "Unbounded event frequency"
-
+- Events run when disabled
+- Unbounded event frequency
 test_ideas:
-  - "Disabled mode never appends log"
-  - "Cap stops further random events"
-
+- Disabled mode never appends log
+- Cap stops further random events
 reusable_across:
-  - game.resource-management-sim
+- game.resource-management-sim

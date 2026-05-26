@@ -3,90 +3,73 @@ id: recovery.broken-grid-state
 kind: recovery_playbook
 name: Fix broken grid state
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Repairs grid puzzles with dimension mismatches, corrupted cell arrays, locked cells overwritten, or invalid state transitions.
+non_template_statement: 'Executable recovery strategy spec for a future runner. Not auto-applied today.
 
-description: >
-  Repairs grid puzzles with dimension mismatches, corrupted cell arrays, locked cells
-  overwritten, or invalid state transitions.
-
-non_template_statement: >
-  Executable recovery strategy spec for a future runner. Not auto-applied today.
-
+  '
 max_attempts: 2
-
 applies_to:
-  - game.daily-puzzle-grid
-  - tag:daily-puzzle-grid
-
+- game.daily-puzzle-grid
+- tag:daily-puzzle-grid
 depends_on:
-  - mechanic.grid-state
-  - mechanic.cell-interaction
-  - validator.grid-dimensions
-  - validator.cell-state-transitions
-
+- mechanic.grid-state
+- mechanic.cell-interaction
+- validator.grid-dimensions
+- validator.cell-state-transitions
 repairs_validators:
-  - validator.grid-dimensions
-  - validator.cell-state-transitions
-
+- validator.grid-dimensions
+- validator.cell-state-transitions
 inputs:
-  - failure_context: validator result or grid corruption report
-  - current_source: grid init and cell handlers (conceptual)
-
+- failure_context: validator result or grid corruption report
+- current_source: grid init and cell handlers (conceptual)
 outputs:
-  - patched_source: conceptual
-  - revalidation_target: validator.grid-dimensions
-
+- patched_source: conceptual
+- revalidation_target: validator.grid-dimensions
 guidance:
-  - "Re-init grid from puzzleDefinition on dimension mismatch"
-  - "Immutable update pattern for cell state changes"
-  - "Guard locked cells in click handler"
-
+- Re-init grid from puzzleDefinition on dimension mismatch
+- Immutable update pattern for cell state changes
+- Guard locked cells in click handler
 validation_notes:
-  - Re-run grid-dimensions validator after repair
-  - Max 2 repair attempts before honest failure
-
+- Re-run grid-dimensions validator after repair
+- Max 2 repair attempts before honest failure
 risk_notes:
-  - Patch may reset player progress on repair
-
+- Patch may reset player progress on repair
 failure_signals:
-  - validator.grid-dimensions fail
-  - validator.cell-state-transitions fail
-  - Locked cells editable
-
+- validator.grid-dimensions fail
+- validator.cell-state-transitions fail
+- Locked cells editable
 diagnosis_steps:
-  - "Compare puzzle def dimensions to cells.length"
-  - "Trace cell click handler for locked guard"
-  - "Check state enum values"
-
+- Compare puzzle def dimensions to cells.length
+- Trace cell click handler for locked guard
+- Check state enum values
 steps:
-  - id: step.reinit_grid
-    action: reinit_grid
-    detail: "Rebuild cells array from puzzle definition"
-  - id: step.guard_locked
-    action: guard_locked
-    detail: "Early return on locked cell clicks"
-  - id: step.immutable_updates
-    action: immutable_updates
-    detail: "Copy cells array on each state change"
-  - id: step.re_validate
-    action: re_validate
-    detail: "Re-run validator.grid-dimensions"
-
+- id: step.reinit_grid
+  action: reinit_grid
+  detail: Rebuild cells array from puzzle definition
+- id: step.guard_locked
+  action: guard_locked
+  detail: Early return on locked cell clicks
+- id: step.immutable_updates
+  action: immutable_updates
+  detail: Copy cells array on each state change
+- id: step.re_validate
+  action: re_validate
+  detail: Re-run validator.grid-dimensions
 repair_strategy:
-  - action: reinit_grid
-    detail: "Align grid with puzzle definition"
-  - action: guard_locked
-    detail: "Protect given cells"
-  - action: immutable_updates
-    detail: "Prevent stale state bugs"
-  - action: re_validate
-    target: validator.grid-dimensions
-
+- action: reinit_grid
+  detail: Align grid with puzzle definition
+- action: guard_locked
+  detail: Protect given cells
+- action: immutable_updates
+  detail: Prevent stale state bugs
+- action: re_validate
+  target: validator.grid-dimensions
 guardrails:
-  - max_attempts: 2
-  - do_not: "Change puzzle definition without user consent"
-  - preserve: "Selected puzzle id and seed"
+- max_attempts: 2
+- do_not: Change puzzle definition without user consent
+- preserve: Selected puzzle id and seed
+user_facing_summary: 'I fixed the puzzle grid so cell sizes and clicks behave correctly.
 
-user_facing_summary: >
-  I fixed the puzzle grid so cell sizes and clicks behave correctly.
+  '

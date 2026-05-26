@@ -3,66 +3,50 @@ id: mechanic.word-target
 kind: mechanic
 name: Hidden word target
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Defines the hidden target word, allowed alphabet, and fixed guess length for a daily word guessing game.
+non_template_statement: 'Behavioral recipe for target word selection only. Does not ship a checked-in dictionary file.
 
-description: >
-  Defines the hidden target word, allowed alphabet, and fixed guess length for a daily
-  word guessing game.
-
-non_template_statement: >
-  Behavioral recipe for target word selection only. Does not ship a checked-in dictionary file.
-
+  '
 applies_to:
-  - game.word-daily
-  - tag:word-daily
-
+- game.word-daily
+- tag:word-daily
 depends_on: []
-
 provides:
-  - target_word_state
-
+- target_word_state
 binds_components:
-  - component.word-grid
-
+- component.word-grid
 inputs:
-  - word_length: number — default 5
-  - allowed_words: array of strings — static in-memory list for MVP
-  - target_word: string — selected by daily seed or dev override
-
+- word_length: number — default 5
+- allowed_words: array of strings — static in-memory list for MVP
+- target_word: string — selected by daily seed or dev override
 outputs:
-  - targetWord: string
-  - wordLength: number
-
+- targetWord: string
+- wordLength: number
 guidance:
-  - "Target word length must match wordLength exactly"
-  - "Use uppercase normalized letters internally for comparison"
-  - "Never expose targetWord in UI until win/loss reveal (optional share copy only after win)"
-
+- Target word length must match wordLength exactly
+- Use uppercase normalized letters internally for comparison
+- Never expose targetWord in UI until win/loss reveal (optional share…
 validation_notes:
-  - targetWord.length === wordLength
-  - targetWord present in allowed_words or dev override flag
-
+- targetWord.length === wordLength
+- targetWord present in allowed_words or dev override flag
 risk_notes:
-  - Target leaked in DOM or console logs
-
+- Target leaked in DOM or console logs
 state_model:
   fields:
-    - name: targetWord
-      type: string
-    - name: wordLength
-      type: number
+  - name: targetWord
+    type: string
+  - name: wordLength
+    type: number
   events:
-    - set_target
-    - reveal_target
-
+  - set_target
+  - reveal_target
 common_failure_modes:
-  - "Target word wrong length"
-  - "Target not in allowed list"
-
+- Target word wrong length
+- Target not in allowed list
 test_ideas:
-  - "Target length matches configured word length"
-  - "Target stable when seed unchanged"
-
+- Target length matches configured word length
+- Target stable when seed unchanged
 reusable_across:
-  - game.word-daily
+- game.word-daily

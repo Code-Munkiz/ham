@@ -3,68 +3,53 @@ id: validator.cell-state-transitions
 kind: validator
 name: Cell state transition guardrails
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Verifies cell state transitions follow puzzle rules, locked cells stay immutable, and interaction blocks after completion.
+non_template_statement: 'Conceptual transition check. Not executable until a future validator runner exists.
 
-description: >
-  Verifies cell state transitions follow puzzle rules, locked cells stay immutable, and
-  interaction blocks after completion.
-
-non_template_statement: >
-  Conceptual transition check. Not executable until a future validator runner exists.
-
+  '
 applies_to:
-  - game.daily-puzzle-grid
-  - tag:daily-puzzle-grid
-
+- game.daily-puzzle-grid
+- tag:daily-puzzle-grid
 depends_on:
-  - mechanic.cell-interaction
-  - mechanic.grid-state
-
+- mechanic.cell-interaction
+- mechanic.grid-state
 validates_modules:
-  - mechanic.cell-interaction
-  - mechanic.grid-state
-  - component.grid-cell
-
+- mechanic.cell-interaction
+- mechanic.grid-state
+- component.grid-cell
 severity: blocking
 runner: conceptual
 check_type: conceptual
-
 inputs:
-  - interaction_mode: string
-  - locked_cells: array
-  - simulated_clicks: array
-
+- interaction_mode: string
+- locked_cells: array
+- simulated_clicks: array
 outputs:
-  - pass | fail
-
+- pass | fail
 guidance:
-  - "Locked cell clicks produce no state change"
-  - "Valid clicks cycle states per interaction_mode"
-  - "No clicks accepted after isComplete"
-
+- Locked cell clicks produce no state change
+- Valid clicks cycle states per interaction_mode
+- No clicks accepted after isComplete
 validation_notes:
-  - Run after cell-interaction handler edits
-  - Does not execute at runtime today
-
+- Run after cell-interaction handler edits
+- Does not execute at runtime today
 risk_notes:
-  - Simulated clicks may miss keyboard path
+- Simulated clicks may miss keyboard path
+validation_goal: 'Cell interactions respect locked cells, state enum, and completion lock.
 
-validation_goal: >
-  Cell interactions respect locked cells, state enum, and completion lock.
-
+  '
 pass_conditions:
-  - "Locked cells unchanged after clicks"
-  - "Editable cells transition predictably"
-  - "Post-complete clicks ignored"
-
+- Locked cells unchanged after clicks
+- Editable cells transition predictably
+- Post-complete clicks ignored
 fail_conditions:
-  - "Locked cell mutated"
-  - "Invalid state enum value"
-  - "Interaction after completion"
+- Locked cell mutated
+- Invalid state enum value
+- Interaction after completion
+suggested_failure_message: 'Cell clicks aren''t behaving correctly. I''ll fix state transitions and locked cell guards.
 
-suggested_failure_message: >
-  Cell clicks aren't behaving correctly. I'll fix state transitions and locked cell guards.
-
+  '
 recovery_playbooks:
-  - recovery.broken-grid-state
+- recovery.broken-grid-state

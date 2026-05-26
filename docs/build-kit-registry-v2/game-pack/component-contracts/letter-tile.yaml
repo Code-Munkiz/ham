@@ -3,67 +3,51 @@ id: component.letter-tile
 kind: component_contract
 name: Letter tile
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Single letter cell in a guess row showing a letter and feedback state after evaluation.
+non_template_statement: 'Tile contract only. Not a fixed tile animation library.
 
-description: >
-  Single letter cell in a guess row showing a letter and feedback state after evaluation.
-
-non_template_statement: >
-  Tile contract only. Not a fixed tile animation library.
-
+  '
 applies_to:
-  - game.word-daily
-  - tag:word-daily
-
+- game.word-daily
+- tag:word-daily
 depends_on:
-  - mechanic.letter-feedback
-
+- mechanic.letter-feedback
 provides:
-  - letter_tile_ui
-
+- letter_tile_ui
 binds_mechanics:
-  - mechanic.letter-feedback
-
+- mechanic.letter-feedback
 inputs:
-  - letter: string | null
-  - feedback: correct | present | absent | none
-  - animate: boolean
-
+- letter: string | null
+- feedback: correct | present | absent | none
+- animate: boolean
 outputs:
-  - tile_display: visual cell
-
+- tile_display: visual cell
 guidance:
-  - "Square tile with centered letter"
-  - "feedback none for empty or in-progress slots"
-  - "Optional flip animation on reveal — keep MVP simple"
-
+- Square tile with centered letter
+- feedback none for empty or in-progress slots
+- Optional flip animation on reveal — keep MVP simple
 validation_notes:
-  - Single character when letter set
-
+- Single character when letter set
 risk_notes:
-  - Wrong feedback color applied
+- Wrong feedback color applied
+purpose: 'Atomic feedback surface for each letter position.
 
-purpose: >
-  Atomic feedback surface for each letter position.
-
+  '
 expected_props:
-  - letter: string | null
-  - feedback: string
-  - animate: boolean
-
+- letter: string | null
+- feedback: string
+- animate: boolean
 states:
-  - empty
-  - filled
-  - correct
-  - present
-  - absent
-
+- empty
+- filled
+- correct
+- present
+- absent
 accessibility_notes:
-  - "aria-label includes letter and feedback when submitted"
-
+- aria-label includes letter and feedback when submitted
 responsive_notes:
-  - "Min 44px tap target when used as interactive (usually row-level input)"
-
+- Min 44px tap target when used as interactive (usually row-level input)
 styling_guidance:
-  - "Bold letter; high contrast border"
+- Bold letter; high contrast border

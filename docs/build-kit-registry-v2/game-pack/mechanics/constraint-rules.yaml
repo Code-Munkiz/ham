@@ -3,72 +3,55 @@ id: mechanic.constraint-rules
 kind: mechanic
 name: Constraint rules engine
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Represents row, column, and region constraints as data and evaluates player grid state against those rules for validation feedback and completion checks.
+non_template_statement: 'Constraint data model guidance only. Not a Sudoku-specific solver library file.
 
-description: >
-  Represents row, column, and region constraints as data and evaluates player grid
-  state against those rules for validation feedback and completion checks.
-
-non_template_statement: >
-  Constraint data model guidance only. Not a Sudoku-specific solver library file.
-
+  '
 applies_to:
-  - game.daily-puzzle-grid
-  - tag:daily-puzzle-grid
-
+- game.daily-puzzle-grid
+- tag:daily-puzzle-grid
 depends_on:
-  - mechanic.puzzle-seed
-  - mechanic.grid-state
-
+- mechanic.puzzle-seed
+- mechanic.grid-state
 provides:
-  - constraint_rules
-
+- constraint_rules
 binds_components:
-  - component.rule-panel
-
+- component.rule-panel
 inputs:
-  - row_constraints: array — per-row rules from puzzle definition
-  - col_constraints: array — per-column rules
-  - region_constraints: array — optional region/group rules
-  - puzzle_variant: string — general grid-logic label (not Sudoku-only)
-
+- row_constraints: array — per-row rules from puzzle definition
+- col_constraints: array — per-column rules
+- region_constraints: array — optional region/group rules
+- puzzle_variant: string — general grid-logic label (not Sudoku-only)
 outputs:
-  - constraintResults: object — per-unit pass/fail/partial
-  - allConstraintsSatisfied: boolean
-
+- constraintResults: object — per-unit pass/fail/partial
+- allConstraintsSatisfied: boolean
 guidance:
-  - "Constraints as serializable data with puzzle definition"
-  - "Evaluate against grid state — not UI appearance alone"
-  - "General grid-logic variants; avoid Sudoku-only hardcoding"
-  - "Human-readable summaries for rule-panel"
-
+- Constraints as serializable data with puzzle definition
+- Evaluate against grid state — not UI appearance alone
+- General grid-logic variants; avoid Sudoku-only hardcoding
 validation_notes:
-  - Constraint count matches grid dimensions where applicable
-  - Evaluation deterministic for same grid state
-
+- Constraint count matches grid dimensions where applicable
+- Evaluation deterministic for same grid state
 risk_notes:
-  - Constraint data inconsistent with grid size
-  - Partial satisfaction misreported as complete
-
+- Constraint data inconsistent with grid size
+- Partial satisfaction misreported as complete
 state_model:
   fields:
-    - name: constraintResults
-      type: object
-    - name: allConstraintsSatisfied
-      type: boolean
+  - name: constraintResults
+    type: object
+  - name: allConstraintsSatisfied
+    type: boolean
   events:
-    - evaluate_constraints
-    - load_constraints_from_puzzle
-
+  - evaluate_constraints
+  - load_constraints_from_puzzle
 common_failure_modes:
-  - "Constraints reference out-of-bounds cells"
-  - "Completion logic ignores region constraints"
-
+- Constraints reference out-of-bounds cells
+- Completion logic ignores region constraints
 test_ideas:
-  - "Known solved grid passes all constraints"
-  - "Partial grid fails appropriately"
-  - "Rule panel text matches constraint data"
-
+- Known solved grid passes all constraints
+- Partial grid fails appropriately
+- Rule panel text matches constraint data
 reusable_across:
-  - game.daily-puzzle-grid
+- game.daily-puzzle-grid

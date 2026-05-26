@@ -3,86 +3,69 @@ id: recovery.inconsistent-constraint-rules
 kind: recovery_playbook
 name: Fix inconsistent constraint rules
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Repairs puzzles where constraint data does not match grid dimensions, evaluation returns wrong results, or rule panel is out of sync.
+non_template_statement: 'Executable recovery strategy spec for a future runner. Not auto-applied today.
 
-description: >
-  Repairs puzzles where constraint data does not match grid dimensions, evaluation
-  returns wrong results, or rule panel is out of sync.
-
-non_template_statement: >
-  Executable recovery strategy spec for a future runner. Not auto-applied today.
-
+  '
 max_attempts: 2
-
 applies_to:
-  - game.daily-puzzle-grid
-  - tag:daily-puzzle-grid
-
+- game.daily-puzzle-grid
+- tag:daily-puzzle-grid
 depends_on:
-  - mechanic.constraint-rules
-  - validator.constraint-consistency
-
+- mechanic.constraint-rules
+- validator.constraint-consistency
 repairs_validators:
-  - validator.constraint-consistency
-
+- validator.constraint-consistency
 inputs:
-  - failure_context: validator result
-  - current_source: constraint eval and rule panel (conceptual)
-
+- failure_context: validator result
+- current_source: constraint eval and rule panel (conceptual)
 outputs:
-  - patched_source: conceptual
-  - revalidation_target: validator.constraint-consistency
-
+- patched_source: conceptual
+- revalidation_target: validator.constraint-consistency
 guidance:
-  - "Validate constraint units against rows/cols on load"
-  - "Single evaluate function used by completion and rule panel"
-  - "Fix fixture grids used in self-check"
-
+- Validate constraint units against rows/cols on load
+- Single evaluate function used by completion and rule panel
+- Fix fixture grids used in self-check
 validation_notes:
-  - Re-run constraint-consistency after repair
-
+- Re-run constraint-consistency after repair
 risk_notes:
-  - Over-simplified constraints to pass validator
-
+- Over-simplified constraints to pass validator
 failure_signals:
-  - validator.constraint-consistency fail
-  - Rule panel shows wrong clue count
-  - Solved grid fails evaluation
-
+- validator.constraint-consistency fail
+- Rule panel shows wrong clue count
+- Solved grid fails evaluation
 diagnosis_steps:
-  - "Dump constraint data vs grid dimensions"
-  - "Run evaluate on known solved fixture"
-  - "Compare rule panel props to constraint data"
-
+- Dump constraint data vs grid dimensions
+- Run evaluate on known solved fixture
+- Compare rule panel props to constraint data
 steps:
-  - id: step.validate_constraint_shape
-    action: validate_constraint_shape
-    detail: "Reject malformed constraint units at init"
-  - id: step.unify_evaluator
-    action: unify_evaluator
-    detail: "One evaluation path for HUD and completion"
-  - id: step.sync_rule_panel
-    action: sync_rule_panel
-    detail: "Derive rule panel purely from constraint data"
-  - id: step.re_validate
-    action: re_validate
-    detail: "Re-run validator.constraint-consistency"
-
+- id: step.validate_constraint_shape
+  action: validate_constraint_shape
+  detail: Reject malformed constraint units at init
+- id: step.unify_evaluator
+  action: unify_evaluator
+  detail: One evaluation path for HUD and completion
+- id: step.sync_rule_panel
+  action: sync_rule_panel
+  detail: Derive rule panel purely from constraint data
+- id: step.re_validate
+  action: re_validate
+  detail: Re-run validator.constraint-consistency
 repair_strategy:
-  - action: validate_constraint_shape
-    detail: "Catch bad constraint data early"
-  - action: unify_evaluator
-    detail: "Prevent divergent eval logic"
-  - action: sync_rule_panel
-    detail: "Keep UI in sync"
-  - action: re_validate
-    target: validator.constraint-consistency
-
+- action: validate_constraint_shape
+  detail: Catch bad constraint data early
+- action: unify_evaluator
+  detail: Prevent divergent eval logic
+- action: sync_rule_panel
+  detail: Keep UI in sync
+- action: re_validate
+  target: validator.constraint-consistency
 guardrails:
-  - max_attempts: 2
-  - do_not: "Remove region constraints silently"
-  - preserve: "Puzzle id and player grid progress where possible"
+- max_attempts: 2
+- do_not: Remove region constraints silently
+- preserve: Puzzle id and player grid progress where possible
+user_facing_summary: 'I fixed the puzzle rules so they match the grid and evaluate correctly.
 
-user_facing_summary: >
-  I fixed the puzzle rules so they match the grid and evaluate correctly.
+  '

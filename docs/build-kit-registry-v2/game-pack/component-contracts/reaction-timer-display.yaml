@@ -3,39 +3,28 @@ id: component.reaction-timer-display
 kind: component_contract
 name: Reaction timer display
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Shows last reaction time in milliseconds after valid response.
+non_template_statement: 'UI contract only. Not Pomodoro countdown display.
 
-description: >
-  Shows last reaction time in milliseconds after valid response.
-
-non_template_statement: >
-  UI contract only. Not Pomodoro countdown display.
-
+  '
 applies_to:
-  - game.reaction-time-challenge
-
+- game.reaction-time-challenge
 depends_on:
-  - mechanic.reaction-timer
-
+- mechanic.reaction-timer
 binds_mechanics:
-  - mechanic.reaction-timer
-
+- mechanic.reaction-timer
 required_props:
-  - reactionMs: number | null
-
+- reactionMs: number | null
 optional_props:
-  - label: string
-
+- label: string
 accessibility:
-  - "Reaction time readable; units stated (ms)"
-
+- Reaction time readable; units stated (ms)
 guidance:
-  - "Show only after valid round completion"
-  - "Format as integer milliseconds"
-
+- Show only after valid round completion
+- Format as integer milliseconds
 validation_notes:
-  - Matches reactionMs from state
-
+- Matches reactionMs from state
 risk_notes:
-  - Live updating timer confuses user during wait
+- Live updating timer confuses user during wait

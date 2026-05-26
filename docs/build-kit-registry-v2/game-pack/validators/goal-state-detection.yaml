@@ -3,63 +3,49 @@ id: validator.goal-state-detection
 kind: validator
 name: Goal state detection
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Verifies win and failure conditions evaluate correctly and pause the sim loop.
+non_template_statement: 'Conceptual goal check. Not executable until a future validator runner exists.
 
-description: >
-  Verifies win and failure conditions evaluate correctly and pause the sim loop.
-
-non_template_statement: >
-  Conceptual goal check. Not executable until a future validator runner exists.
-
+  '
 applies_to:
-  - game.resource-management-sim
-  - tag:resource-management-sim
-
+- game.resource-management-sim
+- tag:resource-management-sim
 depends_on:
-  - mechanic.goal-and-failure-state
-  - mechanic.turn-or-tick-loop
-
+- mechanic.goal-and-failure-state
+- mechanic.turn-or-tick-loop
 validates_modules:
-  - mechanic.goal-and-failure-state
-  - component.goal-status
-
+- mechanic.goal-and-failure-state
+- component.goal-status
 severity: blocking
 runner: conceptual
 check_type: conceptual
-
 inputs:
-  - phase: string
-  - win_condition: object
-  - pool: object
-  - turn: number
-
+- phase: string
+- win_condition: object
+- pool: object
+- turn: number
 outputs:
-  - pass | fail
-
+- pass | fail
 guidance:
-  - "When win threshold met, phase becomes won and loop pauses"
-  - "When failure condition met, phase becomes lost if configured"
-
+- When win threshold met, phase becomes won and loop pauses
+- When failure condition met, phase becomes lost if configured
 validation_notes:
-  - Play through to win in preview or lower threshold for smoke test
-
+- Play through to win in preview or lower threshold for smoke test
 risk_notes:
-  - Win never fires when threshold met
+- Win never fires when threshold met
+validation_goal: 'Terminal win and failure states detect correctly and stop the sim loop.
 
-validation_goal: >
-  Terminal win and failure states detect correctly and stop the sim loop.
-
+  '
 pass_conditions:
-  - "Win fires when threshold met"
-  - "Loop paused after terminal phase"
-
+- Win fires when threshold met
+- Loop paused after terminal phase
 fail_conditions:
-  - "Target reached but phase stays playing"
-  - "Sim continues after won or lost"
+- Target reached but phase stays playing
+- Sim continues after won or lost
+suggested_failure_message: 'The win or loss condition didn''t trigger correctly. I''ll fix goal evaluation and loop pause.
 
-suggested_failure_message: >
-  The win or loss condition didn't trigger correctly. I'll fix goal evaluation and loop pause.
-
+  '
 recovery_playbooks:
-  - recovery.unreachable-goal-state
+- recovery.unreachable-goal-state

@@ -3,68 +3,51 @@ id: mechanic.daily-seed
 kind: mechanic
 name: Daily seed selection
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Picks a deterministic daily target word from a static list using a date-based seed. Supports conceptual dev/test override without changing production daily behavior.
+non_template_statement: 'Seed algorithm guidance only. Not a live calendar service.
 
-description: >
-  Picks a deterministic daily target word from a static list using a date-based seed.
-  Supports conceptual dev/test override without changing production daily behavior.
-
-non_template_statement: >
-  Seed algorithm guidance only. Not a live calendar service.
-
+  '
 applies_to:
-  - game.word-daily
-  - tag:word-daily
-
+- game.word-daily
+- tag:word-daily
 depends_on:
-  - mechanic.word-target
-
+- mechanic.word-target
 provides:
-  - daily_seed_state
-
+- daily_seed_state
 binds_components:
-  - component.word-result-panel
-
+- component.word-result-panel
 inputs:
-  - seed_date: string — YYYY-MM-DD local date default
-  - allowed_words: array — from word-target
-  - dev_override_target: string | null — test mode only
-
+- seed_date: string — YYYY-MM-DD local date default
+- allowed_words: array — from word-target
+- dev_override_target: string | null — test mode only
 outputs:
-  - selectedTargetWord: string
-  - seedKey: string
-
+- selectedTargetWord: string
+- seedKey: string
 guidance:
-  - "Hash or index into allowed_words from seed_date deterministically"
-  - "Same seed_date always yields same target within a build"
-  - "dev_override_target bypasses seed only when explicit test flag enabled"
-  - "Do not fetch date or words from network for MVP"
-
+- Hash or index into allowed_words from seed_date deterministically
+- Same seed_date always yields same target within a build
+- dev_override_target bypasses seed only when explicit test flag enab…
 validation_notes:
-  - Stable output for fixed seed_date
-  - Override ignored when test flag false
-
+- Stable output for fixed seed_date
+- Override ignored when test flag false
 risk_notes:
-  - Clock/timezone changes mid-session alter seed unexpectedly
-
+- Clock/timezone changes mid-session alter seed unexpectedly
 state_model:
   fields:
-    - name: seedKey
-      type: string
-    - name: selectedTargetWord
-      type: string
+  - name: seedKey
+    type: string
+  - name: selectedTargetWord
+    type: string
   events:
-    - init_daily_target
-    - apply_dev_override
-
+  - init_daily_target
+  - apply_dev_override
 common_failure_modes:
-  - "Different target on refresh for same calendar day"
-  - "Empty word list yields no target"
-
+- Different target on refresh for same calendar day
+- Empty word list yields no target
 test_ideas:
-  - "Two runs with same seed pick same word"
-  - "Override selects fixed word in test mode"
-
+- Two runs with same seed pick same word
+- Override selects fixed word in test mode
 reusable_across:
-  - game.word-daily
+- game.word-daily

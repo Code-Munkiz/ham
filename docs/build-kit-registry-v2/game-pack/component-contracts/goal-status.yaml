@@ -3,40 +3,30 @@ id: component.goal-status
 kind: component_contract
 name: Goal status
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Shows current win progress, failure warnings, turn count, and terminal summary.
+non_template_statement: 'UI contract only. Not a victory modal asset.
 
-description: >
-  Shows current win progress, failure warnings, turn count, and terminal summary.
-
-non_template_statement: >
-  UI contract only. Not a victory modal asset.
-
+  '
 applies_to:
-  - game.resource-management-sim
-
+- game.resource-management-sim
 binds_mechanics:
-  - mechanic.goal-and-failure-state
-  - mechanic.turn-or-tick-loop
-
+- mechanic.goal-and-failure-state
+- mechanic.turn-or-tick-loop
 required_props:
-  - phase: playing | won | lost
-  - winProgress: object — target description and current progress
-  - turn: number
-
+- phase: playing | won | lost
+- winProgress: object — target description and current progress
+- turn: number
 optional_props:
-  - terminalReason: string
-  - onReset: callback
-
+- terminalReason: string
+- onReset: callback
 accessibility:
-  - "Terminal state announced to screen readers"
-
+- Terminal state announced to screen readers
 guidance:
-  - "Progress toward win condition always visible during playing"
-  - "Show clear won/lost message when terminal"
-
+- Progress toward win condition always visible during playing
+- Show clear won/lost message when terminal
 validation_notes:
-  - validator.goal-state-detection
-
+- validator.goal-state-detection
 risk_notes:
-  - Progress bar stale after production step
+- Progress bar stale after production step

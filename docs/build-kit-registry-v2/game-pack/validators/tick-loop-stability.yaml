@@ -3,63 +3,48 @@ id: validator.tick-loop-stability
 kind: validator
 name: Tick loop stability
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Ensures turn/tick loop uses a single interval, clears on unmount, and stops after terminal state.
+non_template_statement: 'Conceptual loop check. Not executable until a future validator runner exists.
 
-description: >
-  Ensures turn/tick loop uses a single interval, clears on unmount, and stops
-  after terminal state.
-
-non_template_statement: >
-  Conceptual loop check. Not executable until a future validator runner exists.
-
+  '
 applies_to:
-  - game.resource-management-sim
-  - tag:resource-management-sim
-
+- game.resource-management-sim
+- tag:resource-management-sim
 depends_on:
-  - mechanic.turn-or-tick-loop
-  - mechanic.goal-and-failure-state
-
+- mechanic.turn-or-tick-loop
+- mechanic.goal-and-failure-state
 validates_modules:
-  - mechanic.turn-or-tick-loop
-
+- mechanic.turn-or-tick-loop
 severity: blocking
 runner: conceptual
 check_type: conceptual
-
 inputs:
-  - mode: turn | slow_tick
-  - phase: string
-  - turn: number
-
+- mode: turn | slow_tick
+- phase: string
+- turn: number
 outputs:
-  - pass | fail
-
+- pass | fail
 guidance:
-  - "At most one active interval for slow_tick mode"
-  - "Interval cleared in effect cleanup"
-  - "No advances after phase is won or lost"
-
+- At most one active interval for slow_tick mode
+- Interval cleared in effect cleanup
+- No advances after phase is won or lost
 validation_notes:
-  - Navigate away during tick mode — no interval warnings
-
+- Navigate away during tick mode — no interval warnings
 risk_notes:
-  - Strict mode double-mount can duplicate intervals
+- Strict mode double-mount can duplicate intervals
+validation_goal: 'Simulation clock advances safely without runaway intervals.
 
-validation_goal: >
-  Simulation clock advances safely without runaway intervals.
-
+  '
 pass_conditions:
-  - "Single interval in slow_tick mode"
-  - "Turn counter stable after terminal state"
-
+- Single interval in slow_tick mode
+- Turn counter stable after terminal state
 fail_conditions:
-  - "Turn counter jumps rapidly"
-  - "Resources change after win screen"
+- Turn counter jumps rapidly
+- Resources change after win screen
+suggested_failure_message: 'The sim tick loop kept running after it should have stopped. I''ll fix interval cleanup and pause.
 
-suggested_failure_message: >
-  The sim tick loop kept running after it should have stopped. I'll fix interval cleanup and pause.
-
+  '
 recovery_playbooks:
-  - recovery.runaway-tick-loop
+- recovery.runaway-tick-loop

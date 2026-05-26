@@ -3,79 +3,62 @@ id: recovery.broken-false-start-logic
 kind: recovery_playbook
 name: Fix broken false start logic
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Repairs missing or incorrect false-start detection when player acts during wait phase.
+non_template_statement: 'Executable recovery strategy spec for a future runner. Not auto-applied today.
 
-description: >
-  Repairs missing or incorrect false-start detection when player acts during wait
-  phase.
-
-non_template_statement: >
-  Executable recovery strategy spec for a future runner. Not auto-applied today.
-
+  '
 max_attempts: 2
-
 applies_to:
-  - game.reaction-time-challenge
-  - tag:reaction-time-challenge
-
+- game.reaction-time-challenge
+- tag:reaction-time-challenge
 depends_on:
-  - mechanic.false-start-handling
-  - mechanic.reaction-input-response
-  - validator.false-start-enforcement
-
+- mechanic.false-start-handling
+- mechanic.reaction-input-response
+- validator.false-start-enforcement
 repairs_validators:
-  - validator.false-start-enforcement
-
+- validator.false-start-enforcement
 inputs:
-  - failure_context: validator result
-  - current_source: input handlers (conceptual)
-
+- failure_context: validator result
+- current_source: input handlers (conceptual)
 outputs:
-  - patched_source: conceptual
-  - revalidation_target: validator.false-start-enforcement
-
+- patched_source: conceptual
+- revalidation_target: validator.false-start-enforcement
 guidance:
-  - "Branch on phase === waiting for early input"
-  - "Cancel signal timeout on false start"
-
+- Branch on phase === waiting for early input
+- Cancel signal timeout on false start
 validation_notes:
-  - Re-run false-start-enforcement after repair
-
+- Re-run false-start-enforcement after repair
 risk_notes:
-  - Over-aggressive blocking prevents valid signal response
-
+- Over-aggressive blocking prevents valid signal response
 failure_signals:
-  - validator.false-start-enforcement fail
-  - Early clicks record reaction time
-
+- validator.false-start-enforcement fail
+- Early clicks record reaction time
 diagnosis_steps:
-  - "Check wait-phase handler sets false_start"
-  - "Check reactionMs null on false start path"
-
+- Check wait-phase handler sets false_start
+- Check reactionMs null on false start path
 steps:
-  - id: step.gate_wait_input
-    action: gate_wait_input
-    detail: "Route wait-phase input to false_start not timer"
-  - id: step.cancel_on_false_start
-    action: cancel_on_false_start
-    detail: "Clear pending signal timeout"
-  - id: step.re_validate
-    action: re_validate
-    detail: "Re-run validator.false-start-enforcement"
-
+- id: step.gate_wait_input
+  action: gate_wait_input
+  detail: Route wait-phase input to false_start not timer
+- id: step.cancel_on_false_start
+  action: cancel_on_false_start
+  detail: Clear pending signal timeout
+- id: step.re_validate
+  action: re_validate
+  detail: Re-run validator.false-start-enforcement
 repair_strategy:
-  - action: gate_wait_input
-    detail: "False start on early click"
-  - action: cancel_on_false_start
-    detail: "Cancel scheduled signal"
-  - action: re_validate
-    target: validator.false-start-enforcement
-
+- action: gate_wait_input
+  detail: False start on early click
+- action: cancel_on_false_start
+  detail: Cancel scheduled signal
+- action: re_validate
+  target: validator.false-start-enforcement
 guardrails:
-  - max_attempts: 2
-  - do_not: "Introduce network calls or eval"
-  - preserve: "Retry UX copy"
+- max_attempts: 2
+- do_not: Introduce network calls or eval
+- preserve: Retry UX copy
+user_facing_summary: 'I fixed false-start handling so clicking too early is penalized correctly.
 
-user_facing_summary: >
-  I fixed false-start handling so clicking too early is penalized correctly.
+  '

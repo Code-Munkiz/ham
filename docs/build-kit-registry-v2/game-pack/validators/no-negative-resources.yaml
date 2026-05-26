@@ -3,63 +3,48 @@ id: validator.no-negative-resources
 kind: validator
 name: No negative resources
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Ensures resource pool quantities never fall below zero after allocation, production, or event effects.
+non_template_statement: 'Conceptual pool check. Not executable until a future validator runner exists.
 
-description: >
-  Ensures resource pool quantities never fall below zero after allocation,
-  production, or event effects.
-
-non_template_statement: >
-  Conceptual pool check. Not executable until a future validator runner exists.
-
+  '
 applies_to:
-  - game.resource-management-sim
-  - tag:resource-management-sim
-
+- game.resource-management-sim
+- tag:resource-management-sim
 depends_on:
-  - mechanic.resource-pool
-  - mechanic.allocation-decision
-
+- mechanic.resource-pool
+- mechanic.allocation-decision
 validates_modules:
-  - mechanic.resource-pool
-  - mechanic.allocation-decision
-  - mechanic.production-chain
-
+- mechanic.resource-pool
+- mechanic.allocation-decision
+- mechanic.production-chain
 severity: blocking
 runner: conceptual
 check_type: conceptual
-
 inputs:
-  - pool: object
-  - last_operation: string
-
+- pool: object
+- last_operation: string
 outputs:
-  - pass | fail
-
+- pass | fail
 guidance:
-  - "All resource quantities >= 0 after any state transition"
-  - "Spend operations reject before applying negative delta"
-
+- All resource quantities >= 0 after any state transition
+- Spend operations reject before applying negative delta
 validation_notes:
-  - Run after scaffold and any pool mutation edits
-
+- Run after scaffold and any pool mutation edits
 risk_notes:
-  - Mutable reference bugs double-spend resources
+- Mutable reference bugs double-spend resources
+validation_goal: 'Resource pool never holds negative quantities after valid operations.
 
-validation_goal: >
-  Resource pool never holds negative quantities after valid operations.
-
+  '
 pass_conditions:
-  - "Every resource quantity >= 0"
-  - "Over-spend attempts rejected"
-
+- Every resource quantity >= 0
+- Over-spend attempts rejected
 fail_conditions:
-  - "Negative quantity displayed or stored"
-  - "Spend applied without balance check"
+- Negative quantity displayed or stored
+- Spend applied without balance check
+suggested_failure_message: 'Resource amounts went negative. I''ll fix the pool accounting so spending is guarded.
 
-suggested_failure_message: >
-  Resource amounts went negative. I'll fix the pool accounting so spending is guarded.
-
+  '
 recovery_playbooks:
-  - recovery.broken-resource-accounting
+- recovery.broken-resource-accounting

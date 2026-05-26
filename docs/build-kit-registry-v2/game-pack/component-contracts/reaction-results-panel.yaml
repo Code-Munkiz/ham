@@ -3,43 +3,32 @@ id: component.reaction-results-panel
 kind: component_contract
 name: Reaction results panel
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Round result summary with reaction ms, personal best highlight, and play again.
+non_template_statement: 'UI contract only. Not typing results panel.
 
-description: >
-  Round result summary with reaction ms, personal best highlight, and play again.
-
-non_template_statement: >
-  UI contract only. Not typing results panel.
-
+  '
 applies_to:
-  - game.reaction-time-challenge
-
+- game.reaction-time-challenge
 depends_on:
-  - mechanic.reaction-result-state
-  - component.reaction-timer-display
-
+- mechanic.reaction-result-state
+- component.reaction-timer-display
 binds_mechanics:
-  - mechanic.reaction-result-state
-  - mechanic.reaction-time-scoring
-
+- mechanic.reaction-result-state
+- mechanic.reaction-time-scoring
 required_props:
-  - reactionMs: number
-  - onPlayAgain: callback
-
+- reactionMs: number
+- onPlayAgain: callback
 optional_props:
-  - isPersonalBest: boolean
-  - bestReactionMs: number | null
-
+- isPersonalBest: boolean
+- bestReactionMs: number | null
 accessibility:
-  - "Results readable; play-again button keyboard accessible"
-
+- Results readable; play-again button keyboard accessible
 guidance:
-  - "Show after valid reaction only"
-  - "Celebrate personal best without gambling framing"
-
+- Show after valid reaction only
+- Celebrate personal best without gambling framing
 validation_notes:
-  - Summary matches frozen round state
-
+- Summary matches frozen round state
 risk_notes:
-  - Live metrics shown instead of frozen round result
+- Live metrics shown instead of frozen round result

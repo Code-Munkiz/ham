@@ -3,68 +3,52 @@ id: mechanic.letter-pool
 kind: mechanic
 name: Letter pool
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Defines the finite multiset of letters available for the current round or level.
+non_template_statement: 'Behavioral recipe for letter pool only. Not a checked-in letter asset file.
 
-description: >
-  Defines the finite multiset of letters available for the current round or level.
-
-non_template_statement: >
-  Behavioral recipe for letter pool only. Not a checked-in letter asset file.
-
+  '
 applies_to:
-  - game.word-builder
-  - tag:word-builder
-
+- game.word-builder
+- tag:word-builder
 depends_on: []
-
 provides:
-  - letter_pool_state
-
+- letter_pool_state
 binds_components:
-  - component.letter-pool-panel
-
+- component.letter-pool-panel
 inputs:
-  - pool_letters: array of strings — multiset for MVP
-  - pool_size: number
-
+- pool_letters: array of strings — multiset for MVP
+- pool_size: number
 outputs:
-  - availableLetters: array
-  - letterCounts: object
-
+- availableLetters: array
+- letterCounts: object
 guidance:
-  - "Track remaining count per letter in pool"
-  - "Decrement counts when letters move to slots"
-  - "Restore counts when letters return to pool"
-  - "Reject assignments that exceed available counts"
-
+- Track remaining count per letter in pool
+- Decrement counts when letters move to slots
+- Restore counts when letters return to pool
 validation_notes:
-  - validator.letter-pool-integrity
-
+- validator.letter-pool-integrity
 risk_notes:
-  - Negative letter counts
-  - Pool regenerated mid-round without reset
-
+- Negative letter counts
+- Pool regenerated mid-round without reset
 state_model:
   fields:
-    - name: availableLetters
-      type: array
-    - name: letterCounts
-      type: object
+  - name: availableLetters
+    type: array
+  - name: letterCounts
+    type: object
   events:
-    - init_pool
-    - take_letter
-    - return_letter
-    - reset_pool
-
+  - init_pool
+  - take_letter
+  - return_letter
+  - reset_pool
 common_failure_modes:
-  - "Same letter used more times than pool allows"
-  - "Pool state out of sync with slot board"
-
+- Same letter used more times than pool allows
+- Pool state out of sync with slot board
 test_ideas:
-  - "Pool initializes with expected multiset"
-  - "Taking letter decrements count"
-  - "Returning letter restores count"
-
+- Pool initializes with expected multiset
+- Taking letter decrements count
+- Returning letter restores count
 reusable_across:
-  - game.word-builder
+- game.word-builder

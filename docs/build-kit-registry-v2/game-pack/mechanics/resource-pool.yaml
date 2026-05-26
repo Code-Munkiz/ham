@@ -3,64 +3,47 @@ id: mechanic.resource-pool
 kind: mechanic
 name: Resource pool state
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Maintains named resource quantities with explicit starting values and non-negative invariants. Foundation for allocation, production, and goal checks.
+non_template_statement: 'Resource pool guidance only. Not a preset economy spreadsheet.
 
-description: >
-  Maintains named resource quantities with explicit starting values and non-negative
-  invariants. Foundation for allocation, production, and goal checks.
-
-non_template_statement: >
-  Resource pool guidance only. Not a preset economy spreadsheet.
-
+  '
 applies_to:
-  - game.resource-management-sim
-  - tag:resource-management-sim
-
+- game.resource-management-sim
+- tag:resource-management-sim
 depends_on: []
-
 provides:
-  - resource_pool_state
-
+- resource_pool_state
 binds_components:
-  - component.resource-dashboard
-
+- component.resource-dashboard
 inputs:
-  - resources: array — id, name, quantity, displayUnit
-  - starting_quantities: map resourceId to number
-
+- resources: array — id, name, quantity, displayUnit
+- starting_quantities: map resourceId to number
 outputs:
-  - pool: map resourceId to quantity
-
+- pool: map resourceId to quantity
 guidance:
-  - "2–4 resources for MVP; names from user theme"
-  - "Immutable updates when applying production or allocation"
-  - "Never allow negative quantities after valid operations"
-  - "Display quantities in resource dashboard"
-
+- 2–4 resources for MVP; names from user theme
+- Immutable updates when applying production or allocation
+- Never allow negative quantities after valid operations
 validation_notes:
-  - validator.no-negative-resources
-  - Starting quantities within capacity when caps defined
-
+- validator.no-negative-resources
+- Starting quantities within capacity when caps defined
 risk_notes:
-  - Mutable reference bugs double-spend resources
-
+- Mutable reference bugs double-spend resources
 state_model:
   fields:
-    - name: pool
-      type: object
+  - name: pool
+    type: object
   events:
-    - init_pool
-    - apply_delta
-    - reset_pool
-
+  - init_pool
+  - apply_delta
+  - reset_pool
 common_failure_modes:
-  - "Negative balance after spend"
-  - "Resource id mismatch between pool and chains"
-
+- Negative balance after spend
+- Resource id mismatch between pool and chains
 test_ideas:
-  - "Init matches starting quantities"
-  - "Delta apply never goes negative"
-
+- Init matches starting quantities
+- Delta apply never goes negative
 reusable_across:
-  - game.resource-management-sim
+- game.resource-management-sim

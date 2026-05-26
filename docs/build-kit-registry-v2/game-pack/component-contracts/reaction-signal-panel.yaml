@@ -3,46 +3,34 @@ id: component.reaction-signal-panel
 kind: component_contract
 name: Reaction signal panel
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Primary visual region showing wait, get-ready, and go/signal states with large tap/click target.
+non_template_statement: 'UI contract only. Not a checked-in React panel component.
 
-description: >
-  Primary visual region showing wait, get-ready, and go/signal states with large
-  tap/click target.
-
-non_template_statement: >
-  UI contract only. Not a checked-in React panel component.
-
+  '
 applies_to:
-  - game.reaction-time-challenge
-
+- game.reaction-time-challenge
 depends_on:
-  - mechanic.reaction-state-machine
-  - mechanic.random-signal-delay
-
+- mechanic.reaction-state-machine
+- mechanic.random-signal-delay
 binds_mechanics:
-  - mechanic.reaction-state-machine
-  - mechanic.reaction-input-response
-
+- mechanic.reaction-state-machine
+- mechanic.reaction-input-response
 required_props:
-  - phase: string
-  - onPointerActivate: callback
-
+- phase: string
+- onPointerActivate: callback
 optional_props:
-  - waitMessage: string
-  - signalMessage: string
-  - signalColor: string
-
+- waitMessage: string
+- signalMessage: string
+- signalColor: string
 accessibility:
-  - "Region role=button or labelled tap target when signal active"
-  - "Phase change announced for screen readers"
-
+- Region role=button or labelled tap target when signal active
+- Phase change announced for screen readers
 guidance:
-  - "Full-width panel; high contrast wait vs go colors"
-  - "No misleading click prompt during wait unless false-start education copy"
-
+- Full-width panel; high contrast wait vs go colors
+- No misleading click prompt during wait unless false-start education…
 validation_notes:
-  - Visual state matches phase enum
-
+- Visual state matches phase enum
 risk_notes:
-  - Go color shown during wait phase
+- Go color shown during wait phase

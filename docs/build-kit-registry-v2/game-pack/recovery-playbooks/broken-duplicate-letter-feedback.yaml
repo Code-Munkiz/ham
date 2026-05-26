@@ -3,73 +3,57 @@ id: recovery.broken-duplicate-letter-feedback
 kind: recovery_playbook
 name: Fix broken duplicate letter feedback
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Repairs word games where duplicate-letter feedback miscounts present/correct states.
+non_template_statement: 'Executable recovery strategy spec for a future runner. Not auto-applied today.
 
-description: >
-  Repairs word games where duplicate-letter feedback miscounts present/correct states.
-
-non_template_statement: >
-  Executable recovery strategy spec for a future runner. Not auto-applied today.
-
+  '
 max_attempts: 2
-
 applies_to:
-  - game.word-daily
-  - tag:word-daily
-
+- game.word-daily
+- tag:word-daily
 depends_on:
-  - mechanic.letter-feedback
-  - validator.duplicate-letter-feedback
-
+- mechanic.letter-feedback
+- validator.duplicate-letter-feedback
 repairs_validators:
-  - validator.duplicate-letter-feedback
-
+- validator.duplicate-letter-feedback
 inputs:
-  - failure_context: feedback mismatch report
-  - current_source: evaluate function (conceptual)
-
+- failure_context: feedback mismatch report
+- current_source: evaluate function (conceptual)
 outputs:
-  - patched_source: conceptual
-  - revalidation_target: validator.duplicate-letter-feedback
-
+- patched_source: conceptual
+- revalidation_target: validator.duplicate-letter-feedback
 guidance:
-  - "Replace naive char-frequency with two-pass exact-then-present algorithm"
-  - "Add fixture tests for duplicate letter cases in generated code comments"
-  - "Re-run duplicate-letter validator after repair"
-
+- Replace naive char-frequency with two-pass exact-then-present algor…
+- Add fixture tests for duplicate letter cases in generated code comm…
+- Re-run duplicate-letter validator after repair
 validation_notes:
-  - Re-run validator after repair
-  - Max 2 attempts
-
+- Re-run validator after repair
+- Max 2 attempts
 risk_notes:
-  - Over-correction breaks simple cases
-
+- Over-correction breaks simple cases
 failure_signals:
-  - validator.duplicate-letter-feedback fail
-  - User reports wrong tile colors on duplicate letters
-
+- validator.duplicate-letter-feedback fail
+- User reports wrong tile colors on duplicate letters
 diagnosis_steps:
-  - "Compare feedback output to known fixtures"
-  - "Check whether correct pass consumes target letters before present pass"
-
+- Compare feedback output to known fixtures
+- Check whether correct pass consumes target letters before present pass
 steps:
-  - id: step.two_pass_algorithm
-    action: two_pass_algorithm
-    detail: "Implement exact match pass then present pass with consumption"
-  - id: step.re_validate
-    action: re_validate
-    detail: "Re-run validator.duplicate-letter-feedback"
-
+- id: step.two_pass_algorithm
+  action: two_pass_algorithm
+  detail: Implement exact match pass then present pass with consumption
+- id: step.re_validate
+  action: re_validate
+  detail: Re-run validator.duplicate-letter-feedback
 repair_strategy:
-  - action: two_pass_algorithm
-    detail: "Wordle-style duplicate handling"
-  - action: re_validate
-    target: validator.duplicate-letter-feedback
-
+- action: two_pass_algorithm
+  detail: Wordle-style duplicate handling
+- action: re_validate
+  target: validator.duplicate-letter-feedback
 guardrails:
-  - max_attempts: 2
-  - do_not: "Expose target word in logs during repair"
+- max_attempts: 2
+- do_not: Expose target word in logs during repair
+user_facing_summary: 'I fixed the letter feedback so duplicate letters score correctly.
 
-user_facing_summary: >
-  I fixed the letter feedback so duplicate letters score correctly.
+  '

@@ -3,72 +3,55 @@ id: mechanic.cell-interaction
 kind: mechanic
 name: Cell interaction handler
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: 'Handles player clicks/taps on grid cells: fill, toggle, mark, or cycle states according to puzzle variant rules. Blocks edits on locked cells and after completion.'
+non_template_statement: 'Interaction recipe only. Not a copy-paste cell click handler file.
 
-description: >
-  Handles player clicks/taps on grid cells: fill, toggle, mark, or cycle states according
-  to puzzle variant rules. Blocks edits on locked cells and after completion.
-
-non_template_statement: >
-  Interaction recipe only. Not a copy-paste cell click handler file.
-
+  '
 applies_to:
-  - game.daily-puzzle-grid
-  - tag:daily-puzzle-grid
-
+- game.daily-puzzle-grid
+- tag:daily-puzzle-grid
 depends_on:
-  - mechanic.grid-state
-  - mechanic.constraint-rules
-
+- mechanic.grid-state
+- mechanic.constraint-rules
 provides:
-  - cell_interaction
-
+- cell_interaction
 binds_components:
-  - component.grid-cell
-  - component.puzzle-grid
-
+- component.grid-cell
+- component.puzzle-grid
 inputs:
-  - interaction_mode: fill | toggle | mark_cycle — from puzzle variant
-  - block_after_complete: boolean — default true
-
+- interaction_mode: fill | toggle | mark_cycle — from puzzle variant
+- block_after_complete: boolean — default true
 outputs:
-  - "lastTouchedCell: { row, col } | null"
-  - interactionBlocked: boolean
-
+- 'lastTouchedCell: { row, col } | null'
+- interactionBlocked: boolean
 guidance:
-  - "Ignore clicks on locked cells"
-  - "Cycle cell states per puzzle variant"
-  - "Re-evaluate constraints after valid changes"
-  - "Block interaction when puzzle complete"
-
+- Ignore clicks on locked cells
+- Cycle cell states per puzzle variant
+- Re-evaluate constraints after valid changes
 validation_notes:
-  - Locked cells never mutate on click
-  - No interaction after completion when block_after_complete true
-
+- Locked cells never mutate on click
+- No interaction after completion when block_after_complete true
 risk_notes:
-  - Stale closure reads old grid state on rapid clicks
-  - Error state not cleared on undo/correct move
-
+- Stale closure reads old grid state on rapid clicks
+- Error state not cleared on undo/correct move
 state_model:
   fields:
-    - name: lastTouchedCell
-      type: object
-    - name: interactionBlocked
-      type: boolean
+  - name: lastTouchedCell
+    type: object
+  - name: interactionBlocked
+    type: boolean
   events:
-    - cell_click
-    - cell_key_toggle
-    - block_interaction
-
+  - cell_click
+  - cell_key_toggle
+  - block_interaction
 common_failure_modes:
-  - "Locked cells editable"
-  - "Clicks accepted after puzzle complete"
-
+- Locked cells editable
+- Clicks accepted after puzzle complete
 test_ideas:
-  - "Click cycles state on editable cell"
-  - "Locked cell click no-op"
-  - "Completion blocks further clicks"
-
+- Click cycles state on editable cell
+- Locked cell click no-op
+- Completion blocks further clicks
 reusable_across:
-  - game.daily-puzzle-grid
+- game.daily-puzzle-grid

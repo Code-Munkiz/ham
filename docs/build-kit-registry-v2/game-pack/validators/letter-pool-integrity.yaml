@@ -3,61 +3,47 @@ id: validator.letter-pool-integrity
 kind: validator
 name: Letter pool integrity
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Verifies letter pool counts stay non-negative and match slot usage.
+non_template_statement: 'Conceptual pool integrity check.
 
-description: >
-  Verifies letter pool counts stay non-negative and match slot usage.
-
-non_template_statement: >
-  Conceptual pool integrity check.
-
+  '
 applies_to:
-  - game.word-builder
-  - tag:word-builder
-
+- game.word-builder
+- tag:word-builder
 depends_on:
-  - mechanic.letter-pool
-  - mechanic.word-slot-construction
-
+- mechanic.letter-pool
+- mechanic.word-slot-construction
 validates_modules:
-  - mechanic.letter-pool
-  - component.letter-pool-panel
-
+- mechanic.letter-pool
+- component.letter-pool-panel
 severity: blocking
 runner: conceptual
 check_type: conceptual
-
 inputs:
-  - letter_counts: object
-  - slot_letters: array
-
+- letter_counts: object
+- slot_letters: array
 outputs:
-  - pass | fail
-
+- pass | fail
 guidance:
-  - "No letter count below zero"
-  - "Sum of pool plus slots equals initial multiset"
-
+- No letter count below zero
+- Sum of pool plus slots equals initial multiset
 validation_notes:
-  - Test over-use of duplicate letters
-
+- Test over-use of duplicate letters
 risk_notes:
-  - Negative counts accepted
+- Negative counts accepted
+validation_goal: 'Letter pool multiset is conserved across pool and slots.
 
-validation_goal: >
-  Letter pool multiset is conserved across pool and slots.
-
+  '
 pass_conditions:
-  - "All letter counts >= 0"
-  - "Pool plus slots match initial totals"
-
+- All letter counts >= 0
+- Pool plus slots match initial totals
 fail_conditions:
-  - "Negative letter count"
-  - "Extra letter in slots not from pool"
+- Negative letter count
+- Extra letter in slots not from pool
+suggested_failure_message: 'Letter pool counts got out of sync. I''ll fix pool and slot accounting.
 
-suggested_failure_message: >
-  Letter pool counts got out of sync. I'll fix pool and slot accounting.
-
+  '
 recovery_playbooks:
-  - recovery.broken-letter-pool
+- recovery.broken-letter-pool

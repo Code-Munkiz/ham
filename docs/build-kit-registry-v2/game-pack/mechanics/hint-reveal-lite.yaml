@@ -3,67 +3,50 @@ id: mechanic.hint-reveal-lite
 kind: mechanic
 name: Lightweight hint reveal
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: 'Optional lightweight hints: reveal a letter, show category, word length, or possible target count. Configurable hint budget.'
+non_template_statement: 'Hint behavior guidance only. Not a paid hint monetization system.
 
-description: >
-  Optional lightweight hints: reveal a letter, show category, word length, or possible
-  target count. Configurable hint budget.
-
-non_template_statement: >
-  Hint behavior guidance only. Not a paid hint monetization system.
-
+  '
 applies_to:
-  - game.word-builder
-  - tag:word-builder
-
+- game.word-builder
+- tag:word-builder
 depends_on:
-  - mechanic.word-builder-scoring
-
+- mechanic.word-builder-scoring
 provides:
-  - hint_reveal_state
-
+- hint_reveal_state
 binds_components:
-  - component.word-feedback-panel
-
+- component.word-feedback-panel
 inputs:
-  - max_hints: number — default 1–3
-  - hint_types: array — reveal_letter | show_category | show_length | show_target_count
-
+- max_hints: number — default 1–3
+- hint_types: array — reveal_letter | show_category | show_length | show_target_count
 outputs:
-  - hintsRemaining: number
-  - lastHintApplied: object | null
-
+- hintsRemaining: number
+- lastHintApplied: object | null
 guidance:
-  - "Decrement hintsRemaining on use; disable at zero"
-  - "Hints must not auto-submit valid words or bypass validation"
-  - "Local hints only — no server fetch"
-  - "Optional per user override of hint count"
-
+- Decrement hintsRemaining on use; disable at zero
+- Hints must not auto-submit valid words or bypass validation
+- Local hints only — no server fetch
 validation_notes:
-  - hintsRemaining never negative
-
+- hintsRemaining never negative
 risk_notes:
-  - Hint reveals entire solution list accidentally
-  - Unlimited hints without guard
-
+- Hint reveals entire solution list accidentally
+- Unlimited hints without guard
 state_model:
   fields:
-    - name: hintsRemaining
-      type: number
-    - name: lastHintApplied
-      type: object
+  - name: hintsRemaining
+    type: number
+  - name: lastHintApplied
+    type: object
   events:
-    - apply_hint
-    - reset_hints
-
+  - apply_hint
+  - reset_hints
 common_failure_modes:
-  - "Hint bypasses pool or validation rules"
-  - "Button active with zero hints"
-
+- Hint bypasses pool or validation rules
+- Button active with zero hints
 test_ideas:
-  - "Each hint decrements budget"
-  - "Zero hints disables hint control"
-
+- Each hint decrements budget
+- Zero hints disables hint control
 reusable_across:
-  - game.word-builder
+- game.word-builder

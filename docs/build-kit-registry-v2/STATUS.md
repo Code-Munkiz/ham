@@ -12,7 +12,7 @@ Practical snapshot of where Build Kit Registry v2 stands. For authoring rules se
 - **Default behavior remains v1** — when the flag is unset or false, Lane A uses existing Builder Kit JSON (`src/ham/data/builder_kits/`).
 - **No templates or starter source files** — recipes are generative playbooks only; HAM does not clone checked-in starter trees per kit.
 - **Adaptive policy fields on all Wave 1 app types** — `hard_constraints`, `soft_defaults`, `user_overridable`, `clarify_if_changed`, `out_of_scope_unless_explicit`, and `conflict_policy` document override precedence (schema only; not interpreted at runtime yet).
-- **Local reference checker exists** — `scripts/check_build_registry_references.py` audits pack references, duplicates, orphans, and render-budget headroom. **Local/manual only — not CI-blocking.** Current registry (14 recipes / 323 modules): **0 hard checker errors**, **5 render-near-budget warnings only** (exit 0). No registry YAML was mutated to address those warnings yet. See [REFERENCE_CHECKER_IMPLEMENTATION_PLAN.md](REFERENCE_CHECKER_IMPLEMENTATION_PLAN.md) and [WAVE_3_COMPLETION_CHECKPOINT.md](WAVE_3_COMPLETION_CHECKPOINT.md).
+- **Local reference checker exists** — `scripts/check_build_registry_references.py` audits pack references, duplicates, orphans, and render-budget headroom. **Local/manual only — not CI-blocking.** Current registry (14 recipes / 323 modules): **0 checker errors, 0 warnings** on full orphan + render-budget pass (exit 0). Near-budget recipe trims landed in module YAML (guidance, progress copy, validator pass conditions) without removing core mechanics or safety posture. See [REFERENCE_CHECKER_IMPLEMENTATION_PLAN.md](REFERENCE_CHECKER_IMPLEMENTATION_PLAN.md) and [WAVE_3_COMPLETION_CHECKPOINT.md](WAVE_3_COMPLETION_CHECKPOINT.md).
 
 ---
 
@@ -41,20 +41,20 @@ Practical snapshot of where Build Kit Registry v2 stands. For authoring rules se
 | `game.trivia-timer` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow timed trivia/quiz intent | ~9.6k chars | Conservative timed trivia/quiz routing; v1 fallback preserved |
 | `game.branching-narrative` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow branching/choice/story intent | ~10.3k chars | Conservative branching narrative / CYOA / interactive-fiction routing; v1 fallback preserved |
 | `game.memory-match` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow memory card matching intent | ~10.0k chars | Conservative memory card / pair matching / flip-card routing; v1 fallback preserved |
-| `game.word-daily` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow daily word guessing / Wordle-style intent | ~10.9k chars | Conservative daily word / Wordle-style routing; generic “word game” excluded; v1 fallback preserved |
-| `game.daily-puzzle-grid` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow daily/grid/logic puzzle intent | ~11.4k chars | Conservative daily/grid/logic/cell/rule/clue routing; generic “grid”, “puzzle”, and “daily game” excluded; v1 fallback preserved |
-| `game.resource-management-sim` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow resource-management simulation game intent | ~10.9k chars | Conservative resource/allocation/production/colony/factory/farm management sim routing; dashboards, inventory apps, finance/trading/spreadsheets excluded; v1 fallback preserved |
+| `game.word-daily` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow daily word guessing / Wordle-style intent | ~9.5k chars | Conservative daily word / Wordle-style routing; generic “word game” excluded; v1 fallback preserved |
+| `game.daily-puzzle-grid` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow daily/grid/logic puzzle intent | ~10.3k chars | Conservative daily/grid/logic/cell/rule/clue routing; generic “grid”, “puzzle”, and “daily game” excluded; v1 fallback preserved |
+| `game.resource-management-sim` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow resource-management simulation game intent | ~10.0k chars | Conservative resource/allocation/production/colony/factory/farm management sim routing; dashboards, inventory apps, finance/trading/spreadsheets excluded; v1 fallback preserved |
 | `game.hangman-lite` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow hangman / hidden-word / letter-guessing intent | ~8.8k chars | Conservative hangman / hidden-word / letter-guessing routing; Wordle/daily-word routes to `game.word-daily`; crossword, word search, typing, flashcard, trivia, memory, idle, dashboard prompts excluded; v1 fallback preserved |
 | `game.typing-speed-racer` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow typing speed / WPM / typing challenge intent | ~10.4k chars | Conservative typing speed / WPM / accuracy / timer challenge routing; generic typing app, typing tutor, and dashboard prompts excluded; v1 fallback preserved |
-| `game.word-builder` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow word-building / spelling / letter-pool intent | ~11.2k chars | Conservative word-builder / spelling / letter-pool / letter-tile / word-slot routing; generic “word game” alone excluded; v1 fallback preserved |
+| `game.word-builder` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow word-building / spelling / letter-pool intent | ~10.0k chars | Conservative word-builder / spelling / letter-pool / letter-tile / word-slot routing; generic “word game” alone excluded; v1 fallback preserved |
 | `game.card-deck-turn-based` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow turn-based card deck battle intent | ~11.0k chars | Conservative draw/hand/discard/turn/card-play routing; gambling/casino/marketplace/flashcard/pitch-deck/dashboard/credit-card/business-card/generic deck prompts excluded; memory-match flip-pair routes to `game.memory-match`; v1 fallback preserved |
-| `game.reaction-time-challenge` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow reaction-time / wait-signal / false-start / reaction-ms intent | ~11.2k chars | Conservative wait/signal/false-start/reaction-ms routing; Pomodoro/stopwatch/typing/rhythm/medical/dashboard/gambling/physics prompts excluded; weak timer/reaction/speed/button-only prompts excluded; v1 fallback preserved |
+| `game.reaction-time-challenge` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow reaction-time / wait-signal / false-start / reaction-ms intent | ~10.7k chars | Conservative wait/signal/false-start/reaction-ms routing; Pomodoro/stopwatch/typing/rhythm/medical/dashboard/gambling/physics prompts excluded; weak timer/reaction/speed/button-only prompts excluded; v1 fallback preserved |
 | `game.rhythm-tap-lite` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow rhythm tap timing game intent | ~10.0k chars | Conservative beat/cue/timing-window/perfect-good-miss/combo/streak routing; Pomodoro/stopwatch/metronome/music-player/karaoke/typing/reaction-time/medical/dashboard/gambling/physics prompts excluded; weak tap/beat/rhythm/music/timer/click-only prompts excluded; v1 fallback preserved |
 | `game.deck-builder-lite` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow deck-building card game intent | ~10.0k chars | Conservative starter-deck/encounter/reward/deck-mutation routing; pitch-deck/flashcard/marketplace/gambling/dashboard/kanban/project/music/generic deck-builder prompts excluded; simple turn-based card battle routes to `game.card-deck-turn-based`; v1 fallback preserved |
 
 Fourteen recipe renders target the 12k default budget. All fourteen Game Pack recipes are routed behind `HAM_BUILD_REGISTRY_V2_ENABLED` when prompt intent clearly matches; v1 remains default when the flag is off.
 
-**Reference checker render-near-budget warnings (local run, no registry edits yet):** `game.daily-puzzle-grid` (11,351 chars), `game.reaction-time-challenge` (11,174), `game.resource-management-sim` (10,948), `game.word-builder` (11,232), `game.word-daily` (10,869). All are ≥90% of the 12k cap; none exceed budget.
+**Reference checker render lengths after near-budget trim (local run):** `game.daily-puzzle-grid` (10,297 chars), `game.reaction-time-challenge` (10,702), `game.resource-management-sim` (10,024), `game.word-builder` (10,034), `game.word-daily` (9,452). All are below the 90% threshold (10,800 chars); none exceed the 12k cap.
 
 ---
 
@@ -96,8 +96,8 @@ python3 scripts/check_build_registry_references.py \
 Reference checker notes:
 
 - **Local/manual** — run before landing registry edits; **not CI-blocking** (no workflow change yet).
-- **Current registry result:** 0 errors, 5 `render_near_budget` warnings, exit 0.
-- **Warnings only** — no registry YAML was compressed or trimmed to address near-budget recipes in the checker landing pass.
+- **Current registry result:** 0 errors, 0 warnings, exit 0 (orphans + render-budget pass).
+- **Near-budget trim:** five previously warned recipes tightened via shorter module guidance, progress copy, and validator pass conditions — core mechanics and safety posture preserved.
 - Optional flags: `--app-type`, `--strict`, `--warn-only`, `--json`.
 
 ```bash
@@ -232,10 +232,9 @@ Outcome facts format, manual example reports, and Hermes critique prompt are **a
 
 Possible next steps:
 
-1. **Optional render-budget trim pass** for the five near-budget recipes flagged by the reference checker (no mutation done yet).
+1. **Wave 4 strategy/sim direction** before new recipe expansion — see [WAVE_3_COMPLETION_CHECKPOINT.md](WAVE_3_COMPLETION_CHECKPOINT.md).
 2. **Consider CI ratchet later** — reference checker remains local/manual today; `validate_game_pack_registry.py` + registry pytest stay warning-only in CI.
-3. **Wave 4 strategy/sim direction** before new recipe expansion — see [WAVE_3_COMPLETION_CHECKPOINT.md](WAVE_3_COMPLETION_CHECKPOINT.md).
-4. **Later:** outcome facts → Hermes critique report → proposed patch workflow (no auto-apply)
+3. **Later:** outcome facts → Hermes critique report → proposed patch workflow (no auto-apply)
 
 Routing policy: [ROUTING_STRATEGY.md](ROUTING_STRATEGY.md).
 

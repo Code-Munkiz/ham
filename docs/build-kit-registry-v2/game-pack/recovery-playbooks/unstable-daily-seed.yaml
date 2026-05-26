@@ -3,79 +3,62 @@ id: recovery.unstable-daily-seed
 kind: recovery_playbook
 name: Fix unstable daily seed
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Repairs word games where the daily target word changes unexpectedly between reloads or mid-session for the same calendar date.
+non_template_statement: 'Executable recovery strategy spec for a future runner. Not auto-applied today.
 
-description: >
-  Repairs word games where the daily target word changes unexpectedly between reloads or
-  mid-session for the same calendar date.
-
-non_template_statement: >
-  Executable recovery strategy spec for a future runner. Not auto-applied today.
-
+  '
 max_attempts: 2
-
 applies_to:
-  - game.word-daily
-  - tag:word-daily
-
+- game.word-daily
+- tag:word-daily
 depends_on:
-  - mechanic.daily-seed
-  - validator.daily-seed-stability
-
+- mechanic.daily-seed
+- validator.daily-seed-stability
 repairs_validators:
-  - validator.daily-seed-stability
-
+- validator.daily-seed-stability
 inputs:
-  - failure_context: seed drift report
-  - current_source: seed init (conceptual)
-
+- failure_context: seed drift report
+- current_source: seed init (conceptual)
 outputs:
-  - patched_source: conceptual
-  - revalidation_target: validator.daily-seed-stability
-
+- patched_source: conceptual
+- revalidation_target: validator.daily-seed-stability
 guidance:
-  - "Derive seed from stable YYYY-MM-DD string not Date.now()"
-  - "Persist selected target in session state after first init"
-  - "Gate dev override behind explicit test flag only"
-
+- Derive seed from stable YYYY-MM-DD string not Date.now()
+- Persist selected target in session state after first init
+- Gate dev override behind explicit test flag only
 validation_notes:
-  - Re-run daily-seed validator after repair
-  - Max 2 attempts
-
+- Re-run daily-seed validator after repair
+- Max 2 attempts
 risk_notes:
-  - Timezone changes still edge-case — document local date assumption
-
+- Timezone changes still edge-case — document local date assumption
 failure_signals:
-  - validator.daily-seed-stability fail
-  - Target word differs on refresh same day
-
+- validator.daily-seed-stability fail
+- Target word differs on refresh same day
 diagnosis_steps:
-  - "Check if target recomputed on every render"
-  - "Verify seed input is date string not timestamp"
-
+- Check if target recomputed on every render
+- Verify seed input is date string not timestamp
 steps:
-  - id: step.stabilize_seed
-    action: stabilize_seed
-    detail: "Use deterministic index from seed_date hash"
-  - id: step.session_pin
-    action: session_pin
-    detail: "Pin target after first init in session"
-  - id: step.re_validate
-    action: re_validate
-    detail: "Re-run validator.daily-seed-stability"
-
+- id: step.stabilize_seed
+  action: stabilize_seed
+  detail: Use deterministic index from seed_date hash
+- id: step.session_pin
+  action: session_pin
+  detail: Pin target after first init in session
+- id: step.re_validate
+  action: re_validate
+  detail: Re-run validator.daily-seed-stability
 repair_strategy:
-  - action: stabilize_seed
-    detail: "Deterministic daily selection"
-  - action: session_pin
-    detail: "Avoid mid-session target drift"
-  - action: re_validate
-    target: validator.daily-seed-stability
-
+- action: stabilize_seed
+  detail: Deterministic daily selection
+- action: session_pin
+  detail: Avoid mid-session target drift
+- action: re_validate
+  target: validator.daily-seed-stability
 guardrails:
-  - max_attempts: 2
-  - do_not: "Fetch words from network to fix seed"
+- max_attempts: 2
+- do_not: Fetch words from network to fix seed
+user_facing_summary: 'I stabilized today''s word so it stays the same while you play.
 
-user_facing_summary: >
-  I stabilized today's word so it stays the same while you play.
+  '

@@ -3,219 +3,188 @@ id: game.word-daily
 kind: app_type
 name: Daily word guessing game
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: A browser-based daily word guessing game where the player guesses a hidden word, receives per-letter feedback, tracks attempts, handles duplicate-letter edge cases, and reaches win/loss state. Uses static in-memory word list and date-based daily seed for MVP. Custom-generated fr…
+non_template_statement: 'This app type does not reference checked-in word lists, dictionary APIs, or clone baselines. It defines generative guidance only.
 
-description: >
-  A browser-based daily word guessing game where the player guesses a hidden word,
-  receives per-letter feedback, tracks attempts, handles duplicate-letter edge cases,
-  and reaches win/loss state. Uses static in-memory word list and date-based daily seed
-  for MVP. Output is always custom-generated from the user prompt plus composed playbook
-  modules — never cloned from a starter project.
-
-non_template_statement: >
-  This app type does not reference checked-in word lists, dictionary APIs, or clone
-  baselines. It defines generative guidance only.
-
+  '
 legacy_v1_fallback: generic
-
 safety_constraints:
-  - no-network-egress-for-mvp
-  - no-eval
-  - no-user-accounts-for-mvp
-  - no-multiplayer-for-mvp
-  - static-word-list-for-mvp
-  - no-external-word-api-for-mvp
-  - no-real-money-economy
-
+- no-network-egress-for-mvp
+- no-eval
+- no-user-accounts-for-mvp
+- no-multiplayer-for-mvp
+- static-word-list-for-mvp
+- no-external-word-api-for-mvp
+- no-real-money-economy
 applies_to:
-  - tag:word-daily
-  - tag:dom-casual-game
-
+- tag:word-daily
+- tag:dom-casual-game
 inputs:
-  - user_prompt: natural language theme or tone for word game UI copy
-  - optional_word_length: fixed guess length (default 5)
-  - optional_max_attempts: number of guesses allowed (default 6)
-  - optional_daily_seed: date string for deterministic daily target (default local date)
-
+- user_prompt: natural language theme or tone for word game UI copy
+- optional_word_length: fixed guess length (default 5)
+- optional_max_attempts: number of guesses allowed (default 6)
+- optional_daily_seed: date string for deterministic daily target (default local date)
 outputs:
-  - runnable_vite_react_app: single-page DOM word game
-  - composed_build_recipe: ids of mechanics, contracts, validators, recovery modules
-  - normie_plan_summary: phased build description for chat/activity stream
-
+- runnable_vite_react_app: single-page DOM word game
+- composed_build_recipe: ids of mechanics, contracts, validators, recovery modules
+- normie_plan_summary: phased build description for chat/activity stream
 guidance:
-  - "Prefer React state; static word list embedded in generated source"
-  - "Pick daily target deterministically from date-based seed over in-memory list"
-  - "Allow manual target override only in development/test mode (conceptual flag)"
-  - "Fixed guess length (default 5 letters) unless user explicitly requests otherwise"
-  - "Fixed attempt limit (default 6 guesses)"
-  - "Feedback: correct position, present wrong position, absent"
-  - "Duplicate-letter handling must be explicit and deterministic (Wordle-style)"
-  - "Support physical keyboard and optional on-screen keyboard"
-  - "Block guesses after win/loss; reject incomplete guesses"
-  - "DOM/React UI only; no external dictionary API for MVP"
-
+- Prefer React state; static word list embedded in generated source
+- Pick daily target deterministically from date-based seed over in-me…
+- Allow manual target override only in development/test mode (concept…
 validation_notes:
-  - Run composed validators after scaffold and feedback handler edits
-  - Preview must boot without console errors before success copy
-
+- Run composed validators after scaffold and feedback handler edits
+- Preview must boot without console errors before success copy
 risk_notes:
-  - Duplicate-letter feedback miscounts confuse players
-  - Unstable daily seed changes target mid-session
-  - Incomplete guesses accepted as valid
-
+- Duplicate-letter feedback miscounts confuse players
+- Unstable daily seed changes target mid-session
+- Incomplete guesses accepted as valid
 user_prompt_examples:
-  - "Build a daily word guessing game like Wordle"
-  - "Make a 5-letter word game with color feedback"
-  - "Create a daily puzzle where I guess a hidden word in six tries"
-  - "Build a word game with keyboard and tile feedback"
-
+- Build a daily word guessing game like Wordle
+- Make a 5-letter word game with color feedback
+- Create a daily puzzle where I guess a hidden word in six tries
+- Build a word game with keyboard and tile feedback
 intent_signals:
-  - "\\b(wordle|word\\s+game|word\\s+guess|daily\\s+word)\\b"
-  - "\\b(guess\\s+the\\s+word|letter\\s+feedback|hidden\\s+word)\\b"
-  - "\\b(daily\\s+puzzle|word\\s+puzzle)\\b"
-
+- \b(wordle|word\s+game|word\s+guess|daily\s+word)\b
+- \b(guess\s+the\s+word|letter\s+feedback|hidden\s+word)\b
+- \b(daily\s+puzzle|word\s+puzzle)\b
 clarifying_questions:
-  - when: intent_confidence_low
-    ask: "Should guesses be 5 letters with 6 attempts, or a different length/limit?"
-  - when: keyboard_ambiguous
-    ask: "Do you want an on-screen keyboard, physical keyboard only, or both?"
-  - when: theme_ambiguous
-    ask: "Any preference for light/dark theme or playful vs minimal copy?"
-
+- when: intent_confidence_low
+  ask: Should guesses be 5 letters with 6 attempts, or a different length/limit?
+- when: keyboard_ambiguous
+  ask: Do you want an on-screen keyboard, physical keyboard only, or both?
+- when: theme_ambiguous
+  ask: Any preference for light/dark theme or playful vs minimal copy?
 default_assumptions:
-  - "5-letter words, 6 attempts, daily target from local date seed"
-  - "Static embedded word list; no live dictionary fetch"
-  - "Physical keyboard + optional on-screen keyboard"
-  - "Win/loss panel after game ends; no new guesses allowed"
-  - "DOM/React UI; mobile-friendly at 360px width"
-
+- 5-letter words, 6 attempts, daily target from local date seed
+- Static embedded word list; no live dictionary fetch
+- Physical keyboard + optional on-screen keyboard
+- Win/loss panel after game ends; no new guesses allowed
+- DOM/React UI; mobile-friendly at 360px width
 hard_constraints:
-  - no-real-money-economy
-  - no-template-cloning
-  - no-runtime-llm-generation-for-mvp
-  - no-external-api-for-mvp
-  - no-user-secrets-or-credentials
-  - preserve-safe-local-mvp-scope
-  - static-word-list-for-mvp
-  - no-external-word-api-for-mvp
-
+- no-real-money-economy
+- no-template-cloning
+- no-runtime-llm-generation-for-mvp
+- no-external-api-for-mvp
+- no-user-secrets-or-credentials
+- preserve-safe-local-mvp-scope
+- static-word-list-for-mvp
+- no-external-word-api-for-mvp
 soft_defaults:
-  - five-letter target words
-  - six guess attempts
-  - date-based deterministic daily seed
-  - green/yellow/gray-style letter feedback
-  - physical keyboard plus optional on-screen keyboard
-
+- five-letter target words
+- six guess attempts
+- date-based deterministic daily seed
+- green/yellow/gray-style letter feedback
+- physical keyboard plus optional on-screen keyboard
 user_overridable:
-  - theme and copy tone
-  - word length (when user specifies explicitly)
-  - max attempt count
-  - on-screen keyboard on or off
-  - daily seed date source (local date default)
-  - dev/test target override (conceptual test flag only)
-
+- theme and copy tone
+- word length (when user specifies explicitly)
+- max attempt count
+- on-screen keyboard on or off
+- daily seed date source (local date default)
+- dev/test target override (conceptual test flag only)
 clarify_if_changed:
-  - removing per-letter feedback
-  - allowing unlimited guesses
-  - replacing daily seed with random target every refresh
-  - changing from word guessing to crossword or word search
-  - removing attempt limit or win/loss terminal state
-  - adding live dictionary API for validation
-
+- removing per-letter feedback
+- allowing unlimited guesses
+- replacing daily seed with random target every refresh
+- changing from word guessing to crossword or word search
+- removing attempt limit or win/loss terminal state
+- adding live dictionary API for validation
 out_of_scope_unless_explicit:
-  - live word API or runtime-generated word lists
-  - user accounts or cloud sync
-  - global leaderboards
-  - multiplayer or real-time race
-  - user-submitted dictionaries
-  - custom word list uploads
-  - Web3 or token rewards
-  - payments or monetized prizes
-  - social sharing integrations
-
+- live word API or runtime-generated word lists
+- user accounts or cloud sync
+- global leaderboards
+- multiplayer or real-time race
+- user-submitted dictionaries
+- custom word list uploads
+- Web3 or token rewards
+- payments or monetized prizes
+- social sharing integrations
 conflict_policy:
   user_explicit_overrides_soft_defaults: true
   safety_constraints_override_user_request: true
   core_loop_conflicts_require_clarification: true
   out_of_scope_items_require_explicit_request: true
   fallback_to_v1_or_generic_when_recipe_no_longer_fits: true
-
 stack_kit_id: stack.dom-game-minimal
-
 compose_order_ref: pack.game#compose_defaults.compose_order
-
 composed_modules:
   stack_kit_id: stack.dom-game-minimal
   mechanics:
-    - mechanic.word-target
-    - mechanic.daily-seed
-    - mechanic.guess-grid
-    - mechanic.keyboard-input
-    - mechanic.letter-feedback
-    - mechanic.attempt-limit
-    - mechanic.win-loss-state
+  - mechanic.word-target
+  - mechanic.daily-seed
+  - mechanic.guess-grid
+  - mechanic.keyboard-input
+  - mechanic.letter-feedback
+  - mechanic.attempt-limit
+  - mechanic.win-loss-state
   component_contracts:
-    - component.game-shell
-    - component.word-grid
-    - component.guess-row
-    - component.letter-tile
-    - component.on-screen-keyboard
-    - component.word-result-panel
+  - component.game-shell
+  - component.word-grid
+  - component.guess-row
+  - component.letter-tile
+  - component.on-screen-keyboard
+  - component.word-result-panel
   validators:
-    - validator.duplicate-letter-feedback
-    - validator.guess-length-and-attempts
-    - validator.daily-seed-stability
-    - validator.keyboard-input-guardrails
+  - validator.duplicate-letter-feedback
+  - validator.guess-length-and-attempts
+  - validator.daily-seed-stability
+  - validator.keyboard-input-guardrails
   recovery_playbooks:
-    - recovery.broken-duplicate-letter-feedback
-    - recovery.unstable-daily-seed
-    - recovery.invalid-guess-state
+  - recovery.broken-duplicate-letter-feedback
+  - recovery.unstable-daily-seed
+  - recovery.invalid-guess-state
   progress_labels: progress.word-daily
   learning_hooks: learning.word-daily
-
 build_phases:
-  - id: phase.understand
-    title: Understand the word game idea
-    order: 1
-    modules_used: [app_type]
-  - id: phase.compose
-    title: Compose mechanics and UI contracts
-    order: 2
-    modules_used: [mechanics, component_contracts]
-  - id: phase.generate
-    title: Generate custom word game code
-    order: 3
-    modules_used: [stack_kit_id, guidance]
-  - id: phase.validate
-    title: Check guesses, feedback, and daily seed
-    order: 4
-    modules_used: [validators]
-  - id: phase.preview
-    title: Prepare Workbench preview
-    order: 5
-    modules_used: []
-  - id: phase.recover
-    title: Fix known failure modes if needed
-    order: 6
-    optional: true
-    modules_used: [recovery_playbooks]
-
+- id: phase.understand
+  title: Understand the word game idea
+  order: 1
+  modules_used:
+  - app_type
+- id: phase.compose
+  title: Compose mechanics and UI contracts
+  order: 2
+  modules_used:
+  - mechanics
+  - component_contracts
+- id: phase.generate
+  title: Generate custom word game code
+  order: 3
+  modules_used:
+  - stack_kit_id
+  - guidance
+- id: phase.validate
+  title: Check guesses, feedback, and daily seed
+  order: 4
+  modules_used:
+  - validators
+- id: phase.preview
+  title: Prepare Workbench preview
+  order: 5
+  modules_used: []
+- id: phase.recover
+  title: Fix known failure modes if needed
+  order: 6
+  optional: true
+  modules_used:
+  - recovery_playbooks
 acceptance_criteria:
-  - "Game loads in preview without runtime console errors"
-  - "Player can enter guesses via keyboard until win or loss"
-  - "Each submitted guess shows per-letter feedback (correct/present/absent)"
-  - "Duplicate letters in guesses handled deterministically"
-  - "Incomplete guesses rejected; no guesses after win/loss"
-  - "Daily target stable for the same date seed within a session"
-  - "UI readable on mobile-width viewport"
-
+- Game loads in preview without runtime console errors
+- Player can enter guesses via keyboard until win or loss
+- Each submitted guess shows per-letter feedback (correct/present/absent)
+- Duplicate letters in guesses handled deterministically
+- Incomplete guesses rejected; no guesses after win/loss
+- Daily target stable for the same date seed within a session
+- UI readable on mobile-width viewport
 out_of_scope:
-  - Multiplayer or real-time race
-  - Global leaderboards
-  - User accounts or cloud sync
-  - Live word API or runtime-generated word lists
-  - User-submitted dictionaries
-  - Monetized prizes or Web3/token rewards
-  - Real-money outcomes
-  - Social sharing integration unless explicitly requested later
+- Multiplayer or real-time race
+- Global leaderboards
+- User accounts or cloud sync
+- Live word API or runtime-generated word lists
+- User-submitted dictionaries
+- Monetized prizes or Web3/token rewards
+- Real-money outcomes
+- Social sharing integration unless explicitly requested later

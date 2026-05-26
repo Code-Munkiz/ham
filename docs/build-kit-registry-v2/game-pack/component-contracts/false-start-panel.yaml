@@ -3,41 +3,30 @@ id: component.false-start-panel
 kind: component_contract
 name: False start panel
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Feedback when player clicks too early with retry call-to-action.
+non_template_statement: 'UI contract only. Not medical assessment failure UI.
 
-description: >
-  Feedback when player clicks too early with retry call-to-action.
-
-non_template_statement: >
-  UI contract only. Not medical assessment failure UI.
-
+  '
 applies_to:
-  - game.reaction-time-challenge
-
+- game.reaction-time-challenge
 depends_on:
-  - mechanic.false-start-handling
-
+- mechanic.false-start-handling
 binds_mechanics:
-  - mechanic.false-start-handling
-
+- mechanic.false-start-handling
 required_props:
-  - visible: boolean
-  - onRetry: callback
-
+- visible: boolean
+- onRetry: callback
 optional_props:
-  - message: string
-  - falseStartCount: number
-
+- message: string
+- falseStartCount: number
 accessibility:
-  - "False start message announced; retry button keyboard accessible"
-
+- False start message announced; retry button keyboard accessible
 guidance:
-  - "Clear copy: too early, try again"
-  - "Retry resets to waiting with new delay"
-
+- 'Clear copy: too early, try again'
+- Retry resets to waiting with new delay
 validation_notes:
-  - Visible only in false_start phase
-
+- Visible only in false_start phase
 risk_notes:
-  - Panel persists into next valid round
+- Panel persists into next valid round

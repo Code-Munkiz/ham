@@ -3,59 +3,45 @@ id: validator.duplicate-submission-blocking
 kind: validator
 name: Duplicate submission blocking
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Ensures duplicate valid word submissions do not score or mutate pool incorrectly.
+non_template_statement: 'Conceptual duplicate submission check.
 
-description: >
-  Ensures duplicate valid word submissions do not score or mutate pool incorrectly.
-
-non_template_statement: >
-  Conceptual duplicate submission check.
-
+  '
 applies_to:
-  - game.word-builder
-  - tag:word-builder
-
+- game.word-builder
+- tag:word-builder
 depends_on:
-  - mechanic.submission-attempts
-
+- mechanic.submission-attempts
 validates_modules:
-  - mechanic.submission-attempts
-  - component.word-feedback-panel
-
+- mechanic.submission-attempts
+- component.word-feedback-panel
 severity: blocking
 runner: conceptual
 check_type: conceptual
-
 inputs:
-  - submitted_words: array
-  - duplicate_word: string
-
+- submitted_words: array
+- duplicate_word: string
 outputs:
-  - pass | fail
-
+- pass | fail
 guidance:
-  - "Second submit of same valid word is no-op for score"
-  - "User sees duplicate feedback"
-
+- Second submit of same valid word is no-op for score
+- User sees duplicate feedback
 validation_notes:
-  - Replay duplicate submit in preview
-
+- Replay duplicate submit in preview
 risk_notes:
-  - Duplicate adds score
+- Duplicate adds score
+validation_goal: 'Duplicate valid submissions are blocked without side effects.
 
-validation_goal: >
-  Duplicate valid submissions are blocked without side effects.
-
+  '
 pass_conditions:
-  - "submittedWords unchanged on duplicate attempt"
-  - "score unchanged on duplicate"
-
+- submittedWords unchanged on duplicate attempt
+- score unchanged on duplicate
 fail_conditions:
-  - "Duplicate valid word scores twice"
+- Duplicate valid word scores twice
+suggested_failure_message: 'Submitting the same word twice changed the score. I''ll block duplicate submissions.
 
-suggested_failure_message: >
-  Submitting the same word twice changed the score. I'll block duplicate submissions.
-
+  '
 recovery_playbooks:
-  - recovery.duplicate-word-submission
+- recovery.duplicate-word-submission

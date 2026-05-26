@@ -3,74 +3,57 @@ id: mechanic.completion-check
 kind: mechanic
 name: Puzzle completion check
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Determines puzzle completion when all row/column/region constraints are satisfied — not merely when every cell is filled. Triggers completion modal and blocks interaction.
+non_template_statement: 'Completion logic guidance only. Not a victory animation asset file.
 
-description: >
-  Determines puzzle completion when all row/column/region constraints are satisfied —
-  not merely when every cell is filled. Triggers completion modal and blocks interaction.
-
-non_template_statement: >
-  Completion logic guidance only. Not a victory animation asset file.
-
+  '
 applies_to:
-  - game.daily-puzzle-grid
-  - tag:daily-puzzle-grid
-
+- game.daily-puzzle-grid
+- tag:daily-puzzle-grid
 depends_on:
-  - mechanic.constraint-rules
-  - mechanic.grid-state
-  - mechanic.cell-interaction
-  - mechanic.mistake-tracking
-  - mechanic.hint-system-lite
-
+- mechanic.constraint-rules
+- mechanic.grid-state
+- mechanic.cell-interaction
+- mechanic.mistake-tracking
+- mechanic.hint-system-lite
 provides:
-  - completion_state
-
+- completion_state
 binds_components:
-  - component.completion-modal
-  - component.puzzle-status-bar
-
+- component.completion-modal
+- component.puzzle-status-bar
 inputs:
-  - require_all_constraints: boolean — default true
-  - show_modal_on_complete: boolean — default true
-
+- require_all_constraints: boolean — default true
+- show_modal_on_complete: boolean — default true
 outputs:
-  - isComplete: boolean
-  - completedAt: timestamp | null
-
+- isComplete: boolean
+- completedAt: timestamp | null
 guidance:
-  - "Complete when allConstraintsSatisfied"
-  - "Do not complete on fill-all without constraint pass"
-  - "Mount completion modal when isComplete"
-  - "Block cell interaction after completion"
-
+- Complete when allConstraintsSatisfied
+- Do not complete on fill-all without constraint pass
+- Mount completion modal when isComplete
 validation_notes:
-  - isComplete implies allConstraintsSatisfied
-  - No completion while constraints fail
-
+- isComplete implies allConstraintsSatisfied
+- No completion while constraints fail
 risk_notes:
-  - Premature completion on partial constraint check
-  - Modal never shows despite satisfied constraints
-
+- Premature completion on partial constraint check
+- Modal never shows despite satisfied constraints
 state_model:
   fields:
-    - name: isComplete
-      type: boolean
-    - name: completedAt
-      type: string
+  - name: isComplete
+    type: boolean
+  - name: completedAt
+    type: string
   events:
-    - check_completion
-    - reset_completion
-
+  - check_completion
+  - reset_completion
 common_failure_modes:
-  - "Victory on fill-all-cells without constraint pass"
-  - "Constraints satisfied but isComplete stays false"
-
+- Victory on fill-all-cells without constraint pass
+- Constraints satisfied but isComplete stays false
 test_ideas:
-  - "Fully satisfied puzzle sets isComplete"
-  - "Full but invalid grid stays incomplete"
-  - "Modal visible when complete"
-
+- Fully satisfied puzzle sets isComplete
+- Full but invalid grid stays incomplete
+- Modal visible when complete
 reusable_across:
-  - game.daily-puzzle-grid
+- game.daily-puzzle-grid

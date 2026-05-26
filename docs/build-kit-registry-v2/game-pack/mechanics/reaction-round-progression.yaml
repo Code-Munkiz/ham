@@ -3,61 +3,46 @@ id: mechanic.reaction-round-progression
 kind: mechanic
 name: Reaction round progression
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: 'Advances from result to next round: reset timers, reschedule random delay, and increment round counter. Supports unlimited retries by default.'
+non_template_statement: 'Round flow recipe only. Not turn-based card turns.
 
-description: >
-  Advances from result to next round: reset timers, reschedule random delay, and
-  increment round counter. Supports unlimited retries by default.
-
-non_template_statement: >
-  Round flow recipe only. Not turn-based card turns.
-
+  '
 applies_to:
-  - game.reaction-time-challenge
-  - tag:reaction-time-challenge
-
+- game.reaction-time-challenge
+- tag:reaction-time-challenge
 depends_on:
-  - mechanic.reaction-time-scoring
-  - mechanic.reaction-state-machine
-
+- mechanic.reaction-time-scoring
+- mechanic.reaction-state-machine
 provides:
-  - reaction_round_state
-
+- reaction_round_state
 binds_components:
-  - component.reaction-round-controls
-
+- component.reaction-round-controls
 inputs:
-  - max_rounds: number | null — default null (unlimited)
-
+- max_rounds: number | null — default null (unlimited)
 outputs:
-  - currentRound: number
-  - canPlayAgain: boolean
-
+- currentRound: number
+- canPlayAgain: boolean
 guidance:
-  - "Play again clears signal timer and reaction fields"
-  - "Return to waiting with new random delay"
-  - "Optional max rounds shows session summary"
-
+- Play again clears signal timer and reaction fields
+- Return to waiting with new random delay
+- Optional max rounds shows session summary
 validation_notes:
-  - validator.reaction-state-transitions
-
+- validator.reaction-state-transitions
 risk_notes:
-  - Play again leaves stale signal visible
-  - Round counter skips on false start retry
-
+- Play again leaves stale signal visible
+- Round counter skips on false start retry
 state_model:
   fields:
-    - name: currentRound
-      type: number
+  - name: currentRound
+    type: number
   events:
-    - next_round
-    - retry_after_false_start
-    - end_session
-
+  - next_round
+  - retry_after_false_start
+  - end_session
 common_failure_modes:
-  - "New round starts without clearing timeouts"
-  - "Round count increments on false start"
-
+- New round starts without clearing timeouts
+- Round count increments on false start
 reusable_across:
-  - game.reaction-time-challenge
+- game.reaction-time-challenge

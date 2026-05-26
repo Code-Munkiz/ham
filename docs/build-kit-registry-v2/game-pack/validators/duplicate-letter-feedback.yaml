@@ -3,66 +3,51 @@ id: validator.duplicate-letter-feedback
 kind: validator
 name: Duplicate letter feedback correctness
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Verifies per-letter feedback handles duplicate letters deterministically (Wordle-style two-pass algorithm).
+non_template_statement: 'Conceptual feedback check. Not executable until a future validator runner exists.
 
-description: >
-  Verifies per-letter feedback handles duplicate letters deterministically (Wordle-style
-  two-pass algorithm).
-
-non_template_statement: >
-  Conceptual feedback check. Not executable until a future validator runner exists.
-
+  '
 applies_to:
-  - game.word-daily
-  - tag:word-daily
-
+- game.word-daily
+- tag:word-daily
 depends_on:
-  - mechanic.letter-feedback
-  - mechanic.word-target
-
+- mechanic.letter-feedback
+- mechanic.word-target
 validates_modules:
-  - mechanic.letter-feedback
-  - component.letter-tile
-  - component.guess-row
-
+- mechanic.letter-feedback
+- component.letter-tile
+- component.guess-row
 severity: blocking
 runner: conceptual
 check_type: conceptual
-
 inputs:
-  - target_word: string
-  - guess: string
-  - expected_feedback: array
-
+- target_word: string
+- guess: string
+- expected_feedback: array
 outputs:
-  - pass | fail
-
+- pass | fail
 guidance:
-  - "Exact matches consume target letters before present pass"
-  - "Present count never exceeds remaining target letter counts"
-  - "Include regression cases with duplicate letters"
-
+- Exact matches consume target letters before present pass
+- Present count never exceeds remaining target letter counts
+- Include regression cases with duplicate letters
 validation_notes:
-  - Run after scaffold and feedback handler edits
-  - Does not execute at runtime today
-
+- Run after scaffold and feedback handler edits
+- Does not execute at runtime today
 risk_notes:
-  - Edge cases like ALLLL vs APPLE
+- Edge cases like ALLLL vs APPLE
+validation_goal: 'Duplicate letters in guesses produce correct present/correct/absent counts.
 
-validation_goal: >
-  Duplicate letters in guesses produce correct present/correct/absent counts.
-
+  '
 pass_conditions:
-  - "Known duplicate-letter fixtures match expected feedback"
-  - "Algorithm is deterministic"
-
+- Known duplicate-letter fixtures match expected feedback
+- Algorithm is deterministic
 fail_conditions:
-  - "Extra present marks for duplicated guess letters"
-  - "Correct letters marked absent due to naive counting"
+- Extra present marks for duplicated guess letters
+- Correct letters marked absent due to naive counting
+suggested_failure_message: 'Letter feedback miscounted duplicate letters. I''ll fix the two-pass evaluation.
 
-suggested_failure_message: >
-  Letter feedback miscounted duplicate letters. I'll fix the two-pass evaluation.
-
+  '
 recovery_playbooks:
-  - recovery.broken-duplicate-letter-feedback
+- recovery.broken-duplicate-letter-feedback

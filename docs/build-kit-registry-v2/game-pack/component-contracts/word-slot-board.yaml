@@ -3,40 +3,30 @@ id: component.word-slot-board
 kind: component_contract
 name: Word slot board
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Ordered word slots where placed letters form the candidate word.
+non_template_statement: 'UI contract only.
 
-description: >
-  Ordered word slots where placed letters form the candidate word.
-
-non_template_statement: >
-  UI contract only.
-
+  '
 applies_to:
-  - game.word-builder
-
+- game.word-builder
 binds_mechanics:
-  - mechanic.word-slot-construction
-
+- mechanic.word-slot-construction
 required_props:
-  - slotLetters: array
-  - onPlaceLetter: callback
-  - onRemoveLetter: callback
-  - onClearSlots: callback
-  - disabled: boolean
-
+- slotLetters: array
+- onPlaceLetter: callback
+- onRemoveLetter: callback
+- onClearSlots: callback
+- disabled: boolean
 optional_props:
-  - maxSlots: number
-
+- maxSlots: number
 accessibility:
-  - "Slots announced in order; clear action keyboard reachable"
-
+- Slots announced in order; clear action keyboard reachable
 guidance:
-  - "Show empty slots distinctly from filled"
-  - "Allow remove per slot or clear all"
-
+- Show empty slots distinctly from filled
+- Allow remove per slot or clear all
 validation_notes:
-  - validator.word-slot-state-consistency
-
+- validator.word-slot-state-consistency
 risk_notes:
-  - Slot state diverges from mechanic state
+- Slot state diverges from mechanic state

@@ -3,63 +3,51 @@ id: progress.word-daily
 kind: progress_label
 name: Word daily build progress
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Normie-friendly phase labels for chat and Workbench activity stream during a daily word guessing Game Pack build.
+non_template_statement: 'Progress copy module only. Not emitted by runtime today.
 
-description: >
-  Normie-friendly phase labels for chat and Workbench activity stream during a daily word
-  guessing Game Pack build.
-
-non_template_statement: >
-  Progress copy module only. Not emitted by runtime today.
-
+  '
 source_phase_owner: game.word-daily
-
 applies_to:
-  - game.word-daily
-
+- game.word-daily
 inputs:
-  - current_phase_id: from game.word-daily build_phases
-  - recovery_active: boolean
-
+- current_phase_id: from game.word-daily build_phases
+- recovery_active: boolean
 outputs:
-  - activity_title: short string for feed
-  - activity_message: one sentence for feed or chat ack
-
+- activity_title: short string for feed
+- activity_message: one sentence for feed or chat ack
 guidance:
-  - "Avoid internal words: scaffold, template_kind, OpenRouter, kit_id"
-  - "Use word-game plain language"
-  - "Phase ids and order come from source_phase_owner build_phases only"
-
+- 'Avoid internal words: scaffold, template_kind, OpenRouter, kit_id'
+- Use word-game plain language
+- Phase ids and order come from source_phase_owner build_phases only
 validation_notes:
-  - Each mapped phase id exists on source_phase_owner build_phases
-  - Each phase has a unique normie message
-
+- Each mapped phase id exists on source_phase_owner build_phases
+- Each phase has a unique normie message
 risk_notes:
-  - Over-long messages clutter activity stream
-
+- Over-long messages clutter activity stream
 phase_message_map:
   phase.understand:
-    title: "Getting your word game idea"
-    message: "I'm turning your description into a daily word guessing game plan."
+    title: Getting the idea
+    message: Turning your description into a build plan.
   phase.compose:
-    title: "Planning the game pieces"
-    message: "I'm lining up the grid, keyboard, and letter feedback for your word puzzle."
+    title: Planning pieces
+    message: Lining up mechanics and UI contracts.
   phase.generate:
-    title: "Building your word game"
-    message: "I'm creating the custom code for your daily word game preview."
+    title: Building the game
+    message: Creating custom code for preview.
   phase.validate:
-    title: "Checking the word game"
-    message: "I'm making sure guesses, feedback, and the daily word behave correctly."
+    title: Checking rules
+    message: Verifying core loop and state behave correctly.
   phase.preview:
-    title: "Opening preview"
-    message: "Your word guessing game preview is almost ready in the Workbench."
+    title: Opening preview
+    message: Preview is almost ready.
   phase.recover:
-    title: "Polishing the word game"
-    message: "I noticed a small feedback issue and I'm fixing it before showing the preview."
-
+    title: Polishing
+    message: Fixing a small issue before preview.
 technical_internal_notes:
-  - "Map phase.generate to LLM scaffold step internally when wired"
-  - "phase.compose corresponds to BuildRecipe assembly — not user-visible"
-  - "phase.recover triggers recovery playbook runner — cap attempts per pack.game recovery_policy"
-  - "Do not expose module ids (mechanic.letter-feedback) in normie messages"
+- Map phase.generate to LLM scaffold step internally when wired
+- phase.compose corresponds to BuildRecipe assembly — not user-visible
+- phase.recover triggers recovery playbook runner — cap attempts per pack.game recovery_policy
+- Do not expose module ids (mechanic.letter-feedback) in normie messages

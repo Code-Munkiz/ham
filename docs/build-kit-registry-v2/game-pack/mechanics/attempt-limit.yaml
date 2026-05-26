@@ -3,66 +3,50 @@ id: mechanic.attempt-limit
 kind: mechanic
 name: Attempt limit tracking
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Enforces a fixed maximum number of guesses and tracks remaining attempts for a word guessing game.
+non_template_statement: 'Attempt counter guidance only.
 
-description: >
-  Enforces a fixed maximum number of guesses and tracks remaining attempts for a word
-  guessing game.
-
-non_template_statement: >
-  Attempt counter guidance only.
-
+  '
 applies_to:
-  - game.word-daily
-  - tag:word-daily
-
+- game.word-daily
+- tag:word-daily
 depends_on:
-  - mechanic.guess-grid
-
+- mechanic.guess-grid
 provides:
-  - attempt_limit_state
-
+- attempt_limit_state
 binds_components:
-  - component.word-grid
-
+- component.word-grid
 inputs:
-  - max_attempts: number — default 6
-  - guesses_used: number
-
+- max_attempts: number — default 6
+- guesses_used: number
 outputs:
-  - attemptsRemaining: number
-  - attemptsExhausted: boolean
-
+- attemptsRemaining: number
+- attemptsExhausted: boolean
 guidance:
-  - "Increment guesses_used on each valid submit"
-  - "attemptsExhausted when guesses_used >= max_attempts and not won"
-  - "Show attempts remaining subtly in UI optional"
-
+- Increment guesses_used on each valid submit
+- attemptsExhausted when guesses_used >= max_attempts and not won
+- Show attempts remaining subtly in UI optional
 validation_notes:
-  - guesses_used <= max_attempts
-  - No submit after attempts exhausted unless won on last row
-
+- guesses_used <= max_attempts
+- No submit after attempts exhausted unless won on last row
 risk_notes:
-  - Off-by-one allows seventh guess
-
+- Off-by-one allows seventh guess
 state_model:
   fields:
-    - name: guessesUsed
-      type: number
-    - name: maxAttempts
-      type: number
+  - name: guessesUsed
+    type: number
+  - name: maxAttempts
+    type: number
   events:
-    - consume_attempt
-    - reset_attempts
-
+  - consume_attempt
+  - reset_attempts
 common_failure_modes:
-  - "Seventh guess accepted"
-  - "Loss not triggered when attempts exhausted"
-
+- Seventh guess accepted
+- Loss not triggered when attempts exhausted
 test_ideas:
-  - "Six guesses max with default settings"
-  - "Win on final attempt still counts as success"
-
+- Six guesses max with default settings
+- Win on final attempt still counts as success
 reusable_across:
-  - game.word-daily
+- game.word-daily

@@ -3,68 +3,52 @@ id: mechanic.level-progression
 kind: mechanic
 name: Level progression
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Advances rounds or levels when score or word targets are met; loads new letter pools.
+non_template_statement: 'Progression guidance only. Not a cloud save service.
 
-description: >
-  Advances rounds or levels when score or word targets are met; loads new letter pools.
-
-non_template_statement: >
-  Progression guidance only. Not a cloud save service.
-
+  '
 applies_to:
-  - game.word-builder
-  - tag:word-builder
-
+- game.word-builder
+- tag:word-builder
 depends_on:
-  - mechanic.word-builder-scoring
-  - mechanic.hint-reveal-lite
-
+- mechanic.word-builder-scoring
+- mechanic.hint-reveal-lite
 provides:
-  - level_progression_state
-
+- level_progression_state
 binds_components:
-  - component.word-score-display
-
+- component.word-score-display
 inputs:
-  - target_score: number | null
-  - target_word_count: number | null
-  - max_levels: number
-
+- target_score: number | null
+- target_word_count: number | null
+- max_levels: number
 outputs:
-  - currentLevel: number
-  - wordsFoundThisLevel: number
-
+- currentLevel: number
+- wordsFoundThisLevel: number
 guidance:
-  - "Advance level when target score or word count reached"
-  - "Reset pool and slots on level advance"
-  - "Preserve total score across levels unless user overrides"
-  - "Local-only progression for MVP"
-
+- Advance level when target score or word count reached
+- Reset pool and slots on level advance
+- Preserve total score across levels unless user overrides
 validation_notes:
-  - validator.word-builder-completion
-
+- validator.word-builder-completion
 risk_notes:
-  - Level advances without meeting target
-  - Pool not reset on level change
-
+- Level advances without meeting target
+- Pool not reset on level change
 state_model:
   fields:
-    - name: currentLevel
-      type: number
-    - name: wordsFoundThisLevel
-      type: number
+  - name: currentLevel
+    type: number
+  - name: wordsFoundThisLevel
+    type: number
   events:
-    - advance_level
-    - reset_level_progress
-
+  - advance_level
+  - reset_level_progress
 common_failure_modes:
-  - "Stuck on same level after target met"
-  - "Level index exceeds max_levels"
-
+- Stuck on same level after target met
+- Level index exceeds max_levels
 test_ideas:
-  - "Target word count triggers advance"
-  - "New pool loads on advance"
-
+- Target word count triggers advance
+- New pool loads on advance
 reusable_across:
-  - game.word-builder
+- game.word-builder

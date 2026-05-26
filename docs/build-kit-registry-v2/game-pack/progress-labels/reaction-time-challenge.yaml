@@ -3,64 +3,52 @@ id: progress.reaction-time-challenge
 kind: progress_label
 name: Reaction time challenge build progress
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Normie-friendly phase labels for chat and Workbench activity stream during a reaction-time challenge Game Pack build.
+non_template_statement: 'Progress copy module only. Not emitted by runtime today.
 
-description: >
-  Normie-friendly phase labels for chat and Workbench activity stream during a
-  reaction-time challenge Game Pack build.
-
-non_template_statement: >
-  Progress copy module only. Not emitted by runtime today.
-
+  '
 source_phase_owner: game.reaction-time-challenge
-
 applies_to:
-  - game.reaction-time-challenge
-  - tag:reaction-time-challenge
-
+- game.reaction-time-challenge
+- tag:reaction-time-challenge
 inputs:
-  - current_phase_id: from game.reaction-time-challenge build_phases
-  - recovery_active: boolean
-
+- current_phase_id: from game.reaction-time-challenge build_phases
+- recovery_active: boolean
 outputs:
-  - activity_title: short string for feed
-  - activity_message: one sentence for feed or chat ack
-
+- activity_title: short string for feed
+- activity_message: one sentence for feed or chat ack
 guidance:
-  - "Avoid internal words: scaffold, template_kind, OpenRouter, kit_id"
-  - "Use reaction challenge plain language"
-  - "Phase ids and order come from source_phase_owner build_phases only"
-
+- 'Avoid internal words: scaffold, template_kind, OpenRouter, kit_id'
+- Use reaction challenge plain language
+- Phase ids and order come from source_phase_owner build_phases only
 validation_notes:
-  - Each mapped phase id exists on source_phase_owner build_phases
-  - Each phase has a unique normie message
-
+- Each mapped phase id exists on source_phase_owner build_phases
+- Each phase has a unique normie message
 risk_notes:
-  - Over-long messages clutter activity stream
-
+- Over-long messages clutter activity stream
 phase_message_map:
   phase.understand:
-    title: "Getting your reaction game idea"
-    message: "Turning your description into a wait-and-click reaction challenge plan."
+    title: Getting the idea
+    message: Turning your description into a build plan.
   phase.compose:
-    title: "Planning the game pieces"
-    message: "Lining up wait/signal timing, false starts, and score tracking."
+    title: Planning pieces
+    message: Lining up mechanics and UI contracts.
   phase.generate:
-    title: "Building your reaction game"
-    message: "Creating custom code for your reaction challenge preview."
+    title: Building the game
+    message: Creating custom code for preview.
   phase.validate:
-    title: "Checking the reaction rules"
-    message: "Verifying signal delay, false starts, timing, and best score."
+    title: Checking rules
+    message: Verifying core loop and state behave correctly.
   phase.preview:
-    title: "Opening your reaction game preview"
-    message: "Your reaction challenge is almost ready to play."
+    title: Opening preview
+    message: Preview is almost ready.
   phase.recover:
-    title: "Fixing a reaction timing issue"
-    message: "Correcting a wait, signal, or score tracking issue."
-
+    title: Polishing
+    message: Fixing a small issue before preview.
 technical_internal_notes:
-  - "Map phase.generate to LLM scaffold step internally when wired"
-  - "phase.compose corresponds to BuildRecipe assembly — not user-visible"
-  - "phase.recover triggers recovery playbook runner — cap attempts per pack.game recovery_policy"
-  - "Do not expose module ids (mechanic.reaction-state-machine) in normie messages"
+- Map phase.generate to LLM scaffold step internally when wired
+- phase.compose corresponds to BuildRecipe assembly — not user-visible
+- phase.recover triggers recovery playbook runner — cap attempts per pack.game recovery_policy
+- Do not expose module ids (mechanic.reaction-state-machine) in normie messages

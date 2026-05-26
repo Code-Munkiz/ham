@@ -3,66 +3,50 @@ id: validator.puzzle-seed-stability
 kind: validator
 name: Puzzle seed stability
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Verifies the same date seed or puzzle id selects the same puzzle within a session and across reloads (MVP deterministic behavior).
+non_template_statement: 'Conceptual seed stability check. Not executable until a future validator runner exists.
 
-description: >
-  Verifies the same date seed or puzzle id selects the same puzzle within a session and
-  across reloads (MVP deterministic behavior).
-
-non_template_statement: >
-  Conceptual seed stability check. Not executable until a future validator runner exists.
-
+  '
 applies_to:
-  - game.daily-puzzle-grid
-  - tag:daily-puzzle-grid
-
+- game.daily-puzzle-grid
+- tag:daily-puzzle-grid
 depends_on:
-  - mechanic.puzzle-seed
-
+- mechanic.puzzle-seed
 validates_modules:
-  - mechanic.puzzle-seed
-
+- mechanic.puzzle-seed
 severity: blocking
 runner: conceptual
 check_type: conceptual
-
 inputs:
-  - seed_date: string
-  - puzzle_id: string | null
-  - allowed_puzzles: array
-  - runs: number — default 2
-
+- seed_date: string
+- puzzle_id: string | null
+- allowed_puzzles: array
+- runs: number — default 2
 outputs:
-  - pass | fail
-
+- pass | fail
 guidance:
-  - "Same seed_date + same puzzle list → same selectedPuzzleId"
-  - "Free-play puzzle_id selects stable puzzle"
-  - "dev_override_puzzle_id only when test flag enabled"
-  - "No network fetch for seed or puzzles"
-
+- Same seed_date + same puzzle list → same selectedPuzzleId
+- Free-play puzzle_id selects stable puzzle
+- dev_override_puzzle_id only when test flag enabled
 validation_notes:
-  - Run after puzzle-seed init wired
-  - Does not execute at runtime today
-
+- Run after puzzle-seed init wired
+- Does not execute at runtime today
 risk_notes:
-  - Timezone drift changes effective seed mid-day
+- Timezone drift changes effective seed mid-day
+validation_goal: 'Daily and free-play puzzle selection is stable and deterministic.
 
-validation_goal: >
-  Daily and free-play puzzle selection is stable and deterministic.
-
+  '
 pass_conditions:
-  - "Repeated init with same seed picks same puzzle"
-  - "Override ignored without test flag"
-  - "puzzle_id mode stable across reloads"
-
+- Repeated init with same seed picks same puzzle
+- Override ignored without test flag
+- puzzle_id mode stable across reloads
 fail_conditions:
-  - "Puzzle changes between reloads for same seed"
-  - "Random puzzle each mount without explicit non-daily mode"
+- Puzzle changes between reloads for same seed
+- Random puzzle each mount without explicit non-daily mode
+suggested_failure_message: 'The daily puzzle changed unexpectedly. I''ll stabilize the date-based seed selection.
 
-suggested_failure_message: >
-  The daily puzzle changed unexpectedly. I'll stabilize the date-based seed selection.
-
+  '
 recovery_playbooks:
-  - recovery.unstable-puzzle-seed
+- recovery.unstable-puzzle-seed

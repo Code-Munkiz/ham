@@ -3,64 +3,49 @@ id: mechanic.reaction-state-machine
 kind: mechanic
 name: Reaction game state machine
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: 'Core phase machine for a reaction challenge: idle, waiting, signal/go, result, and false-start states. Gates which inputs are accepted in each phase.'
+non_template_statement: 'State machine behavior recipe only. Not a checked-in React reducer file.
 
-description: >
-  Core phase machine for a reaction challenge: idle, waiting, signal/go, result,
-  and false-start states. Gates which inputs are accepted in each phase.
-
-non_template_statement: >
-  State machine behavior recipe only. Not a checked-in React reducer file.
-
+  '
 applies_to:
-  - game.reaction-time-challenge
-  - tag:reaction-time-challenge
-
+- game.reaction-time-challenge
+- tag:reaction-time-challenge
 depends_on: []
-
 provides:
-  - reaction_phase_state
-
+- reaction_phase_state
 binds_components:
-  - component.reaction-signal-panel
-  - component.reaction-round-controls
-
+- component.reaction-signal-panel
+- component.reaction-round-controls
 inputs:
-  - initial_phase: idle | waiting — default idle
-
+- initial_phase: idle | waiting — default idle
 outputs:
-  - phase: idle | waiting | signal | result | false_start
-  - canAcceptReactionInput: boolean
-  - canStartRound: boolean
-
+- phase: idle | waiting | signal | result | false_start
+- canAcceptReactionInput: boolean
+- canStartRound: boolean
 guidance:
-  - "Explicit enum/string phase; no ambiguous booleans alone"
-  - "Only signal phase accepts reaction timing input"
-  - "waiting phase detects false starts only"
-
+- Explicit enum/string phase; no ambiguous booleans alone
+- Only signal phase accepts reaction timing input
+- waiting phase detects false starts only
 validation_notes:
-  - validator.reaction-state-transitions
-
+- validator.reaction-state-transitions
 risk_notes:
-  - Phase stuck in waiting after signal fired
-  - Result phase still accepts timed input
-
+- Phase stuck in waiting after signal fired
+- Result phase still accepts timed input
 state_model:
   fields:
-    - name: phase
-      type: string
+  - name: phase
+    type: string
   events:
-    - start_round
-    - enter_waiting
-    - show_signal
-    - record_result
-    - false_start
-    - reset_round
-
+  - start_round
+  - enter_waiting
+  - show_signal
+  - record_result
+  - false_start
+  - reset_round
 common_failure_modes:
-  - "Phase never leaves waiting"
-  - "Multiple signal transitions without reset"
-
+- Phase never leaves waiting
+- Multiple signal transitions without reset
 reusable_across:
-  - game.reaction-time-challenge
+- game.reaction-time-challenge

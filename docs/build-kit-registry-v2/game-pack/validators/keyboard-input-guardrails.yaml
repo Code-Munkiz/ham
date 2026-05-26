@@ -3,66 +3,50 @@ id: validator.keyboard-input-guardrails
 kind: validator
 name: Keyboard input guardrails
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Verifies physical and on-screen keyboard input respects game state, ignores invalid keys, and does not double-fire handlers.
+non_template_statement: 'Conceptual keyboard check. Not executable until a future validator runner exists.
 
-description: >
-  Verifies physical and on-screen keyboard input respects game state, ignores invalid
-  keys, and does not double-fire handlers.
-
-non_template_statement: >
-  Conceptual keyboard check. Not executable until a future validator runner exists.
-
+  '
 applies_to:
-  - game.word-daily
-  - tag:word-daily
-
+- game.word-daily
+- tag:word-daily
 depends_on:
-  - mechanic.keyboard-input
-  - mechanic.win-loss-state
-
+- mechanic.keyboard-input
+- mechanic.win-loss-state
 validates_modules:
-  - mechanic.keyboard-input
-  - component.on-screen-keyboard
-
+- mechanic.keyboard-input
+- component.on-screen-keyboard
 severity: blocking
 runner: conceptual
 check_type: conceptual
-
 inputs:
-  - game_status: playing | won | lost
-  - key_events: simulated sequence
-
+- game_status: playing | won | lost
+- key_events: simulated sequence
 outputs:
-  - pass | fail
-
+- pass | fail
 guidance:
-  - "Letters append only when playing and row not full"
-  - "Backspace removes from current row only"
-  - "Enter triggers submit only when guess complete"
-  - "On-screen and physical paths share one handler"
-
+- Letters append only when playing and row not full
+- Backspace removes from current row only
+- Enter triggers submit only when guess complete
 validation_notes:
-  - Run after keyboard wiring
-  - Does not execute at runtime today
-
+- Run after keyboard wiring
+- Does not execute at runtime today
 risk_notes:
-  - Duplicate listeners on mount
+- Duplicate listeners on mount
+validation_goal: 'Keyboard input is safe, single-path, and blocked after terminal game state.
 
-validation_goal: >
-  Keyboard input is safe, single-path, and blocked after terminal game state.
-
+  '
 pass_conditions:
-  - "No input after win/loss"
-  - "Invalid keys ignored"
-  - "Single handler per key action"
-
+- No input after win/loss
+- Invalid keys ignored
+- Single handler per key action
 fail_conditions:
-  - "Keys append after game over"
-  - "Double letter on one keypress"
+- Keys append after game over
+- Double letter on one keypress
+suggested_failure_message: 'Keyboard input still works after the game ended. I''ll add input guardrails.
 
-suggested_failure_message: >
-  Keyboard input still works after the game ended. I'll add input guardrails.
-
+  '
 recovery_playbooks:
-  - recovery.invalid-guess-state
+- recovery.invalid-guess-state

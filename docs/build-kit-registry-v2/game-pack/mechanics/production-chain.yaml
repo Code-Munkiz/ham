@@ -3,66 +3,49 @@ id: mechanic.production-chain
 kind: mechanic
 name: Production chain
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Represents input-to-output production rules as data. Applies chain steps on turn advance or tick when inputs are available.
+non_template_statement: 'Production data model only. Not a hardcoded factory UI.
 
-description: >
-  Represents input-to-output production rules as data. Applies chain steps on turn
-  advance or tick when inputs are available.
-
-non_template_statement: >
-  Production data model only. Not a hardcoded factory UI.
-
+  '
 applies_to:
-  - game.resource-management-sim
-  - tag:resource-management-sim
-
+- game.resource-management-sim
+- tag:resource-management-sim
 depends_on:
-  - mechanic.resource-pool
-  - mechanic.capacity-limit
-
+- mechanic.resource-pool
+- mechanic.capacity-limit
 provides:
-  - production_chains
-
+- production_chains
 binds_components:
-  - component.production-panel
-
+- component.production-panel
 inputs:
-  - chains: array — id, inputs map, outputs map, rate or batch size
-  - auto_run: boolean — run each turn/tick when affordable
-
+- chains: array — id, inputs map, outputs map, rate or batch size
+- auto_run: boolean — run each turn/tick when affordable
 outputs:
-  - lastProduction: object | null
-
+- lastProduction: object | null
 guidance:
-  - "Chains as serializable data alongside sim definition"
-  - "Respect capacity limits on outputs"
-  - "Consume inputs atomically per chain step"
-  - "Show active chains and last output in production panel"
-
+- Chains as serializable data alongside sim definition
+- Respect capacity limits on outputs
+- Consume inputs atomically per chain step
 validation_notes:
-  - validator.production-chain-consistency
-
+- validator.production-chain-consistency
 risk_notes:
-  - Partial input consumption leaves inconsistent pool
-
+- Partial input consumption leaves inconsistent pool
 state_model:
   fields:
-    - name: chains
-      type: array
-    - name: lastProduction
-      type: object
+  - name: chains
+    type: array
+  - name: lastProduction
+    type: object
   events:
-    - run_production
-    - toggle_chain
-
+  - run_production
+  - toggle_chain
 common_failure_modes:
-  - "Chain references unknown resource ids"
-  - "Outputs exceed capacity without guard"
-
+- Chain references unknown resource ids
+- Outputs exceed capacity without guard
 test_ideas:
-  - "Affordable chain consumes inputs and grants outputs"
-  - "Insufficient inputs skip chain cleanly"
-
+- Affordable chain consumes inputs and grants outputs
+- Insufficient inputs skip chain cleanly
 reusable_across:
-  - game.resource-management-sim
+- game.resource-management-sim

@@ -3,63 +3,48 @@ id: validator.allocation-bounds
 kind: validator
 name: Allocation bounds
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Ensures allocation decisions cannot commit costs exceeding available resources or per-turn limits.
+non_template_statement: 'Conceptual allocation check. Not executable until a future validator runner exists.
 
-description: >
-  Ensures allocation decisions cannot commit costs exceeding available resources
-  or per-turn limits.
-
-non_template_statement: >
-  Conceptual allocation check. Not executable until a future validator runner exists.
-
+  '
 applies_to:
-  - game.resource-management-sim
-  - tag:resource-management-sim
-
+- game.resource-management-sim
+- tag:resource-management-sim
 depends_on:
-  - mechanic.allocation-decision
-  - mechanic.resource-pool
-
+- mechanic.allocation-decision
+- mechanic.resource-pool
 validates_modules:
-  - mechanic.allocation-decision
-  - component.allocation-control
-
+- mechanic.allocation-decision
+- component.allocation-control
 severity: blocking
 runner: conceptual
 check_type: conceptual
-
 inputs:
-  - allocations: object
-  - pool: object
-  - max_per_turn: number | null
-
+- allocations: object
+- pool: object
+- max_per_turn: number | null
 outputs:
-  - pass | fail
-
+- pass | fail
 guidance:
-  - "Committed allocation total cost <= available per resource"
-  - "When max_per_turn set, allocations in turn do not exceed cap"
-
+- Committed allocation total cost <= available per resource
+- When max_per_turn set, allocations in turn do not exceed cap
 validation_notes:
-  - Test over-budget click is rejected in preview
-
+- Test over-budget click is rejected in preview
 risk_notes:
-  - Double-submit spends resources twice
+- Double-submit spends resources twice
+validation_goal: 'Allocations respect pool balances and per-turn limits.
 
-validation_goal: >
-  Allocations respect pool balances and per-turn limits.
-
+  '
 pass_conditions:
-  - "Over-budget allocation rejected"
-  - "pendingCost matches slot costs before commit"
-
+- Over-budget allocation rejected
+- pendingCost matches slot costs before commit
 fail_conditions:
-  - "Allocation succeeds with insufficient resources"
-  - "Per-turn cap exceeded"
+- Allocation succeeds with insufficient resources
+- Per-turn cap exceeded
+suggested_failure_message: 'An allocation went through without enough resources. I''ll add bounds checks before commit.
 
-suggested_failure_message: >
-  An allocation went through without enough resources. I'll add bounds checks before commit.
-
+  '
 recovery_playbooks:
-  - recovery.broken-resource-accounting
+- recovery.broken-resource-accounting

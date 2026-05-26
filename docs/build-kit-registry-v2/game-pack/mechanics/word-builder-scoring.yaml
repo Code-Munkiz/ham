@@ -3,68 +3,52 @@ id: mechanic.word-builder-scoring
 kind: mechanic
 name: Word builder scoring
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Awards score for valid unique word submissions using deterministic rules.
+non_template_statement: 'Scoring guidance only. Not a leaderboard service.
 
-description: >
-  Awards score for valid unique word submissions using deterministic rules.
-
-non_template_statement: >
-  Scoring guidance only. Not a leaderboard service.
-
+  '
 applies_to:
-  - game.word-builder
-  - tag:word-builder
-
+- game.word-builder
+- tag:word-builder
 depends_on:
-  - mechanic.word-validation
-  - mechanic.submission-attempts
-
+- mechanic.word-validation
+- mechanic.submission-attempts
 provides:
-  - word_builder_score
-
+- word_builder_score
 binds_components:
-  - component.word-score-display
-
+- component.word-score-display
 inputs:
-  - word: string
-  - word_length: number
-  - base_points_per_letter: number — default 1
-
+- word: string
+- word_length: number
+- base_points_per_letter: number — default 1
 outputs:
-  - score: number
-  - lastPointsAwarded: number
-
+- score: number
+- lastPointsAwarded: number
 guidance:
-  - "Award points only on valid non-duplicate submission"
-  - "Default: points proportional to word length"
-  - "Update total score atomically with submission acceptance"
-  - "Show last points awarded in feedback"
-
+- Award points only on valid non-duplicate submission
+- 'Default: points proportional to word length'
+- Update total score atomically with submission acceptance
 validation_notes:
-  - validator.word-builder-scoring-consistency
-
+- validator.word-builder-scoring-consistency
 risk_notes:
-  - Invalid word adds score
-  - Duplicate submission adds score
-
+- Invalid word adds score
+- Duplicate submission adds score
 state_model:
   fields:
-    - name: score
-      type: number
-    - name: lastPointsAwarded
-      type: number
+  - name: score
+    type: number
+  - name: lastPointsAwarded
+    type: number
   events:
-    - award_points
-    - reset_score
-
+  - award_points
+  - reset_score
 common_failure_modes:
-  - "Score increments on invalid submit"
-  - "Negative score from bad math"
-
+- Score increments on invalid submit
+- Negative score from bad math
 test_ideas:
-  - "Valid unique word increases score"
-  - "Duplicate does not change score"
-
+- Valid unique word increases score
+- Duplicate does not change score
 reusable_across:
-  - game.word-builder
+- game.word-builder

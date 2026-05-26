@@ -3,65 +3,51 @@ id: validator.word-builder-completion
 kind: validator
 name: Word builder completion
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Verifies level completion and terminal result state fire at correct thresholds.
+non_template_statement: 'Conceptual completion check.
 
-description: >
-  Verifies level completion and terminal result state fire at correct thresholds.
-
-non_template_statement: >
-  Conceptual completion check.
-
+  '
 applies_to:
-  - game.word-builder
-  - tag:word-builder
-
+- game.word-builder
+- tag:word-builder
 depends_on:
-  - mechanic.level-progression
-  - mechanic.word-builder-result-state
-
+- mechanic.level-progression
+- mechanic.word-builder-result-state
 validates_modules:
-  - mechanic.level-progression
-  - mechanic.word-builder-result-state
-  - component.word-builder-results-panel
-
+- mechanic.level-progression
+- mechanic.word-builder-result-state
+- component.word-builder-results-panel
 severity: blocking
 runner: conceptual
 check_type: conceptual
-
 inputs:
-  - current_level: number
-  - max_levels: number
-  - target_met: boolean
-  - phase: string
-
+- current_level: number
+- max_levels: number
+- target_met: boolean
+- phase: string
 outputs:
-  - pass | fail
-
+- pass | fail
 guidance:
-  - "Level advances only when target met"
-  - "Complete phase locks submit and slots"
-  - "Results panel visible only in complete phase"
-
+- Level advances only when target met
+- Complete phase locks submit and slots
+- Results panel visible only in complete phase
 validation_notes:
-  - Test final level completion
-
+- Test final level completion
 risk_notes:
-  - Submit still active after complete
+- Submit still active after complete
+validation_goal: 'Progression and result phases transition correctly and lock input when complete.
 
-validation_goal: >
-  Progression and result phases transition correctly and lock input when complete.
-
+  '
 pass_conditions:
-  - "Target met advances level or completes session"
-  - "Complete phase disables input"
-
+- Target met advances level or completes session
+- Complete phase disables input
 fail_conditions:
-  - "Level skips without target"
-  - "Input active after complete"
+- Level skips without target
+- Input active after complete
+suggested_failure_message: 'Level or completion state is wrong. I''ll fix progression and result handling.
 
-suggested_failure_message: >
-  Level or completion state is wrong. I'll fix progression and result handling.
-
+  '
 recovery_playbooks:
-  - recovery.invalid-word-slot-state
+- recovery.invalid-word-slot-state

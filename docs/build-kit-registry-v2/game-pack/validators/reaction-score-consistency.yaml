@@ -3,64 +3,49 @@ id: validator.reaction-score-consistency
 kind: validator
 name: Reaction score consistency
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Ensures best reaction is minimum valid ms this session and average excludes false starts.
+non_template_statement: 'Validation rule definition only. Not executable until a future validator runner exists.
 
-description: >
-  Ensures best reaction is minimum valid ms this session and average excludes
-  false starts.
-
-non_template_statement: >
-  Validation rule definition only. Not executable until a future validator runner exists.
-
+  '
 applies_to:
-  - game.reaction-time-challenge
-  - tag:reaction-time-challenge
-
+- game.reaction-time-challenge
+- tag:reaction-time-challenge
 depends_on:
-  - mechanic.reaction-time-scoring
-
+- mechanic.reaction-time-scoring
 validates_modules:
-  - mechanic.reaction-time-scoring
-  - component.reaction-score-tracker
-  - component.reaction-results-panel
-
+- mechanic.reaction-time-scoring
+- component.reaction-score-tracker
+- component.reaction-results-panel
 severity: blocking
 runner: conceptual
 check_type: conceptual
-
 inputs:
-  - lastReactionMs: number | null
-  - bestReactionMs: number | null
-  - averageReactionMs: number | null
-  - validRoundHistory: array
-
+- lastReactionMs: number | null
+- bestReactionMs: number | null
+- averageReactionMs: number | null
+- validRoundHistory: array
 outputs:
-  - pass | fail with reason code
-
+- pass | fail with reason code
 guidance:
-  - "bestReactionMs === min(validRoundHistory)"
-  - "Average only over valid rounds"
-
+- bestReactionMs === min(validRoundHistory)
+- Average only over valid rounds
 validation_notes:
-  - Run after scoring handler edits
-
+- Run after scoring handler edits
 risk_notes:
-  - Best score increases on slower reaction
+- Best score increases on slower reaction
+validation_goal: 'Protect best/average score tracking.
 
-validation_goal: >
-  Protect best/average score tracking.
-
+  '
 pass_conditions:
-  - "Best updates only on lower valid reactionMs"
-  - "False starts excluded from average"
-
+- Best updates only on lower valid reactionMs
+- False starts excluded from average
 fail_conditions:
-  - "bestReactionMs greater than all valid rounds"
-  - "Average includes null or false-start rounds"
+- bestReactionMs greater than all valid rounds
+- Average includes null or false-start rounds
+suggested_failure_message: 'Best or average scores look inconsistent. I''ll fix score tracking rules.
 
-suggested_failure_message: >
-  Best or average scores look inconsistent. I'll fix score tracking rules.
-
+  '
 recovery_playbooks:
-  - recovery.invalid-reaction-timer
+- recovery.invalid-reaction-timer

@@ -3,86 +3,69 @@ id: recovery.unstable-puzzle-seed
 kind: recovery_playbook
 name: Fix unstable puzzle seed
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Repairs daily grid puzzles where the selected puzzle changes on reload for the same date seed or free-play id drifts unexpectedly.
+non_template_statement: 'Executable recovery strategy spec for a future runner. Not auto-applied today.
 
-description: >
-  Repairs daily grid puzzles where the selected puzzle changes on reload for the same
-  date seed or free-play id drifts unexpectedly.
-
-non_template_statement: >
-  Executable recovery strategy spec for a future runner. Not auto-applied today.
-
+  '
 max_attempts: 2
-
 applies_to:
-  - game.daily-puzzle-grid
-  - tag:daily-puzzle-grid
-
+- game.daily-puzzle-grid
+- tag:daily-puzzle-grid
 depends_on:
-  - mechanic.puzzle-seed
-  - validator.puzzle-seed-stability
-
+- mechanic.puzzle-seed
+- validator.puzzle-seed-stability
 repairs_validators:
-  - validator.puzzle-seed-stability
-
+- validator.puzzle-seed-stability
 inputs:
-  - failure_context: validator result
-  - current_source: seed selection logic (conceptual)
-
+- failure_context: validator result
+- current_source: seed selection logic (conceptual)
 outputs:
-  - patched_source: conceptual
-  - revalidation_target: validator.puzzle-seed-stability
-
+- patched_source: conceptual
+- revalidation_target: validator.puzzle-seed-stability
 guidance:
-  - "Use pure function of seed_date and puzzle list index"
-  - "Avoid Date.now() or random in daily selection path"
-  - "Persist selectedPuzzleId in session state for same-day reload"
-
+- Use pure function of seed_date and puzzle list index
+- Avoid Date.now() or random in daily selection path
+- Persist selectedPuzzleId in session state for same-day reload
 validation_notes:
-  - Re-run puzzle-seed-stability after repair
-
+- Re-run puzzle-seed-stability after repair
 risk_notes:
-  - Timezone handling still ambiguous after patch
-
+- Timezone handling still ambiguous after patch
 failure_signals:
-  - validator.puzzle-seed-stability fail
-  - Different puzzle after refresh same day
-  - Random puzzle on each mount in daily mode
-
+- validator.puzzle-seed-stability fail
+- Different puzzle after refresh same day
+- Random puzzle on each mount in daily mode
 diagnosis_steps:
-  - "Log seedKey and selectedPuzzleId on init"
-  - "Verify selection function is deterministic"
-  - "Check for random or time-based noise in seed path"
-
+- Log seedKey and selectedPuzzleId on init
+- Verify selection function is deterministic
+- Check for random or time-based noise in seed path
 steps:
-  - id: step.pure_seed_fn
-    action: pure_seed_fn
-    detail: "Deterministic index from seed_date hash"
-  - id: step.session_pin
-    action: session_pin
-    detail: "Optional sessionStorage pin for same-day reload"
-  - id: step.guard_override
-    action: guard_override
-    detail: "Dev override only with explicit test flag"
-  - id: step.re_validate
-    action: re_validate
-    detail: "Re-run validator.puzzle-seed-stability"
-
+- id: step.pure_seed_fn
+  action: pure_seed_fn
+  detail: Deterministic index from seed_date hash
+- id: step.session_pin
+  action: session_pin
+  detail: Optional sessionStorage pin for same-day reload
+- id: step.guard_override
+  action: guard_override
+  detail: Dev override only with explicit test flag
+- id: step.re_validate
+  action: re_validate
+  detail: Re-run validator.puzzle-seed-stability
 repair_strategy:
-  - action: pure_seed_fn
-    detail: "Stable daily selection"
-  - action: session_pin
-    detail: "Same-day reload consistency"
-  - action: guard_override
-    detail: "Prevent accidental override"
-  - action: re_validate
-    target: validator.puzzle-seed-stability
-
+- action: pure_seed_fn
+  detail: Stable daily selection
+- action: session_pin
+  detail: Same-day reload consistency
+- action: guard_override
+  detail: Prevent accidental override
+- action: re_validate
+  target: validator.puzzle-seed-stability
 guardrails:
-  - max_attempts: 2
-  - do_not: "Fetch puzzles from network"
-  - preserve: "Static puzzle list content"
+- max_attempts: 2
+- do_not: Fetch puzzles from network
+- preserve: Static puzzle list content
+user_facing_summary: 'I stabilized the daily puzzle so it stays the same for today''s challenge.
 
-user_facing_summary: >
-  I stabilized the daily puzzle so it stays the same for today's challenge.
+  '

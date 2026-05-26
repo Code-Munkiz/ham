@@ -3,75 +3,59 @@ id: recovery.broken-letter-pool
 kind: recovery_playbook
 name: Fix broken letter pool
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Repairs letter pool accounting when counts go negative or drift from slots.
+non_template_statement: 'Executable recovery strategy spec for a future runner. Not auto-applied today.
 
-description: >
-  Repairs letter pool accounting when counts go negative or drift from slots.
-
-non_template_statement: >
-  Executable recovery strategy spec for a future runner. Not auto-applied today.
-
+  '
 max_attempts: 2
-
 applies_to:
-  - game.word-builder
-  - tag:word-builder
-
+- game.word-builder
+- tag:word-builder
 depends_on:
-  - mechanic.letter-pool
-  - validator.letter-pool-integrity
-
+- mechanic.letter-pool
+- validator.letter-pool-integrity
 repairs_validators:
-  - validator.letter-pool-integrity
-
+- validator.letter-pool-integrity
 inputs:
-  - failure_context: validator result
-  - current_source: pool handler (conceptual)
-
+- failure_context: validator result
+- current_source: pool handler (conceptual)
 outputs:
-  - patched_source: conceptual
-  - revalidation_target: validator.letter-pool-integrity
-
+- patched_source: conceptual
+- revalidation_target: validator.letter-pool-integrity
 guidance:
-  - "Recompute counts from initial multiset minus slot usage"
-  - "Clamp counts at zero before apply"
-
+- Recompute counts from initial multiset minus slot usage
+- Clamp counts at zero before apply
 validation_notes:
-  - Re-run letter-pool-integrity after repair
-
+- Re-run letter-pool-integrity after repair
 risk_notes:
-  - Patch clears valid slot assignments
-
+- Patch clears valid slot assignments
 failure_signals:
-  - validator.letter-pool-integrity fail
-
+- validator.letter-pool-integrity fail
 diagnosis_steps:
-  - "Compare pool counts to slot letters"
-  - "Trace take/return handlers"
-
+- Compare pool counts to slot letters
+- Trace take/return handlers
 steps:
-  - id: step.recompute_counts
-    action: recompute_counts
-    detail: "Derive letterCounts from initial pool minus slots"
-  - id: step.clamp_non_negative
-    action: clamp_non_negative
-    detail: "Ensure no count below zero"
-  - id: step.re_validate
-    action: re_validate
-    detail: "Re-run validator.letter-pool-integrity"
-
+- id: step.recompute_counts
+  action: recompute_counts
+  detail: Derive letterCounts from initial pool minus slots
+- id: step.clamp_non_negative
+  action: clamp_non_negative
+  detail: Ensure no count below zero
+- id: step.re_validate
+  action: re_validate
+  detail: Re-run validator.letter-pool-integrity
 repair_strategy:
-  - action: recompute_counts
-    detail: "Fix pool drift"
-  - action: clamp_non_negative
-    detail: "Prevent negative counts"
-  - action: re_validate
-    target: validator.letter-pool-integrity
-
+- action: recompute_counts
+  detail: Fix pool drift
+- action: clamp_non_negative
+  detail: Prevent negative counts
+- action: re_validate
+  target: validator.letter-pool-integrity
 guardrails:
-  - max_attempts: 2
-  - preserve: "Current level and score unless corrupt"
+- max_attempts: 2
+- preserve: Current level and score unless corrupt
+user_facing_summary: 'I fixed the letter pool so used letters stay in sync with your slots.
 
-user_facing_summary: >
-  I fixed the letter pool so used letters stay in sync with your slots.
+  '

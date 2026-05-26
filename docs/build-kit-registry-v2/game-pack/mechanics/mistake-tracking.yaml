@@ -3,70 +3,53 @@ id: mechanic.mistake-tracking
 kind: mechanic
 name: Mistake tracking
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Optionally counts constraint violations or invalid moves against a configurable limit. Disabled by default; user may enable via soft override.
+non_template_statement: 'Mistake counter guidance only. Not a scoring or leaderboard module.
 
-description: >
-  Optionally counts constraint violations or invalid moves against a configurable limit.
-  Disabled by default; user may enable via soft override.
-
-non_template_statement: >
-  Mistake counter guidance only. Not a scoring or leaderboard module.
-
+  '
 applies_to:
-  - game.daily-puzzle-grid
-  - tag:daily-puzzle-grid
-
+- game.daily-puzzle-grid
+- tag:daily-puzzle-grid
 depends_on:
-  - mechanic.cell-interaction
-
+- mechanic.cell-interaction
 provides:
-  - mistake_tracking
-
+- mistake_tracking
 binds_components:
-  - component.puzzle-status-bar
-
+- component.puzzle-status-bar
 inputs:
-  - mistake_limit: number | null — null means unlimited
-  - enabled: boolean — default false
-
+- mistake_limit: number | null — null means unlimited
+- enabled: boolean — default false
 outputs:
-  - mistakeCount: number
-  - mistakesExceeded: boolean
-
+- mistakeCount: number
+- mistakesExceeded: boolean
 guidance:
-  - "Off by default; enable when user requests"
-  - "Increment on constraint violation or invalid move"
-  - "Show remaining mistakes in status bar when limited"
-  - "No backend persistence for MVP"
-
+- Off by default; enable when user requests
+- Increment on constraint violation or invalid move
+- Show remaining mistakes in status bar when limited
 validation_notes:
-  - Counter stays zero when disabled
-  - Does not increment on locked cell clicks
-
+- Counter stays zero when disabled
+- Does not increment on locked cell clicks
 risk_notes:
-  - False positives increment mistakes on benign toggles
-  - Limit reached but play continues
-
+- False positives increment mistakes on benign toggles
+- Limit reached but play continues
 state_model:
   fields:
-    - name: mistakeCount
-      type: number
-    - name: mistakesExceeded
-      type: boolean
+  - name: mistakeCount
+    type: number
+  - name: mistakesExceeded
+    type: boolean
   events:
-    - record_mistake
-    - reset_mistakes
-    - disable_tracking
-
+  - record_mistake
+  - reset_mistakes
+  - disable_tracking
 common_failure_modes:
-  - "Mistakes counted when tracking disabled"
-  - "Limit ignored after exceeded"
-
+- Mistakes counted when tracking disabled
+- Limit ignored after exceeded
 test_ideas:
-  - "Disabled tracking never increments"
-  - "Limit triggers mistakesExceeded"
-  - "Reset clears counter on new puzzle"
-
+- Disabled tracking never increments
+- Limit triggers mistakesExceeded
+- Reset clears counter on new puzzle
 reusable_across:
-  - game.daily-puzzle-grid
+- game.daily-puzzle-grid

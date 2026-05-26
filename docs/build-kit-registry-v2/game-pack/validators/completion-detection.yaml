@@ -3,67 +3,52 @@ id: validator.completion-detection
 kind: validator
 name: Constraint-based completion detection
 status: proposed
-schema_version: "0.1"
-version: "0.1.0-pilot"
+schema_version: '0.1'
+version: 0.1.0-pilot
+description: Verifies completion triggers only when all constraints satisfied, completion modal mounts, and grid interaction stops — not on mere full grid fill.
+non_template_statement: 'Conceptual completion check. Not executable until a future validator runner exists.
 
-description: >
-  Verifies completion triggers only when all constraints satisfied, completion modal
-  mounts, and grid interaction stops — not on mere full grid fill.
-
-non_template_statement: >
-  Conceptual completion check. Not executable until a future validator runner exists.
-
+  '
 applies_to:
-  - game.daily-puzzle-grid
-  - tag:daily-puzzle-grid
-
+- game.daily-puzzle-grid
+- tag:daily-puzzle-grid
 depends_on:
-  - mechanic.completion-check
-  - mechanic.constraint-rules
-
+- mechanic.completion-check
+- mechanic.constraint-rules
 validates_modules:
-  - mechanic.completion-check
-  - mechanic.constraint-rules
-  - component.completion-modal
-
+- mechanic.completion-check
+- mechanic.constraint-rules
+- component.completion-modal
 severity: blocking
 runner: conceptual
 check_type: conceptual
-
 inputs:
-  - solved_grid: object
-  - invalid_full_grid: object
-
+- solved_grid: object
+- invalid_full_grid: object
 outputs:
-  - pass | fail
-
+- pass | fail
 guidance:
-  - "Solved grid sets isComplete and shows modal"
-  - "Full but constraint-failing grid stays incomplete"
-  - "No further cell clicks after completion"
-
+- Solved grid sets isComplete and shows modal
+- Full but constraint-failing grid stays incomplete
+- No further cell clicks after completion
 validation_notes:
-  - Run after completion-check wired
-  - Does not execute at runtime today
-
+- Run after completion-check wired
+- Does not execute at runtime today
 risk_notes:
-  - Test grids may not cover all constraint types
+- Test grids may not cover all constraint types
+validation_goal: 'Puzzle completes only on constraint satisfaction with proper terminal UI.
 
-validation_goal: >
-  Puzzle completes only on constraint satisfaction with proper terminal UI.
-
+  '
 pass_conditions:
-  - "isComplete true only when allConstraintsSatisfied"
-  - "Completion modal visible on success"
-  - "Grid locked after complete"
-
+- isComplete true only when allConstraintsSatisfied
+- Completion modal visible on success
+- Grid locked after complete
 fail_conditions:
-  - "Complete before constraints satisfied"
-  - "Constraints satisfied but no modal"
-  - "Complete on fill-all without constraint pass"
+- Complete before constraints satisfied
+- Constraints satisfied but no modal
+- Complete on fill-all without constraint pass
+suggested_failure_message: 'The puzzle didn''t finish properly when rules were satisfied. I''ll fix completion detection.
 
-suggested_failure_message: >
-  The puzzle didn't finish properly when rules were satisfied. I'll fix completion detection.
-
+  '
 recovery_playbooks:
-  - recovery.bad-completion-check
+- recovery.bad-completion-check
