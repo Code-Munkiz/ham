@@ -22,6 +22,7 @@ from src.ham.build_registry.intent import (
     WORD_DAILY_APP_TYPE,
     CARD_DECK_TURN_BASED_APP_TYPE,
     REACTION_TIME_CHALLENGE_APP_TYPE,
+    RHYTHM_TAP_LITE_APP_TYPE,
     enrich_plan_metadata_with_registry_v2,
     select_registry_v2_app_type_for_prompt,
 )
@@ -427,6 +428,61 @@ _CROSS_EXCLUSION_PROMPTS = (
         "Build a reflex challenge where clicking too early counts as a false start and players can retry for a better score.",
         REACTION_TIME_CHALLENGE_APP_TYPE,
     ),
+    (
+        "Build a browser rhythm tap game where circles appear on beats and players press space at the right time for perfect/good/miss scores.",
+        RHYTHM_TAP_LITE_APP_TYPE,
+    ),
+    (
+        "Build a simple tap-the-beat game with timing windows, streaks, misses, and a final score.",
+        RHYTHM_TAP_LITE_APP_TYPE,
+    ),
+)
+
+
+_RHYTHM_TAP_LITE_POSITIVE_PROMPTS = (
+    "Build a browser rhythm tap game where circles appear on beats and players press space at the right time for perfect/good/miss scores.",
+    "Build a simple tap-the-beat game with timing windows, streaks, misses, and a final score.",
+    "Build a local rhythm challenge where cues appear in sequence and the player taps when each cue reaches the target.",
+    "Build a DOM rhythm game with beat prompts, combo scoring, and a play-again results screen.",
+    "Make a rhythm tap game with perfect good miss timing windows and combo streak tracking.",
+    "Build a browser game where beat cues appear in sequence and players tap for perfect or good timing scores.",
+    "Create a rhythm tap challenge with timing windows, combo streaks, and a results screen.",
+)
+
+_RHYTHM_TAP_LITE_NEGATIVE_PROMPTS = (
+    "Build a Pomodoro timer",
+    "Make a stopwatch app",
+    "Build a countdown timer app",
+    "Build a metronome",
+    "Build a music player",
+    "Build a karaoke lyric game",
+    "Build a typing speed test",
+    "Make a typing race with WPM",
+    "Build a reaction time test",
+    "Build a browser reaction-time game where the player waits for the screen to turn green, clicks as fast as possible, and sees their reaction time.",
+    "Build a medical rhythm assessment",
+    "Create a clinical accessibility assessment",
+    "Build a dashboard for music analytics",
+    "Make a gambling game with rhythm bets",
+    "Build a betting wagering game",
+    "Build a game with physics collisions",
+    "Build a rhythm app",
+    "Make a beat game",
+    "Build a timer",
+    "Click fast",
+    "Build a music app",
+    "Tap",
+)
+
+_RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVE_PROMPTS = (
+    "Build me a trivia quiz with a timer",
+    "Build an idle clicker game",
+    "Build me a memory card matching game",
+    "Build me a daily word guessing game",
+    "Build me a typing speed game",
+    "Build a reflex challenge where clicking too early counts as a false start and players can retry for a better score.",
+    "Build a simple turn-based card battle game with a draw pile, hand, discard pile, and health points.",
+    "Build a SaaS dashboard",
 )
 
 
@@ -556,6 +612,18 @@ class TestSelectRegistryV2AppTypeForPrompt:
     @pytest.mark.parametrize("prompt", _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVE_PROMPTS)
     def test_other_recipe_prompts_do_not_route_to_reaction_time_challenge_param(self, prompt: str):
         assert select_registry_v2_app_type_for_prompt(prompt) != REACTION_TIME_CHALLENGE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _RHYTHM_TAP_LITE_POSITIVE_PROMPTS)
+    def test_matches_rhythm_tap_lite_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) == RHYTHM_TAP_LITE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _RHYTHM_TAP_LITE_NEGATIVE_PROMPTS)
+    def test_rejects_non_rhythm_tap_lite_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != RHYTHM_TAP_LITE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVE_PROMPTS)
+    def test_other_recipe_prompts_do_not_route_to_rhythm_tap_lite_param(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != RHYTHM_TAP_LITE_APP_TYPE
 
     @pytest.mark.parametrize("prompt,expected", _CROSS_EXCLUSION_PROMPTS)
     def test_recipes_do_not_steal_each_other(self, prompt: str, expected: str):
@@ -1019,6 +1087,51 @@ class TestSelectRegistryV2AppTypeForPrompt:
             not in {REACTION_TIME_CHALLENGE_APP_TYPE, TRIVIA_TIMER_APP_TYPE}
         )
 
+    def test_typing_speed_prompt_still_routes_to_typing_not_rhythm(self):
+        prompt = "Build me a typing speed game"
+        assert select_registry_v2_app_type_for_prompt(prompt) == TYPING_SPEED_RACER_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != RHYTHM_TAP_LITE_APP_TYPE
+
+    def test_reaction_time_prompt_still_routes_to_reaction_not_rhythm(self):
+        prompt = (
+            "Build a browser reaction-time game where the player waits for the screen "
+            "to turn green, clicks as fast as possible, and sees their reaction time."
+        )
+        assert select_registry_v2_app_type_for_prompt(prompt) == REACTION_TIME_CHALLENGE_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != RHYTHM_TAP_LITE_APP_TYPE
+
+    def test_rhythm_prompt_does_not_route_to_other_recipes(self):
+        prompt = (
+            "Build a browser rhythm tap game where circles appear on beats and players "
+            "press space at the right time for perfect/good/miss scores."
+        )
+        assert select_registry_v2_app_type_for_prompt(prompt) == RHYTHM_TAP_LITE_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != REACTION_TIME_CHALLENGE_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != TYPING_SPEED_RACER_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != TRIVIA_TIMER_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != MEMORY_MATCH_APP_TYPE
+
+    def test_other_recipe_prompts_do_not_route_to_rhythm_tap_lite(self):
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a trivia quiz with a timer")
+            != RHYTHM_TAP_LITE_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a typing speed game")
+            == TYPING_SPEED_RACER_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt(
+                "Build a browser reaction-time game where the player waits for the screen "
+                "to turn green, clicks as fast as possible, and sees their reaction time."
+            )
+            == REACTION_TIME_CHALLENGE_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build a Pomodoro timer")
+            not in {RHYTHM_TAP_LITE_APP_TYPE, TRIVIA_TIMER_APP_TYPE}
+        )
+
 
 class TestEnrichPlanMetadataWithRegistryV2:
     def test_flag_disabled_does_not_add_registry_metadata(self, monkeypatch):
@@ -1136,6 +1249,18 @@ class TestEnrichPlanMetadataWithRegistryV2:
             (
                 "Build a browser reaction-time game where the player waits for the screen "
                 "to turn green, clicks as fast as possible, and sees their reaction time."
+            ),
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
+
+    def test_flag_disabled_rhythm_prompt_does_not_add_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            (
+                "Build a browser rhythm tap game where circles appear on beats and players "
+                "press space at the right time for perfect/good/miss scores."
             ),
         )
         assert "registry_v2_app_type" not in metadata
@@ -1267,6 +1392,19 @@ class TestEnrichPlanMetadataWithRegistryV2:
         assert metadata["template_kind"] == "generic"
         assert metadata["originated_from"] == "builder_chat_scaffold"
 
+    def test_flag_enabled_rhythm_prompt_adds_registry_metadata(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic", "originated_from": "builder_chat_scaffold"},
+            (
+                "Build a browser rhythm tap game where circles appear on beats and players "
+                "press space at the right time for perfect/good/miss scores."
+            ),
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        assert metadata["registry_v2_app_type"] == RHYTHM_TAP_LITE_APP_TYPE
+        assert metadata["template_kind"] == "generic"
+        assert metadata["originated_from"] == "builder_chat_scaffold"
+
     def test_flag_enabled_non_idle_prompt_leaves_registry_metadata_absent(self):
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "landing-page"},
@@ -1372,6 +1510,15 @@ class TestEnrichPlanMetadataWithRegistryV2:
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "generic"},
             "Build a Pomodoro timer",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "1"},
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
+
+    def test_flag_enabled_non_rhythm_prompt_leaves_registry_metadata_absent(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            "Build a metronome",
             env={"HAM_BUILD_REGISTRY_V2_ENABLED": "1"},
         )
         assert "registry_v2_app_type" not in metadata
@@ -1506,6 +1653,15 @@ class TestChatScaffoldSyntheticPlanMetadata:
         assert metadata.get("template_kind") == "generic"
         assert "registry_v2_app_type" not in metadata
 
+    def test_flag_disabled_rhythm_prompt_has_no_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = _synthetic_plan_metadata(
+            "Build a browser rhythm tap game where circles appear on beats and players "
+            "press space at the right time for perfect/good/miss scores."
+        )
+        assert metadata.get("template_kind") == "generic"
+        assert "registry_v2_app_type" not in metadata
+
     def test_flag_enabled_idle_prompt_adds_registry_metadata(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
         metadata = _synthetic_plan_metadata("build me an idle clicker game")
@@ -1589,6 +1745,15 @@ class TestChatScaffoldSyntheticPlanMetadata:
         )
         assert metadata.get("template_kind") == "generic"
         assert metadata.get("registry_v2_app_type") == REACTION_TIME_CHALLENGE_APP_TYPE
+
+    def test_flag_enabled_rhythm_prompt_adds_registry_metadata_synthetic(self, monkeypatch):
+        monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
+        metadata = _synthetic_plan_metadata(
+            "Build a browser rhythm tap game where circles appear on beats and players "
+            "press space at the right time for perfect/good/miss scores."
+        )
+        assert metadata.get("template_kind") == "generic"
+        assert metadata.get("registry_v2_app_type") == RHYTHM_TAP_LITE_APP_TYPE
 
     def test_flag_enabled_non_idle_prompt_has_no_registry_metadata(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
@@ -2186,6 +2351,68 @@ class TestEndToEndScaffoldMessages:
             project_id="proj_test",
             user_message=prompt,
             steps=[Step(title="Scaffold game", description="Create reaction time game files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(plan)[1]["content"]
+        assert "registry_v2_app_type" not in metadata
+        assert "Builder Kit context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" not in content
+
+    def test_flag_enabled_rhythm_prompt_produces_v2_context(self):
+        prompt = (
+            "Build a browser rhythm tap game where circles appear on beats and players "
+            "press space at the right time for perfect/good/miss scores."
+        )
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            prompt,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_rhythm_e2e",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message=prompt,
+            steps=[Step(title="Scaffold game", description="Create rhythm tap game files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(
+            plan,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )[1]["content"]
+        assert metadata["registry_v2_app_type"] == RHYTHM_TAP_LITE_APP_TYPE
+        assert "Build Registry v2 playbook context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" in content
+        assert "game.rhythm-tap-lite" in content
+        assert "mechanic.rhythm-round-state-machine" in content
+        assert "mechanic.rhythm-beat-sequence" in content
+        assert "mechanic.rhythm-timing-window" in content
+        assert "mechanic.rhythm-tap-input" in content
+        assert "mechanic.rhythm-accuracy-scoring" in content
+        assert "mechanic.rhythm-streak-combo" in content
+        assert "mechanic.rhythm-result-state" in content
+        assert "validator.rhythm-timing-window-bounds" in content
+        assert "Builder Kit context:" not in content
+        assert content.count("Builder Kit:") == 0
+
+    def test_flag_disabled_rhythm_prompt_produces_v1_context_only(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        prompt = (
+            "Build a browser rhythm tap game where circles appear on beats and players "
+            "press space at the right time for perfect/good/miss scores."
+        )
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            prompt,
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_rhythm_v1",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message=prompt,
+            steps=[Step(title="Scaffold game", description="Create rhythm tap game files")],
             planner_confidence="high",
             metadata=metadata,
         )

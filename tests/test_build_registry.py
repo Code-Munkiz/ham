@@ -954,12 +954,12 @@ class TestRhythmTapLiteRecipe:
             assert key in conflict_policy
             assert conflict_policy[key] is True
 
-    def test_rhythm_tap_lite_not_routed_in_intent_module(self):
+    def test_rhythm_tap_lite_routed_in_intent_module(self):
         import src.ham.build_registry.intent as intent_module
 
         source = Path(intent_module.__file__).read_text(encoding="utf-8")
-        assert "game.rhythm-tap-lite" not in source
-        assert "RHYTHM_TAP_LITE_APP_TYPE" not in source
+        assert "game.rhythm-tap-lite" in source
+        assert "RHYTHM_TAP_LITE_APP_TYPE" in source
 
     def test_existing_twelve_routed_recipes_still_compose_after_rhythm_tap_lite_added(
         self, game_pack_root: Path
