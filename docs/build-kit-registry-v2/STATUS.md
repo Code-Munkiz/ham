@@ -12,6 +12,7 @@ Practical snapshot of where Build Kit Registry v2 stands. For authoring rules se
 - **Default behavior remains v1** — when the flag is unset or false, Lane A uses existing Builder Kit JSON (`src/ham/data/builder_kits/`).
 - **No templates or starter source files** — recipes are generative playbooks only; HAM does not clone checked-in starter trees per kit.
 - **Adaptive policy fields on all Wave 1 app types** — `hard_constraints`, `soft_defaults`, `user_overridable`, `clarify_if_changed`, `out_of_scope_unless_explicit`, and `conflict_policy` document override precedence (schema only; not interpreted at runtime yet).
+- **Local reference checker exists** — `scripts/check_build_registry_references.py` audits pack references, duplicates, orphans, and render-budget headroom. **Local/manual only — not CI-blocking.** Current registry (14 recipes / 323 modules): **0 hard checker errors**, **5 render-near-budget warnings only** (exit 0). No registry YAML was mutated to address those warnings yet. See [REFERENCE_CHECKER_IMPLEMENTATION_PLAN.md](REFERENCE_CHECKER_IMPLEMENTATION_PLAN.md) and [WAVE_3_COMPLETION_CHECKPOINT.md](WAVE_3_COMPLETION_CHECKPOINT.md).
 
 ---
 
@@ -24,8 +25,10 @@ Practical snapshot of where Build Kit Registry v2 stands. For authoring rules se
 | **Game Pack** | [game-pack/](game-pack/) — **14 recipes** (all routed when flag on), **323 modules** |
 | **Outcome facts / evolution loop docs** | [OUTCOME_FACTS.md](OUTCOME_FACTS.md), [examples/outcome-facts/](examples/outcome-facts/), [examples/hermes-critique-prompt.md](examples/hermes-critique-prompt.md) |
 | **Validation script** | `scripts/validate_game_pack_registry.py` |
+| **Reference checker** | `scripts/check_build_registry_references.py` — local/manual drift audit; complements validate/compose; **not wired into CI** |
+| **Reference checker docs** | [REGISTRY_REFERENCE_CHECKER_PROPOSAL.md](REGISTRY_REFERENCE_CHECKER_PROPOSAL.md), [REFERENCE_CHECKER_IMPLEMENTATION_PLAN.md](REFERENCE_CHECKER_IMPLEMENTATION_PLAN.md) |
 | **Internal package** | `src/ham/build_registry/` (`loader`, `validate`, `compose`, `render`, `scaffold_context`, `intent`) |
-| **Tests** | `tests/test_build_registry.py` (71 cases), `tests/test_build_registry_scaffold_context.py`, `tests/test_builder_llm_scaffold_registry_context.py`, `tests/test_builder_llm_scaffold_registry_manual_smoke.py`, `tests/test_build_registry_intent.py` |
+| **Tests** | `tests/test_build_registry.py` (71 cases), `tests/test_build_registry_scaffold_context.py`, `tests/test_builder_llm_scaffold_registry_context.py`, `tests/test_builder_llm_scaffold_registry_manual_smoke.py`, `tests/test_build_registry_intent.py`, `tests/test_build_registry_reference_checker.py` (12 cases) |
 | **CI** | `.github/workflows/ci.yml` — warning-only `pytest tests/test_build_registry.py` + idle app-type validation (`continue-on-error: true`) |
 
 ---
@@ -50,6 +53,8 @@ Practical snapshot of where Build Kit Registry v2 stands. For authoring rules se
 | `game.deck-builder-lite` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow deck-building card game intent | ~10.0k chars | Conservative starter-deck/encounter/reward/deck-mutation routing; pitch-deck/flashcard/marketplace/gambling/dashboard/kanban/project/music/generic deck-builder prompts excluded; simple turn-based card battle routes to `game.card-deck-turn-based`; v1 fallback preserved |
 
 Fourteen recipe renders target the 12k default budget. All fourteen Game Pack recipes are routed behind `HAM_BUILD_REGISTRY_V2_ENABLED` when prompt intent clearly matches; v1 remains default when the flag is off.
+
+**Reference checker render-near-budget warnings (local run, no registry edits yet):** `game.daily-puzzle-grid` (11,351 chars), `game.reaction-time-challenge` (11,174), `game.resource-management-sim` (10,948), `game.word-builder` (11,232), `game.word-daily` (10,869). All are ≥90% of the 12k cap; none exceed budget.
 
 ---
 
@@ -80,6 +85,24 @@ Fourteen recipe renders target the 12k default budget. All fourteen Game Pack re
 ---
 
 ## 5. Validation commands
+
+```bash
+python3 scripts/check_build_registry_references.py \
+  --pack docs/build-kit-registry-v2/game-pack/registry-pack.yaml \
+  --check-orphans \
+  --check-render-budget
+```
+
+Reference checker notes:
+
+- **Local/manual** — run before landing registry edits; **not CI-blocking** (no workflow change yet).
+- **Current registry result:** 0 errors, 5 `render_near_budget` warnings, exit 0.
+- **Warnings only** — no registry YAML was compressed or trimmed to address near-budget recipes in the checker landing pass.
+- Optional flags: `--app-type`, `--strict`, `--warn-only`, `--json`.
+
+```bash
+pytest tests/test_build_registry_reference_checker.py -q
+```
 
 ```bash
 pytest tests/test_build_registry.py -q
@@ -209,9 +232,10 @@ Outcome facts format, manual example reports, and Hermes critique prompt are **a
 
 Possible next steps:
 
-1. **Manual outcome report** for deck-builder after routing lands (optional).
-2. **Consider CI ratchet later** if registry usage increases (today warning-only for idle app-type validation + registry tests)
-3. **Later:** outcome facts → Hermes critique report → proposed patch workflow (no auto-apply)
+1. **Optional render-budget trim pass** for the five near-budget recipes flagged by the reference checker (no mutation done yet).
+2. **Consider CI ratchet later** — reference checker remains local/manual today; `validate_game_pack_registry.py` + registry pytest stay warning-only in CI.
+3. **Wave 4 strategy/sim direction** before new recipe expansion — see [WAVE_3_COMPLETION_CHECKPOINT.md](WAVE_3_COMPLETION_CHECKPOINT.md).
+4. **Later:** outcome facts → Hermes critique report → proposed patch workflow (no auto-apply)
 
 Routing policy: [ROUTING_STRATEGY.md](ROUTING_STRATEGY.md).
 
@@ -223,6 +247,12 @@ Build Registry v2–related commits on `main` (newest first):
 
 | Commit | Subject |
 |--------|---------|
+| `4889a95d` | feat(builder): add build registry reference checker |
+| `552559e2` | docs(builder): add registry reference checker plan |
+| `25240bbb` | docs(builder): add wave 3 completion checkpoint |
+| `5a5d0864` | fix(builder): close deck builder generated quality gate |
+| `d5115e79` | fix(builder): fix deck builder routing gate prompt |
+| `a9cad352` | feat(builder): route deck builder recipe behind registry flag |
 | `cbac76c8` | feat(builder): route word builder prompts to registry v2 |
 | `d118fe34` | docs(builder): add word builder game recipe |
 | `ca8c2727` | feat(builder): route typing speed prompts to registry v2 |
@@ -273,5 +303,6 @@ Build Registry v2–related commits on `main` (newest first):
 - No auto-generated PRs from Hermes yet
 - No executable validator runners yet
 - No recovery runner yet
+- No reference checker CI enforcement yet (local script only)
 - No promotion of registry YAML from `docs/build-kit-registry-v2/` to `src/ham/data/` yet
 - No telemetry / outcome-facts capture implementation yet (ADR-0018 future phases)
