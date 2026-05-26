@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.starter-deck-non-empty
+kind: validator
+name: Starter deck non-empty
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Starter seed yields non-empty draw pile at run start.
+non_template_statement: Validator spec only — not executable today.
+applies_to:
+  - game.deck-builder-lite
+  - tag:deck-builder-lite
+depends_on:
+  - mechanic.starter-deck-seed
+validates_modules:
+  - mechanic.starter-deck-seed
+severity: blocking
+runner: conceptual
+check_type: conceptual
+pass_conditions:
+  - "drawPile.length > 0 after new run"
+recovery_playbooks:
+  - recovery.broken-deck-builder-run-state

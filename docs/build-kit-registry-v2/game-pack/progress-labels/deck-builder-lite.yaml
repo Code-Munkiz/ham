@@ -1,0 +1,32 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: progress.deck-builder-lite
+kind: progress_label
+name: Deck builder lite progress
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Phase labels for deck builder lite builds.
+non_template_statement: Progress copy only — not emitted at runtime.
+source_phase_owner: game.deck-builder-lite
+applies_to:
+  - game.deck-builder-lite
+  - tag:deck-builder-lite
+phase_message_map:
+  phase.understand:
+    title: Plan
+    message: Planning run.
+  phase.compose:
+    title: Compose
+    message: Deck, encounters, rewards.
+  phase.generate:
+    title: Build
+    message: Generating preview.
+  phase.validate:
+    title: Check
+    message: Verifying deck flow.
+  phase.preview:
+    title: Preview
+    message: Ready to play.
+  phase.recover:
+    title: Fix
+    message: Repairing wiring.

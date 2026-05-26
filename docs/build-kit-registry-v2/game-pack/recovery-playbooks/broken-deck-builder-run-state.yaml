@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.broken-deck-builder-run-state
+kind: recovery_playbook
+name: Fix broken deck builder run state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Repair stuck phases, empty seed, or result/new-run wiring.
+non_template_statement: Recovery spec only — not auto-applied today.
+max_attempts: 2
+applies_to:
+  - game.deck-builder-lite
+  - tag:deck-builder-lite
+depends_on:
+  - mechanic.deck-builder-run-state-machine
+repairs_validators:
+  - validator.deck-builder-run-state-transitions
+  - validator.starter-deck-non-empty
+  - validator.deck-builder-run-result-detection
+steps:
+  - id: step.fix_run_flow
+    action: fix_run_flow
+    detail: "Wire phases and seed starter deck"

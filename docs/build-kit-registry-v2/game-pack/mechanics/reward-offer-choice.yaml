@@ -1,0 +1,20 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.reward-offer-choice
+kind: mechanic
+name: Reward offer choice
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: After win, offer 2–3 reward cards; player picks one to add.
+non_template_statement: Reward offer only — not a shop or marketplace.
+applies_to:
+  - game.deck-builder-lite
+  - tag:deck-builder-lite
+depends_on:
+  - mechanic.encounter-round-loop
+guidance:
+  - "Static pool; lock card play during reward phase"
+validation_notes:
+  - validator.reward-choice-integrity
+reusable_across:
+  - game.deck-builder-lite

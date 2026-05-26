@@ -1,0 +1,16 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.deck-builder-event-log
+kind: component_contract
+name: Deck builder event log
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Bounded log for card plays, encounter outcomes, reward picks.
+non_template_statement: Event log contract only.
+applies_to:
+  - game.deck-builder-lite
+  - tag:deck-builder-lite
+depends_on:
+  - mechanic.card-effect-resolution
+guidance:
+  - "Cap at last N events"

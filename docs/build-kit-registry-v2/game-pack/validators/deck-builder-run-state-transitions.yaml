@@ -1,0 +1,24 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.deck-builder-run-state-transitions
+kind: validator
+name: Deck builder run state transitions
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Run phases transition correctly; inputs gated per phase.
+non_template_statement: Validator spec only — not executable today.
+applies_to:
+  - game.deck-builder-lite
+  - tag:deck-builder-lite
+depends_on:
+  - mechanic.deck-builder-run-state-machine
+validates_modules:
+  - mechanic.deck-builder-run-state-machine
+  - mechanic.encounter-round-loop
+severity: blocking
+runner: conceptual
+check_type: conceptual
+pass_conditions:
+  - "Win → reward; result locks play until new run"
+recovery_playbooks:
+  - recovery.broken-deck-builder-run-state

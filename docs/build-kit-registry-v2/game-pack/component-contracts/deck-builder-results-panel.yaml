@@ -1,0 +1,16 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.deck-builder-results-panel
+kind: component_contract
+name: Deck builder results panel
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Run summary, deck stats, cards added, new run control.
+non_template_statement: Results panel only — not a leaderboard.
+applies_to:
+  - game.deck-builder-lite
+  - tag:deck-builder-lite
+depends_on:
+  - mechanic.deck-builder-result-state
+guidance:
+  - "Result phase only; New run resets state"

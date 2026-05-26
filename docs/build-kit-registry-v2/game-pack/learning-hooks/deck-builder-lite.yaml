@@ -1,0 +1,28 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: learning.deck-builder-lite
+kind: learning_hook
+name: Deck builder lite learning
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Hermes evolution signals for deck builder lite — not wired at runtime.
+non_template_statement: Learning hook schema only — Hermes deferred per ADR-0018.
+applies_to:
+  - game.deck-builder-lite
+  - tag:deck-builder-lite
+source_phase_owner: game.deck-builder-lite
+signal_categories:
+  - starter_deck_non_empty
+  - deck_zone_integrity
+  - reward_choice_integrity
+  - deck_mutation_consistency
+  - run_result_detection
+  - preview_boot_success
+outcome_fact_fields:
+  - preview_boot_success: boolean
+  - starter_deck_empty: boolean
+  - reward_pick_no_op: boolean
+  - run_result_missing: boolean
+  - validator_failures: array of validator id
+guidance:
+  - "Bounded preview/validator evidence only; no secrets in prompts"

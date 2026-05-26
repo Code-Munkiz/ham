@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.reward-choice-integrity
+kind: validator
+name: Reward choice integrity
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Reward offers present after win; pick mutates deck.
+non_template_statement: Validator spec only — not executable today.
+applies_to:
+  - game.deck-builder-lite
+  - tag:deck-builder-lite
+depends_on:
+  - mechanic.reward-offer-choice
+validates_modules:
+  - mechanic.reward-offer-choice
+severity: blocking
+runner: conceptual
+check_type: conceptual
+pass_conditions:
+  - "select_reward updates masterDeck"
+recovery_playbooks:
+  - recovery.empty-reward-pool

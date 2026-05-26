@@ -1,0 +1,21 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.deck-mutation
+kind: mechanic
+name: Deck mutation
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Add reward card to master deck; optional single remove/upgrade slot.
+non_template_statement: Deck mutation only — not trading or marketplace inventory.
+applies_to:
+  - game.deck-builder-lite
+  - tag:deck-builder-lite
+depends_on:
+  - mechanic.reward-offer-choice
+  - mechanic.starter-deck-seed
+guidance:
+  - "Persist pick to masterDeck; optional one remove/upgrade"
+validation_notes:
+  - validator.deck-mutation-consistency
+reusable_across:
+  - game.deck-builder-lite

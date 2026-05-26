@@ -10,9 +10,10 @@ description: >
   proposed modules for DOM-native casual games, starting with game.idle-incremental,
   game.trivia-timer, game.branching-narrative, game.memory-match, game.word-daily,
   game.daily-puzzle-grid, game.resource-management-sim, game.hangman-lite,
-  game.typing-speed-racer (Wave 2 routed), game.word-builder (Wave 2 schema-only),
+  game.typing-speed-racer (Wave 2 routed), game.word-builder (Wave 2 routed),
   game.card-deck-turn-based (Wave 3 routed), game.reaction-time-challenge
-  (Wave 3 routed), and game.rhythm-tap-lite (Wave 3 schema-only, not routed).
+  (Wave 3 routed), game.rhythm-tap-lite (Wave 3 routed), and game.deck-builder-lite
+  (Wave 3 schema-only, not routed).
   Used for cross-reference validation and future composer defaults — not loaded by HAM
   at runtime today.
 
@@ -36,6 +37,7 @@ module_index:
     - game.card-deck-turn-based
     - game.reaction-time-challenge
     - game.rhythm-tap-lite
+    - game.deck-builder-lite
   stack_kits:
     - stack.dom-game-minimal
   mechanics:
@@ -126,6 +128,12 @@ module_index:
     - mechanic.rhythm-streak-combo
     - mechanic.rhythm-round-progression
     - mechanic.rhythm-result-state
+    - mechanic.deck-builder-run-state-machine
+    - mechanic.starter-deck-seed
+    - mechanic.encounter-round-loop
+    - mechanic.reward-offer-choice
+    - mechanic.deck-mutation
+    - mechanic.deck-builder-result-state
   component_contracts:
     - component.game-shell
     - component.resource-counter
@@ -199,6 +207,11 @@ module_index:
     - component.rhythm-miss-panel
     - component.rhythm-round-controls
     - component.rhythm-results-panel
+    - component.encounter-action-bar
+    - component.reward-choice-panel
+    - component.run-status-bar
+    - component.deck-builder-event-log
+    - component.deck-builder-results-panel
   validators:
     - validator.no-negative-currency
     - validator.passive-income-tick
@@ -258,6 +271,11 @@ module_index:
     - validator.rhythm-score-consistency
     - validator.rhythm-input-cleanup
     - validator.rhythm-streak-bounds
+    - validator.deck-builder-run-state-transitions
+    - validator.starter-deck-non-empty
+    - validator.reward-choice-integrity
+    - validator.deck-mutation-consistency
+    - validator.deck-builder-run-result-detection
   recovery_playbooks:
     - recovery.stale-interval-or-bad-tick-loop
     - recovery.invalid-local-storage-json
@@ -302,6 +320,10 @@ module_index:
     - recovery.broken-rhythm-timing
     - recovery.invalid-rhythm-score
     - recovery.stale-rhythm-cue
+    - recovery.broken-deck-builder-run-state
+    - recovery.empty-reward-pool
+    - recovery.stuck-encounter-loop
+    - recovery.invalid-deck-mutation
   progress_labels:
     - progress.idle-incremental
     - progress.trivia-timer
@@ -316,6 +338,7 @@ module_index:
     - progress.card-deck-turn-based
     - progress.reaction-time-challenge
     - progress.rhythm-tap-lite
+    - progress.deck-builder-lite
   learning_hooks:
     - learning.idle-incremental
     - learning.trivia-timer
@@ -330,6 +353,7 @@ module_index:
     - learning.card-deck-turn-based
     - learning.reaction-time-challenge
     - learning.rhythm-tap-lite
+    - learning.deck-builder-lite
 
 compose_defaults:
   compose_order:

@@ -1,0 +1,21 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.empty-reward-pool
+kind: recovery_playbook
+name: Fix empty reward pool
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Repair missing reward offers after encounter wins.
+non_template_statement: Recovery spec only — not auto-applied today.
+max_attempts: 2
+applies_to:
+  - game.deck-builder-lite
+  - tag:deck-builder-lite
+depends_on:
+  - mechanic.reward-offer-choice
+repairs_validators:
+  - validator.reward-choice-integrity
+steps:
+  - id: step.populate_rewards
+    action: populate_rewards
+    detail: "Static pool with 3+ options"

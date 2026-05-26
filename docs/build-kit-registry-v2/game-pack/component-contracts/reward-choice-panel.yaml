@@ -1,0 +1,16 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.reward-choice-panel
+kind: component_contract
+name: Reward choice panel
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Shows 2–3 reward cards; player picks one to add.
+non_template_statement: Reward panel only — not a shop UI.
+applies_to:
+  - game.deck-builder-lite
+  - tag:deck-builder-lite
+depends_on:
+  - mechanic.reward-offer-choice
+guidance:
+  - "One pick then advance"

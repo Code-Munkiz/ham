@@ -1,0 +1,16 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.encounter-action-bar
+kind: component_contract
+name: Encounter action bar
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: End turn, draw, and encounter controls during battle.
+non_template_statement: Action bar contract only.
+applies_to:
+  - game.deck-builder-lite
+  - tag:deck-builder-lite
+depends_on:
+  - mechanic.encounter-round-loop
+guidance:
+  - "Disable outside encounter phase"

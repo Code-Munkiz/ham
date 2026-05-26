@@ -1,0 +1,20 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.starter-deck-seed
+kind: mechanic
+name: Starter deck seed
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Non-empty starter deck on new run; shuffle into draw pile.
+non_template_statement: Starter seed recipe only — not a deck asset file.
+applies_to:
+  - game.deck-builder-lite
+  - tag:deck-builder-lite
+depends_on:
+  - mechanic.deck-builder-run-state-machine
+guidance:
+  - "Seed masterDeck and draw pile before first draw"
+validation_notes:
+  - validator.starter-deck-non-empty
+reusable_across:
+  - game.deck-builder-lite

@@ -1,0 +1,19 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.stuck-encounter-loop
+kind: recovery_playbook
+name: Fix stuck encounter loop
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Repair encounter index not advancing after win.
+non_template_statement: Recovery spec only — not auto-applied today.
+max_attempts: 2
+applies_to:
+  - game.deck-builder-lite
+  - tag:deck-builder-lite
+depends_on:
+  - mechanic.encounter-round-loop
+steps:
+  - id: step.wire_encounter_win
+    action: wire_encounter_win
+    detail: "Win transitions to reward phase"

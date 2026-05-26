@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.deck-builder-run-result-detection
+kind: validator
+name: Deck builder run result detection
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Run completion shows result panel; new run resets state.
+non_template_statement: Validator spec only — not executable today.
+applies_to:
+  - game.deck-builder-lite
+  - tag:deck-builder-lite
+depends_on:
+  - mechanic.deck-builder-result-state
+validates_modules:
+  - mechanic.deck-builder-result-state
+severity: blocking
+runner: conceptual
+check_type: conceptual
+pass_conditions:
+  - "new run re-seeds deck and resets encounter index"
+recovery_playbooks:
+  - recovery.broken-deck-builder-run-state

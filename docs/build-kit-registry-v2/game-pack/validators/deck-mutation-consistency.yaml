@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.deck-mutation-consistency
+kind: validator
+name: Deck mutation consistency
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Add/remove/upgrade updates master deck consistently.
+non_template_statement: Validator spec only — not executable today.
+applies_to:
+  - game.deck-builder-lite
+  - tag:deck-builder-lite
+depends_on:
+  - mechanic.deck-mutation
+validates_modules:
+  - mechanic.deck-mutation
+severity: blocking
+runner: conceptual
+check_type: conceptual
+pass_conditions:
+  - "masterDeck includes selected reward id"
+recovery_playbooks:
+  - recovery.invalid-deck-mutation

@@ -1,0 +1,21 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.invalid-deck-mutation
+kind: recovery_playbook
+name: Fix invalid deck mutation
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Repair reward picks that do not update master deck.
+non_template_statement: Recovery spec only — not auto-applied today.
+max_attempts: 2
+applies_to:
+  - game.deck-builder-lite
+  - tag:deck-builder-lite
+depends_on:
+  - mechanic.deck-mutation
+repairs_validators:
+  - validator.deck-mutation-consistency
+steps:
+  - id: step.apply_reward
+    action: apply_reward
+    detail: "Add picked card to masterDeck"

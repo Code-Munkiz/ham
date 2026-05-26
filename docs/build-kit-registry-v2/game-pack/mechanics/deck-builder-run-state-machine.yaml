@@ -1,0 +1,19 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.deck-builder-run-state-machine
+kind: mechanic
+name: Deck builder run state machine
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Run phases idle/encounter/reward/result; gates input and deck mutations.
+non_template_statement: State machine recipe only — not a checked-in reducer.
+applies_to:
+  - game.deck-builder-lite
+  - tag:deck-builder-lite
+depends_on: []
+guidance:
+  - "Gate card play and reward pick by phase"
+validation_notes:
+  - validator.deck-builder-run-state-transitions
+reusable_across:
+  - game.deck-builder-lite

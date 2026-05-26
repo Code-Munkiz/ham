@@ -1,0 +1,247 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: game.deck-builder-lite
+kind: app_type
+name: Deck builder lite
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+
+description: >
+  DOM deck-building card game: starter deck, draw/hand/discard, encounters, rewards, run result.
+
+non_template_statement: >
+  Generative guidance only — no checked-in assets, marketplace UIs, or templates.
+
+legacy_v1_fallback: generic
+
+safety_constraints:
+  - no-network-egress-for-mvp
+  - no-eval
+  - no-user-accounts-for-mvp
+  - no-multiplayer-for-mvp
+  - no-real-money-economy
+  - dom-native-ui-only-for-mvp
+  - no-gambling-casino-betting-for-mvp
+  - no-nft-or-marketplace-for-mvp
+  - no-flashcard-study-deck-for-mvp
+  - no-pitch-deck-or-presentation-for-mvp
+  - no-dashboard-card-layout-for-mvp
+  - no-map-pathing-campaign-for-mvp
+
+applies_to:
+  - tag:deck-builder-lite
+  - tag:dom-casual-game
+
+inputs:
+  - user_prompt: natural language deck-builder theme and copy
+  - optional_encounter_count: number — default 3–5 encounters per run
+  - optional_reward_options: number — default 3 cards offered per reward
+  - optional_hand_limit: number — default 5–7
+
+outputs:
+  - runnable_vite_react_app: single-page DOM deck-building card game
+  - composed_build_recipe: ids of mechanics, contracts, validators, recovery modules
+  - normie_plan_summary: phased build description for chat/activity stream
+
+guidance:
+  - "Phases: idle → encounter → reward → result"
+  - "Starter deck, draw/play/discard, reward pick adds card, run summary"
+  - "DOM tap/keyboard only; no Canvas"
+
+validation_notes:
+  - Run composed validators after scaffold and deck/reward handler edits
+  - Preview must boot without console errors before success copy
+
+risk_notes:
+  - Confusion with pitch decks, flashcards, marketplaces, or turn-based battle-only prompts
+  - Empty starter deck or reward pool breaks run loop
+  - Reward choice not mutating canonical deck state
+  - Stealing prompts meant for game.card-deck-turn-based without reward/progression signals
+
+user_prompt_examples:
+  - "Build a browser deck-building card game where the player starts with a small deck, fights simple encounters, and chooses a new card reward after each win."
+  - "Build a local deck-builder where players draw a hand, play cards against a simple enemy, discard played cards, and add one reward card to their deck."
+  - "Build a tiny roguelite deck-building game with a starter deck, card rewards, simple battles, and a run result screen."
+  - "Build a DOM deck-building card game where each round offers three card rewards and the player picks one to improve their deck."
+
+negative_prompt_examples:
+  - "Build a pitch deck generator."
+  - "Build a slide deck builder."
+  - "Build a presentation deck."
+  - "Build a flashcard study deck."
+  - "Build a trading card marketplace."
+  - "Build an NFT card pack store."
+  - "Build a card collection marketplace."
+  - "Build a poker game."
+  - "Build a blackjack app."
+  - "Build a casino card game with chips and betting."
+  - "Build a dashboard with cards."
+  - "Build a kanban board with cards."
+  - "Build a card layout component library."
+  - "Build a construction planning deck."
+  - "Build a music deck app."
+
+intent_signals:
+  - "\\bdeck[- ]building\\b.{0,80}\\b(card|encounter|reward|battle|run)\\b"
+  - "\\b(starter|small)\\s+deck\\b.{0,80}\\b(reward|encounter|add\\s+card)\\b"
+  - "\\badd\\s+cards?\\s+to\\s+(the\\s+)?deck\\b.{0,80}\\b(reward|encounter|after)\\b"
+  - "\\broguelite\\b.{0,80}\\bdeck\\b.{0,80}\\b(card|reward|run)\\b"
+
+clarifying_questions:
+  - when: intent_confidence_low
+    ask: "How many encounters per run — default three to five?"
+  - when: reward_ambiguous
+    ask: "Add-only rewards, or also allow remove/upgrade between encounters?"
+  - when: encounter_ambiguous
+    ask: "Simple HP enemy battle, or score/challenge target?"
+
+default_assumptions:
+  - "8–12 card starter; 3–5 encounters; 3 reward options; hand limit 5–7"
+  - "Local DOM/React; linear encounters; reshuffle discard when draw empty"
+
+hard_constraints:
+  - no-real-money-economy
+  - no-template-cloning
+  - no-runtime-llm-generation-for-mvp
+  - no-external-api-for-mvp
+  - no-user-secrets-or-credentials
+  - preserve-safe-local-mvp-scope
+  - dom-native-ui-only-for-mvp
+  - no-gambling-casino-betting-for-mvp
+  - no-nft-or-marketplace-for-mvp
+  - no-flashcard-study-deck-for-mvp
+  - no-pitch-deck-or-presentation-for-mvp
+  - no-dashboard-card-layout-for-mvp
+  - no-map-pathing-campaign-for-mvp
+
+soft_defaults:
+  - static embedded card definitions
+  - linear encounter sequence without map
+  - add-one-card reward after encounter win
+  - optional single remove-or-upgrade slot between encounters
+  - defeat-enemy victory per encounter
+  - run summary with cards added count
+
+user_overridable:
+  - theme and visual tone
+  - card names and effect copy
+  - encounter count and enemy stats
+  - reward pool size and option count
+  - hand limit
+  - result copy tone
+
+clarify_if_changed:
+  - removing draw pile or discard pile entirely
+  - replacing deck-building with pitch or presentation deck
+  - adding marketplace, trading, or NFT card packs
+  - adding gambling, betting, or casino mechanics
+  - replacing card game with flashcard study deck
+  - adding map/pathing roguelite campaign graph
+  - adding multiplayer or accounts
+  - requiring Canvas or WebGL rendering
+
+out_of_scope_unless_explicit:
+  - user accounts or cloud sync
+  - backend persistence or leaderboards
+  - multiplayer or PvP
+  - gambling, NFT marketplace, flashcards, pitch decks, dashboard cards
+  - map pathing campaigns or live card APIs
+
+conflict_policy:
+  user_explicit_overrides_soft_defaults: true
+  safety_constraints_override_user_request: true
+  core_loop_conflicts_require_clarification: true
+  out_of_scope_items_require_explicit_request: true
+  fallback_to_v1_or_generic_when_recipe_no_longer_fits: true
+
+adaptive_policy_note: >
+  User prompt is source of truth. Hard constraints are non-negotiable; soft defaults
+  may be overridden. Excluded semantics (pitch deck, flashcards, marketplace, gambling,
+  dashboard cards) should clarify or fall back. Weak deck/card/collection terms alone
+  are not enough for future routing.
+
+stack_kit_id: stack.dom-game-minimal
+
+compose_order_ref: pack.game#compose_defaults.compose_order
+
+composed_modules:
+  stack_kit_id: stack.dom-game-minimal
+  mechanics:
+    - mechanic.deck-builder-run-state-machine
+    - mechanic.starter-deck-seed
+    - mechanic.deck-draw-pile
+    - mechanic.hand-state
+    - mechanic.discard-pile
+    - mechanic.encounter-round-loop
+    - mechanic.card-effect-resolution
+    - mechanic.opponent-challenge-state
+    - mechanic.reward-offer-choice
+    - mechanic.deck-mutation
+    - mechanic.deck-builder-result-state
+  component_contracts:
+    - component.game-shell
+    - component.card-zone-layout
+    - component.playable-card
+    - component.hand-panel
+    - component.opponent-status-panel
+    - component.encounter-action-bar
+    - component.reward-choice-panel
+    - component.deck-builder-event-log
+    - component.deck-builder-results-panel
+  validators:
+    - validator.deck-builder-run-state-transitions
+    - validator.starter-deck-non-empty
+    - validator.deck-zone-integrity
+    - validator.hand-size-bounds
+    - validator.draw-discard-consistency
+    - validator.reward-choice-integrity
+    - validator.deck-mutation-consistency
+    - validator.card-effect-resolution-order
+    - validator.deck-builder-run-result-detection
+  recovery_playbooks:
+    - recovery.broken-deck-builder-run-state
+    - recovery.empty-reward-pool
+    - recovery.stuck-encounter-loop
+    - recovery.invalid-deck-mutation
+  progress_labels: progress.deck-builder-lite
+  learning_hooks: learning.deck-builder-lite
+
+build_phases:
+  - id: phase.understand
+    title: Understand idea
+    order: 1
+    modules_used: [app_type]
+  - id: phase.compose
+    title: Compose modules
+    order: 2
+    modules_used: [mechanics, component_contracts]
+  - id: phase.generate
+    title: Generate code
+    order: 3
+    modules_used: [stack_kit_id, guidance]
+  - id: phase.validate
+    title: Validate rules
+    order: 4
+    modules_used: [validators]
+  - id: phase.preview
+    title: Preview
+    order: 5
+    modules_used: []
+  - id: phase.recover
+    title: Recover
+    order: 6
+    optional: true
+    modules_used: [recovery_playbooks]
+
+acceptance_criteria:
+  - "Game loads in preview without runtime console errors"
+  - "New run seeds non-empty starter deck and shuffled draw pile"
+  - "Player can draw into hand, play cards, and discard with effects applied"
+  - "Encounter win offers reward choices; selected card adds to deck"
+  - "Run ends with visible result summary and new run control"
+  - "UI readable on mobile-width viewport"
+
+out_of_scope:
+  - Multiplayer, accounts, leaderboards, backend
+  - Gambling, NFT/marketplace, flashcards, pitch decks, dashboard card UI
+  - Map/pathing campaigns, Canvas/physics, Web3 prizes

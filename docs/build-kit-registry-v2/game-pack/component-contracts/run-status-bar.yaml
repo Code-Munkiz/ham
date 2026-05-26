@@ -1,0 +1,27 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.run-status-bar
+kind: component_contract
+name: Run status bar
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: >
+  Shows encounter index, deck size, and cards added this run during play.
+non_template_statement: >
+  Status bar contract only. Not a dashboard analytics panel.
+applies_to:
+  - game.deck-builder-lite
+  - tag:deck-builder-lite
+depends_on:
+  - mechanic.deck-builder-run-state-machine
+provides:
+  - run_status_ui
+binds_mechanics:
+  - mechanic.encounter-round-loop
+  - mechanic.deck-mutation
+expected_props:
+  - encounterIndex: number
+  - deckSize: number
+  - cardsAddedThisRun: number
+guidance:
+  - "Compact HUD; hide during idle if separate start screen"

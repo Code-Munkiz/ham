@@ -7,8 +7,8 @@ Practical snapshot of where Build Kit Registry v2 stands. For authoring rules se
 ## 1. Current status
 
 - **Build Registry v2 exists and is tested** — loader, composer, renderer, opt-in scaffold wiring, and narrow prompt routing are in place.
-- **Game Pack has thirteen recipes** — **300 indexed modules** total.
-- **Thirteen Game Pack recipes are narrowly routable** behind `HAM_BUILD_REGISTRY_V2_ENABLED` when prompt intent clearly matches idle/incremental/clicker/tycoon, timed trivia/quiz game, branching/choice/story, memory card matching, daily word guessing / Wordle-style patterns, daily/grid/logic puzzle patterns, resource-management simulation game patterns, hangman / hidden-word / letter-guessing patterns, typing speed / WPM / typing challenge patterns, word-building / spelling / letter-pool patterns, turn-based card deck battle patterns (draw/hand/discard/turn/card-play), reaction-time challenge patterns (wait/signal/false-start/reaction-ms), or rhythm tap timing game patterns (beat/cue/timing-window/perfect-good-miss/combo/streak). **Wave 2 includes** **`game.daily-puzzle-grid`**, **`game.resource-management-sim`**, **`game.hangman-lite`**, **`game.typing-speed-racer`**, and **`game.word-builder`**. **Wave 3 includes** **`game.card-deck-turn-based`**, **`game.reaction-time-challenge`**, and **`game.rhythm-tap-lite`** (all schema + routing complete); see [CARD_DECK_AMBIGUITY_REVIEW.md](CARD_DECK_AMBIGUITY_REVIEW.md), [WAVE_3_POST_QUALITY_REPAIR_CHECKPOINT.md](WAVE_3_POST_QUALITY_REPAIR_CHECKPOINT.md), and [WAVE_3_PROGRESS_CHECKPOINT.md](WAVE_3_PROGRESS_CHECKPOINT.md).
+- **Game Pack has fourteen recipes** — **323 indexed modules** total.
+- **Thirteen Game Pack recipes are narrowly routable** behind `HAM_BUILD_REGISTRY_V2_ENABLED` when prompt intent clearly matches idle/incremental/clicker/tycoon, timed trivia/quiz game, branching/choice/story, memory card matching, daily word guessing / Wordle-style patterns, daily/grid/logic puzzle patterns, resource-management simulation game patterns, hangman / hidden-word / letter-guessing patterns, typing speed / WPM / typing challenge patterns, word-building / spelling / letter-pool patterns, turn-based card deck battle patterns (draw/hand/discard/turn/card-play), reaction-time challenge patterns (wait/signal/false-start/reaction-ms), or rhythm tap timing game patterns (beat/cue/timing-window/perfect-good-miss/combo/streak). **Wave 2 includes** **`game.daily-puzzle-grid`**, **`game.resource-management-sim`**, **`game.hangman-lite`**, **`game.typing-speed-racer`**, and **`game.word-builder`**. **Wave 3 routed recipes include** **`game.card-deck-turn-based`**, **`game.reaction-time-challenge`**, and **`game.rhythm-tap-lite`**. **`game.deck-builder-lite`** is authored schema-only (validates and composes; **not routed yet**). See [CARD_DECK_AMBIGUITY_REVIEW.md](CARD_DECK_AMBIGUITY_REVIEW.md), [DECK_BUILDER_LITE_READINESS_REVIEW.md](DECK_BUILDER_LITE_READINESS_REVIEW.md), [WAVE_3_POST_QUALITY_REPAIR_CHECKPOINT.md](WAVE_3_POST_QUALITY_REPAIR_CHECKPOINT.md), and [WAVE_3_PROGRESS_CHECKPOINT.md](WAVE_3_PROGRESS_CHECKPOINT.md).
 - **Default behavior remains v1** — when the flag is unset or false, Lane A uses existing Builder Kit JSON (`src/ham/data/builder_kits/`).
 - **No templates or starter source files** — recipes are generative playbooks only; HAM does not clone checked-in starter trees per kit.
 - **Adaptive policy fields on all Wave 1 app types** — `hard_constraints`, `soft_defaults`, `user_overridable`, `clarify_if_changed`, `out_of_scope_unless_explicit`, and `conflict_policy` document override precedence (schema only; not interpreted at runtime yet).
@@ -21,7 +21,7 @@ Practical snapshot of where Build Kit Registry v2 stands. For authoring rules se
 |-------|----------|
 | **ADRs** | [0016](../adr/0016-generative-build-kit-registry-v2.md) (registry design), [0017](../adr/0017-build-registry-v2-opt-in-scaffold-wiring.md) (opt-in scaffold wiring), [0018](../adr/0018-build-kit-evolution-loop-with-hermes.md) (future Hermes evolution loop) |
 | **Authoring Guide** | [AUTHORING_GUIDE.md](AUTHORING_GUIDE.md) |
-| **Game Pack** | [game-pack/](game-pack/) — **13 recipes** (all routed when flag on), **300 modules** |
+| **Game Pack** | [game-pack/](game-pack/) — **14 recipes** (13 routed when flag on; **`game.deck-builder-lite` schema-only**), **323 modules** |
 | **Outcome facts / evolution loop docs** | [OUTCOME_FACTS.md](OUTCOME_FACTS.md), [examples/outcome-facts/](examples/outcome-facts/), [examples/hermes-critique-prompt.md](examples/hermes-critique-prompt.md) |
 | **Validation script** | `scripts/validate_game_pack_registry.py` |
 | **Internal package** | `src/ham/build_registry/` (`loader`, `validate`, `compose`, `render`, `scaffold_context`, `intent`) |
@@ -47,8 +47,9 @@ Practical snapshot of where Build Kit Registry v2 stands. For authoring rules se
 | `game.card-deck-turn-based` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow turn-based card deck battle intent | ~11.0k chars | Conservative draw/hand/discard/turn/card-play routing; gambling/casino/marketplace/flashcard/pitch-deck/dashboard/credit-card/business-card/generic deck prompts excluded; memory-match flip-pair routes to `game.memory-match`; v1 fallback preserved |
 | `game.reaction-time-challenge` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow reaction-time / wait-signal / false-start / reaction-ms intent | ~11.2k chars | Conservative wait/signal/false-start/reaction-ms routing; Pomodoro/stopwatch/typing/rhythm/medical/dashboard/gambling/physics prompts excluded; weak timer/reaction/speed/button-only prompts excluded; v1 fallback preserved |
 | `game.rhythm-tap-lite` | Validated | Yes (narrow) | `HAM_BUILD_REGISTRY_V2_ENABLED` + narrow rhythm tap timing game intent | ~10.0k chars | Conservative beat/cue/timing-window/perfect-good-miss/combo/streak routing; Pomodoro/stopwatch/metronome/music-player/karaoke/typing/reaction-time/medical/dashboard/gambling/physics prompts excluded; weak tap/beat/rhythm/music/timer/click-only prompts excluded; v1 fallback preserved |
+| `game.deck-builder-lite` | Validated | **No** | Routing deferred — schema-only | ~10.0k chars | Starter deck, draw/hand/discard, encounter loop, card rewards, deck mutation, short run result; pitch-deck/flashcard/marketplace/gambling/dashboard/map-pathing negatives; distinct from turn-based battle-only prompts; v1 fallback preserved |
 
-Thirteen recipe renders target the 12k default budget.
+Fourteen recipe renders target the 12k default budget. **`game.deck-builder-lite`** validates and composes but is **not routed** behind `HAM_BUILD_REGISTRY_V2_ENABLED` until explicitly approved with intent tests.
 
 ---
 
@@ -207,7 +208,7 @@ Possible next steps:
 
 1. **Manual outcome report** for card-deck after routing lands (optional).
 2. **Consider CI ratchet later** if registry usage increases (today warning-only for idle app-type validation + registry tests)
-3. **Defer `game.deck-builder-lite`** until turn-based card recipe and routing prove stable
+3. **Route `game.deck-builder-lite` only after explicit approval** — schema authored; generated gate + conservative intent tests required before routing
 4. **Later:** outcome facts → Hermes critique report → proposed patch workflow (no auto-apply)
 
 Routing policy: [ROUTING_STRATEGY.md](ROUTING_STRATEGY.md).

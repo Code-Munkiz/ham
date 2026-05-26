@@ -1,0 +1,20 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.deck-builder-result-state
+kind: mechanic
+name: Deck builder result state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Run outcome summary, deck stats, and new run reset.
+non_template_statement: Result state only — not a leaderboard.
+applies_to:
+  - game.deck-builder-lite
+  - tag:deck-builder-lite
+depends_on:
+  - mechanic.deck-builder-run-state-machine
+guidance:
+  - "Result panel and new run reset all run state"
+validation_notes:
+  - validator.deck-builder-run-result-detection
+reusable_across:
+  - game.deck-builder-lite

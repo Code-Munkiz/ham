@@ -2,7 +2,7 @@
 
 **Status:** Non-runtime schema pilot only. **Schema version:** `0.1`
 
-This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: twelve routed Wave 1–3 recipes plus **`game.rhythm-tap-lite`** (Wave 3 schema-only, not routed). See [STATUS.md](../STATUS.md) for the full recipe list.
+This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: thirteen routed Wave 1–3 recipes plus **`game.deck-builder-lite`** (Wave 3 schema-only, not routed). See [STATUS.md](../STATUS.md) for the full recipe list.
 
 ## Root manifest
 
@@ -372,6 +372,36 @@ validators:   validator.rhythm-state-transitions, validator.rhythm-timing-window
 recovery:     recovery.stuck-rhythm-state, recovery.broken-rhythm-timing, recovery.invalid-rhythm-score, recovery.stale-rhythm-cue
 progress:     progress.rhythm-tap-lite
 learning:     learning.rhythm-tap-lite
+```
+
+**Note:** This recipe is **schema-only** today — not routed until explicitly approved.
+
+### `game.deck-builder-lite` (Wave 3 — schema-only, not routed)
+
+| Reason | Detail |
+|--------|--------|
+| **Fourteenth recipe shape** | Proves the pack supports DOM deck-building runs — distinct from turn-based battle-only and non-game “deck” meanings. |
+| **DOM-native deck UI** | Card zones, hand panel, encounter bar, reward choice, run status, event log, results panel — no Canvas for MVP. |
+| **Shared reuse** | Reuses `mechanic.deck-draw-pile`, `mechanic.hand-state`, `mechanic.discard-pile`, `mechanic.card-effect-resolution`, `mechanic.opponent-challenge-state`, and card-zone components from `game.card-deck-turn-based`. |
+| **Distinct mechanics** | Run state machine, starter deck seed, encounter loop, reward offer/choice, deck mutation, run result. |
+| **Explicit MVP bounds** | Local-only linear encounter run; add-card rewards; optional lightweight remove/upgrade; no map/pathing, marketplace, or accounts. |
+| **Routing** | Schema-only — not routed behind `HAM_BUILD_REGISTRY_V2_ENABLED` until explicitly approved. |
+
+### Conceptual composition — `game.deck-builder-lite`
+
+When a user says *"Build a browser deck-building card game where the player starts with a small deck, fights simple encounters, and chooses a new card reward after each win"*, a **future** composer would assemble:
+
+```txt
+registry_pack: pack.game
+schema_version: 0.1
+app_type:     game.deck-builder-lite
+stack_kit:    stack.dom-game-minimal
+mechanics:    mechanic.deck-builder-run-state-machine → mechanic.starter-deck-seed → mechanic.deck-draw-pile → mechanic.hand-state → mechanic.discard-pile → mechanic.encounter-round-loop → mechanic.card-effect-resolution → mechanic.opponent-challenge-state → mechanic.reward-offer-choice → mechanic.deck-mutation → mechanic.deck-builder-result-state
+contracts:    component.game-shell, component.card-zone-layout, component.playable-card, component.hand-panel, component.opponent-status-panel, component.encounter-action-bar, component.reward-choice-panel, component.deck-builder-event-log, component.deck-builder-results-panel
+validators:   validator.deck-builder-run-state-transitions, validator.starter-deck-non-empty, validator.deck-zone-integrity, validator.hand-size-bounds, validator.draw-discard-consistency, validator.reward-choice-integrity, validator.deck-mutation-consistency, validator.card-effect-resolution-order, validator.deck-builder-run-result-detection
+recovery:     recovery.broken-deck-builder-run-state, recovery.empty-reward-pool, recovery.stuck-encounter-loop, recovery.invalid-deck-mutation
+progress:     progress.deck-builder-lite
+learning:     learning.deck-builder-lite
 ```
 
 **Note:** This recipe is **schema-only** today — not routed until explicitly approved.

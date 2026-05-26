@@ -1,0 +1,21 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.encounter-round-loop
+kind: mechanic
+name: Encounter round loop
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Linear encounters; draw/play/discard in battle; advance index on win.
+non_template_statement: Encounter loop only — no map/pathing.
+applies_to:
+  - game.deck-builder-lite
+  - tag:deck-builder-lite
+depends_on:
+  - mechanic.deck-builder-run-state-machine
+  - mechanic.hand-state
+guidance:
+  - "Advance encounter index after reward pick"
+validation_notes:
+  - validator.deck-builder-run-state-transitions
+reusable_across:
+  - game.deck-builder-lite
