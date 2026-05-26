@@ -311,6 +311,29 @@ def _build_scaffold_messages(
     ]
 
 
+def _maybe_apply_quality_repair(
+    result: ScaffoldResult,
+    *,
+    plan: Plan,
+    api_key: str,
+    model: str,
+    scaffold_timeout: float,
+) -> ScaffoldResult:
+    from src.ham.scaffold_quality import maybe_repair_generated_scaffold
+
+    repaired = maybe_repair_generated_scaffold(
+        result,
+        plan=plan,
+        api_key=api_key,
+        model=model,
+        scaffold_timeout=scaffold_timeout,
+        base_system_prompt=_SCAFFOLD_SYSTEM_PROMPT,
+        parse_result=_parse_scaffold_result,
+        complete_chat=complete_chat_messages_openrouter,
+    )
+    return repaired
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -366,6 +389,13 @@ def generate_scaffold(
             timeout_sec=scaffold_timeout,
         )
         result = _parse_scaffold_result(raw)
+        result = _maybe_apply_quality_repair(
+            result,
+            plan=plan,
+            api_key=api_key,
+            model=model,
+            scaffold_timeout=scaffold_timeout,
+        )
         _LOG.info(
             "LLM scaffold produced %d file(s) for plan=%s project=%s workspace=%s model=%s",
             len(result.file_changes),
@@ -398,6 +428,13 @@ def generate_scaffold(
             timeout_sec=scaffold_timeout,
         )
         result2 = _parse_scaffold_result(raw2)
+        result2 = _maybe_apply_quality_repair(
+            result2,
+            plan=plan,
+            api_key=api_key,
+            model=model,
+            scaffold_timeout=scaffold_timeout,
+        )
         _LOG.info(
             "LLM scaffold (retry) produced %d file(s) for plan=%s project=%s workspace=%s",
             len(result2.file_changes),
