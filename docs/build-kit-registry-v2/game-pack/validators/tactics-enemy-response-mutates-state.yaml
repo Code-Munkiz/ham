@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.tactics-enemy-response-mutates-state
+kind: validator
+name: Tactics enemy response mutates state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Enemy phase performs move, attack, or explicit skip — not a no-op.
+non_template_statement: Validator spec only — not executable today.
+applies_to:
+  - game.turn-based-tactics-lite
+  - tag:turn-based-tactics-lite
+depends_on:
+  - mechanic.tactics-enemy-response
+  - mechanic.tactics-turn-loop
+validates_modules:
+  - mechanic.tactics-enemy-response
+severity: blocking
+runner: conceptual
+check_type: conceptual
+pass_conditions:
+  - "enemy turn returns to player phase after actions"
+  - "enemy action changes positions or HP when enemies remain"
+recovery_playbooks:
+  - recovery.tactics-stuck-turn-phase

@@ -1,0 +1,22 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.tactics-unit-roster
+kind: mechanic
+name: Tactics unit roster seed
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Seeded player and enemy units with id, side, position, HP, and defeated flag.
+non_template_statement: Unit roster recipe only — not prefab unit assets.
+applies_to:
+  - game.turn-based-tactics-lite
+  - tag:turn-based-tactics-lite
+depends_on:
+  - mechanic.tactics-grid-board-state
+provides:
+  - unit_roster
+guidance:
+  - "Non-empty rosters at battle start; sync positions with grid occupancy"
+validation_notes:
+  - validator.tactics-seeded-units-on-grid
+reusable_across:
+  - game.turn-based-tactics-lite

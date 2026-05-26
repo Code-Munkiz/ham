@@ -1,0 +1,24 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.tactics-missing-battle-result
+kind: recovery_playbook
+name: Fix missing battle result
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Repair win/loss not firing or restart not resetting battle state.
+non_template_statement: Recovery spec only — not auto-applied today.
+max_attempts: 2
+applies_to:
+  - game.turn-based-tactics-lite
+  - tag:turn-based-tactics-lite
+depends_on:
+  - mechanic.tactics-battle-result-state
+repairs_validators:
+  - validator.tactics-battle-result-detection
+steps:
+  - id: step.detect_result
+    action: detect_result
+    detail: "Check surviving sides after each action"
+  - id: step.wire_restart
+    action: wire_restart
+    detail: "New battle re-seeds grid and clears result"

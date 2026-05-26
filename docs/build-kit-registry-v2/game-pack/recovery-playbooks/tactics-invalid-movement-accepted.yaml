@@ -1,0 +1,21 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.tactics-invalid-movement-accepted
+kind: recovery_playbook
+name: Fix invalid movement accepted
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Repair moves that ignore range, bounds, or occupancy rules.
+non_template_statement: Recovery spec only — not auto-applied today.
+max_attempts: 2
+applies_to:
+  - game.turn-based-tactics-lite
+  - tag:turn-based-tactics-lite
+depends_on:
+  - mechanic.tactics-movement-range
+repairs_validators:
+  - validator.tactics-valid-movement-range
+steps:
+  - id: step.validate_move
+    action: validate_move
+    detail: "Reject out-of-range or occupied cells"

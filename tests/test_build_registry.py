@@ -160,6 +160,17 @@ EXPECTED_DECK_BUILDER_LITE_MECHANIC_ORDER = (
     "mechanic.deck-mutation",
 )
 
+EXPECTED_TURN_BASED_TACTICS_LITE_MECHANIC_ORDER = (
+    "mechanic.tactics-grid-board-state",
+    "mechanic.tactics-unit-roster",
+    "mechanic.tactics-selection-state",
+    "mechanic.tactics-attack-resolution",
+    "mechanic.tactics-movement-range",
+    "mechanic.tactics-turn-loop",
+    "mechanic.tactics-battle-result-state",
+    "mechanic.tactics-enemy-response",
+)
+
 WAVE_1_APP_TYPES = (
     "game.idle-incremental",
     "game.trivia-timer",
@@ -195,7 +206,7 @@ class TestHappyPath:
         pack = load_registry_pack(game_pack_root)
         assert pack.pack_id == "pack.game"
         assert pack.schema_version == "0.1"
-        assert len(pack.modules) == 323
+        assert len(pack.modules) == 349
 
     def test_validate_docs_game_pack(self, game_pack_root: Path):
         pack = load_registry_pack(game_pack_root)
@@ -1099,6 +1110,99 @@ class TestDeckBuilderLiteRecipe:
         assert card_deck.mechanic_ids == EXPECTED_CARD_DECK_TURN_BASED_MECHANIC_ORDER
         assert reaction.mechanic_ids == EXPECTED_REACTION_TIME_CHALLENGE_MECHANIC_ORDER
         assert rhythm.mechanic_ids == EXPECTED_RHYTHM_TAP_LITE_MECHANIC_ORDER
+
+
+class TestTurnBasedTacticsLiteRecipe:
+    def test_app_type_exists_in_game_pack(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        assert "game.turn-based-tactics-lite" in pack.modules
+        app = pack.module_data("game.turn-based-tactics-lite")
+        assert app.get("kind") == "app_type"
+
+    def test_compose_turn_based_tactics_lite(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        validate_registry_pack(pack)
+        recipe = compose_build_recipe(pack, "game.turn-based-tactics-lite")
+        assert recipe.app_type_id == "game.turn-based-tactics-lite"
+        assert recipe.stack_kit_id == "stack.dom-game-minimal"
+        assert recipe.mechanic_ids == EXPECTED_TURN_BASED_TACTICS_LITE_MECHANIC_ORDER
+
+    def test_render_turn_based_tactics_lite_includes_key_ids(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        recipe = compose_build_recipe(pack, "game.turn-based-tactics-lite")
+        rendered = render_playbook_context(recipe)
+        assert "game.turn-based-tactics-lite" in rendered
+        assert "stack.dom-game-minimal" in rendered
+        assert "mechanic.tactics-grid-board-state" in rendered
+        assert "mechanic.tactics-turn-loop" in rendered
+        assert "mechanic.tactics-enemy-response" in rendered
+        assert "mechanic.tactics-battle-result-state" in rendered
+        assert "validator.tactics-seeded-units-on-grid" in rendered
+        assert "validator.tactics-battle-result-detection" in rendered
+        assert "no-chess-checkers-go-for-mvp" in rendered
+        assert "no-city-builder-or-resource-sim-for-mvp" in rendered
+        assert "no-tower-defense-or-rts-for-mvp" in rendered
+
+    def test_render_turn_based_tactics_lite_under_default_budget(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        recipe = compose_build_recipe(pack, "game.turn-based-tactics-lite")
+        rendered = render_playbook_context(recipe)
+        assert len(rendered) <= 12_000
+        assert rendered.startswith("Build Kit Registry v2 — BuildRecipe\n")
+
+    def test_turn_based_tactics_lite_adaptive_policy_fields(self, game_pack_root: Path):
+        pack = load_registry_pack(game_pack_root)
+        app = pack.module_data("game.turn-based-tactics-lite")
+        for field in WAVE_1_ADAPTIVE_POLICY_LIST_FIELDS:
+            value = app.get(field)
+            assert isinstance(value, list), f"game.turn-based-tactics-lite: {field} must be a list"
+            assert value, f"game.turn-based-tactics-lite: {field} must be non-empty"
+
+        conflict_policy = app.get("conflict_policy")
+        assert isinstance(conflict_policy, dict)
+        for key in WAVE_1_CONFLICT_POLICY_KEYS:
+            assert key in conflict_policy
+            assert conflict_policy[key] is True
+
+    def test_turn_based_tactics_lite_not_routed_in_intent_module(self):
+        import src.ham.build_registry.intent as intent_module
+
+        source = Path(intent_module.__file__).read_text(encoding="utf-8")
+        assert "game.turn-based-tactics-lite" not in source
+
+    def test_existing_fourteen_routed_recipes_still_compose_after_tactics_lite_added(
+        self, game_pack_root: Path
+    ):
+        pack = load_registry_pack(game_pack_root)
+        validate_registry_pack(pack)
+        idle = compose_build_recipe(pack, "game.idle-incremental")
+        trivia = compose_build_recipe(pack, "game.trivia-timer")
+        branching = compose_build_recipe(pack, "game.branching-narrative")
+        memory = compose_build_recipe(pack, "game.memory-match")
+        word = compose_build_recipe(pack, "game.word-daily")
+        puzzle = compose_build_recipe(pack, "game.daily-puzzle-grid")
+        sim = compose_build_recipe(pack, "game.resource-management-sim")
+        hangman = compose_build_recipe(pack, "game.hangman-lite")
+        typing = compose_build_recipe(pack, "game.typing-speed-racer")
+        word_builder = compose_build_recipe(pack, "game.word-builder")
+        card_deck = compose_build_recipe(pack, "game.card-deck-turn-based")
+        reaction = compose_build_recipe(pack, "game.reaction-time-challenge")
+        rhythm = compose_build_recipe(pack, "game.rhythm-tap-lite")
+        deck_builder = compose_build_recipe(pack, "game.deck-builder-lite")
+        assert idle.mechanic_ids == EXPECTED_MECHANIC_ORDER
+        assert trivia.mechanic_ids == EXPECTED_TRIVIA_MECHANIC_ORDER
+        assert branching.mechanic_ids == EXPECTED_BRANCHING_NARRATIVE_MECHANIC_ORDER
+        assert memory.mechanic_ids == EXPECTED_MEMORY_MATCH_MECHANIC_ORDER
+        assert word.mechanic_ids == EXPECTED_WORD_DAILY_MECHANIC_ORDER
+        assert puzzle.mechanic_ids == EXPECTED_DAILY_PUZZLE_GRID_MECHANIC_ORDER
+        assert sim.mechanic_ids == EXPECTED_RESOURCE_MANAGEMENT_SIM_MECHANIC_ORDER
+        assert hangman.mechanic_ids == EXPECTED_HANGMAN_LITE_MECHANIC_ORDER
+        assert typing.mechanic_ids == EXPECTED_TYPING_SPEED_RACER_MECHANIC_ORDER
+        assert word_builder.mechanic_ids == EXPECTED_WORD_BUILDER_MECHANIC_ORDER
+        assert card_deck.mechanic_ids == EXPECTED_CARD_DECK_TURN_BASED_MECHANIC_ORDER
+        assert reaction.mechanic_ids == EXPECTED_REACTION_TIME_CHALLENGE_MECHANIC_ORDER
+        assert rhythm.mechanic_ids == EXPECTED_RHYTHM_TAP_LITE_MECHANIC_ORDER
+        assert deck_builder.mechanic_ids == EXPECTED_DECK_BUILDER_LITE_MECHANIC_ORDER
 
 
 class TestWave1AdaptivePolicyFields:

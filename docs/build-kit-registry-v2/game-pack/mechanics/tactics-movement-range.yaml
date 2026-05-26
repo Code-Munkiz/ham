@@ -1,0 +1,26 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.tactics-movement-range
+kind: mechanic
+name: Tactics movement range
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Manhattan movement within fixed range; highlight valid cells; no pathfinding library.
+non_template_statement: Movement range recipe only — not A* or navmesh code.
+applies_to:
+  - game.turn-based-tactics-lite
+  - tag:turn-based-tactics-lite
+depends_on:
+  - mechanic.tactics-grid-board-state
+  - mechanic.tactics-unit-roster
+  - mechanic.tactics-selection-state
+provides:
+  - movement_range
+guidance:
+  - "Reject occupied and out-of-range moves; update grid occupancy on success"
+validation_notes:
+  - validator.tactics-valid-movement-range
+recovery_playbooks:
+  - recovery.tactics-invalid-movement-accepted
+reusable_across:
+  - game.turn-based-tactics-lite

@@ -1,0 +1,24 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.tactics-enemy-response
+kind: mechanic
+name: Tactics enemy response
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Simple scripted enemy turn — move toward nearest player unit, attack if in range, or skip.
+non_template_statement: Enemy script recipe only — not AI behavior trees.
+applies_to:
+  - game.turn-based-tactics-lite
+  - tag:turn-based-tactics-lite
+depends_on:
+  - mechanic.tactics-turn-loop
+  - mechanic.tactics-unit-roster
+  - mechanic.tactics-attack-resolution
+provides:
+  - enemy_response
+guidance:
+  - "One enemy action pass per enemy turn; no multi-step planning"
+validation_notes:
+  - validator.tactics-enemy-response-mutates-state
+reusable_across:
+  - game.turn-based-tactics-lite

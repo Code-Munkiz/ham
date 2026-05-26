@@ -1,0 +1,24 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.tactics-attack-resolution
+kind: validator
+name: Tactics attack resolution
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Attacks reduce HP in range; defeated units removed from board.
+non_template_statement: Validator spec only — not executable today.
+applies_to:
+  - game.turn-based-tactics-lite
+  - tag:turn-based-tactics-lite
+depends_on:
+  - mechanic.tactics-attack-resolution
+validates_modules:
+  - mechanic.tactics-attack-resolution
+severity: blocking
+runner: conceptual
+check_type: conceptual
+pass_conditions:
+  - "attack mutates target HP or defeated flag"
+  - "out-of-range or defeated targets rejected"
+recovery_playbooks:
+  - recovery.tactics-no-selected-unit

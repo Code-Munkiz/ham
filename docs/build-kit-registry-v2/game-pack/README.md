@@ -2,7 +2,7 @@
 
 **Status:** Non-runtime schema pilot only. **Schema version:** `0.1`
 
-This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: thirteen routed Wave 1–3 recipes plus **`game.deck-builder-lite`** (Wave 3 schema-only, not routed). See [STATUS.md](../STATUS.md) for the full recipe list.
+This directory holds **design data** for the first [Generative Build Kit Registry v2](../../adr/0016-generative-build-kit-registry-v2.md) Game Pack pilot: fourteen routed Wave 1–3 recipes plus **`game.turn-based-tactics-lite`** (Wave 4 schema-only, not routed). See [STATUS.md](../STATUS.md) for the full recipe list.
 
 ## Root manifest
 
@@ -402,6 +402,36 @@ validators:   validator.deck-builder-run-state-transitions, validator.starter-de
 recovery:     recovery.broken-deck-builder-run-state, recovery.empty-reward-pool, recovery.stuck-encounter-loop, recovery.invalid-deck-mutation
 progress:     progress.deck-builder-lite
 learning:     learning.deck-builder-lite
+```
+
+**Note:** This recipe is **schema-only** today — not routed until explicitly approved.
+
+### `game.turn-based-tactics-lite` (Wave 4 — schema-only, not routed)
+
+| Reason | Detail |
+|--------|--------|
+| **Fifteenth recipe shape** | Proves the pack supports DOM turn-based grid tactics — distinct from daily puzzle grids, resource sims, and card battles. |
+| **DOM-native tactics UI** | Grid board, unit status, action bar, event log, results panel — no Canvas or pathfinding library for MVP. |
+| **Shared reuse** | Reuses `component.game-shell`, `stack.dom-game-minimal`. Does not reuse puzzle-grid completion or card-deck hand zones. |
+| **Distinct mechanics** | Grid board state, unit roster, selection, movement/attack range, turn loop, enemy response, battle result. |
+| **Explicit MVP bounds** | Fixed 5×5–6×6 grid; 1–3 units per side; Manhattan move range; scripted enemy turn; local-only; no campaign/map editor. |
+| **Routing** | Schema-only — not routed behind `HAM_BUILD_REGISTRY_V2_ENABLED` until explicitly approved. See [TACTICS_GRID_AMBIGUITY_REVIEW.md](../TACTICS_GRID_AMBIGUITY_REVIEW.md). |
+
+### Conceptual composition — `game.turn-based-tactics-lite`
+
+When a user says *"Build a browser turn-based tactics game on a small grid where the player moves units, attacks enemies, and wins by defeating all enemies"*, a **future** composer would assemble:
+
+```txt
+registry_pack: pack.game
+schema_version: 0.1
+app_type:     game.turn-based-tactics-lite
+stack_kit:    stack.dom-game-minimal
+mechanics:    mechanic.tactics-grid-board-state → mechanic.tactics-unit-roster → mechanic.tactics-selection-state → mechanic.tactics-attack-resolution → mechanic.tactics-movement-range → mechanic.tactics-turn-loop → mechanic.tactics-battle-result-state → mechanic.tactics-enemy-response
+contracts:    component.game-shell, component.tactics-grid-board, component.unit-status-panel, component.tactics-action-bar, component.tactics-event-log, component.tactics-results-panel
+validators:   validator.tactics-seeded-units-on-grid, validator.tactics-valid-movement-range, validator.tactics-attack-resolution, validator.tactics-enemy-response-mutates-state, validator.tactics-battle-result-detection
+recovery:     recovery.tactics-empty-grid-no-units, recovery.tactics-no-selected-unit, recovery.tactics-stuck-turn-phase, recovery.tactics-invalid-movement-accepted, recovery.tactics-missing-battle-result
+progress:     progress.turn-based-tactics-lite
+learning:     learning.turn-based-tactics-lite
 ```
 
 **Note:** This recipe is **schema-only** today — not routed until explicitly approved.

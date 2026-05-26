@@ -1,0 +1,17 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.tactics-grid-board
+kind: component_contract
+name: Tactics grid board
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Renders fixed grid cells with unit markers and optional move/attack highlights.
+non_template_statement: Grid board contract only — not a map editor UI.
+applies_to:
+  - game.turn-based-tactics-lite
+  - tag:turn-based-tactics-lite
+depends_on:
+  - mechanic.tactics-grid-board-state
+  - mechanic.tactics-unit-roster
+guidance:
+  - "Click cell to move selected unit or select unit on cell"

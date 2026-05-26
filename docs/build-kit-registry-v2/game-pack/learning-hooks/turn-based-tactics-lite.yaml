@@ -1,0 +1,29 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: learning.turn-based-tactics-lite
+kind: learning_hook
+name: Turn-based tactics lite learning
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Hermes evolution signals for turn-based tactics lite — not wired at runtime.
+non_template_statement: Learning hook schema only — Hermes deferred per ADR-0018.
+applies_to:
+  - game.turn-based-tactics-lite
+  - tag:turn-based-tactics-lite
+source_phase_owner: game.turn-based-tactics-lite
+signal_categories:
+  - seeded_units_on_grid
+  - valid_movement_range
+  - attack_resolution
+  - enemy_response_mutates_state
+  - battle_result_detection
+  - preview_boot_success
+outcome_fact_fields:
+  - preview_boot_success: boolean
+  - empty_grid_or_roster: boolean
+  - move_action_no_op: boolean
+  - enemy_turn_no_op: boolean
+  - battle_result_missing: boolean
+  - validator_failures: array of validator id
+guidance:
+  - "Bounded preview/validator evidence only; no secrets in prompts"

@@ -1,0 +1,22 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.tactics-stuck-turn-phase
+kind: recovery_playbook
+name: Fix stuck turn phase
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Repair turn loop stuck on player or enemy phase.
+non_template_statement: Recovery spec only — not auto-applied today.
+max_attempts: 2
+applies_to:
+  - game.turn-based-tactics-lite
+  - tag:turn-based-tactics-lite
+depends_on:
+  - mechanic.tactics-turn-loop
+  - mechanic.tactics-enemy-response
+repairs_validators:
+  - validator.tactics-enemy-response-mutates-state
+steps:
+  - id: step.advance_phase
+    action: advance_phase
+    detail: "End enemy pass and return to player turn"

@@ -1,0 +1,16 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.tactics-event-log
+kind: component_contract
+name: Tactics event log
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Short log of moves, attacks, and phase changes.
+non_template_statement: Event log contract only — not campaign quest journal.
+applies_to:
+  - game.turn-based-tactics-lite
+  - tag:turn-based-tactics-lite
+depends_on:
+  - mechanic.tactics-turn-loop
+guidance:
+  - "Append on move, attack, enemy action, win/loss"

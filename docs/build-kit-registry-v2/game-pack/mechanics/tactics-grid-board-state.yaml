@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.tactics-grid-board-state
+kind: mechanic
+name: Tactics grid board state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Fixed rectangular grid with rows, cols, and cell occupancy for unit positions.
+non_template_statement: Grid state recipe only — not a checked-in board component.
+applies_to:
+  - game.turn-based-tactics-lite
+  - tag:turn-based-tactics-lite
+depends_on: []
+provides:
+  - grid_board_state
+binds_components:
+  - component.tactics-grid-board
+guidance:
+  - "Initialize rows x cols; track unit id per occupied cell"
+validation_notes:
+  - validator.tactics-seeded-units-on-grid
+reusable_across:
+  - game.turn-based-tactics-lite

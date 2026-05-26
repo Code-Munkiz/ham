@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.tactics-battle-result-detection
+kind: validator
+name: Tactics battle result detection
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Win/loss fires correctly; restart resets grid, units, and turn phase.
+non_template_statement: Validator spec only — not executable today.
+applies_to:
+  - game.turn-based-tactics-lite
+  - tag:turn-based-tactics-lite
+depends_on:
+  - mechanic.tactics-battle-result-state
+validates_modules:
+  - mechanic.tactics-battle-result-state
+severity: blocking
+runner: conceptual
+check_type: conceptual
+pass_conditions:
+  - "all enemies defeated triggers win"
+  - "all player units defeated triggers loss"
+  - "new battle re-seeds state"
+recovery_playbooks:
+  - recovery.tactics-missing-battle-result

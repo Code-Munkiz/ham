@@ -1,0 +1,17 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.unit-status-panel
+kind: component_contract
+name: Unit status panel
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Shows selected unit HP, side, and defeated state.
+non_template_statement: Status panel contract only — not RPG inventory UI.
+applies_to:
+  - game.turn-based-tactics-lite
+  - tag:turn-based-tactics-lite
+depends_on:
+  - mechanic.tactics-selection-state
+  - mechanic.tactics-unit-roster
+guidance:
+  - "Update when selection or HP changes"

@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.tactics-selection-state
+kind: mechanic
+name: Tactics unit selection state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Selected player unit id during player turn; gates move and attack actions.
+non_template_statement: Selection state recipe only — not a UI framework.
+applies_to:
+  - game.turn-based-tactics-lite
+  - tag:turn-based-tactics-lite
+depends_on:
+  - mechanic.tactics-unit-roster
+provides:
+  - selection_state
+binds_components:
+  - component.unit-status-panel
+  - component.tactics-action-bar
+guidance:
+  - "Only player units selectable during player phase; clear on end turn"
+validation_notes:
+  - validator.tactics-valid-movement-range
+reusable_across:
+  - game.turn-based-tactics-lite

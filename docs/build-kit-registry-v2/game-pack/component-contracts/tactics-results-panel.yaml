@@ -1,0 +1,16 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.tactics-results-panel
+kind: component_contract
+name: Tactics results panel
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Win/loss summary and new battle control.
+non_template_statement: Results panel only — not campaign map select.
+applies_to:
+  - game.turn-based-tactics-lite
+  - tag:turn-based-tactics-lite
+depends_on:
+  - mechanic.tactics-battle-result-state
+guidance:
+  - "Show only in terminal phase; restart re-seeds battle"

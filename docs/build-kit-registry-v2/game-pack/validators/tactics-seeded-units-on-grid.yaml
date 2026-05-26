@@ -1,0 +1,27 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.tactics-seeded-units-on-grid
+kind: validator
+name: Tactics seeded units on grid
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Battle start has non-empty grid, rosters, and consistent unit positions.
+non_template_statement: Validator spec only — not executable today.
+applies_to:
+  - game.turn-based-tactics-lite
+  - tag:turn-based-tactics-lite
+depends_on:
+  - mechanic.tactics-grid-board-state
+  - mechanic.tactics-unit-roster
+validates_modules:
+  - mechanic.tactics-grid-board-state
+  - mechanic.tactics-unit-roster
+severity: blocking
+runner: conceptual
+check_type: conceptual
+pass_conditions:
+  - "grid has expected rows and cols"
+  - "at least one player and one enemy unit seeded"
+  - "unit positions match grid occupancy"
+recovery_playbooks:
+  - recovery.tactics-empty-grid-no-units

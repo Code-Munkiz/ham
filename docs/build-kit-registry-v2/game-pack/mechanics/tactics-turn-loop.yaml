@@ -1,0 +1,29 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.tactics-turn-loop
+kind: mechanic
+name: Tactics turn loop
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Alternates player and enemy phases; gates actions by active phase.
+non_template_statement: Turn loop recipe only — not a full battle engine.
+applies_to:
+  - game.turn-based-tactics-lite
+  - tag:turn-based-tactics-lite
+depends_on:
+  - mechanic.tactics-selection-state
+  - mechanic.tactics-movement-range
+  - mechanic.tactics-attack-resolution
+provides:
+  - turn_loop_state
+binds_components:
+  - component.tactics-action-bar
+  - component.tactics-event-log
+guidance:
+  - "Player: select, move, attack, end turn; then enemy phase"
+validation_notes:
+  - validator.tactics-enemy-response-mutates-state
+recovery_playbooks:
+  - recovery.tactics-stuck-turn-phase
+reusable_across:
+  - game.turn-based-tactics-lite

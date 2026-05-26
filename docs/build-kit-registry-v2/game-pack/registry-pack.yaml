@@ -12,8 +12,8 @@ description: >
   game.daily-puzzle-grid, game.resource-management-sim, game.hangman-lite,
   game.typing-speed-racer (Wave 2 routed), game.word-builder (Wave 2 routed),
   game.card-deck-turn-based (Wave 3 routed), game.reaction-time-challenge
-  (Wave 3 routed), game.rhythm-tap-lite (Wave 3 routed), and game.deck-builder-lite
-  (Wave 3 schema-only, not routed).
+  (Wave 3 routed), game.rhythm-tap-lite (Wave 3 routed), game.deck-builder-lite
+  (Wave 3 routed), and game.turn-based-tactics-lite (Wave 4 schema-only, not routed).
   Used for cross-reference validation and future composer defaults — not loaded by HAM
   at runtime today.
 
@@ -38,6 +38,7 @@ module_index:
     - game.reaction-time-challenge
     - game.rhythm-tap-lite
     - game.deck-builder-lite
+    - game.turn-based-tactics-lite
   stack_kits:
     - stack.dom-game-minimal
   mechanics:
@@ -134,6 +135,14 @@ module_index:
     - mechanic.reward-offer-choice
     - mechanic.deck-mutation
     - mechanic.deck-builder-result-state
+    - mechanic.tactics-grid-board-state
+    - mechanic.tactics-unit-roster
+    - mechanic.tactics-selection-state
+    - mechanic.tactics-movement-range
+    - mechanic.tactics-attack-resolution
+    - mechanic.tactics-turn-loop
+    - mechanic.tactics-enemy-response
+    - mechanic.tactics-battle-result-state
   component_contracts:
     - component.game-shell
     - component.resource-counter
@@ -212,6 +221,11 @@ module_index:
     - component.run-status-bar
     - component.deck-builder-event-log
     - component.deck-builder-results-panel
+    - component.tactics-grid-board
+    - component.unit-status-panel
+    - component.tactics-action-bar
+    - component.tactics-event-log
+    - component.tactics-results-panel
   validators:
     - validator.no-negative-currency
     - validator.passive-income-tick
@@ -276,6 +290,11 @@ module_index:
     - validator.reward-choice-integrity
     - validator.deck-mutation-consistency
     - validator.deck-builder-run-result-detection
+    - validator.tactics-seeded-units-on-grid
+    - validator.tactics-valid-movement-range
+    - validator.tactics-attack-resolution
+    - validator.tactics-enemy-response-mutates-state
+    - validator.tactics-battle-result-detection
   recovery_playbooks:
     - recovery.stale-interval-or-bad-tick-loop
     - recovery.invalid-local-storage-json
@@ -324,6 +343,11 @@ module_index:
     - recovery.empty-reward-pool
     - recovery.stuck-encounter-loop
     - recovery.invalid-deck-mutation
+    - recovery.tactics-empty-grid-no-units
+    - recovery.tactics-no-selected-unit
+    - recovery.tactics-stuck-turn-phase
+    - recovery.tactics-invalid-movement-accepted
+    - recovery.tactics-missing-battle-result
   progress_labels:
     - progress.idle-incremental
     - progress.trivia-timer
@@ -339,6 +363,7 @@ module_index:
     - progress.reaction-time-challenge
     - progress.rhythm-tap-lite
     - progress.deck-builder-lite
+    - progress.turn-based-tactics-lite
   learning_hooks:
     - learning.idle-incremental
     - learning.trivia-timer
@@ -354,6 +379,7 @@ module_index:
     - learning.reaction-time-challenge
     - learning.rhythm-tap-lite
     - learning.deck-builder-lite
+    - learning.turn-based-tactics-lite
 
 compose_defaults:
   compose_order:

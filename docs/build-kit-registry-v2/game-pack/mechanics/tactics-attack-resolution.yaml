@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.tactics-attack-resolution
+kind: mechanic
+name: Tactics attack resolution
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Attack within fixed range reduces target HP and marks defeated units.
+non_template_statement: Attack resolution recipe only — not physics collision.
+applies_to:
+  - game.turn-based-tactics-lite
+  - tag:turn-based-tactics-lite
+depends_on:
+  - mechanic.tactics-unit-roster
+  - mechanic.tactics-selection-state
+provides:
+  - attack_resolution
+guidance:
+  - "Validate target in range and alive; apply damage; remove defeated from board"
+validation_notes:
+  - validator.tactics-attack-resolution
+reusable_across:
+  - game.turn-based-tactics-lite

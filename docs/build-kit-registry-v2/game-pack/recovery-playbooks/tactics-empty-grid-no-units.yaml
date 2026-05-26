@@ -1,0 +1,22 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.tactics-empty-grid-no-units
+kind: recovery_playbook
+name: Fix empty grid or missing units
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Repair empty grid or missing seeded units at battle start.
+non_template_statement: Recovery spec only — not auto-applied today.
+max_attempts: 2
+applies_to:
+  - game.turn-based-tactics-lite
+  - tag:turn-based-tactics-lite
+depends_on:
+  - mechanic.tactics-grid-board-state
+  - mechanic.tactics-unit-roster
+repairs_validators:
+  - validator.tactics-seeded-units-on-grid
+steps:
+  - id: step.seed_battle
+    action: seed_battle
+    detail: "5x5 grid with 2 player and 2 enemy units"

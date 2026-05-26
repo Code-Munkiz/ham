@@ -1,0 +1,27 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: mechanic.tactics-battle-result-state
+kind: mechanic
+name: Tactics battle result state
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Win when all enemies defeated; loss when all player units defeated; restart resets battle.
+non_template_statement: Result state recipe only — not a campaign progression system.
+applies_to:
+  - game.turn-based-tactics-lite
+  - tag:turn-based-tactics-lite
+depends_on:
+  - mechanic.tactics-unit-roster
+  - mechanic.tactics-turn-loop
+provides:
+  - battle_result_state
+binds_components:
+  - component.tactics-results-panel
+guidance:
+  - "Terminal phase blocks move/attack; new battle re-seeds grid and units"
+validation_notes:
+  - validator.tactics-battle-result-detection
+recovery_playbooks:
+  - recovery.tactics-missing-battle-result
+reusable_across:
+  - game.turn-based-tactics-lite

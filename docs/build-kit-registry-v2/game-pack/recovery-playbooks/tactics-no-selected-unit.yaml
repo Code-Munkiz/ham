@@ -1,0 +1,22 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.tactics-no-selected-unit
+kind: recovery_playbook
+name: Fix missing unit selection
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Repair move/attack without selected player unit during player phase.
+non_template_statement: Recovery spec only — not auto-applied today.
+max_attempts: 2
+applies_to:
+  - game.turn-based-tactics-lite
+  - tag:turn-based-tactics-lite
+depends_on:
+  - mechanic.tactics-selection-state
+repairs_validators:
+  - validator.tactics-valid-movement-range
+  - validator.tactics-attack-resolution
+steps:
+  - id: step.require_selection
+    action: require_selection
+    detail: "Block move/attack until player unit selected"

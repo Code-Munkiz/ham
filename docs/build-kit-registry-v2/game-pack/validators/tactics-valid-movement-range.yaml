@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.tactics-valid-movement-range
+kind: validator
+name: Tactics valid movement range
+status: proposed
+schema_version: "0.1"
+version: "0.1.0-pilot"
+description: Moves respect Manhattan range, bounds, occupancy, and player phase.
+non_template_statement: Validator spec only — not executable today.
+applies_to:
+  - game.turn-based-tactics-lite
+  - tag:turn-based-tactics-lite
+depends_on:
+  - mechanic.tactics-movement-range
+validates_modules:
+  - mechanic.tactics-movement-range
+severity: blocking
+runner: conceptual
+check_type: conceptual
+pass_conditions:
+  - "invalid moves rejected without state change"
+  - "valid move updates unit position and grid occupancy"
+recovery_playbooks:
+  - recovery.tactics-invalid-movement-accepted
+  - recovery.tactics-no-selected-unit
