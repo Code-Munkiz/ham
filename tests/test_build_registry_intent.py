@@ -21,6 +21,7 @@ from src.ham.build_registry.intent import (
     WORD_BUILDER_APP_TYPE,
     WORD_DAILY_APP_TYPE,
     CARD_DECK_TURN_BASED_APP_TYPE,
+    REACTION_TIME_CHALLENGE_APP_TYPE,
     enrich_plan_metadata_with_registry_v2,
     select_registry_v2_app_type_for_prompt,
 )
@@ -342,6 +343,53 @@ _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVE_PROMPTS = (
     "Build a SaaS dashboard",
 )
 
+_REACTION_TIME_CHALLENGE_POSITIVE_PROMPTS = (
+    "Build a browser reaction-time game where the player waits for the screen to turn green, clicks as fast as possible, and sees their reaction time.",
+    "Build a reflex challenge where clicking too early counts as a false start and players can retry for a better score.",
+    "Build a local reaction-speed game with random delays, best score tracking, and a play-again button.",
+    "Build a simple reaction test game where the user presses space when the signal appears and gets millisecond feedback.",
+    "Make a reaction time challenge with false start detection and best reaction time tracking.",
+    "Create a browser game with random delay then click as fast as you can when the signal appears.",
+    "Build a reflex test game where players wait for go then tap and see average reaction time.",
+)
+
+_REACTION_TIME_CHALLENGE_NEGATIVE_PROMPTS = (
+    "Build a Pomodoro timer",
+    "Make a stopwatch app",
+    "Build a countdown timer app",
+    "Build a typing speed test",
+    "Make a typing race with WPM",
+    "Build a rhythm tap game",
+    "Create a music rhythm game",
+    "Build a dashboard for response times",
+    "Make an analytics dashboard for response times",
+    "Build a medical reflex test",
+    "Create a clinical reaction assessment",
+    "Build an accessibility reaction assessment",
+    "Build a game with physics collisions",
+    "Make a gambling game with reaction bets",
+    "Build a betting reaction game",
+    "Build a reaction app",
+    "Make a speed challenge",
+    "Build a timer",
+    "Click fast",
+    "Build a stopwatch",
+    "Build a response time dashboard",
+)
+
+_REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVE_PROMPTS = (
+    "Build me a trivia quiz with a timer",
+    "Build an idle clicker game",
+    "Build me a memory card matching game",
+    "Build me a daily word guessing game",
+    "Build me a daily puzzle grid game",
+    "Build me a resource management sim",
+    "Build a hangman word game",
+    "Build me a word builder game",
+    "Build a simple turn-based card battle game with a draw pile, hand, discard pile, and health points.",
+    "Build a SaaS dashboard",
+)
+
 _CROSS_EXCLUSION_PROMPTS = (
     ("build me an idle clicker game", IDLE_INCREMENTAL_APP_TYPE),
     ("Build me a trivia quiz with a timer", TRIVIA_TIMER_APP_TYPE),
@@ -370,6 +418,14 @@ _CROSS_EXCLUSION_PROMPTS = (
     (
         "Build a browser card game where the player draws cards, plays one card per turn, and tries to defeat a simple enemy.",
         CARD_DECK_TURN_BASED_APP_TYPE,
+    ),
+    (
+        "Build a browser reaction-time game where the player waits for the screen to turn green, clicks as fast as possible, and sees their reaction time.",
+        REACTION_TIME_CHALLENGE_APP_TYPE,
+    ),
+    (
+        "Build a reflex challenge where clicking too early counts as a false start and players can retry for a better score.",
+        REACTION_TIME_CHALLENGE_APP_TYPE,
     ),
 )
 
@@ -488,6 +544,18 @@ class TestSelectRegistryV2AppTypeForPrompt:
     @pytest.mark.parametrize("prompt", _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVE_PROMPTS)
     def test_other_recipe_prompts_do_not_route_to_card_deck_turn_based_param(self, prompt: str):
         assert select_registry_v2_app_type_for_prompt(prompt) != CARD_DECK_TURN_BASED_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _REACTION_TIME_CHALLENGE_POSITIVE_PROMPTS)
+    def test_matches_reaction_time_challenge_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) == REACTION_TIME_CHALLENGE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _REACTION_TIME_CHALLENGE_NEGATIVE_PROMPTS)
+    def test_rejects_non_reaction_time_challenge_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != REACTION_TIME_CHALLENGE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVE_PROMPTS)
+    def test_other_recipe_prompts_do_not_route_to_reaction_time_challenge_param(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != REACTION_TIME_CHALLENGE_APP_TYPE
 
     @pytest.mark.parametrize("prompt,expected", _CROSS_EXCLUSION_PROMPTS)
     def test_recipes_do_not_steal_each_other(self, prompt: str, expected: str):
@@ -917,6 +985,40 @@ class TestSelectRegistryV2AppTypeForPrompt:
             != CARD_DECK_TURN_BASED_APP_TYPE
         )
 
+    def test_typing_speed_prompt_still_routes_to_typing_not_reaction_time(self):
+        prompt = "Build me a typing speed game"
+        assert select_registry_v2_app_type_for_prompt(prompt) == TYPING_SPEED_RACER_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != REACTION_TIME_CHALLENGE_APP_TYPE
+
+    def test_reaction_time_prompt_does_not_route_to_other_recipes(self):
+        prompt = (
+            "Build a browser reaction-time game where the player waits for the screen "
+            "to turn green, clicks as fast as possible, and sees their reaction time."
+        )
+        assert select_registry_v2_app_type_for_prompt(prompt) == REACTION_TIME_CHALLENGE_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != TYPING_SPEED_RACER_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != TRIVIA_TIMER_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != MEMORY_MATCH_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != CARD_DECK_TURN_BASED_APP_TYPE
+
+    def test_other_recipe_prompts_do_not_route_to_reaction_time_challenge(self):
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a trivia quiz with a timer")
+            != REACTION_TIME_CHALLENGE_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a typing speed game")
+            == TYPING_SPEED_RACER_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a memory card matching game")
+            == MEMORY_MATCH_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build a Pomodoro timer")
+            not in {REACTION_TIME_CHALLENGE_APP_TYPE, TRIVIA_TIMER_APP_TYPE}
+        )
+
 
 class TestEnrichPlanMetadataWithRegistryV2:
     def test_flag_disabled_does_not_add_registry_metadata(self, monkeypatch):
@@ -1022,6 +1124,18 @@ class TestEnrichPlanMetadataWithRegistryV2:
             (
                 "Build a simple turn-based card battle game with a draw pile, hand, "
                 "discard pile, and health points."
+            ),
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
+
+    def test_flag_disabled_reaction_time_prompt_does_not_add_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            (
+                "Build a browser reaction-time game where the player waits for the screen "
+                "to turn green, clicks as fast as possible, and sees their reaction time."
             ),
         )
         assert "registry_v2_app_type" not in metadata
@@ -1140,6 +1254,19 @@ class TestEnrichPlanMetadataWithRegistryV2:
         assert metadata["template_kind"] == "generic"
         assert metadata["originated_from"] == "builder_chat_scaffold"
 
+    def test_flag_enabled_reaction_time_prompt_adds_registry_metadata(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic", "originated_from": "builder_chat_scaffold"},
+            (
+                "Build a browser reaction-time game where the player waits for the screen "
+                "to turn green, clicks as fast as possible, and sees their reaction time."
+            ),
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        assert metadata["registry_v2_app_type"] == REACTION_TIME_CHALLENGE_APP_TYPE
+        assert metadata["template_kind"] == "generic"
+        assert metadata["originated_from"] == "builder_chat_scaffold"
+
     def test_flag_enabled_non_idle_prompt_leaves_registry_metadata_absent(self):
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "landing-page"},
@@ -1236,6 +1363,15 @@ class TestEnrichPlanMetadataWithRegistryV2:
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "generic"},
             "Build a poker game",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "1"},
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
+
+    def test_flag_enabled_non_reaction_time_prompt_leaves_registry_metadata_absent(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            "Build a Pomodoro timer",
             env={"HAM_BUILD_REGISTRY_V2_ENABLED": "1"},
         )
         assert "registry_v2_app_type" not in metadata
@@ -1361,6 +1497,15 @@ class TestChatScaffoldSyntheticPlanMetadata:
         assert metadata.get("template_kind") == "generic"
         assert "registry_v2_app_type" not in metadata
 
+    def test_flag_disabled_reaction_time_prompt_has_no_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = _synthetic_plan_metadata(
+            "Build a browser reaction-time game where the player waits for the screen "
+            "to turn green, clicks as fast as possible, and sees their reaction time."
+        )
+        assert metadata.get("template_kind") == "generic"
+        assert "registry_v2_app_type" not in metadata
+
     def test_flag_enabled_idle_prompt_adds_registry_metadata(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
         metadata = _synthetic_plan_metadata("build me an idle clicker game")
@@ -1433,6 +1578,17 @@ class TestChatScaffoldSyntheticPlanMetadata:
         )
         assert metadata.get("template_kind") == "generic"
         assert metadata.get("registry_v2_app_type") == CARD_DECK_TURN_BASED_APP_TYPE
+
+    def test_flag_enabled_reaction_time_prompt_adds_registry_metadata_synthetic(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
+        metadata = _synthetic_plan_metadata(
+            "Build a browser reaction-time game where the player waits for the screen "
+            "to turn green, clicks as fast as possible, and sees their reaction time."
+        )
+        assert metadata.get("template_kind") == "generic"
+        assert metadata.get("registry_v2_app_type") == REACTION_TIME_CHALLENGE_APP_TYPE
 
     def test_flag_enabled_non_idle_prompt_has_no_registry_metadata(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
@@ -1969,6 +2125,67 @@ class TestEndToEndScaffoldMessages:
             project_id="proj_test",
             user_message=prompt,
             steps=[Step(title="Scaffold game", description="Create card battle game files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(plan)[1]["content"]
+        assert "registry_v2_app_type" not in metadata
+        assert "Builder Kit context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" not in content
+
+    def test_flag_enabled_reaction_time_prompt_produces_v2_context(self):
+        prompt = (
+            "Build a browser reaction-time game where the player waits for the screen "
+            "to turn green, clicks as fast as possible, and sees their reaction time."
+        )
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            prompt,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_reaction_time_e2e",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message=prompt,
+            steps=[Step(title="Scaffold game", description="Create reaction time game files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(
+            plan,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )[1]["content"]
+        assert metadata["registry_v2_app_type"] == REACTION_TIME_CHALLENGE_APP_TYPE
+        assert "Build Registry v2 playbook context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" in content
+        assert "game.reaction-time-challenge" in content
+        assert "mechanic.reaction-state-machine" in content
+        assert "mechanic.random-signal-delay" in content
+        assert "mechanic.false-start-handling" in content
+        assert "mechanic.reaction-timer" in content
+        assert "mechanic.reaction-input-response" in content
+        assert "mechanic.reaction-result-state" in content
+        assert "validator.false-start-enforcement" in content
+        assert "Builder Kit context:" not in content
+        assert content.count("Builder Kit:") == 0
+
+    def test_flag_disabled_reaction_time_prompt_produces_v1_context_only(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        prompt = (
+            "Build a browser reaction-time game where the player waits for the screen "
+            "to turn green, clicks as fast as possible, and sees their reaction time."
+        )
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            prompt,
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_reaction_time_v1",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message=prompt,
+            steps=[Step(title="Scaffold game", description="Create reaction time game files")],
             planner_confidence="high",
             metadata=metadata,
         )

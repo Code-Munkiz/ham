@@ -855,11 +855,12 @@ class TestReactionTimeChallengeRecipe:
             assert key in conflict_policy
             assert conflict_policy[key] is True
 
-    def test_reaction_time_not_routed_in_intent_module(self):
+    def test_reaction_time_routed_in_intent_module(self):
         import src.ham.build_registry.intent as intent_module
 
         source = Path(intent_module.__file__).read_text(encoding="utf-8")
-        assert "game.reaction-time-challenge" not in source
+        assert "game.reaction-time-challenge" in source
+        assert "REACTION_TIME_CHALLENGE_APP_TYPE" in source
 
     def test_existing_eleven_routed_recipes_still_compose_after_reaction_time_added(
         self, game_pack_root: Path

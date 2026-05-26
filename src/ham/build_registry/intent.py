@@ -20,6 +20,7 @@ HANGMAN_LITE_APP_TYPE = "game.hangman-lite"
 TYPING_SPEED_RACER_APP_TYPE = "game.typing-speed-racer"
 WORD_BUILDER_APP_TYPE = "game.word-builder"
 CARD_DECK_TURN_BASED_APP_TYPE = "game.card-deck-turn-based"
+REACTION_TIME_CHALLENGE_APP_TYPE = "game.reaction-time-challenge"
 
 _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES: tuple[str, ...] = (
     r"\bhangman(-style)?\b",
@@ -98,6 +99,18 @@ _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES: tuple[str, ...] = (
     r"\bdefeat\b.{0,60}\b(enemy|opponent)\b.{0,80}\bcard\b",
 )
 
+_REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES: tuple[str, ...] = (
+    r"\breaction[- ]time\b.{0,80}\b(game|test|challenge|click|tap|millisecond|ms)\b",
+    r"\b(game|test|challenge)\b.{0,80}\breaction[- ]time\b",
+    r"\b(false\s+start|too\s+early)\b.{0,80}\b(click|tap|reaction|reflex)\b",
+    r"\bwait\s+for\s+(the\s+)?(screen\s+to\s+turn\s+green|signal|green)\b",
+    r"\bpress\s+space\b.{0,80}\b(signal|when|appears)\b",
+    r"\breflex\s+(challenge|test|game)\b.{0,80}\b(reaction|millisecond|ms|false\s+start)\b",
+    r"\brandom\s+delay\b.{0,80}\b(click|tap|press|signal|reaction)\b",
+    r"\bbest\s+reaction\s+time\b",
+    r"\baverage\s+reaction\s+time\b",
+)
+
 _GLOBAL_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(dashboard|landing\s*page|saas|calculator|todo|to[-\s]?do|crm)\b",
     r"\b(crypto|trading)\s+(dashboard|app|platform)\b",
@@ -114,7 +127,7 @@ _IDLE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES
 
 _TRIVIA_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(idle|incremental|clicker|tycoon)\b",
@@ -133,7 +146,7 @@ _TRIVIA_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES
 
 _IDLE_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\b(idle|incremental|clicker|tycoon)\b",
@@ -179,7 +192,7 @@ _BRANCHING_NARRATIVE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES
 
 _BRANCHING_NARRATIVE_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bbranching\s+story\b.{0,80}\bgame\b",
@@ -213,7 +226,7 @@ _MEMORY_MATCH_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES
 
 _MEMORY_MATCH_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bmemory\s+(card|match)\b",
@@ -250,7 +263,7 @@ _WORD_DAILY_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
     r"\bfill\s+cells\b.{0,80}\b(clue|row|column|constraint)\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES
 
 _WORD_DAILY_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bwordle(-style)?\b",
@@ -294,7 +307,7 @@ _DAILY_PUZZLE_GRID_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\beducation\s+website\b",
     r"\b(blog|chatbot)\b",
     r"\bwriting\s+app\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES
 
 _DAILY_PUZZLE_GRID_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bdaily\s+puzzle\s+grid\b",
@@ -342,7 +355,7 @@ _RESOURCE_MANAGEMENT_SIM_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\breal[-\s]?time\s+combat\b",
     r"\bcity\s+builder\b.{0,100}\bcombat\b",
     r"\bgeneric\s+dashboard\b",
-) + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES
+) + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES
 
 _HANGMAN_LITE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(idle|incremental|clicker|tycoon)\b",
@@ -369,7 +382,7 @@ _HANGMAN_LITE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\bdaily\s+puzzle\s+grid\b",
     r"\bsurvey\b",
     r"\beducation\s+website\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES
 
 _HANGMAN_LITE_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bhangman(-style)?\b",
@@ -438,7 +451,7 @@ _TYPING_SPEED_RACER_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\bdaily\s+puzzle\s+grid\b",
     r"\bsurvey\b",
     r"\beducation\s+website\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES
 
 _TYPING_SPEED_RACER_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\btyping\s+speed\b.{0,80}\b(game|racer|challenge|test)\b",
@@ -605,6 +618,87 @@ _CARD_DECK_TURN_BASED_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\btrack\s+victory\b.{0,80}\b(card|deck|hand|battle)\b",
 )
 
+_REACTION_TIME_CHALLENGE_NEGATIVE_PATTERNS: tuple[str, ...] = (
+    r"\b(idle|incremental|clicker|tycoon)\b",
+    r"\bcookie\s+clicker\b",
+    r"\bpassive\s+income\b",
+    r"\b(trivia|quiz)\b",
+    r"\bmemory\s+(card|match)\b",
+    r"\bbranching\s+story\b",
+    r"\bchoose\s+your\s+own\s+adventure\b",
+    r"\binteractive\s+fiction\b",
+    r"\b(wordle|daily\s+word|wordle-style)\b",
+    r"\bdaily\s+word\b.{0,100}\b(guess(ing)?|game|puzzle)\b",
+    r"\bword\s+guess(ing)?\b.{0,100}\b(game|puzzle|challenge)\b",
+    r"\bhangman(-style)?\b",
+    r"\bhangman\b.{0,80}\b(game|word)\b",
+    r"\bguess\s+letters?\b",
+    r"\bletter\s+guessing\b",
+    r"\btyping\s+speed\b",
+    r"\btyping\s+speed\s+(game|racer)\b",
+    r"\bwpm\b",
+    r"\bwords?\s+per\s+minute\b",
+    r"\btyping\s+(challenge|test|game|race)\b",
+    r"\bword\s+build(er|ing)\b",
+    r"\bword-building\b",
+    r"\bspelling\s+challenge\b",
+    r"\bturn[- ]based\b.{0,80}\bcard\b",
+    r"\bcard\s+battle\b",
+    r"\b(draw\s+pile|discard\s+pile)\b",
+    r"\bplay\s+(a\s+)?card\b",
+    r"\b(nonogram|picross|sudoku|minesweeper)\b",
+    r"\blogic\s+grid\s+puzzle\b",
+    r"\bdaily\s+puzzle\s+grid\b",
+    r"\bresource\s+management\b",
+    r"\bpomodoro\b",
+    r"\bstopwatch\b",
+    r"\bstopwatch\s+app\b",
+    r"\bproductivity\s+timer\b",
+    r"\bcountdown\s+timer\s+app\b",
+    r"\bfocus\s+timer\b",
+    r"\b(rhythm|music)\s+tap\b",
+    r"\brhythm\s+game\b",
+    r"\bmusic\s+rhythm\b",
+    r"\btap\s+to\s+the\s+beat\b",
+    r"\bmedical\b.{0,80}\b(reflex|reaction)\b",
+    r"\bclinical\b.{0,80}\b(reaction|reflex|assessment)\b",
+    r"\breflex\s+test\b.{0,80}\b(medical|clinical|diagnos)\b",
+    r"\baccessibility\b.{0,80}\b(reaction|assessment)\b",
+    r"\bdashboard\b.{0,80}\b(response\s+time|reaction)\b",
+    r"\banalytics\b.{0,80}\b(response\s+time|reaction)\b",
+    r"\bresponse\s+time\b.{0,80}\b(dashboard|analytics)\b",
+    r"\bphysics\b.{0,80}\b(collision|game)\b",
+    r"\bcollision\b.{0,80}\b(physics|game)\b",
+    r"\b(gambling|betting|wagering|casino)\b.{0,80}\b(reaction|reflex)\b",
+    r"\b(reaction|reflex)\b.{0,80}\b(bet|wager|gambling)\b",
+    r"\bsurvey\b",
+    r"\beducation\s+website\b",
+    r"\b(dashboard|landing\s*page|saas)\b",
+) + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES
+
+_REACTION_TIME_CHALLENGE_POSITIVE_PATTERNS: tuple[str, ...] = (
+    r"\breaction[- ]time\b.{0,100}\b(game|click|tap|test|challenge|millisecond|ms|false\s+start)\b",
+    r"\b(game|click|tap|test|challenge)\b.{0,100}\breaction[- ]time\b",
+    r"\bwait\b.{0,80}\b(for\s+)?(screen\s+to\s+turn\s+green|signal|go)\b.{0,100}\b(click|tap|fast|reaction)\b",
+    r"\b(screen\s+to\s+turn\s+green|turn\s+green)\b.{0,100}\b(click|tap|fast|reaction)\b",
+    r"\bfalse\s+start\b.{0,100}\b(too\s+early|click|tap|retry|reaction|reflex)\b",
+    r"\b(too\s+early|click(ed)?\s+too\s+early)\b.{0,100}\b(false\s+start|reaction|reflex)\b",
+    r"\bpress\s+space\b.{0,100}\b(signal|appears|when)\b.{0,100}\b(reaction|millisecond|ms|feedback)\b",
+    r"\bpress(es)?\s+space\b.{0,100}\b(signal|appears|when)\b",
+    r"\breflex\s+(challenge|test|game)\b.{0,100}\b(false\s+start|reaction|millisecond|ms|retry)\b",
+    r"\breaction\s+test\b.{0,80}\bgame\b.{0,100}\b(signal|millisecond|ms|press|space)\b",
+    r"\breaction[- ]speed\b.{0,80}\bgame\b.{0,100}\b(random\s+delay|play\s+again|best\s+score)\b",
+    r"\brandom\s+delay\b.{0,100}\b(click|tap|press|signal|reaction)\b",
+    r"\b(click|tap|press)\b.{0,100}\brandom\s+delay\b.{0,100}\b(reaction|signal|reflex)\b",
+    r"\bbest\s+reaction\s+time\b",
+    r"\baverage\s+reaction\s+time\b",
+    r"\breaction\s+speed\b.{0,80}\b(game|challenge|test|millisecond|ms|delay)\b",
+    r"\bplay\s+again\b.{0,80}\b(reaction|reflex|retry)\b",
+    r"\bretry\b.{0,80}\b(reaction|reflex|false\s+start|better\s+score)\b",
+    r"\bmeasure\b.{0,60}\b(reaction|response)\s+time\b.{0,60}\b(millisecond|ms)\b",
+    r"\bget\s+millisecond\b.{0,80}\b(reaction|feedback)\b",
+)
+
 
 def _normalized_prompt(prompt: str) -> str:
     return re.sub(r"\s+", " ", str(prompt or "").strip().lower())
@@ -700,6 +794,14 @@ def _matches_card_deck_turn_based(text: str) -> bool:
     )
 
 
+def _matches_reaction_time_challenge(text: str) -> bool:
+    return _matches_recipe(
+        text,
+        negatives=_REACTION_TIME_CHALLENGE_NEGATIVE_PATTERNS,
+        positives=_REACTION_TIME_CHALLENGE_POSITIVE_PATTERNS,
+    )
+
+
 def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
     """Return a Game Pack app type id for clear prompt matches, else ``None``."""
     text = _normalized_prompt(prompt)
@@ -709,7 +811,7 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
         return None
     # Precedence: trivia → idle → branching narrative → memory match → word daily
     # → daily puzzle grid → resource management sim → hangman lite → typing speed racer
-    # → word builder → card deck turn-based.
+    # → word builder → card deck turn-based → reaction time challenge.
     if _matches_trivia(text):
         return TRIVIA_TIMER_APP_TYPE
     if _matches_idle(text):
@@ -732,6 +834,8 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
         return WORD_BUILDER_APP_TYPE
     if _matches_card_deck_turn_based(text):
         return CARD_DECK_TURN_BASED_APP_TYPE
+    if _matches_reaction_time_challenge(text):
+        return REACTION_TIME_CHALLENGE_APP_TYPE
     return None
 
 
