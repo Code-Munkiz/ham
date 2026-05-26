@@ -85,6 +85,29 @@ class TestResolveScaffoldContextV2Success:
             assert mechanic_id in result.context
         assert "Builder Kit:" not in result.context
 
+    def test_returns_v2_playbook_context_for_city_builder_lite(self):
+        result = resolve_scaffold_context(
+            metadata={"registry_v2_app_type": "game.city-builder-lite"},
+            template_kind="generic",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "1"},
+            repo_root=REPO_ROOT,
+        )
+        assert result.source == "v2"
+        assert result.registry_v2_app_type == "game.city-builder-lite"
+        assert "game.city-builder-lite" in result.context
+        for mechanic_id in (
+            "mechanic.city-grid-state",
+            "mechanic.city-building-catalog",
+            "mechanic.city-placement-rules",
+            "mechanic.city-resource-pools",
+            "mechanic.city-production-tick",
+            "mechanic.city-population-happiness",
+            "mechanic.city-upgrade-choice",
+            "mechanic.city-goal-result-state",
+        ):
+            assert mechanic_id in result.context
+        assert "Builder Kit:" not in result.context
+
 
 class TestResolveScaffoldContextUnknownAppType:
     def test_falls_back_to_v1_on_unknown_app_type(self):

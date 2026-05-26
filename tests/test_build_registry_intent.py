@@ -25,6 +25,7 @@ from src.ham.build_registry.intent import (
     RHYTHM_TAP_LITE_APP_TYPE,
     DECK_BUILDER_LITE_APP_TYPE,
     TURN_BASED_TACTICS_LITE_APP_TYPE,
+    CITY_BUILDER_LITE_APP_TYPE,
     enrich_plan_metadata_with_registry_v2,
     select_registry_v2_app_type_for_prompt,
 )
@@ -39,6 +40,11 @@ _CANONICAL_DECK_BUILDER_GATE_PROMPT = (
 _CANONICAL_TACTICS_GATE_PROMPT = (
     "Build a browser turn-based tactics game on a small grid where the player moves units, "
     "attacks enemies, and wins by defeating all enemies."
+)
+
+_CANONICAL_CITY_BUILDER_GATE_PROMPT = (
+    "Build a browser city-building game where the player places houses and farms on a small grid, "
+    "advances days, produces food and coins, and wins by reaching a population goal."
 )
 
 _IDLE_POSITIVE_PROMPTS = (
@@ -465,6 +471,14 @@ _CROSS_EXCLUSION_PROMPTS = (
         "Build a tactical battle on a 5x5 grid with movement range, attack range, player turn, enemy turn, and defeat all enemies.",
         TURN_BASED_TACTICS_LITE_APP_TYPE,
     ),
+    (
+        _CANONICAL_CITY_BUILDER_GATE_PROMPT,
+        CITY_BUILDER_LITE_APP_TYPE,
+    ),
+    (
+        "Build a local city-builder with a 5x5 grid, building palette, resource counters, day button, placement rules, happiness, and restart.",
+        CITY_BUILDER_LITE_APP_TYPE,
+    ),
 )
 
 
@@ -626,6 +640,62 @@ _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVE_PROMPTS = (
     "Build a browser deck-building card game where the player starts with a small deck, fights simple encounters, and chooses a new card reward after each win.",
     "Build a browser reaction-time game where the player waits for the screen to turn green, clicks as fast as possible, and sees their reaction time.",
     "Build a browser rhythm tap game where circles appear on beats and players press space at the right time for perfect/good/miss scores.",
+    "Build a SaaS dashboard",
+)
+
+
+_CITY_BUILDER_LITE_POSITIVE_PROMPTS = (
+    _CANONICAL_CITY_BUILDER_GATE_PROMPT,
+    "Build a local city-builder with a 5x5 grid, building palette, resource counters, day button, placement rules, happiness, and restart.",
+    "Build a tiny DOM city sim where buildings produce resources each turn and the player must meet a city goal by day 10.",
+    "Build a small city-building game with houses, farms, wells, power, resource production, population growth, and a result screen.",
+    "Build a browser game where the player places buildings on a 6x6 city grid, clicks End Day for production, tracks happiness, and restarts with New City.",
+    "Build a local city-building game with building palette, resource counters, population goal by day 12, and a result screen.",
+)
+
+_CITY_BUILDER_LITE_NEGATIVE_PROMPTS = (
+    "Build a resource analytics dashboard.",
+    "Build a resource management sim with no building placement",
+    "Build a city planning spreadsheet.",
+    "Build a real estate dashboard.",
+    "Build an urban planning dashboard.",
+    "Build a map editor.",
+    "Build a level editor.",
+    "Build a factory automation game.",
+    "Build a tower defense game.",
+    "Build a real-time strategy game.",
+    "Build a tactics grid battle.",
+    "Build a daily puzzle grid.",
+    "Build a multiplayer city game.",
+    "Build a finance dashboard.",
+    "Build a city app.",
+    "city",
+    "builder",
+    "grid",
+    "resources",
+    "buildings",
+    "population",
+    "map",
+    "planning",
+    "simulation",
+    "dashboard",
+    "management",
+)
+
+_CITY_BUILDER_LITE_CROSS_RECIPE_NEGATIVE_PROMPTS = (
+    "Build me a trivia quiz with a timer",
+    "Build an idle clicker game",
+    "Build me a memory card matching game",
+    "Build me a daily word guessing game",
+    "Build me a daily puzzle grid game",
+    "Build me a resource management sim",
+    "Build a hangman word game",
+    "Build me a typing speed game",
+    "Build a simple turn-based card battle game with a draw pile, hand, discard pile, and health points.",
+    "Build a browser deck-building card game where the player starts with a small deck, fights simple encounters, and chooses a new card reward after each win.",
+    "Build a browser reaction-time game where the player waits for the screen to turn green, clicks as fast as possible, and sees their reaction time.",
+    "Build a browser rhythm tap game where circles appear on beats and players press space at the right time for perfect/good/miss scores.",
+    _CANONICAL_TACTICS_GATE_PROMPT,
     "Build a SaaS dashboard",
 )
 
@@ -792,6 +862,18 @@ class TestSelectRegistryV2AppTypeForPrompt:
     @pytest.mark.parametrize("prompt", _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVE_PROMPTS)
     def test_other_recipe_prompts_do_not_route_to_turn_based_tactics_lite_param(self, prompt: str):
         assert select_registry_v2_app_type_for_prompt(prompt) != TURN_BASED_TACTICS_LITE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _CITY_BUILDER_LITE_POSITIVE_PROMPTS)
+    def test_matches_city_builder_lite_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) == CITY_BUILDER_LITE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _CITY_BUILDER_LITE_NEGATIVE_PROMPTS)
+    def test_rejects_non_city_builder_lite_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != CITY_BUILDER_LITE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _CITY_BUILDER_LITE_CROSS_RECIPE_NEGATIVE_PROMPTS)
+    def test_other_recipe_prompts_do_not_route_to_city_builder_lite_param(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != CITY_BUILDER_LITE_APP_TYPE
 
     @pytest.mark.parametrize("prompt,expected", _CROSS_EXCLUSION_PROMPTS)
     def test_recipes_do_not_steal_each_other(self, prompt: str, expected: str):
@@ -1407,6 +1489,53 @@ class TestSelectRegistryV2AppTypeForPrompt:
             == CARD_DECK_TURN_BASED_APP_TYPE
         )
 
+    def test_city_builder_prompt_does_not_route_to_other_recipes(self):
+        prompt = _CANONICAL_CITY_BUILDER_GATE_PROMPT
+        assert select_registry_v2_app_type_for_prompt(prompt) == CITY_BUILDER_LITE_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != RESOURCE_MANAGEMENT_SIM_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != DAILY_PUZZLE_GRID_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != TURN_BASED_TACTICS_LITE_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != CARD_DECK_TURN_BASED_APP_TYPE
+
+    def test_resource_management_sim_still_routes_not_city_builder(self):
+        prompt = "Build me a resource management sim"
+        assert select_registry_v2_app_type_for_prompt(prompt) == RESOURCE_MANAGEMENT_SIM_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != CITY_BUILDER_LITE_APP_TYPE
+
+    def test_daily_puzzle_grid_still_routes_not_city_builder(self):
+        prompt = "Build me a daily puzzle grid game"
+        assert select_registry_v2_app_type_for_prompt(prompt) == DAILY_PUZZLE_GRID_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != CITY_BUILDER_LITE_APP_TYPE
+
+    def test_tactics_still_routes_not_city_builder(self):
+        prompt = _CANONICAL_TACTICS_GATE_PROMPT
+        assert select_registry_v2_app_type_for_prompt(prompt) == TURN_BASED_TACTICS_LITE_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != CITY_BUILDER_LITE_APP_TYPE
+
+    def test_canonical_city_builder_gate_prompt_routes_to_city_builder(self):
+        assert (
+            select_registry_v2_app_type_for_prompt(_CANONICAL_CITY_BUILDER_GATE_PROMPT)
+            == CITY_BUILDER_LITE_APP_TYPE
+        )
+
+    def test_other_recipe_prompts_do_not_route_to_city_builder_lite(self):
+        assert (
+            select_registry_v2_app_type_for_prompt("Build a resource analytics dashboard.")
+            != CITY_BUILDER_LITE_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build a map editor.")
+            != CITY_BUILDER_LITE_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a resource management sim")
+            == RESOURCE_MANAGEMENT_SIM_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt("Build me a daily puzzle grid game")
+            == DAILY_PUZZLE_GRID_APP_TYPE
+        )
+
 
 class TestEnrichPlanMetadataWithRegistryV2:
     def test_flag_disabled_does_not_add_registry_metadata(self, monkeypatch):
@@ -1555,6 +1684,15 @@ class TestEnrichPlanMetadataWithRegistryV2:
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "generic"},
             _CANONICAL_TACTICS_GATE_PROMPT,
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
+
+    def test_flag_disabled_city_builder_prompt_does_not_add_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            _CANONICAL_CITY_BUILDER_GATE_PROMPT,
         )
         assert "registry_v2_app_type" not in metadata
         assert metadata["template_kind"] == "generic"
@@ -1739,6 +1877,16 @@ class TestEnrichPlanMetadataWithRegistryV2:
             env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
         )
         assert metadata["registry_v2_app_type"] == TURN_BASED_TACTICS_LITE_APP_TYPE
+        assert metadata["template_kind"] == "generic"
+        assert metadata["originated_from"] == "builder_chat_scaffold"
+
+    def test_flag_enabled_city_builder_prompt_adds_registry_metadata(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic", "originated_from": "builder_chat_scaffold"},
+            _CANONICAL_CITY_BUILDER_GATE_PROMPT,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        assert metadata["registry_v2_app_type"] == CITY_BUILDER_LITE_APP_TYPE
         assert metadata["template_kind"] == "generic"
         assert metadata["originated_from"] == "builder_chat_scaffold"
 
@@ -2139,6 +2287,18 @@ class TestChatScaffoldSyntheticPlanMetadata:
         metadata = _synthetic_plan_metadata(_CANONICAL_TACTICS_GATE_PROMPT)
         assert metadata.get("template_kind") == "generic"
         assert metadata.get("registry_v2_app_type") == TURN_BASED_TACTICS_LITE_APP_TYPE
+
+    def test_flag_disabled_city_builder_prompt_has_no_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = _synthetic_plan_metadata(_CANONICAL_CITY_BUILDER_GATE_PROMPT)
+        assert metadata.get("template_kind") == "generic"
+        assert "registry_v2_app_type" not in metadata
+
+    def test_flag_enabled_city_builder_prompt_adds_registry_metadata_synthetic(self, monkeypatch):
+        monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
+        metadata = _synthetic_plan_metadata(_CANONICAL_CITY_BUILDER_GATE_PROMPT)
+        assert metadata.get("template_kind") == "generic"
+        assert metadata.get("registry_v2_app_type") == CITY_BUILDER_LITE_APP_TYPE
 
     def test_flag_enabled_non_idle_prompt_has_no_registry_metadata(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
@@ -2914,6 +3074,65 @@ class TestEndToEndScaffoldMessages:
             project_id="proj_test",
             user_message=prompt,
             steps=[Step(title="Scaffold game", description="Create tactics game files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(plan)[1]["content"]
+        assert "registry_v2_app_type" not in metadata
+        assert "Builder Kit context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" not in content
+
+    def test_flag_enabled_city_builder_prompt_produces_v2_context(self):
+        prompt = _CANONICAL_CITY_BUILDER_GATE_PROMPT
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            prompt,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_city_builder_e2e",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message=prompt,
+            steps=[Step(title="Scaffold game", description="Create city builder game files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(
+            plan,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )[1]["content"]
+        assert metadata["registry_v2_app_type"] == CITY_BUILDER_LITE_APP_TYPE
+        assert "Build Registry v2 playbook context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" in content
+        assert "game.city-builder-lite" in content
+        for mechanic_id in (
+            "mechanic.city-grid-state",
+            "mechanic.city-building-catalog",
+            "mechanic.city-placement-rules",
+            "mechanic.city-resource-pools",
+            "mechanic.city-production-tick",
+            "mechanic.city-population-happiness",
+            "mechanic.city-upgrade-choice",
+            "mechanic.city-goal-result-state",
+        ):
+            assert mechanic_id in content
+        assert "Builder Kit context:" not in content
+        assert content.count("Builder Kit:") == 0
+
+    def test_flag_disabled_city_builder_prompt_produces_v1_context_only(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        prompt = _CANONICAL_CITY_BUILDER_GATE_PROMPT
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            prompt,
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_city_builder_v1",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message=prompt,
+            steps=[Step(title="Scaffold game", description="Create city builder game files")],
             planner_confidence="high",
             metadata=metadata,
         )

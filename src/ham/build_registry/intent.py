@@ -24,6 +24,7 @@ REACTION_TIME_CHALLENGE_APP_TYPE = "game.reaction-time-challenge"
 RHYTHM_TAP_LITE_APP_TYPE = "game.rhythm-tap-lite"
 DECK_BUILDER_LITE_APP_TYPE = "game.deck-builder-lite"
 TURN_BASED_TACTICS_LITE_APP_TYPE = "game.turn-based-tactics-lite"
+CITY_BUILDER_LITE_APP_TYPE = "game.city-builder-lite"
 
 _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES: tuple[str, ...] = (
     r"\bhangman(-style)?\b",
@@ -151,6 +152,18 @@ _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES: tuple[str, ...] = (
     r"\b(5x5|6x6|5\s*x\s*5|6\s*x\s*6)\b.{0,100}\b(grid|tactics|units|battle)\b",
 )
 
+_CITY_BUILDER_LITE_CROSS_RECIPE_NEGATIVES: tuple[str, ...] = (
+    r"\bcity[- ]build(ing|er)\b.{0,120}\b(grid|buildings|houses|farms|place|day|turn|production|population|goal)\b",
+    r"\b(browser|local|dom|small|tiny)\b.{0,60}\bcity\b.{0,120}\b(grid|building|place|day|resource|population|happiness)\b",
+    r"\bplace\b.{0,60}\b(buildings|houses|farms|wells?)\b.{0,120}\b(grid|city|small\s+grid)\b",
+    r"\bbuilding\s+palette\b.{0,120}\b(grid|place|day|resource|production|goal|restart)\b",
+    r"\b(5x5|6x6|5\s*x\s*5|6\s*x\s*6)\b.{0,120}\b(grid|city|building|houses|farms)\b",
+    r"\b(end\s+day|advance\s+days?)\b.{0,120}\b(production|resources?|building|grid|city|population|happiness)\b",
+    r"\bbuildings?\b.{0,80}\bproduce\b.{0,120}\b(resources?|food|coins?|turn|day|each\s+turn|each\s+day)\b",
+    r"\bpopulation\s+(goal|growth|happiness)\b.{0,120}\b(city|grid|building|day|goal)\b",
+    r"\b(new\s+city|restart)\b.{0,120}\b(grid|resources?|buildings?|day|city\s+goal)\b",
+)
+
 _GLOBAL_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(dashboard|landing\s*page|saas|calculator|todo|to[-\s]?do|crm)\b",
     r"\b(crypto|trading)\s+(dashboard|app|platform)\b",
@@ -167,7 +180,7 @@ _IDLE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES + _CITY_BUILDER_LITE_CROSS_RECIPE_NEGATIVES
 
 _TRIVIA_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(idle|incremental|clicker|tycoon)\b",
@@ -186,7 +199,7 @@ _TRIVIA_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES + _CITY_BUILDER_LITE_CROSS_RECIPE_NEGATIVES
 
 _IDLE_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\b(idle|incremental|clicker|tycoon)\b",
@@ -232,7 +245,7 @@ _BRANCHING_NARRATIVE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES + _CITY_BUILDER_LITE_CROSS_RECIPE_NEGATIVES
 
 _BRANCHING_NARRATIVE_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bbranching\s+story\b.{0,80}\bgame\b",
@@ -266,7 +279,7 @@ _MEMORY_MATCH_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(nonogram|picross|sudoku|minesweeper)\b",
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES + _CITY_BUILDER_LITE_CROSS_RECIPE_NEGATIVES
 
 _MEMORY_MATCH_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bmemory\s+(card|match)\b",
@@ -303,7 +316,7 @@ _WORD_DAILY_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\blogic\s+grid\s+puzzle\b",
     r"\bdaily\s+puzzle\s+grid\b",
     r"\bfill\s+cells\b.{0,80}\b(clue|row|column|constraint)\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES + _CITY_BUILDER_LITE_CROSS_RECIPE_NEGATIVES
 
 _WORD_DAILY_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bwordle(-style)?\b",
@@ -347,7 +360,7 @@ _DAILY_PUZZLE_GRID_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\beducation\s+website\b",
     r"\b(blog|chatbot)\b",
     r"\bwriting\s+app\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES + _CITY_BUILDER_LITE_CROSS_RECIPE_NEGATIVES
 
 _DAILY_PUZZLE_GRID_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bdaily\s+puzzle\s+grid\b",
@@ -395,7 +408,7 @@ _RESOURCE_MANAGEMENT_SIM_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\breal[-\s]?time\s+combat\b",
     r"\bcity\s+builder\b.{0,100}\bcombat\b",
     r"\bgeneric\s+dashboard\b",
-) + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES
+) + _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES + _CITY_BUILDER_LITE_CROSS_RECIPE_NEGATIVES
 
 _HANGMAN_LITE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(idle|incremental|clicker|tycoon)\b",
@@ -422,7 +435,7 @@ _HANGMAN_LITE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\bdaily\s+puzzle\s+grid\b",
     r"\bsurvey\b",
     r"\beducation\s+website\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES + _CITY_BUILDER_LITE_CROSS_RECIPE_NEGATIVES
 
 _HANGMAN_LITE_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\bhangman(-style)?\b",
@@ -491,7 +504,7 @@ _TYPING_SPEED_RACER_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\bdaily\s+puzzle\s+grid\b",
     r"\bsurvey\b",
     r"\beducation\s+website\b",
-) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES
+) + _RESOURCE_MGMT_CROSS_RECIPE_NEGATIVES + _WORD_BUILDER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES + _CITY_BUILDER_LITE_CROSS_RECIPE_NEGATIVES
 
 _TYPING_SPEED_RACER_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\btyping\s+speed\b.{0,80}\b(game|racer|challenge|test)\b",
@@ -721,7 +734,7 @@ _REACTION_TIME_CHALLENGE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\bsurvey\b",
     r"\beducation\s+website\b",
     r"\b(dashboard|landing\s*page|saas)\b",
-) + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES
+) + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _TURN_BASED_TACTICS_LITE_CROSS_RECIPE_NEGATIVES + _CITY_BUILDER_LITE_CROSS_RECIPE_NEGATIVES
 
 _REACTION_TIME_CHALLENGE_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\breaction[- ]time\b.{0,100}\b(game|click|tap|test|challenge|millisecond|ms|false\s+start)\b",
@@ -932,6 +945,14 @@ _TURN_BASED_TACTICS_LITE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\bcheckers\b",
     r"\bgo\b",
     r"\bcity\s+builder\b",
+    r"\bcity[- ]build(ing|er)\b",
+    r"\bbuilding\s+palette\b",
+    r"\bplace\b.{0,60}\b(buildings|houses|farms|wells?|power)\b",
+    r"\bend\s+day\b",
+    r"\bpopulation\s+(goal|happiness|growth)\b",
+    r"\b(new\s+city|restart)\b.{0,80}\b(city|grid|resources?|buildings?)\b",
+    r"\bbuildings?\b.{0,80}\bproduce\b.{0,80}\b(resources?|food|coins?)\b",
+    r"\bresource\s+counters?\b",
     r"\bresource\s+management\b",
     r"\bturn[-\s]?based\b.{0,80}\bresource\s+management\b",
     r"\btower\s+defense\b",
@@ -987,6 +1008,97 @@ _TURN_BASED_TACTICS_LITE_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\btactics\b.{0,100}\b(battle|grid)\b.{0,100}\b(units?|enemies?|player)\b.{0,100}\b(turn(s)?|mov(e|ing)|attack(ing)?)\b",
     r"\b(player|enemy)\s+units?\b.{0,100}\btake\s+turns\b.{0,100}\bgrid\b",
     r"\brestart\s+battle\b.{0,100}\b(grid|units?|tactics|health)\b",
+)
+
+_CITY_BUILDER_LITE_NEGATIVE_PATTERNS: tuple[str, ...] = (
+    r"\b(idle|incremental|clicker|tycoon)\b",
+    r"\bcookie\s+clicker\b",
+    r"\bpassive\s+income\b",
+    r"\b(trivia|quiz)\b",
+    r"\bmemory\s+(card|match)\b",
+    r"\bbranching\s+story\b",
+    r"\bchoose\s+your\s+own\s+adventure\b",
+    r"\b(wordle|daily\s+word|wordle-style)\b",
+    r"\bword\s+guess(ing)?\b",
+    r"\bhangman(-style)?\b",
+    r"\btyping\s+speed\b",
+    r"\bwpm\b",
+    r"\bword\s+build(er|ing)\b",
+    r"\breaction[- ]time\b",
+    r"\brhythm\s+tap\b",
+    r"\btap[- ]the[- ]beat\b",
+    r"\bturn[- ]based\b.{0,80}\bcard\b",
+    r"\bcard\s+battle\b",
+    r"\b(draw\s+pile|discard\s+pile)\b",
+    r"\bplay\s+(a\s+)?card\b",
+    r"\bdeck[- ]building\b",
+    r"\b(nonogram|picross|sudoku|minesweeper)\b",
+    r"\blogic\s+grid\s+puzzle\b",
+    r"\bdaily\s+puzzle\s+grid\b",
+    r"\bfill\s+cells\b.{0,80}\b(clue|row|column|constraint)\b",
+    r"\bturn[- ]based\b.{0,100}\btactics\b",
+    r"\btactics\b.{0,100}\b(units|enemies|move|attack)\b",
+    r"\bselect\b.{0,60}\b(a\s+)?unit\b",
+    r"\bdefeat\s+all\s+enemies\b",
+    r"\bresource\s+analytics\b",
+    r"\b(dashboard|analytics)\b.{0,80}\bresource\b",
+    r"\bresource\b.{0,80}\b(dashboard|analytics|spreadsheet)\b",
+    r"\bresource\s+management\b.{0,120}\b(sim|simulation|game)\b(?!.{0,120}\b(place|placing|building\s+palette|houses|farms|grid)\b)",
+    r"\bturn[-\s]?based\b.{0,80}\bresource\s+management\b",
+    r"\bcolony\s+management\b",
+    r"\bproduction\s+chain\b",
+    r"\bfactory\s+automation\b",
+    r"\bbelt(s)?\b.{0,80}\b(logistics|automation|factory)\b",
+    r"\btower\s+defense\b",
+    r"\breal[- ]time\s+strategy\b",
+    r"\brts\b",
+    r"\bcity\s+planning\b.{0,80}\b(spreadsheet|dashboard|tool)\b",
+    r"\burban\s+planning\b.{0,80}\b(dashboard|tool|spreadsheet)\b",
+    r"\breal\s+estate\b.{0,80}\b(dashboard|tool|app)\b",
+    r"\bfinance\b.{0,80}\bdashboard\b",
+    r"\bfinancial\b.{0,80}\bdashboard\b",
+    r"\bmap\s+editor\b",
+    r"\blevel\s+editor\b",
+    r"\bmultiplayer\b.{0,80}\bcity\b",
+    r"\bonline\b.{0,80}\bcity\b",
+    r"\bphysics\b.{0,80}\b(game|sim)\b",
+    r"\btech\s+tree\b",
+    r"\bcampaign\b",
+    r"\bdashboard\s+grid\b",
+    r"\b(dashboard|data\s+table|spreadsheet)\b",
+    r"\bsurvey\b",
+    r"\beducation\s+website\b",
+    r"\b(dashboard|landing\s*page|saas)\b",
+    r"^city$",
+    r"^builder$",
+    r"^grid$",
+    r"^resources?$",
+    r"^buildings?$",
+    r"^population$",
+    r"^map$",
+    r"^planning$",
+    r"^simulation$",
+    r"^dashboard$",
+    r"^management$",
+    r"^city\s+builder$",
+    r"^build a city builder\.?$",
+    r"^city app$",
+    r"^grid builder$",
+) + _REACTION_TIME_CHALLENGE_CROSS_RECIPE_NEGATIVES + _TYPING_SPEED_RACER_CROSS_RECIPE_NEGATIVES + _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVES + _DECK_BUILDER_LITE_CROSS_RECIPE_NEGATIVES + _CARD_DECK_TURN_BASED_CROSS_RECIPE_NEGATIVES
+
+_CITY_BUILDER_LITE_POSITIVE_PATTERNS: tuple[str, ...] = (
+    r"\bcity[- ]build(ing|er)\b.{0,120}\b(grid|buildings|houses|farms|place|day|turn|production|population|goal)\b",
+    r"\b(browser|local|dom|small|tiny)\b.{0,60}\bcity\b.{0,120}\b(grid|building|place|day|resource|population|happiness)\b",
+    r"\bplace\b.{0,60}\b(buildings|houses|farms|wells?|power)\b.{0,120}\b(grid|city|small\s+grid)\b",
+    r"\bbuilding\s+palette\b.{0,120}\b(grid|place|day|resource|production|goal|restart)\b",
+    r"\b(5x5|6x6|5\s*x\s*5|6\s*x\s*6)\b.{0,120}\b(grid|city|building|houses|farms)\b",
+    r"\b(end\s+day|advance\s+days?)\b.{0,120}\b(production|resources?|building|grid|city|population|happiness)\b",
+    r"\bbuildings?\b.{0,80}\bproduce\b.{0,120}\b(resources?|food|coins?|turn|day|each\s+turn|each\s+day)\b",
+    r"\bpopulation\s+(goal|growth|happiness)\b.{0,120}\b(city|grid|building|day|goal)\b",
+    r"\b(new\s+city|restart)\b.{0,120}\b(grid|resources?|buildings?|day|city\s+goal|population)\b",
+    r"\bcity\s+goal\b.{0,120}\b(day|population|happiness|win|result)\b",
+    r"\bresource\s+counters?\b.{0,120}\b(city|grid|building|day|place|production)\b",
+    r"\bmeet\b.{0,60}\b(city|population)\s+goal\b.{0,120}\b(day|grid|building)\b",
 )
 
 
@@ -1116,6 +1228,14 @@ def _matches_turn_based_tactics_lite(text: str) -> bool:
     )
 
 
+def _matches_city_builder_lite(text: str) -> bool:
+    return _matches_recipe(
+        text,
+        negatives=_CITY_BUILDER_LITE_NEGATIVE_PATTERNS,
+        positives=_CITY_BUILDER_LITE_POSITIVE_PATTERNS,
+    )
+
+
 def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
     """Return a Game Pack app type id for clear prompt matches, else ``None``."""
     text = _normalized_prompt(prompt)
@@ -1126,7 +1246,7 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
     # Precedence: trivia → idle → branching narrative → memory match → word daily
     # → daily puzzle grid → resource management sim → hangman lite → typing speed racer
     # → word builder → card deck turn-based → reaction time challenge → rhythm tap lite
-    # → deck builder lite → turn-based tactics lite.
+    # → deck builder lite → turn-based tactics lite → city builder lite.
     if _matches_trivia(text):
         return TRIVIA_TIMER_APP_TYPE
     if _matches_idle(text):
@@ -1157,6 +1277,8 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
         return DECK_BUILDER_LITE_APP_TYPE
     if _matches_turn_based_tactics_lite(text):
         return TURN_BASED_TACTICS_LITE_APP_TYPE
+    if _matches_city_builder_lite(text):
+        return CITY_BUILDER_LITE_APP_TYPE
     return None
 
 
