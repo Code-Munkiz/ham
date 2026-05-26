@@ -151,6 +151,134 @@ const Game = () => {
 };
 """
 
+_CARD_DECK_PROMPT = (
+    "Build a browser card battle game where the player draws a hand from a shuffled deck, "
+    "plays one card per turn, resolves card effects against a simple enemy, uses a discard pile, "
+    "and wins by reducing the enemy health to zero."
+)
+
+_EMPTY_SHUFFLED_DECK_APP = """
+const shuffledDeck = () => { return []; };
+const drawInitialHand = () => { return []; };
+const reducer = (state, action) => state;
+"""
+
+_SEEDED_DECK_APP = """
+const CARDS = [{ id: 1, name: 'Strike', power: 5 }];
+const shuffledDeck = () => [...CARDS].sort(() => Math.random() - 0.5);
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'START_GAME':
+      return { ...state, deck: shuffledDeck(), hand: shuffledDeck().slice(0, 3) };
+    default:
+      return state;
+  }
+};
+"""
+
+_UNWIRED_VICTORY_GAME = """
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'PLAY_CARD':
+      return { ...state, enemyHp: state.enemyHp - action.payload.power, discardPile: [...state.discardPile, action.payload] };
+    case 'END_GAME':
+      return { ...state, gameEnded: true };
+    default:
+      return state;
+  }
+};
+const Game = () => {
+  const [state, dispatch] = useReducer(reducer, { enemyHp: 20, discardPile: [], gameEnded: false });
+  return (
+    <>
+      <Opponent enemyHp={state.enemyHp} />
+      {state.gameEnded && <ResultsPanel enemyHp={state.enemyHp} />}
+    </>
+  );
+};
+"""
+
+_WIRED_VICTORY_GAME = """
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'PLAY_CARD': {
+      const nextHp = state.enemyHp - action.payload.power;
+      const next = { ...state, enemyHp: nextHp, discardPile: [...state.discardPile, action.payload] };
+      return nextHp <= 0 ? { ...next, gameEnded: true } : next;
+    }
+    case 'END_GAME':
+      return { ...state, gameEnded: true };
+    default:
+      return state;
+  }
+};
+"""
+
+_IMPLEMENTED_DRAW_CARD = """
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'DRAW_CARD':
+      if (state.deck.length === 0) return state;
+      const cardToDraw = state.deck[0];
+      return {
+        ...state,
+        deck: state.deck.slice(1),
+        hand: [...state.hand, cardToDraw]
+      };
+    default:
+      return state;
+  }
+};
+"""
+
+_NOOP_DRAW_CARD = """
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'DRAW_CARD':
+      return state;
+    default:
+      return state;
+  }
+};
+"""
+
+_IGNORED_SEED_PAYLOAD_APP = """
+const initialState = { playerHealth: 20, enemyHealth: 20, deck: [], hand: [], discard: [] };
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'NEW_GAME':
+      return initialState;
+    case 'PLAY_CARD':
+      return { ...state, enemyHealth: state.enemyHealth - action.card.power };
+    default:
+      return state;
+  }
+};
+export const App = () => {
+  const [state, dispatch] = useReducer(reducer, initialState);
+  useEffect(() => {
+    const shuffledDeck = [...Array(10).keys()].map(i => ({ id: i, power: 3 }));
+    dispatch({ type: 'NEW_GAME', deck: shuffledDeck });
+  }, []);
+};
+"""
+
+_APPLIED_SEED_PAYLOAD_APP = """
+const initialState = { deck: [], hand: [], discard: [], enemyHealth: 20 };
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'NEW_GAME':
+      return {
+        ...initialState,
+        deck: action.payload.deck,
+        hand: action.payload.hand || action.payload.deck.slice(0, 3),
+      };
+    default:
+      return state;
+  }
+};
+"""
+
 
 class TestInspectGeneratedScaffoldQuality:
     def test_detects_noop_primary_reducer_action(self):
@@ -266,6 +394,95 @@ class TestInspectGeneratedScaffoldQuality:
         )
         assert not any(i.code == "missing_result_state" for i in issues)
 
+    def test_detects_empty_shuffled_deck_for_card_prompt(self):
+        plan = _plan()
+        plan.user_message = _CARD_DECK_PROMPT
+        issues = inspect_generated_scaffold_quality(
+            [("src/components/Game.tsx", _EMPTY_SHUFFLED_DECK_APP)],
+            plan=plan,
+        )
+        assert any(i.code == "empty_deck_seed" for i in issues)
+
+    def test_seeded_deck_not_overflagged(self):
+        plan = _plan()
+        plan.user_message = _CARD_DECK_PROMPT
+        issues = inspect_generated_scaffold_quality(
+            [("src/components/Game.tsx", _SEEDED_DECK_APP)],
+            plan=plan,
+        )
+        assert not any(i.code == "empty_deck_seed" for i in issues)
+
+    def test_detects_missing_victory_wiring_when_end_game_never_fires(self):
+        plan = _plan()
+        plan.user_message = _CARD_DECK_PROMPT
+        issues = inspect_generated_scaffold_quality(
+            [("src/components/Game.tsx", _UNWIRED_VICTORY_GAME)],
+            plan=plan,
+        )
+        assert any(i.code == "missing_victory_wiring" for i in issues)
+
+    def test_wired_victory_on_enemy_hp_not_overflagged(self):
+        plan = _plan()
+        plan.user_message = _CARD_DECK_PROMPT
+        issues = inspect_generated_scaffold_quality(
+            [("src/components/Game.tsx", _WIRED_VICTORY_GAME)],
+            plan=plan,
+        )
+        assert not any(i.code == "missing_victory_wiring" for i in issues)
+
+    def test_implemented_draw_card_not_flagged_as_noop(self):
+        issues = inspect_generated_scaffold_quality([("src/Game.tsx", _IMPLEMENTED_DRAW_CARD)])
+        assert not any(
+            i.code == "noop_reducer_action" and "DRAW_CARD" in i.message for i in issues
+        )
+
+    def test_true_noop_draw_card_still_flagged(self):
+        issues = inspect_generated_scaffold_quality([("src/Game.tsx", _NOOP_DRAW_CARD)])
+        assert any(i.code == "noop_reducer_action" and "DRAW_CARD" in i.message for i in issues)
+
+    def test_detects_ignored_seed_payload_for_new_game(self):
+        plan = _plan()
+        plan.user_message = _CARD_DECK_PROMPT
+        issues = inspect_generated_scaffold_quality(
+            [("src/App.tsx", _IGNORED_SEED_PAYLOAD_APP)],
+            plan=plan,
+        )
+        assert any(i.code == "ignored_seed_payload" for i in issues)
+
+    def test_applied_seed_payload_not_overflagged(self):
+        plan = _plan()
+        plan.user_message = _CARD_DECK_PROMPT
+        issues = inspect_generated_scaffold_quality(
+            [("src/App.tsx", _APPLIED_SEED_PAYLOAD_APP)],
+            plan=plan,
+        )
+        assert not any(i.code == "ignored_seed_payload" for i in issues)
+
+    def test_populated_seed_with_empty_new_game_reducer_flagged(self):
+        plan = _plan()
+        plan.user_message = _CARD_DECK_PROMPT
+        issues = inspect_generated_scaffold_quality(
+            [
+                (
+                    "src/App.tsx",
+                    """
+const CARDS = [{ id: 1, name: 'Strike', power: 5 }];
+const initialState = { deck: [], hand: [] };
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'NEW_GAME': return initialState;
+    default: return state;
+  }
+};
+""",
+                )
+            ],
+            plan=plan,
+        )
+        assert any(
+            i.code in {"ignored_seed_payload", "empty_deck_seed"} for i in issues
+        )
+
 
 class TestBuildScaffoldRepairPrompt:
     def test_repair_prompt_includes_detected_issues_and_mutation_guidance(self):
@@ -338,6 +555,47 @@ class TestBuildScaffoldRepairPrompt:
         )
         assert "Result-state repair focus" in messages[0]["content"]
         assert "restart" in messages[0]["content"].lower()
+
+    def test_repair_prompt_adds_card_deck_focus_when_deck_issue_present(self):
+        issues = [
+            ScaffoldQualityIssue(
+                code="empty_deck_seed",
+                message="deck seed empty",
+                path="src/Game.tsx",
+            )
+        ]
+        plan = _plan()
+        plan.user_message = _CARD_DECK_PROMPT
+        messages = build_scaffold_repair_prompt(
+            plan,
+            [("src/Game.tsx", _EMPTY_SHUFFLED_DECK_APP)],
+            issues,
+            base_system_prompt="BASE",
+        )
+        assert "Card-deck repair focus" in messages[0]["content"]
+        assert "shuffled deck" in messages[0]["content"].lower()
+        assert "enemy HP reaches zero" in messages[0]["content"]
+
+    def test_repair_prompt_adds_seed_payload_guidance(self):
+        issues = [
+            ScaffoldQualityIssue(
+                code="ignored_seed_payload",
+                message="Reducer ignores seeded deck payload",
+                path="src/App.tsx",
+            )
+        ]
+        plan = _plan()
+        plan.user_message = _CARD_DECK_PROMPT
+        messages = build_scaffold_repair_prompt(
+            plan,
+            [("src/App.tsx", _IGNORED_SEED_PAYLOAD_APP)],
+            issues,
+            base_system_prompt="BASE",
+        )
+        body = messages[0]["content"]
+        assert "action.payload" in body
+        assert "NEW_GAME/RESET/START" in body
+        assert "non-empty at game start" in body.lower()
 
 
 class TestMaybeRepairGeneratedScaffold:

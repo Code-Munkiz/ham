@@ -114,6 +114,63 @@ _RESULT_STATE_MARKERS = re.compile(
     re.IGNORECASE,
 )
 
+_PROMPT_CARD_DECK = re.compile(
+    r"\bcards?\b|\bdecks?\b|\bhand\b|\bdraw\b|\bdiscard\b|shuffled deck|card battle",
+    re.IGNORECASE,
+)
+
+_EMPTY_DECK_FACTORY = re.compile(
+    r"(?:function\s+|const\s+)?(?:shuffledDeck|drawInitialHand|createDeck|buildDeck|makeDeck)\w*"
+    r"(?:\s*=\s*)?(?:\([^)]*\)\s*)?(?:=>)?\s*\{[^}]*return\s*\[\s*\]",
+    re.IGNORECASE | re.DOTALL,
+)
+
+_EMPTY_DECK_ARROW = re.compile(
+    r"(?:const|function)\s+(?:shuffledDeck|drawInitialHand|createDeck|buildDeck)\w*\s*="
+    r"\s*(?:\([^)]*\)\s*)?=>\s*\[\s*\]",
+    re.IGNORECASE,
+)
+
+_STUB_DECK_IMPL = re.compile(
+    r"/\*\s*implementation\s*\*/\s*return\s*\[\s*\]",
+    re.IGNORECASE,
+)
+
+_POPULATED_CARD_DEF = re.compile(
+    r"\[\s*\{[^}]*(?:name|damage|power|effect|id)\s*:",
+    re.IGNORECASE,
+)
+
+_MEANINGFUL_REDUCER_MUTATION = re.compile(
+    r"return\s*\{[^}]*\.\.\.[^}]*(?:deck|hand|discard|enemyHp|playerHp|food|wood|count|score|mistakes|wpm)\s*:",
+    re.IGNORECASE | re.DOTALL,
+)
+
+_PROMPT_CARD_VICTORY = re.compile(
+    r"enemy health|reducing.*health.*zero|health to zero|card battle|wins by",
+    re.IGNORECASE,
+)
+
+_VICTORY_TRANSITION = re.compile(
+    r"dispatch\s*\(\s*\{\s*type:\s*['\"](?:END_GAME|WIN|GAME_OVER|SET_GAME_OVER)['\"]"
+    r"|setGameOver\s*\("
+    r"|setResult\s*\("
+    r"|if\s*\([^)]*enemyHp\s*<=\s*0[^)]*\)\s*\{[^}]*(?:setGameOver|setResult|gameEnded|gameOver|dispatch)"
+    r"|(?:nextHp|newEnemyHp|updatedHp|enemyHealth)\s*<=\s*0[^;{]*(?:gameEnded|gameOver|You win)"
+    r"|case\s*['\"]PLAY_CARD['\"][^}]*gameEnded:\s*true",
+    re.IGNORECASE | re.DOTALL,
+)
+
+_SEED_GAME_ACTIONS = frozenset(
+    {"NEW_GAME", "RESET_GAME", "START_GAME", "RESET", "INIT_GAME", "START"}
+)
+
+_DISPATCH_SEED_WITH_DATA = re.compile(
+    r"dispatch\s*\(\s*\{[^}]*type:\s*['\"](?:NEW_GAME|RESET_GAME|START_GAME|RESET|INIT_GAME|START)['\"]"
+    r"[^}]*(?:payload|deck|hand|cards)\s*:",
+    re.IGNORECASE | re.DOTALL,
+)
+
 _JS_SOURCE_SUFFIXES = (".tsx", ".ts", ".jsx", ".js")
 
 
@@ -157,13 +214,8 @@ def _inspect_reducer_noops(path: str, content: str) -> list[ScaffoldQualityIssue
         body = match.group(2)
         if action == "default":
             continue
-        action_upper = action.upper()
-        is_primary = action_upper in _PRIMARY_GAMEPLAY_ACTIONS or (
-            action_upper.replace("-", "_") in _PRIMARY_GAMEPLAY_ACTIONS
-        )
         has_stub = bool(_STUB_PLACEHOLDER.search(body))
-        has_noop = bool(_NOOP_RETURN.search(body.strip()))
-        if has_stub or (has_noop and (is_primary or action_upper == action)):
+        if has_stub or _is_noop_case_body(body, action):
             issues.append(
                 ScaffoldQualityIssue(
                     code="noop_reducer_action",
@@ -216,11 +268,24 @@ def _collect_dispatch_types(file_changes: list[tuple[str, str]]) -> list[tuple[s
 
 
 def _is_noop_case_body(body: str, action: str) -> bool:
-    action_upper = action.upper()
-    is_primary = action_upper in _PRIMARY_GAMEPLAY_ACTIONS
-    has_stub = bool(_STUB_PLACEHOLDER.search(body))
-    has_noop = bool(_NOOP_RETURN.search(body.strip()))
-    return has_stub or (has_noop and is_primary)
+    if _STUB_PLACEHOLDER.search(body):
+        return True
+    if _MEANINGFUL_REDUCER_MUTATION.search(body):
+        return False
+    if re.search(
+        r"return\s*\{[^}]*(?:deck|hand|discardPile|discard)\s*:",
+        body,
+        re.IGNORECASE | re.DOTALL,
+    ):
+        return False
+    stripped = body.strip()
+    for line in stripped.splitlines():
+        line = line.strip()
+        if not line or line.startswith("//"):
+            continue
+        if line.startswith("return") and not _NOOP_RETURN.match(line):
+            return False
+    return bool(_NOOP_RETURN.search(stripped))
 
 
 def _inspect_dispatch_reducer_mismatch(
@@ -387,6 +452,192 @@ def _inspect_missing_result_state(
     ]
 
 
+def _prompt_is_card_deck_game(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    return bool(_PROMPT_CARD_DECK.search(prompt))
+
+
+def _has_playable_card_seed(combined: str) -> bool:
+    if not _POPULATED_CARD_DEF.search(combined):
+        return False
+    if re.search(r"deck:\s*\[\s*\{", combined, re.I):
+        return True
+    if re.search(r"(?:initialDeck|cards|cardDeck|CARD_DECK)\s*=\s*\[\s*\{", combined, re.I):
+        return True
+    if re.search(
+        r"(?:shuffledDeck|createDeck|buildDeck|makeDeck)\w*\([^)]*\)\s*\{[^}]*return\s*\[\s*\{",
+        combined,
+        re.I | re.DOTALL,
+    ):
+        return True
+    return bool(re.search(r"return\s*\[[^\]]*\{[^}]*(?:name|damage|power|effect|id)\s*:", combined, re.I))
+
+
+def _inspect_empty_deck_seed(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_is_card_deck_game(plan.user_message):
+        return []
+    combined = _combined_js_source(file_changes)
+    if not re.search(r"deck|hand|draw|discard|card", combined, re.I):
+        return []
+    empty_factory = bool(
+        _EMPTY_DECK_FACTORY.search(combined)
+        or _EMPTY_DECK_ARROW.search(combined)
+        or _STUB_DECK_IMPL.search(combined)
+    )
+    if _has_playable_card_seed(combined) and not empty_factory:
+        return []
+    if empty_factory or (
+        not _has_playable_card_seed(combined)
+        and re.search(r"(?:deck|hand):\s*\[\s*\]", combined, re.I)
+    ):
+        path = _first_path_matching(
+            _js_sources(file_changes),
+            r"shuffledDeck|drawInitialHand|createDeck|deck|hand|Game",
+        )
+        return [
+            ScaffoldQualityIssue(
+                code="empty_deck_seed",
+                message=(
+                    "Card/deck prompt expects playable cards but deck/hand seed "
+                    "functions or initial arrays are empty"
+                ),
+                path=path,
+            )
+        ]
+    return []
+
+
+def _inspect_missing_victory_wiring(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _PROMPT_CARD_VICTORY.search(plan.user_message or ""):
+        return []
+    combined = _combined_js_source(file_changes)
+    if not re.search(r"enemyHp|enemy.*health", combined, re.I):
+        return []
+    if not re.search(r"enemyHp\s*[-=]|enemyHp:.*-", combined, re.I):
+        return []
+    if _VICTORY_TRANSITION.search(combined):
+        return []
+    gated_result = bool(re.search(r"gameEnded|gameOver", combined, re.I))
+    has_result_ui = bool(re.search(r"ResultsPanel|VictoryScreen|result", combined, re.I))
+    has_end_game_case = "END_GAME" in combined
+    if gated_result and has_result_ui and has_end_game_case:
+        path = _first_path_matching(_js_sources(file_changes), r"Game|enemyHp|ResultsPanel")
+        return [
+            ScaffoldQualityIssue(
+                code="missing_victory_wiring",
+                message=(
+                    "Enemy HP is reduced and END_GAME/result UI exist, but no win "
+                    "transition fires when enemy HP reaches zero"
+                ),
+                path=path,
+            )
+        ]
+    if has_result_ui and not _RESULT_STATE_MARKERS.search(combined):
+        return []
+    if gated_result and has_result_ui:
+        path = _first_path_matching(_js_sources(file_changes), r"Game|enemyHp|ResultsPanel")
+        return [
+            ScaffoldQualityIssue(
+                code="missing_victory_wiring",
+                message=(
+                    "Enemy HP is reduced but gated result UI never receives a win/game-over transition"
+                ),
+                path=path,
+            )
+        ]
+    return []
+
+
+def _case_reads_seed_payload(body: str) -> bool:
+    return bool(
+        re.search(
+            r"action\.(?:payload(?:\.(?:deck|hand|cards))?|deck|hand|cards|card\b)",
+            body,
+            re.IGNORECASE,
+        )
+    )
+
+
+def _case_returns_static_empty_seed(body: str) -> bool:
+    if re.search(r"return\s+initialState\b", body):
+        return True
+    if re.search(r"return\s*\{[^}]*\.\.\.initialState\b", body, re.IGNORECASE):
+        return True
+    if re.search(
+        r"return\s*\{[^}]*deck:\s*\[\s*\][^}]*hand:\s*\[\s*\]",
+        body,
+        re.IGNORECASE | re.DOTALL,
+    ):
+        return True
+    return bool(
+        re.search(
+            r"return\s*\{[^}]*\.\.\.state[^}]*deck:\s*\[\s*\]",
+            body,
+            re.IGNORECASE | re.DOTALL,
+        )
+        and not _case_reads_seed_payload(body)
+    )
+
+
+def _dispatch_passes_seed_data(combined: str, action_type: str) -> bool:
+    pattern = re.compile(
+        rf"dispatch\s*\(\s*{{[^}}]*type:\s*['\"]{re.escape(action_type)}['\"]"
+        rf"[^}}]*(?:payload|deck|hand|cards)\s*:",
+        re.IGNORECASE | re.DOTALL,
+    )
+    return bool(pattern.search(combined))
+
+
+def _inspect_ignored_seed_payload(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_is_card_deck_game(plan.user_message):
+        return []
+    combined = _combined_js_source(file_changes)
+    if not re.search(r"deck|hand|draw|discard|card|reducer", combined, re.I):
+        return []
+    reducer_actions = _collect_reducer_actions(file_changes)
+    if not reducer_actions:
+        return []
+    has_populated_seed = bool(_POPULATED_CARD_DEF.search(combined) or _has_playable_card_seed(combined))
+    issues: list[ScaffoldQualityIssue] = []
+    for action_type, body in reducer_actions.items():
+        action_upper = action_type.upper()
+        if action_upper not in _SEED_GAME_ACTIONS:
+            continue
+        dispatch_passes_data = _dispatch_passes_seed_data(combined, action_type)
+        if not dispatch_passes_data and not has_populated_seed:
+            continue
+        if _case_reads_seed_payload(body):
+            continue
+        if not _case_returns_static_empty_seed(body) and not dispatch_passes_data:
+            continue
+        if dispatch_passes_data or (has_populated_seed and _case_returns_static_empty_seed(body)):
+            path = _first_path_matching(
+                _js_sources(file_changes),
+                rf"{action_type}|reducer|deck|Game|App",
+            )
+            issues.append(
+                ScaffoldQualityIssue(
+                    code="ignored_seed_payload",
+                    message=(
+                        f"Reducer case '{action_type}' ignores seeded deck/hand payload "
+                        "and returns empty/default state"
+                    ),
+                    path=path,
+                )
+            )
+    return issues
+
+
 def _inspect_import_export(
     file_changes: list[tuple[str, str]],
 ) -> list[ScaffoldQualityIssue]:
@@ -446,6 +697,9 @@ def inspect_generated_scaffold_quality(
     if plan is not None:
         issues.extend(_inspect_timer_duration(plan, file_changes))
         issues.extend(_inspect_missing_result_state(plan, file_changes))
+        issues.extend(_inspect_empty_deck_seed(plan, file_changes))
+        issues.extend(_inspect_missing_victory_wiring(plan, file_changes))
+        issues.extend(_inspect_ignored_seed_payload(plan, file_changes))
     issues.extend(_inspect_import_export(file_changes))
     issues.extend(_inspect_dispatch_reducer_mismatch(file_changes))
     # De-dupe by (code, path, message)
@@ -510,11 +764,33 @@ def build_scaffold_repair_prompt(
             "- Initialize round duration to 60 seconds (or 60000 ms) and lock input when it reaches zero.\n"
             "- Display final score/WPM/accuracy on expiry.\n"
         )
-    if "missing_result_state" in issue_codes:
+    if "missing_result_state" in issue_codes or "missing_victory_wiring" in issue_codes:
         repair_system += (
             "\nResult-state repair focus:\n"
             "- Wire victory when enemy HP reaches zero (or survival goal met) into visible result UI.\n"
             "- Include win/loss/completion state and a restart or play-again control.\n"
+        )
+    card_codes = issue_codes & {
+        "empty_deck_seed",
+        "ignored_seed_payload",
+        "missing_victory_wiring",
+        "noop_reducer_action",
+        "dispatch_reducer_mismatch",
+    }
+    if card_codes and _prompt_is_card_deck_game(plan.user_message):
+        repair_system += (
+            "\nCard-deck repair focus:\n"
+            "- Define non-empty card objects (name, damage/power/effect) and a shuffled deck.\n"
+            "- Seed an initial hand or provide an immediate draw path with playable cards.\n"
+            "- If cards are generated in setup/useEffect, pass them into canonical game state.\n"
+            "- If dispatching NEW_GAME/RESET/START with payload or deck/hand fields, the reducer "
+            "must read action.payload (or action.deck/hand) and install them into state.\n"
+            "- Do not generate card arrays disconnected from reducer state; deck/hand must be "
+            "non-empty at game start, or Draw must immediately populate hand from a non-empty deck.\n"
+            "- Do not leave deck/hand as empty arrays unless another implemented action immediately fills them.\n"
+            "- On PLAY_CARD: remove from hand, apply effect to enemy/player HP, push card to discard.\n"
+            "- When enemy HP reaches zero, set visible win/result state (dispatch END_GAME or equivalent).\n"
+            "- Restart/new round resets deck, hand, discard, enemy HP, and result state.\n"
         )
     user_content = (
         f"User request: {plan.user_message}\n\n"
