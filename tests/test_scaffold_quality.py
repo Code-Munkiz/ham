@@ -348,6 +348,103 @@ const reducer = (state, action) => {
 };
 """
 
+_DECK_BUILDER_GATE_PROMPT = (
+    "Build a browser deck-building card game where the player starts with a small deck, "
+    "draws a hand, plays cards against a simple enemy, discards played cards, chooses one "
+    "card reward after each win, adds it to the deck, and tries to complete a short run."
+)
+
+_INITIALIZED_DECK_APP = """
+const initialState = { deck: [], hand: [], discard: [] };
+const initialDeck = () => [{ id: '1', name: 'Attack' }, { id: '2', name: 'Defend' }];
+const drawHand = () => [initialDeck()[0]];
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'INITIALIZE':
+      return { ...state, deck: initialDeck(), hand: drawHand() };
+    default:
+      return state;
+  }
+};
+export const App = () => {
+  const [state, dispatch] = useReducer(reducer, initialState);
+  useEffect(() => { dispatch({ type: 'INITIALIZE' }); }, []);
+};
+"""
+
+_EMPTY_REWARD_POOL_APP = """
+const rewards = [];
+const reducer = (state, action) => state;
+const Game = () => state.phase === 'reward' ? <RewardChoicePanel rewards={rewards} /> : null;
+"""
+
+_POPULATED_REWARD_POOL_APP = """
+const rewards = [{ id: 'r1', name: 'Bolt' }, { id: 'r2', name: 'Shield' }];
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'SELECT_REWARD':
+      return { ...state, deck: [...state.deck, action.payload], phase: 'encounter' };
+    default:
+      return state;
+  }
+};
+"""
+
+_REWARD_NOT_WIRED_APP = """
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'SELECT_REWARD':
+      return { ...state, phase: 'encounter' };
+    default:
+      return state;
+  }
+};
+"""
+
+_DISCARD_NOT_WIRED_APP = """
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'PLAY_CARD':
+      return { ...state, hand: state.hand.filter(c => c.id !== action.payload), enemyHp: state.enemyHp - 1 };
+    default:
+      return state;
+  }
+};
+const initialState = { deck: [{ id: 1 }], hand: [{ id: 1 }], discardPile: [], enemyHp: 10 };
+"""
+
+_DISCARD_WIRED_APP = """
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'PLAY_CARD': {
+      const card = state.hand.find(c => c.id === action.payload);
+      return {
+        ...state,
+        hand: state.hand.filter(c => c.id !== action.payload),
+        discardPile: [...state.discardPile, card],
+        enemyHp: state.enemyHp - 1,
+      };
+    }
+    default:
+      return state;
+  }
+};
+"""
+
+_DECK_BUILDER_NO_RESTART_APP = """
+const reducer = (state, action) => state;
+const Game = () => <div>Encounter {state.encounter}</div>;
+"""
+
+_DECK_BUILDER_WITH_RESTART_APP = """
+const Game = () => (
+  <>
+    <ResultsPanel />
+    <button onClick={playAgain}>Play Again</button>
+  </>
+);
+"""
+
 
 class TestInspectGeneratedScaffoldQuality:
     def test_detects_noop_primary_reducer_action(self):
@@ -597,6 +694,103 @@ const reducer = (state, action) => {
             i.code in {"ignored_seed_payload", "empty_deck_seed"} for i in issues
         )
 
+    def test_initialized_deck_on_mount_not_flagged_as_empty_seed(self):
+        plan = _plan()
+        plan.user_message = _DECK_BUILDER_GATE_PROMPT
+        issues = inspect_generated_scaffold_quality(
+            [("src/App.tsx", _INITIALIZED_DECK_APP)],
+            plan=plan,
+        )
+        assert not any(i.code == "empty_deck_seed" for i in issues)
+
+    def test_draw_pile_seeded_initial_state_not_flagged_as_empty_seed(self):
+        plan = _plan()
+        plan.user_message = _DECK_BUILDER_GATE_PROMPT
+        app = """
+export const initialState = {
+  drawPile: [{ id: 1, name: 'Attack', damage: 5 }],
+  hand: [],
+  discardPile: [],
+};
+"""
+        issues = inspect_generated_scaffold_quality(
+            [("src/reducers/gameReducer.ts", app)],
+            plan=plan,
+        )
+        assert not any(i.code == "empty_deck_seed" for i in issues)
+
+    def test_empty_reward_pool_flagged_for_deck_builder_prompt(self):
+        plan = _plan()
+        plan.user_message = _DECK_BUILDER_GATE_PROMPT
+        issues = inspect_generated_scaffold_quality(
+            [("src/components/Game.tsx", _EMPTY_REWARD_POOL_APP)],
+            plan=plan,
+        )
+        assert any(i.code == "empty_reward_pool" for i in issues)
+
+    def test_populated_reward_pool_not_overflagged(self):
+        plan = _plan()
+        plan.user_message = _DECK_BUILDER_GATE_PROMPT
+        issues = inspect_generated_scaffold_quality(
+            [("src/state/gameReducer.ts", _POPULATED_REWARD_POOL_APP)],
+            plan=plan,
+        )
+        assert not any(i.code == "empty_reward_pool" for i in issues)
+
+    def test_reward_choice_not_wired_to_deck_is_flagged(self):
+        plan = _plan()
+        plan.user_message = _DECK_BUILDER_GATE_PROMPT
+        issues = inspect_generated_scaffold_quality(
+            [("src/state/gameReducer.ts", _REWARD_NOT_WIRED_APP)],
+            plan=plan,
+        )
+        assert any(i.code == "reward_choice_not_wired" for i in issues)
+
+    def test_reward_choice_appending_to_deck_not_overflagged(self):
+        plan = _plan()
+        plan.user_message = _DECK_BUILDER_GATE_PROMPT
+        issues = inspect_generated_scaffold_quality(
+            [("src/state/gameReducer.ts", _POPULATED_REWARD_POOL_APP)],
+            plan=plan,
+        )
+        assert not any(i.code == "reward_choice_not_wired" for i in issues)
+
+    def test_discard_pile_not_wired_is_flagged(self):
+        plan = _plan()
+        plan.user_message = _DECK_BUILDER_GATE_PROMPT
+        issues = inspect_generated_scaffold_quality(
+            [("src/state/gameReducer.ts", _DISCARD_NOT_WIRED_APP)],
+            plan=plan,
+        )
+        assert any(i.code == "discard_not_wired" for i in issues)
+
+    def test_discard_pile_append_not_overflagged(self):
+        plan = _plan()
+        plan.user_message = _DECK_BUILDER_GATE_PROMPT
+        issues = inspect_generated_scaffold_quality(
+            [("src/state/gameReducer.ts", _DISCARD_WIRED_APP)],
+            plan=plan,
+        )
+        assert not any(i.code == "discard_not_wired" for i in issues)
+
+    def test_missing_restart_flagged_for_deck_builder_run_prompt(self):
+        plan = _plan()
+        plan.user_message = _DECK_BUILDER_GATE_PROMPT
+        issues = inspect_generated_scaffold_quality(
+            [("src/components/Game.tsx", _DECK_BUILDER_NO_RESTART_APP)],
+            plan=plan,
+        )
+        assert any(i.code == "missing_restart_action" for i in issues)
+
+    def test_restart_present_not_overflagged_for_deck_builder(self):
+        plan = _plan()
+        plan.user_message = _DECK_BUILDER_GATE_PROMPT
+        issues = inspect_generated_scaffold_quality(
+            [("src/components/Game.tsx", _DECK_BUILDER_WITH_RESTART_APP)],
+            plan=plan,
+        )
+        assert not any(i.code == "missing_restart_action" for i in issues)
+
 
 class TestBuildScaffoldRepairPrompt:
     def test_repair_prompt_includes_detected_issues_and_mutation_guidance(self):
@@ -735,6 +929,33 @@ class TestBuildScaffoldRepairPrompt:
         assert "action.payload" in body
         assert "NEW_GAME/RESET/START" in body
         assert "non-empty at game start" in body.lower()
+
+    def test_repair_prompt_adds_deck_builder_focus_when_deck_builder_issue_present(self):
+        issues = [
+            ScaffoldQualityIssue(
+                code="empty_reward_pool",
+                message="reward pool empty",
+                path="src/state/gameReducer.ts",
+            ),
+            ScaffoldQualityIssue(
+                code="discard_not_wired",
+                message="discard not wired",
+                path="src/state/gameReducer.ts",
+            ),
+        ]
+        plan = _plan()
+        plan.user_message = _DECK_BUILDER_GATE_PROMPT
+        messages = build_scaffold_repair_prompt(
+            plan,
+            [("src/state/gameReducer.ts", _EMPTY_REWARD_POOL_APP)],
+            issues,
+            base_system_prompt="BASE",
+        )
+        body = messages[0]["content"]
+        assert "Deck-builder repair focus" in body
+        assert "non-empty reward pool" in body.lower()
+        assert "push card to discard" in body.lower()
+        assert "restart/new-run/play-again" in body.lower()
 
 
 class TestMaybeRepairGeneratedScaffold:

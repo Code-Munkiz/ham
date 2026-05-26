@@ -100,19 +100,19 @@ _EXPLICIT_60_DURATION = re.compile(
 
 _PROMPT_RESULT_REQUIRED = re.compile(
     r"\bwins?\b|\bvict(?:ory|orious)\b|\bsurvive\b|health to zero|reducing.*health|"
-    r"final score|win state|game over|running out of",
+    r"final score|win state|game over|running out of|short run|complete a run|run result",
     re.IGNORECASE,
 )
 
 _RESULT_STATE_MARKERS = re.compile(
     r"\b(?:gameWon|gameLost|isFinished|gameOver|hasWon|hasLost|showResult|resultScreen|showResults|finalScore)\b"
     r"|set(?:Result|GameOver|Win|Victory|Status|FinalScore)\s*\("
-    r"|(?:phase|gamePhase|gameState|status)\s*===?\s*['\"](?:result|complete|finished)['\"]"
-    r"|['\"](?:win|won|lose|lost|victory|result|complete)['\"]"
-    r"|type:\s*['\"](?:WIN|LOSE|VICTORY|GAME_OVER|RESULT)['\"]"
+    r"|(?:phase|gamePhase|gameState|status)\s*===?\s*['\"](?:result|complete|finished|runComplete|runResult)['\"]"
+    r"|['\"](?:win|won|lose|lost|victory|result|complete|runComplete|runResult)['\"]"
+    r"|type:\s*['\"](?:WIN|LOSE|VICTORY|GAME_OVER|RESULT|RUN_COMPLETE|NEW_RUN)['\"]"
     r"|enemyHp\s*<=\s*0|enemyHp\s*===?\s*0"
-    r"|VictoryScreen|ResultsPanel|GameOver|GoalStatus"
-    r"|Play Again|Try Again|playAgain|restartGame",
+    r"|VictoryScreen|ResultsPanel|GameOver|GoalStatus|RunResult|DeckBuilderResults"
+    r"|Play Again|Try Again|playAgain|restartGame|newRun|startNewRun|restartRun",
     re.IGNORECASE,
 )
 
@@ -148,6 +148,52 @@ _STALE_RHYTHM_FINAL_SCORE = re.compile(
 
 _PROMPT_CARD_DECK = re.compile(
     r"\bcards?\b|\bdecks?\b|\bhand\b|\bdraw\b|\bdiscard\b|shuffled deck|card battle",
+    re.IGNORECASE,
+)
+
+_PROMPT_DECK_BUILDER = re.compile(
+    r"deck[- ]building|deck builder|starter deck|card reward|add.*to.*deck|"
+    r"short run|complete a run|deck mutation|roguelite.*deck|reward choice",
+    re.IGNORECASE,
+)
+
+_PROMPT_DECK_BUILDER_REWARDS = re.compile(
+    r"card reward|choose.*reward|reward choice|add.*to.*deck|pick.*reward|reward card",
+    re.IGNORECASE,
+)
+
+_PROMPT_DECK_BUILDER_DISCARD = re.compile(
+    r"\bdiscard(?:s|ed|ing)?\b|\bdiscard pile\b",
+    re.IGNORECASE,
+)
+
+_PROMPT_DECK_BUILDER_RUN = re.compile(
+    r"short run|complete a run|run result|new run|restart|play again|run progression|encounters?",
+    re.IGNORECASE,
+)
+
+_EMPTY_REWARD_POOL = re.compile(
+    r"(?:const|let|var)\s+(?:rewards|rewardPool|availableRewards|rewardCards|rewardOptions)\s*=\s*\[\s*\]"
+    r"|(?:rewards|rewardPool|availableRewards|rewardCards|rewardOptions)\s*:\s*\[\s*\]",
+    re.IGNORECASE,
+)
+
+_POPULATED_REWARD_POOL = re.compile(
+    r"(?:rewards|rewardPool|availableRewards|rewardCards|rewardOptions)\s*[=:]\s*\[\s*\{"
+    r"|(?:REWARD_CARDS|rewardCards|defaultRewards)\s*=\s*\[\s*\{",
+    re.IGNORECASE,
+)
+
+_DISCARD_APPEND = re.compile(
+    r"discard(?:Pile)?\s*:\s*\[\.\.\.(?:state\.)?(?:discard|discardPile)"
+    r"|(?:discard|discardPile)\s*:\s*\[\.\.\.(?:state\.)?(?:discard|discardPile)"
+    r"|(?:discard|discardPile)\.push\s*\("
+    r"|\.concat\s*\(\s*(?:state\.)?(?:discard|discardPile)",
+    re.IGNORECASE,
+)
+
+_RESTART_MARKERS = re.compile(
+    r"Play Again|Try Again|playAgain|restartGame|newRun|startNewRun|restartRun|NEW_RUN|RESET_RUN",
     re.IGNORECASE,
 )
 
@@ -194,11 +240,11 @@ _VICTORY_TRANSITION = re.compile(
 )
 
 _SEED_GAME_ACTIONS = frozenset(
-    {"NEW_GAME", "RESET_GAME", "START_GAME", "RESET", "INIT_GAME", "START"}
+    {"NEW_GAME", "RESET_GAME", "START_GAME", "RESET", "INIT_GAME", "START", "INITIALIZE"}
 )
 
 _DISPATCH_SEED_WITH_DATA = re.compile(
-    r"dispatch\s*\(\s*\{[^}]*type:\s*['\"](?:NEW_GAME|RESET_GAME|START_GAME|RESET|INIT_GAME|START)['\"]"
+    r"dispatch\s*\(\s*\{[^}]*type:\s*['\"](?:NEW_GAME|RESET_GAME|START_GAME|RESET|INIT_GAME|START|INITIALIZE)['\"]"
     r"[^}]*(?:payload|deck|hand|cards)\s*:",
     re.IGNORECASE | re.DOTALL,
 )
@@ -554,20 +600,80 @@ def _prompt_is_card_deck_game(prompt: str | None) -> bool:
     return bool(_PROMPT_CARD_DECK.search(prompt))
 
 
+def _prompt_is_deck_builder_game(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    return bool(_PROMPT_DECK_BUILDER.search(prompt))
+
+
+def _prompt_requests_deck_builder_rewards(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    return bool(_PROMPT_DECK_BUILDER_REWARDS.search(prompt))
+
+
+def _prompt_requests_discard_pile(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    return bool(_PROMPT_DECK_BUILDER_DISCARD.search(prompt))
+
+
+def _prompt_requires_deck_builder_run(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    return bool(_PROMPT_DECK_BUILDER_RUN.search(prompt))
+
+
 def _has_playable_card_seed(combined: str) -> bool:
     if not _POPULATED_CARD_DEF.search(combined):
         return False
-    if re.search(r"deck:\s*\[\s*\{", combined, re.I):
+    if re.search(r"(?:deck|drawPile|draw\s*pile):\s*\[\s*\{", combined, re.I):
         return True
-    if re.search(r"(?:initialDeck|cards|cardDeck|CARD_DECK)\s*=\s*\[\s*\{", combined, re.I):
+    if re.search(r"hand:\s*\[\s*\{", combined, re.I):
+        return True
+    if re.search(r"(?:initialDeck|starterDeck|cards|cardDeck|CARD_DECK)\s*=\s*\[\s*\{", combined, re.I):
         return True
     if re.search(
-        r"(?:shuffledDeck|createDeck|buildDeck|makeDeck)\w*\([^)]*\)\s*\{[^}]*return\s*\[\s*\{",
+        r"(?:initialDeck|starterDeck|drawHand)\w*\s*=\s*(?:\([^)]*\)\s*)?=>\s*\[\s*\{",
+        combined,
+        re.I,
+    ):
+        return True
+    if re.search(
+        r"(?:shuffledDeck|createDeck|buildDeck|makeDeck|initialDeck|starterDeck)\w*\([^)]*\)\s*\{[^}]*return\s*\[\s*\{",
+        combined,
+        re.I | re.DOTALL,
+    ):
+        return True
+    if re.search(
+        r"case\s*['\"]INITIALIZE['\"][^}]*(?:deck|hand)\s*:",
         combined,
         re.I | re.DOTALL,
     ):
         return True
     return bool(re.search(r"return\s*\[[^\]]*\{[^}]*(?:name|damage|power|effect|id)\s*:", combined, re.I))
+
+
+def _has_mounted_deck_initialization(combined: str) -> bool:
+    if not re.search(r"useEffect\s*\(", combined):
+        return False
+    if not re.search(
+        r"dispatch\s*\(\s*\{\s*type:\s*['\"](?:INITIALIZE|NEW_GAME|RESET|START_GAME|START|INIT_GAME)['\"]",
+        combined,
+        re.I,
+    ):
+        return False
+    return _has_playable_card_seed(combined) or bool(
+        re.search(r"case\s*['\"]INITIALIZE['\"]", combined, re.I)
+    )
+
+
+def _has_populated_reward_pool(combined: str) -> bool:
+    return bool(_POPULATED_REWARD_POOL.search(combined))
+
+
+def _has_discard_wiring(combined: str) -> bool:
+    return bool(_DISCARD_APPEND.search(combined))
 
 
 def _inspect_empty_deck_seed(
@@ -578,6 +684,8 @@ def _inspect_empty_deck_seed(
         return []
     combined = _combined_js_source(file_changes)
     if not re.search(r"deck|hand|draw|discard|card", combined, re.I):
+        return []
+    if _has_mounted_deck_initialization(combined):
         return []
     empty_factory = bool(
         _EMPTY_DECK_FACTORY.search(combined)
@@ -605,6 +713,128 @@ def _inspect_empty_deck_seed(
             )
         ]
     return []
+
+
+def _inspect_empty_reward_pool(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_requests_deck_builder_rewards(plan.user_message):
+        return []
+    combined = _combined_js_source(file_changes)
+    if _has_populated_reward_pool(combined):
+        return []
+    has_reward_ui = bool(
+        re.search(
+            r"RewardChoice|reward phase|phase\s*===?\s*['\"]reward['\"]|SELECT_REWARD|CHOOSE_REWARD",
+            combined,
+            re.I,
+        )
+    )
+    if not has_reward_ui and not _EMPTY_REWARD_POOL.search(combined):
+        return []
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"reward|Reward|Game|reducer",
+    )
+    return [
+        ScaffoldQualityIssue(
+            code="empty_reward_pool",
+            message=(
+                "Deck-builder prompt expects card reward choices but reward pool "
+                "array is empty or never populated"
+            ),
+            path=path,
+        )
+    ]
+
+
+def _inspect_reward_choice_not_wired(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_requests_deck_builder_rewards(plan.user_message):
+        return []
+    combined = _combined_js_source(file_changes)
+    reducer_actions = _collect_reducer_actions(file_changes)
+    reward_actions = {
+        action: body
+        for action, body in reducer_actions.items()
+        if action.upper() in {"SELECT_REWARD", "CHOOSE_REWARD", "ADD_REWARD", "PICK_REWARD"}
+    }
+    if not reward_actions:
+        return []
+    issues: list[ScaffoldQualityIssue] = []
+    for action_type, body in reward_actions.items():
+        if re.search(r"deck\s*:\s*\[\.\.\.(?:state\.)?deck", body, re.I):
+            continue
+        if re.search(r"(?:state\.)?deck\.push\s*\(", body, re.I):
+            continue
+        if re.search(r"deck\s*:\s*\[\.\.\.(?:state\.)?deck[^\]]*,", body, re.I | re.DOTALL):
+            continue
+        path = _first_path_matching(_js_sources(file_changes), rf"{action_type}|reducer|deck")
+        issues.append(
+            ScaffoldQualityIssue(
+                code="reward_choice_not_wired",
+                message=(
+                    f"Reducer action '{action_type}' does not append chosen reward card to deck"
+                ),
+                path=path,
+            )
+        )
+    return issues
+
+
+def _inspect_discard_not_wired(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_requests_discard_pile(plan.user_message):
+        return []
+    combined = _combined_js_source(file_changes)
+    if not re.search(r"discard(?:Pile)?", combined, re.I):
+        return []
+    if _has_discard_wiring(combined):
+        return []
+    plays_cards = bool(re.search(r"case\s*['\"](?:PLAY_CARD|PLAY)['\"]", combined, re.I))
+    removes_from_hand = bool(
+        re.search(r"hand\s*:\s*[^;]*\.filter|hand\s*:\s*[^;]*\.slice|newHand", combined, re.I)
+    )
+    if not (plays_cards and removes_from_hand):
+        return []
+    path = _first_path_matching(_js_sources(file_changes), r"PLAY_CARD|PLAY|discard|Game|reducer")
+    return [
+        ScaffoldQualityIssue(
+            code="discard_not_wired",
+            message=(
+                "Played cards are removed from hand but never appended to discard pile"
+            ),
+            path=path,
+        )
+    ]
+
+
+def _inspect_deck_builder_run_result_missing(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_requires_deck_builder_run(plan.user_message):
+        return []
+    combined = _combined_js_source(file_changes)
+    issues: list[ScaffoldQualityIssue] = []
+    if not _RESTART_MARKERS.search(combined):
+        path = _first_path_matching(_js_sources(file_changes), r"Game|App|Control|Button")
+        issues.append(
+            ScaffoldQualityIssue(
+                code="missing_restart_action",
+                message=(
+                    "Deck-builder prompt requires restart/new run but no play-again "
+                    "or new-run action exists"
+                ),
+                path=path,
+            )
+        )
+    return issues
 
 
 def _inspect_missing_victory_wiring(
@@ -796,6 +1026,10 @@ def inspect_generated_scaffold_quality(
         issues.extend(_inspect_rhythm_miss_feedback_weak(plan, file_changes))
         issues.extend(_inspect_rhythm_result_state_weak(plan, file_changes))
         issues.extend(_inspect_empty_deck_seed(plan, file_changes))
+        issues.extend(_inspect_empty_reward_pool(plan, file_changes))
+        issues.extend(_inspect_reward_choice_not_wired(plan, file_changes))
+        issues.extend(_inspect_discard_not_wired(plan, file_changes))
+        issues.extend(_inspect_deck_builder_run_result_missing(plan, file_changes))
         issues.extend(_inspect_missing_victory_wiring(plan, file_changes))
         issues.extend(_inspect_ignored_seed_payload(plan, file_changes))
     issues.extend(_inspect_import_export(file_changes))
@@ -905,6 +1139,30 @@ def build_scaffold_repair_prompt(
             "- On PLAY_CARD: remove from hand, apply effect to enemy/player HP, push card to discard.\n"
             "- When enemy HP reaches zero, set visible win/result state (dispatch END_GAME or equivalent).\n"
             "- Restart/new round resets deck, hand, discard, enemy HP, and result state.\n"
+        )
+    deck_builder_codes = issue_codes & {
+        "empty_deck_seed",
+        "empty_reward_pool",
+        "reward_choice_not_wired",
+        "discard_not_wired",
+        "missing_restart_action",
+        "ignored_seed_payload",
+        "missing_victory_wiring",
+        "noop_reducer_action",
+    }
+    if deck_builder_codes and _prompt_is_deck_builder_game(plan.user_message):
+        repair_system += (
+            "\nDeck-builder repair focus:\n"
+            "- Seed a non-empty starter deck and initial hand with playable card objects.\n"
+            "- If using INITIALIZE/NEW_GAME on mount, reducer must install deck/hand from payload "
+            "or a non-empty card list — do not leave deck/hand empty after init.\n"
+            "- Define a non-empty reward pool (2–3 card options) shown after each encounter win.\n"
+            "- On reward choice: append the selected card to the canonical deck array.\n"
+            "- On PLAY_CARD: remove from hand, apply effect to enemy/player HP, push card to discard.\n"
+            "- Track encounter/run progress (encounter count or run-complete threshold).\n"
+            "- Show visible run result / win-loss state when the run completes.\n"
+            "- Add restart/new-run/play-again that resets deck, hand, discard, enemy, and run state.\n"
+            "- Do not leave rewards[], discard, or deck disconnected from reducer mutations.\n"
         )
     user_content = (
         f"User request: {plan.user_message}\n\n"
