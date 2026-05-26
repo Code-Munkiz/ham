@@ -29,6 +29,12 @@ from src.ham.build_registry.intent import (
 )
 from src.ham.clerk_auth import HamActor
 
+_CANONICAL_DECK_BUILDER_GATE_PROMPT = (
+    "Build a browser deck-building card game where the player starts with a small deck, "
+    "draws a hand, plays cards against a simple enemy, discards played cards, chooses one "
+    "card reward after each win, adds it to the deck, and tries to complete a short run."
+)
+
 _IDLE_POSITIVE_PROMPTS = (
     "build me an idle clicker game",
     "make a cookie clicker style game",
@@ -497,6 +503,7 @@ _RHYTHM_TAP_LITE_CROSS_RECIPE_NEGATIVE_PROMPTS = (
 
 
 _DECK_BUILDER_LITE_POSITIVE_PROMPTS = (
+    _CANONICAL_DECK_BUILDER_GATE_PROMPT,
     "Build a browser deck-building card game where the player starts with a small deck, fights simple encounters, and chooses a new card reward after each win.",
     "Build a local deck-builder where players draw a hand, play cards against a simple enemy, discard played cards, and add one reward card to their deck.",
     "Build a roguelite deck builder card game with encounters, reward choices, and deck mutation between battles.",
@@ -504,6 +511,7 @@ _DECK_BUILDER_LITE_POSITIVE_PROMPTS = (
     "Build a small deck-building run with starter deck, draw hand, play cards, discard, choose rewards, and deck mutation.",
     "Create a deck-building card game with encounter rounds, card reward offers, and add cards to deck after battles.",
     "Build a browser game where players draw a hand, play cards in encounters, discard, and choose card rewards to improve their deck.",
+    "Build a deck-building card game where you choose one reward card after each encounter and add it to your deck.",
 )
 
 _DECK_BUILDER_LITE_NEGATIVE_PROMPTS = (
@@ -1215,6 +1223,20 @@ class TestSelectRegistryV2AppTypeForPrompt:
         assert select_registry_v2_app_type_for_prompt(prompt) == CARD_DECK_TURN_BASED_APP_TYPE
         assert select_registry_v2_app_type_for_prompt(prompt) != DECK_BUILDER_LITE_APP_TYPE
 
+    def test_browser_card_game_one_per_turn_routes_to_card_deck_not_deck_builder(self):
+        prompt = (
+            "Build a browser card game where the player draws cards, plays one card per turn, "
+            "uses a discard pile, and defeats a simple enemy."
+        )
+        assert select_registry_v2_app_type_for_prompt(prompt) == CARD_DECK_TURN_BASED_APP_TYPE
+        assert select_registry_v2_app_type_for_prompt(prompt) != DECK_BUILDER_LITE_APP_TYPE
+
+    def test_canonical_deck_builder_gate_prompt_routes_to_deck_builder(self):
+        assert (
+            select_registry_v2_app_type_for_prompt(_CANONICAL_DECK_BUILDER_GATE_PROMPT)
+            == DECK_BUILDER_LITE_APP_TYPE
+        )
+
     def test_deck_builder_prompt_does_not_route_to_other_recipes(self):
         prompt = (
             "Build a browser deck-building card game where the player starts with a small deck, "
@@ -1380,13 +1402,18 @@ class TestEnrichPlanMetadataWithRegistryV2:
         monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "generic"},
-            (
-                "Build a browser deck-building card game where the player starts with a small deck, "
-                "fights simple encounters, and chooses a new card reward after each win."
-            ),
+            _CANONICAL_DECK_BUILDER_GATE_PROMPT,
         )
         assert "registry_v2_app_type" not in metadata
         assert metadata["template_kind"] == "generic"
+
+    def test_flag_enabled_canonical_deck_builder_gate_prompt_adds_registry_metadata(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic", "originated_from": "builder_chat_scaffold"},
+            _CANONICAL_DECK_BUILDER_GATE_PROMPT,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        assert metadata["registry_v2_app_type"] == DECK_BUILDER_LITE_APP_TYPE
 
     def test_flag_enabled_idle_prompt_adds_registry_metadata(self):
         metadata = enrich_plan_metadata_with_registry_v2(
