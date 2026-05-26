@@ -137,6 +137,12 @@ Rules:
 - assertions: 1–5 plain-English test assertions for the builder_verifier.
 - Output only the JSON object — no markdown fences, no commentary.
 - Generate real, runnable code. Use React + TypeScript + Tailwind CSS.
+- Prefer a smaller fully working loop over a larger component shell.
+- Do not produce placeholder or no-op core gameplay actions.
+- For every primary interaction in the plan, implement the state transition, UI wiring, and visible feedback needed for a minimally playable version.
+- If using reducers or dispatched actions, every declared action must either mutate state meaningfully or be removed; do not leave primary actions as pass-through returns, TODOs, stubs, or future-work placeholders.
+- Before finalizing files, self-check that the generated app can be used end-to-end for the requested loop.
+- Ensure imports and exports are consistent (default export ↔ default import).
 """
 
 _SCAFFOLD_SYSTEM_PROMPT_STRICT = (
