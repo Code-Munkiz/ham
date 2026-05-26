@@ -151,6 +151,75 @@ const Game = () => {
 };
 """
 
+_RHYTHM_GATE_PROMPT = (
+    "Build a browser rhythm tap game where beat cues appear in sequence, the player "
+    "presses space at the right time, earns perfect/good/miss scores based on timing "
+    "accuracy, builds a combo streak, sees a final score, and can play again."
+)
+
+_RHYTHM_WITH_RESULT_APP = """
+const RhythmGame = () => {
+  const [gameState, setGameState] = useState('idle');
+  const [finalScore, setFinalScore] = useState(0);
+  const finishRound = (nextScore) => {
+    setFinalScore(nextScore);
+    setGameState('result');
+  };
+  const restartGame = () => setGameState('idle');
+  return (
+    <div>
+      {gameState === 'result' && <p>Final Score: {finalScore}</p>}
+      <button onClick={restartGame}>Play Again</button>
+    </div>
+  );
+};
+"""
+
+_RHYTHM_NO_RESULT_APP = """
+const RhythmGame = () => {
+  const [score, setScore] = useState(0);
+  return <div>Score: {score}</div>;
+};
+"""
+
+_RHYTHM_MISS_STREAK_ONLY_APP = """
+const handleTap = () => {
+  if (offset <= timingWindows.perfect) {
+    setScore((prev) => prev + 100);
+    setStreak((prev) => prev + 1);
+  } else if (offset <= timingWindows.good) {
+    setScore((prev) => prev + 50);
+    setStreak((prev) => prev + 1);
+  } else {
+    setStreak(0);
+  }
+};
+"""
+
+_RHYTHM_MISS_WITH_FEEDBACK_APP = """
+const [missCount, setMissCount] = useState(0);
+const [lastJudgment, setLastJudgment] = useState('');
+const handleTap = () => {
+  if (offset <= timingWindows.perfect) {
+    setScore((prev) => prev + 100);
+  } else if (offset <= timingWindows.good) {
+    setScore((prev) => prev + 50);
+  } else {
+    setMissCount((prev) => prev + 1);
+    setStreak(0);
+    setLastJudgment('miss');
+  }
+};
+return missCount > 0 ? <p>Misses: {missCount}</p> : null;
+"""
+
+_RHYTHM_STALE_FINAL_SCORE_APP = """
+const finishRound = () => {
+  setGameState('result');
+  setFinalScore(score);
+};
+"""
+
 _CARD_DECK_PROMPT = (
     "Build a browser card battle game where the player draws a hand from a shuffled deck, "
     "plays one card per turn, resolves card effects against a simple enemy, uses a discard pile, "
@@ -394,6 +463,51 @@ class TestInspectGeneratedScaffoldQuality:
         )
         assert not any(i.code == "missing_result_state" for i in issues)
 
+    def test_rhythm_result_phase_not_flagged_as_missing_result_state(self):
+        plan = _plan()
+        plan.user_message = _RHYTHM_GATE_PROMPT
+        issues = inspect_generated_scaffold_quality(
+            [("src/components/RhythmGame.tsx", _RHYTHM_WITH_RESULT_APP)],
+            plan=plan,
+        )
+        assert not any(i.code == "missing_result_state" for i in issues)
+
+    def test_rhythm_prompt_without_result_is_flagged(self):
+        plan = _plan()
+        plan.user_message = _RHYTHM_GATE_PROMPT
+        issues = inspect_generated_scaffold_quality(
+            [("src/components/RhythmGame.tsx", _RHYTHM_NO_RESULT_APP)],
+            plan=plan,
+        )
+        assert any(i.code == "missing_result_state" for i in issues)
+
+    def test_rhythm_miss_streak_only_is_flagged(self):
+        plan = _plan()
+        plan.user_message = _RHYTHM_GATE_PROMPT
+        issues = inspect_generated_scaffold_quality(
+            [("src/components/RhythmGame.tsx", _RHYTHM_MISS_STREAK_ONLY_APP)],
+            plan=plan,
+        )
+        assert any(i.code == "rhythm_miss_feedback_weak" for i in issues)
+
+    def test_rhythm_miss_with_feedback_not_overflagged(self):
+        plan = _plan()
+        plan.user_message = _RHYTHM_GATE_PROMPT
+        issues = inspect_generated_scaffold_quality(
+            [("src/components/RhythmGame.tsx", _RHYTHM_MISS_WITH_FEEDBACK_APP)],
+            plan=plan,
+        )
+        assert not any(i.code == "rhythm_miss_feedback_weak" for i in issues)
+
+    def test_rhythm_stale_final_score_is_flagged(self):
+        plan = _plan()
+        plan.user_message = _RHYTHM_GATE_PROMPT
+        issues = inspect_generated_scaffold_quality(
+            [("src/components/RhythmGame.tsx", _RHYTHM_STALE_FINAL_SCORE_APP)],
+            plan=plan,
+        )
+        assert any(i.code == "rhythm_result_state_weak" for i in issues)
+
     def test_detects_empty_shuffled_deck_for_card_prompt(self):
         plan = _plan()
         plan.user_message = _CARD_DECK_PROMPT
@@ -555,6 +669,31 @@ class TestBuildScaffoldRepairPrompt:
         )
         assert "Result-state repair focus" in messages[0]["content"]
         assert "restart" in messages[0]["content"].lower()
+
+    def test_repair_prompt_adds_rhythm_focus_when_rhythm_issue_present(self):
+        issues = [
+            ScaffoldQualityIssue(
+                code="rhythm_miss_feedback_weak",
+                message="Rhythm miss handling only resets streak",
+                path="src/components/RhythmGame.tsx",
+            )
+        ]
+        messages = build_scaffold_repair_prompt(
+            Plan(
+                plan_id="pln_rhythm",
+                workspace_id="ws",
+                project_id="p",
+                user_message=_RHYTHM_GATE_PROMPT,
+                steps=[Step(title="Scaffold", description="Create game")],
+                planner_confidence="high",
+            ),
+            [("src/components/RhythmGame.tsx", _RHYTHM_MISS_STREAK_ONLY_APP)],
+            issues,
+            base_system_prompt="BASE",
+        )
+        assert "Rhythm/timing repair focus" in messages[0]["content"]
+        assert "miss counters" in messages[0]["content"].lower()
+        assert "stale closure" in messages[0]["content"].lower()
 
     def test_repair_prompt_adds_card_deck_focus_when_deck_issue_present(self):
         issues = [

@@ -105,12 +105,44 @@ _PROMPT_RESULT_REQUIRED = re.compile(
 )
 
 _RESULT_STATE_MARKERS = re.compile(
-    r"\b(?:gameWon|gameLost|isFinished|gameOver|hasWon|hasLost|showResult|resultScreen)\b"
-    r"|set(?:Result|GameOver|Win|Victory|Status)\s*\("
-    r"|['\"](?:win|won|lose|lost|victory)['\"]"
-    r"|type:\s*['\"](?:WIN|LOSE|VICTORY|GAME_OVER)['\"]"
+    r"\b(?:gameWon|gameLost|isFinished|gameOver|hasWon|hasLost|showResult|resultScreen|showResults|finalScore)\b"
+    r"|set(?:Result|GameOver|Win|Victory|Status|FinalScore)\s*\("
+    r"|(?:phase|gamePhase|gameState|status)\s*===?\s*['\"](?:result|complete|finished)['\"]"
+    r"|['\"](?:win|won|lose|lost|victory|result|complete)['\"]"
+    r"|type:\s*['\"](?:WIN|LOSE|VICTORY|GAME_OVER|RESULT)['\"]"
     r"|enemyHp\s*<=\s*0|enemyHp\s*===?\s*0"
-    r"|VictoryScreen|ResultsPanel|GameOver|GoalStatus",
+    r"|VictoryScreen|ResultsPanel|GameOver|GoalStatus"
+    r"|Play Again|Try Again|playAgain|restartGame",
+    re.IGNORECASE,
+)
+
+_PROMPT_RHYTHM_TIMING = re.compile(
+    r"rhythm\s+tap|tap the beat|beat cue|timing accuracy|perfect.*good.*miss",
+    re.IGNORECASE,
+)
+
+_PROMPT_RHYTHM_MISS_SCORING = re.compile(
+    r"miss|perfect.*good.*miss|timing accuracy",
+    re.IGNORECASE,
+)
+
+_RHYTHM_STREAK_RESET = re.compile(
+    r"setStreak\s*\(\s*(?:0|prev\s*=>\s*0)\s*\)",
+    re.IGNORECASE,
+)
+
+_RHYTHM_MISS_FEEDBACK_MARKERS = re.compile(
+    r"\bmiss(?:Count|es)?\b"
+    r"|MissPanel|missFeedback|timingFeedback|RhythmMiss"
+    r"|lastJudgment.*miss|judgment.*['\"]miss['\"]"
+    r"|['\"]miss['\"]"
+    r"|setScore\s*\([^)]*-\s*\d"
+    r"|score.*(?:miss|penalty)",
+    re.IGNORECASE,
+)
+
+_STALE_RHYTHM_FINAL_SCORE = re.compile(
+    r"setFinalScore\s*\(\s*(?:score|totalScore)\s*\)",
     re.IGNORECASE,
 )
 
@@ -397,6 +429,70 @@ def _prompt_requires_result_state(prompt: str | None) -> bool:
     if not prompt:
         return False
     return bool(_PROMPT_RESULT_REQUIRED.search(prompt))
+
+
+def _prompt_is_rhythm_timing_game(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    return bool(_PROMPT_RHYTHM_TIMING.search(prompt))
+
+
+def _inspect_rhythm_miss_feedback_weak(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_is_rhythm_timing_game(plan.user_message):
+        return []
+    if not _PROMPT_RHYTHM_MISS_SCORING.search(plan.user_message):
+        return []
+    combined = _combined_js_source(file_changes)
+    if not _RHYTHM_STREAK_RESET.search(combined):
+        return []
+    if not re.search(r"perfect|good|timingWindow|offset", combined, re.I):
+        return []
+    if _RHYTHM_MISS_FEEDBACK_MARKERS.search(combined):
+        return []
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"Rhythm|Game|tap|beat|score|streak|handleTap",
+    )
+    return [
+        ScaffoldQualityIssue(
+            code="rhythm_miss_feedback_weak",
+            message=(
+                "Rhythm miss handling only resets streak without visible miss feedback "
+                "or score/result counter updates"
+            ),
+            path=path,
+        )
+    ]
+
+
+def _inspect_rhythm_result_state_weak(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_is_rhythm_timing_game(plan.user_message):
+        return []
+    if not _prompt_requires_result_state(plan.user_message):
+        return []
+    combined = _combined_js_source(file_changes)
+    if not _STALE_RHYTHM_FINAL_SCORE.search(combined):
+        return []
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"finalScore|Rhythm|Game|result",
+    )
+    return [
+        ScaffoldQualityIssue(
+            code="rhythm_result_state_weak",
+            message=(
+                "Final score may capture stale closure state; derive from current tally "
+                "at round end via functional update or computed next score"
+            ),
+            path=path,
+        )
+    ]
 
 
 def _inspect_timer_duration(
@@ -697,6 +793,8 @@ def inspect_generated_scaffold_quality(
     if plan is not None:
         issues.extend(_inspect_timer_duration(plan, file_changes))
         issues.extend(_inspect_missing_result_state(plan, file_changes))
+        issues.extend(_inspect_rhythm_miss_feedback_weak(plan, file_changes))
+        issues.extend(_inspect_rhythm_result_state_weak(plan, file_changes))
         issues.extend(_inspect_empty_deck_seed(plan, file_changes))
         issues.extend(_inspect_missing_victory_wiring(plan, file_changes))
         issues.extend(_inspect_ignored_seed_payload(plan, file_changes))
@@ -769,6 +867,22 @@ def build_scaffold_repair_prompt(
             "\nResult-state repair focus:\n"
             "- Wire victory when enemy HP reaches zero (or survival goal met) into visible result UI.\n"
             "- Include win/loss/completion state and a restart or play-again control.\n"
+        )
+    rhythm_codes = issue_codes & {
+        "missing_result_state",
+        "rhythm_miss_feedback_weak",
+        "rhythm_result_state_weak",
+    }
+    if _prompt_is_rhythm_timing_game(plan.user_message) and rhythm_codes:
+        repair_system += (
+            "\nRhythm/timing repair focus:\n"
+            "- Miss taps must show visible feedback and/or update miss counters or score/result metrics, "
+            "not only reset streak.\n"
+            "- Derive final score from the current tally at round end (functional score read or local "
+            "nextScore), not stale closure capture.\n"
+            "- Show a result panel with final score, optional perfect/good/miss breakdown, and "
+            "play-again/retry control.\n"
+            "- Apply timing judgments to canonical state before checking round completion.\n"
         )
     card_codes = issue_codes & {
         "empty_deck_seed",
