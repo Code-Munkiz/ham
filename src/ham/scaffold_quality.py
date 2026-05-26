@@ -1176,6 +1176,28 @@ def build_scaffold_repair_prompt(
     ]
 
 
+def _merge_repair_file_changes(
+    original: list[tuple[str, str]],
+    repaired: list[tuple[str, str]],
+) -> list[tuple[str, str]]:
+    """Overlay repair output onto the original scaffold without dropping paths.
+
+    Repair models often return only the files they touched; returning that list
+    as the final scaffold would omit ``package.json``, entrypoints, etc.
+    """
+    rep = dict(repaired)
+    merged: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for path, content in original:
+        seen.add(path)
+        merged.append((path, rep.get(path, content)))
+    for path, content in repaired:
+        if path not in seen:
+            merged.append((path, content))
+            seen.add(path)
+    return merged
+
+
 def maybe_repair_generated_scaffold(
     result: Any,
     *,
@@ -1213,6 +1235,16 @@ def maybe_repair_generated_scaffold(
             timeout_sec=scaffold_timeout,
         )
         repaired = parse_result(raw)
+        merged_files = _merge_repair_file_changes(
+            list(result.file_changes),
+            list(repaired.file_changes),
+        )
+        repaired.file_changes = merged_files
+        orig_assertions = list(getattr(result, "assertions", []) or [])
+        rep_assertions = list(getattr(repaired, "assertions", []) or [])
+        merged_assertions = rep_assertions if rep_assertions else orig_assertions
+        if hasattr(repaired, "assertions"):
+            repaired.assertions = merged_assertions
         remaining = inspect_generated_scaffold_quality(repaired.file_changes, plan=plan)
         if remaining:
             summary = ", ".join(
