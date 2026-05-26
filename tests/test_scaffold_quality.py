@@ -51,6 +51,51 @@ function reducer(state, action) {
 }
 """
 
+_DISPATCH_MISMATCH_APP = """
+import React, { useReducer } from 'react';
+const reducer = (state, action) => {
+  switch (action.type) {
+    case 'ALLOCATE':
+      return { ...state };
+    default:
+      return state;
+  }
+};
+const App = () => {
+  const [state, dispatch] = useReducer(reducer, { wood: 0 });
+  return <button onClick={() => dispatch({ type: 'ALLOCATE' })}>Go</button>;
+};
+"""
+
+_LOG_ONLY_APP = """
+const playCard = (card) => {
+  console.log('played', card);
+};
+"""
+
+_STALE_WIN_APP = """
+const App = () => {
+  const [enemyHp, setEnemyHp] = useState(20);
+  const checkWinCondition = () => {
+    if (enemyHp <= 0) {
+      setResult('win');
+    }
+  };
+  const play = () => {
+    setEnemyHp(prev => prev - 5);
+    checkWinCondition();
+  };
+};
+"""
+
+_CLEAN_TYPING_APP = """
+const App = () => {
+  const [timer, setTimer] = useState(60);
+  const handleInput = (value) => setInput(value);
+  return <input onChange={(e) => handleInput(e.target.value)} />;
+};
+"""
+
 
 class TestInspectGeneratedScaffoldQuality:
     def test_detects_noop_primary_reducer_action(self):
@@ -86,6 +131,37 @@ class TestInspectGeneratedScaffoldQuality:
         issues = inspect_generated_scaffold_quality(files)
         assert any(i.code == "import_export_mismatch" for i in issues)
 
+    def test_detects_dispatch_reducer_mismatch(self):
+        issues = inspect_generated_scaffold_quality([("src/App.tsx", _DISPATCH_MISMATCH_APP)])
+        assert any(i.code == "dispatch_reducer_mismatch" for i in issues)
+
+    def test_detects_log_only_primary_handler(self):
+        issues = inspect_generated_scaffold_quality([("src/App.tsx", _LOG_ONLY_APP)])
+        assert any(i.code == "empty_primary_handler" for i in issues)
+
+    def test_detects_stale_state_win_check(self):
+        issues = inspect_generated_scaffold_quality([("src/App.tsx", _STALE_WIN_APP)])
+        assert any(i.code == "stale_state_win_check" for i in issues)
+
+    def test_detects_timer_duration_mismatch_for_60s_prompt(self):
+        plan = _plan()
+        plan.user_message = "Build a typing game with a final score after 60 seconds."
+        issues = inspect_generated_scaffold_quality(
+            [("src/App.tsx", "const [timer, setTimer] = useState(0);")],
+            plan=plan,
+        )
+        assert any(i.code == "timer_duration_mismatch" for i in issues)
+
+    def test_clean_typing_app_not_overflagged(self):
+        plan = _plan()
+        plan.user_message = "Build a typing game with a final score after 60 seconds."
+        issues = inspect_generated_scaffold_quality(
+            [("src/App.tsx", _CLEAN_TYPING_APP)],
+            plan=plan,
+        )
+        assert not any(i.code == "timer_duration_mismatch" for i in issues)
+        assert not any(i.code == "empty_primary_handler" for i in issues)
+
 
 class TestBuildScaffoldRepairPrompt:
     def test_repair_prompt_includes_detected_issues_and_mutation_guidance(self):
@@ -105,6 +181,8 @@ class TestBuildScaffoldRepairPrompt:
         assert messages[0]["role"] == "system"
         assert "repair mode" in messages[0]["content"].lower()
         assert "mutate state" in messages[0]["content"].lower()
+        assert "stale-state" in messages[0]["content"].lower()
+        assert "60 seconds" in messages[0]["content"].lower()
         assert "PLAY_CARD" in messages[1]["content"]
         assert "playability checks" in messages[1]["content"].lower()
 

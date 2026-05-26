@@ -48,6 +48,37 @@ _NOOP_RETURN = re.compile(
     re.MULTILINE,
 )
 
+_DISPATCH_TYPE = re.compile(
+    r"dispatch\s*\(\s*\{\s*type:\s*['\"]([^'\"]+)['\"]",
+    re.IGNORECASE,
+)
+
+_SWITCH_ON_ACTION = re.compile(r"switch\s*\(\s*action\.type\s*\)")
+
+_LOG_ONLY_HANDLER = re.compile(
+    r"(?:const|function)\s+(?:handle\w+|on\w+|play\w+|draw\w+|submit\w+|endTurn)\w*\s*=\s*"
+    r"(?:\([^)]*\)\s*)?=>\s*\{\s*console\.log",
+    re.IGNORECASE,
+)
+
+_EMPTY_HANDLER = re.compile(
+    r"(?:onClick|onChange|onSubmit)=\{\s*(?:\(\)\s*)?=>\s*\{\s*\}\s*\}",
+    re.IGNORECASE,
+)
+
+_STALE_HP_WIN_CHECK = re.compile(
+    r"set(?:Enemy|Player)?Hp\s*\("
+    r"(?:(?!;).){0,400}?"
+    r"if\s*\(\s*(?:enemyHp|playerHp|health)\s*<=",
+    re.IGNORECASE | re.DOTALL,
+)
+
+_STALE_NAMED_WIN_FN = re.compile(
+    r"(?:function|const)\s+(?:checkWin\w*|check\w*Condition)\s*=\s*"
+    r"(?:\([^)]*\)\s*)=>\s*\{[^}]*if\s*\(\s*(?:enemyHp|playerHp|health)\s*<=",
+    re.IGNORECASE | re.DOTALL,
+)
+
 _NAMED_IMPORT = re.compile(
     r"import\s+\{\s*(\w+)\s*\}\s+from\s+['\"](\.[^'\"]+)['\"]"
 )
@@ -130,6 +161,134 @@ def _inspect_stub_comments(path: str, content: str) -> list[ScaffoldQualityIssue
     return issues
 
 
+def _collect_reducer_actions(file_changes: list[tuple[str, str]]) -> dict[str, str]:
+    """Map reducer action type -> case body across all files."""
+    actions: dict[str, str] = {}
+    for _path, content in file_changes:
+        if not _SWITCH_ON_ACTION.search(content):
+            continue
+        for match in _CASE_BLOCK.finditer(content):
+            action = match.group(1).strip()
+            if action != "default":
+                actions[action] = match.group(2)
+    return actions
+
+
+def _collect_dispatch_types(file_changes: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Return (action_type, path) for each dispatch call."""
+    found: list[tuple[str, str]] = []
+    for path, content in file_changes:
+        for match in _DISPATCH_TYPE.finditer(content):
+            found.append((match.group(1).strip(), path))
+    return found
+
+
+def _is_noop_case_body(body: str, action: str) -> bool:
+    action_upper = action.upper()
+    is_primary = action_upper in _PRIMARY_GAMEPLAY_ACTIONS
+    has_stub = bool(_STUB_PLACEHOLDER.search(body))
+    has_noop = bool(_NOOP_RETURN.search(body.strip()))
+    return has_stub or (has_noop and is_primary)
+
+
+def _inspect_dispatch_reducer_mismatch(
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    reducer_actions = _collect_reducer_actions(file_changes)
+    if not reducer_actions:
+        return []
+    issues: list[ScaffoldQualityIssue] = []
+    for action, path in _collect_dispatch_types(file_changes):
+        action_upper = action.upper()
+        if action_upper not in _PRIMARY_GAMEPLAY_ACTIONS:
+            continue
+        body = reducer_actions.get(action)
+        if body is None:
+            issues.append(
+                ScaffoldQualityIssue(
+                    code="dispatch_reducer_mismatch",
+                    message=f"dispatch type '{action}' has no matching reducer case",
+                    path=path,
+                )
+            )
+        elif _is_noop_case_body(body, action):
+            issues.append(
+                ScaffoldQualityIssue(
+                    code="dispatch_reducer_mismatch",
+                    message=f"dispatch type '{action}' maps to a no-op reducer case",
+                    path=path,
+                )
+            )
+    return issues
+
+
+def _inspect_empty_or_log_handlers(path: str, content: str) -> list[ScaffoldQualityIssue]:
+    issues: list[ScaffoldQualityIssue] = []
+    if _LOG_ONLY_HANDLER.search(content):
+        issues.append(
+            ScaffoldQualityIssue(
+                code="empty_primary_handler",
+                message="Primary handler only logs and does not mutate game state",
+                path=path,
+            )
+        )
+    if _EMPTY_HANDLER.search(content):
+        issues.append(
+            ScaffoldQualityIssue(
+                code="empty_primary_handler",
+                message="Primary UI handler is empty",
+                path=path,
+            )
+        )
+    return issues
+
+
+def _inspect_stale_state_win_checks(path: str, content: str) -> list[ScaffoldQualityIssue]:
+    issues: list[ScaffoldQualityIssue] = []
+    if _STALE_HP_WIN_CHECK.search(content):
+        issues.append(
+            ScaffoldQualityIssue(
+                code="stale_state_win_check",
+                message=(
+                    "Win/loss may read stale HP state immediately after setState; "
+                    "compute next state before checking result"
+                ),
+                path=path,
+            )
+        )
+    elif _STALE_NAMED_WIN_FN.search(content):
+        issues.append(
+            ScaffoldQualityIssue(
+                code="stale_state_win_check",
+                message=(
+                    "checkWin/checkCondition reads HP from closure; "
+                    "use computed next HP or functional update result"
+                ),
+                path=path,
+            )
+        )
+    return issues
+
+
+def _inspect_timer_duration(plan: Plan | None, path: str, content: str) -> list[ScaffoldQualityIssue]:
+    if plan is None:
+        return []
+    prompt = (plan.user_message or "").lower()
+    if "60 second" not in prompt and "60 seconds" not in prompt and "60s" not in prompt:
+        return []
+    if not re.search(r"timer|countdown|seconds|elapsed", content, re.I):
+        return []
+    if re.search(r"useState\s*\(\s*60\s*\)|=\s*60\b", content):
+        return []
+    return [
+        ScaffoldQualityIssue(
+            code="timer_duration_mismatch",
+            message="Prompt requests 60-second timer but code lacks explicit 60s duration",
+            path=path,
+        )
+    ]
+
+
 def _inspect_import_export(
     file_changes: list[tuple[str, str]],
 ) -> list[ScaffoldQualityIssue]:
@@ -174,6 +333,8 @@ def _inspect_import_export(
 
 def inspect_generated_scaffold_quality(
     file_changes: list[tuple[str, str]],
+    *,
+    plan: Plan | None = None,
 ) -> list[ScaffoldQualityIssue]:
     """Return playability issues found in generated scaffold files."""
     issues: list[ScaffoldQualityIssue] = []
@@ -182,7 +343,11 @@ def inspect_generated_scaffold_quality(
             continue
         issues.extend(_inspect_reducer_noops(path, content))
         issues.extend(_inspect_stub_comments(path, content))
+        issues.extend(_inspect_empty_or_log_handlers(path, content))
+        issues.extend(_inspect_stale_state_win_checks(path, content))
+        issues.extend(_inspect_timer_duration(plan, path, content))
     issues.extend(_inspect_import_export(file_changes))
+    issues.extend(_inspect_dispatch_reducer_mismatch(file_changes))
     # De-dupe by (code, path, message)
     seen: set[tuple[str, str | None, str]] = set()
     unique: list[ScaffoldQualityIssue] = []
@@ -225,6 +390,10 @@ def build_scaffold_repair_prompt(
         "- Do not create a larger empty component shell.\n"
         "- Implement the missing core loop and wire controls to state transitions.\n"
         "- Remove no-op reducer cases; every declared primary action must mutate state meaningfully.\n"
+        "- Verify every primary control changes canonical game state (not just logs or local UI text).\n"
+        "- Avoid stale-state win/loss checks: compute next HP/resources before checking result conditions.\n"
+        "- When the prompt specifies a duration (e.g. 60 seconds), initialize the timer/countdown to that value.\n"
+        "- Make resource/turn loops strategically meaningful — allocations and day ticks must change resources.\n"
         "- Ensure visible feedback and result/win state where the plan requires them.\n"
         "- Fix import/export consistency (default export ↔ default import).\n"
         "- Output ONLY the same JSON object schema.\n"
@@ -256,7 +425,7 @@ def maybe_repair_generated_scaffold(
     """Run one repair LLM pass when quality issues are detected; else return as-is."""
     if not scaffold_quality_repair_enabled(env):
         return result
-    issues = inspect_generated_scaffold_quality(result.file_changes)
+    issues = inspect_generated_scaffold_quality(result.file_changes, plan=plan)
     if not issues:
         return result
     _LOG.info(
