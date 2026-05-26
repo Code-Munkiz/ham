@@ -172,6 +172,96 @@ _PROMPT_DECK_BUILDER_RUN = re.compile(
     re.IGNORECASE,
 )
 
+_PROMPT_TACTICS_GAME = re.compile(
+    r"turn[- ]based\s+tactics|tactics\s+game|tactical\s+battle|"
+    r"\b(?:player|enemy)\s+units?\b|"
+    r"\bgrid\b.{0,160}\b(?:select|move|attack).{0,160}\bunit",
+    re.IGNORECASE,
+)
+
+_PROMPT_TACTICS_MOVEMENT_RANGE = re.compile(
+    r"within range|movement range|move them within|move range|movement options",
+    re.IGNORECASE,
+)
+
+_PROMPT_TACTICS_ATTACK_RANGE = re.compile(
+    r"attack range|attacks enemy|attack enemy|attack enemies",
+    re.IGNORECASE,
+)
+
+_PROMPT_TACTICS_ENEMY_TURN = re.compile(
+    r"enemy turn|enemy units|resolves a simple enemy|enemy phase",
+    re.IGNORECASE,
+)
+
+_PROMPT_TACTICS_WIN = re.compile(
+    r"defeating all enemies|defeat all enemies|wins by defeating",
+    re.IGNORECASE,
+)
+
+_PROMPT_TACTICS_LOSS = re.compile(
+    r"all player units are defeated|player units are defeated|all player units",
+    re.IGNORECASE,
+)
+
+_PROMPT_TACTICS_RESTART = re.compile(
+    r"restart the battle|restart|new battle|play again",
+    re.IGNORECASE,
+)
+
+_PLAYER_UNIT_MARKER = re.compile(
+    r"isPlayer:\s*true|team:\s*['\"]player['\"]|owner:\s*['\"]player['\"]|"
+    r"type:\s*['\"]player['\"]|"
+    r"playerUnits|side:\s*['\"]player['\"]|role:\s*['\"]player['\"]|"
+    r"id\.startsWith\s*\(\s*['\"]p|unit\.id\.startsWith\s*\(\s*['\"]p|"
+    r"units\.find\s*\(\s*u\s*=>\s*u\.id\.startsWith\s*\(\s*['\"]p|"
+    r"unit\.type\s*===?\s*['\"]player['\"]|u\.type\s*===?\s*['\"]player['\"]",
+    re.IGNORECASE,
+)
+
+_ENEMY_UNIT_MARKER = re.compile(
+    r"isPlayer:\s*false|team:\s*['\"]enemy['\"]|owner:\s*['\"]enemy['\"]|"
+    r"type:\s*['\"]enemy['\"]|"
+    r"enemyUnits|isEnemy:\s*true|side:\s*['\"]enemy['\"]|role:\s*['\"]enemy['\"]|"
+    r"id\.startsWith\s*\(\s*['\"]e|unit\.id\.startsWith\s*\(\s*['\"]e|"
+    r"units\.find\s*\(\s*u\s*=>\s*u\.id\.startsWith\s*\(\s*['\"]e|"
+    r"unit\.id\.startsWith\s*\(\s*['\"]e|"
+    r"unit\.type\s*===?\s*['\"]enemy['\"]|u\.type\s*===?\s*['\"]enemy['\"]",
+    re.IGNORECASE,
+)
+
+_MOVEMENT_RANGE_MARKERS = re.compile(
+    r"move(?:ment)?Range|moveRange|maxMove|movement\s+range|moveDistance|"
+    r"manhattan|distance\s*[<=>]|adjacent|validMoves|legalMoves|withinRange|"
+    r"Math\.abs\s*\([^)]+\)\s*[<=>]",
+    re.IGNORECASE,
+)
+
+_ATTACK_RANGE_MARKERS = re.compile(
+    r"attackRange|attack\s+range|maxAttack|inAttackRange|canAttack|attackDistance|"
+    r"withinAttackRange|Math\.abs\s*\(\s*dx\s*\)\s*<=|Math\.abs\s*\(\s*dy\s*\)\s*<=",
+    re.IGNORECASE,
+)
+
+_INPLACE_HP_MUTATION = re.compile(
+    r"(?:target|unit|enemy|attacker|defender|playerUnit|player)\.hp\s*[-=]|\.hp\s*[-+]?=",
+    re.IGNORECASE,
+)
+
+_IMMUTABLE_UNITS_RETURN = re.compile(
+    r"return\s*\{[^}]*units\s*:\s*(?:state\.units\.map|state\.units\.filter|newUnits|nextUnits|updatedUnits|\[\s*\.\.\.)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+_TACTICS_MOVE_ACTIONS = frozenset({"MOVE_UNIT", "MOVE"})
+_TACTICS_ATTACK_ACTIONS = frozenset({"ATTACK_UNIT", "ATTACK"})
+_TACTICS_SELECT_ACTIONS = frozenset({"SELECT_UNIT", "SELECT"})
+_TACTICS_INIT_ACTIONS = frozenset({"INIT", "INIT_GAME", "START_GAME", "NEW_GAME", "RESET"})
+
+_TACTICS_UI_ACTIONS = frozenset(
+    {"SELECT_UNIT", "SELECT", "MOVE_UNIT", "MOVE", "ATTACK_UNIT", "ATTACK", "END_TURN"}
+)
+
 _EMPTY_REWARD_POOL = re.compile(
     r"(?:const|let|var)\s+(?:rewards|rewardPool|availableRewards|rewardCards|rewardOptions)\s*=\s*\[\s*\]"
     r"|(?:rewards|rewardPool|availableRewards|rewardCards|rewardOptions)\s*:\s*\[\s*\]",
@@ -193,7 +283,8 @@ _DISCARD_APPEND = re.compile(
 )
 
 _RESTART_MARKERS = re.compile(
-    r"Play Again|Try Again|playAgain|restartGame|newRun|startNewRun|restartRun|NEW_RUN|RESET_RUN",
+    r"Play Again|Try Again|playAgain|restartGame|newRun|startNewRun|restartRun|NEW_RUN|RESET_RUN|"
+    r"RESTART_GAME|RESTART\b|Restart",
     re.IGNORECASE,
 )
 
@@ -242,6 +333,8 @@ _VICTORY_TRANSITION = re.compile(
 _SEED_GAME_ACTIONS = frozenset(
     {"NEW_GAME", "RESET_GAME", "START_GAME", "RESET", "INIT_GAME", "START", "INITIALIZE"}
 )
+
+_TACTICS_SEED_ACTIONS = frozenset(_SEED_GAME_ACTIONS | {"RESTART_GAME", "RESTART"})
 
 _DISPATCH_SEED_WITH_DATA = re.compile(
     r"dispatch\s*\(\s*\{[^}]*type:\s*['\"](?:NEW_GAME|RESET_GAME|START_GAME|RESET|INIT_GAME|START|INITIALIZE)['\"]"
@@ -572,6 +665,8 @@ def _inspect_missing_result_state(
 ) -> list[ScaffoldQualityIssue]:
     if plan is None or not _prompt_requires_result_state(plan.user_message):
         return []
+    if _prompt_is_tactics_game(plan.user_message):
+        return []
     combined = _combined_js_source(file_changes)
     if _RESULT_STATE_MARKERS.search(combined):
         return []
@@ -621,7 +716,15 @@ def _prompt_requests_discard_pile(prompt: str | None) -> bool:
 def _prompt_requires_deck_builder_run(prompt: str | None) -> bool:
     if not prompt:
         return False
+    if _prompt_is_tactics_game(prompt):
+        return False
     return bool(_PROMPT_DECK_BUILDER_RUN.search(prompt))
+
+
+def _prompt_is_tactics_game(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    return bool(_PROMPT_TACTICS_GAME.search(prompt))
 
 
 def _has_playable_card_seed(combined: str) -> bool:
@@ -964,6 +1067,701 @@ def _inspect_ignored_seed_payload(
     return issues
 
 
+def _has_dispatch_for_action(combined: str, action_type: str) -> bool:
+    return bool(
+        re.search(
+            rf"dispatch\s*\(\s*{{[^}}]*type:\s*['\"]{re.escape(action_type)}['\"]",
+            combined,
+            re.IGNORECASE,
+        )
+    )
+
+
+def _canonical_units_empty(combined: str) -> bool:
+    if re.search(r"units:\s*\[\s*\]", combined, re.IGNORECASE):
+        return True
+    return bool(
+        re.search(r"useReducer\s*\([^,]+,\s*\{\s*units:\s*\[\s*\]", combined, re.IGNORECASE)
+    )
+
+
+def _has_mounted_game_init(combined: str) -> bool:
+    if not re.search(r"useEffect\s*\(", combined):
+        return False
+    return bool(
+        re.search(
+            r"dispatch\s*\(\s*\{\s*type:\s*['\"](?:INIT_GAME|START_GAME|NEW_GAME|RESET|START|INITIALIZE)['\"]",
+            combined,
+            re.IGNORECASE,
+        )
+    )
+
+
+def _seed_case_includes_both_sides(reducer_actions: dict[str, str]) -> bool:
+    for action_type, body in reducer_actions.items():
+        if action_type.upper() not in _SEED_GAME_ACTIONS:
+            continue
+        if _PLAYER_UNIT_MARKER.search(body) and _ENEMY_UNIT_MARKER.search(body):
+            return True
+    return False
+
+
+def _init_applied_to_state(combined: str, reducer_actions: dict[str, str]) -> bool:
+    if _seed_case_includes_both_sides(reducer_actions) and (
+        not _canonical_units_empty(combined) or _has_mounted_game_init(combined)
+    ):
+        return True
+    if (
+        _PLAYER_UNIT_MARKER.search(combined)
+        and _ENEMY_UNIT_MARKER.search(combined)
+        and not _canonical_units_empty(combined)
+    ):
+        return True
+    return False
+
+
+def _grid_source_present(combined: str) -> bool:
+    return bool(
+        re.search(
+            r"grid-cols|GridBoard|TacticsGrid|\.map\s*\(\s*\(?\s*row|tile|cell",
+            combined,
+            re.IGNORECASE,
+        )
+    )
+
+
+def _grid_has_click_handlers(combined: str) -> bool:
+    return bool(
+        re.search(
+            r"onClick|onCellClick|handleCellClick|handleGridClick|onTileClick",
+            combined,
+            re.IGNORECASE,
+        )
+    )
+
+
+def _grid_has_select_click_handlers(combined: str) -> bool:
+    if re.search(
+        r"onClick[^;{]{0,320}dispatch\s*\(\s*\{[^}]*type:\s*['\"](?:SELECT_UNIT|SELECT)['\"]",
+        combined,
+        re.IGNORECASE | re.DOTALL,
+    ):
+        return True
+    return bool(
+        re.search(
+            r"onUnitClick|handleSelectUnit|selectUnit\s*\(|onSelectUnit",
+            combined,
+            re.IGNORECASE,
+        )
+    )
+
+
+def _has_attack_ui_dispatch(combined: str) -> bool:
+    if _has_dispatch_for_action(combined, "ATTACK_UNIT") or _has_dispatch_for_action(
+        combined, "ATTACK"
+    ):
+        return True
+    return bool(
+        re.search(
+            r"onClick[^;{]{0,360}dispatch\s*\(\s*\{[^}]*type:\s*['\"](?:ATTACK_UNIT|ATTACK)['\"]",
+            combined,
+            re.IGNORECASE | re.DOTALL,
+        )
+    )
+
+
+def _attack_case_mutates_hp(body: str) -> bool:
+    return bool(re.search(r"hp|damage|attack", body, re.IGNORECASE))
+
+
+def _attack_case_has_range_check(body: str) -> bool:
+    if _ATTACK_RANGE_MARKERS.search(body):
+        return True
+    return bool(
+        re.search(
+            r"isValidAttack|validAttack|legalAttack|canAttack|inAttackRange|withinAttackRange|"
+            r"attackAllowed|attackRange|manhattanDistance|manhattan|Math\.abs\s*\(",
+            body,
+            re.IGNORECASE,
+        )
+    )
+
+
+def _case_mutates_enemy_hp(body: str) -> bool:
+    if not re.search(r"hp\s*[-=]|\.hp\s*-=", body, re.IGNORECASE):
+        return False
+    return bool(
+        re.search(
+            r"enemyUnit|enemyUnits|type\s*===?\s*['\"]enemy['\"]|targetCell\.type\s*===?\s*['\"]enemy['\"]|"
+            r"!u\.isPlayer|isPlayer:\s*false",
+            body,
+            re.IGNORECASE,
+        )
+    )
+
+
+def _reducer_has_player_attack_with_range(reducer_actions: dict[str, str]) -> bool:
+    if _player_attack_has_range_check(reducer_actions):
+        return True
+    for action, body in reducer_actions.items():
+        if action == "default" or _is_noop_case_body(body, action):
+            continue
+        if not (_attack_case_mutates_hp(body) or _case_mutates_enemy_hp(body)):
+            continue
+        if _attack_case_has_range_check(body):
+            return True
+    return False
+
+
+def _player_attack_has_range_check(reducer_actions: dict[str, str]) -> bool:
+    for action in sorted(_TACTICS_ATTACK_ACTIONS):
+        body = reducer_actions.get(action, "")
+        if not body or _is_noop_case_body(body, action):
+            continue
+        if _attack_case_mutates_hp(body) and _attack_case_has_range_check(body):
+            return True
+    return False
+
+
+def _implemented_tactics_actions(
+    reducer_actions: dict[str, str],
+    action_names: frozenset[str],
+) -> set[str]:
+    return {
+        action
+        for action in reducer_actions
+        if action.upper() in action_names
+        and not _is_noop_case_body(reducer_actions[action], action)
+    }
+
+
+def _move_case_changes_position(body: str) -> bool:
+    return bool(
+        re.search(
+            r"position|newGrid|grid\s*:|payload\s*\[|payload\.(?:to|x|y)|\.map\s*\(",
+            body,
+            re.IGNORECASE,
+        )
+    )
+
+
+def _move_case_has_range_check(body: str) -> bool:
+    if _MOVEMENT_RANGE_MARKERS.search(body):
+        return True
+    return bool(
+        re.search(
+            r"isValidMove|validMove|legalMove|canMove|withinMoveRange|moveAllowed",
+            body,
+            re.IGNORECASE,
+        )
+    )
+
+
+def _attack_case_has_inplace_hp_mutation(body: str) -> bool:
+    if not _INPLACE_HP_MUTATION.search(body):
+        return False
+    if re.search(
+        r"const\s+(?:newUnits|nextUnits|updatedUnits)\s*=\s*state\.units\.map",
+        body,
+        re.IGNORECASE,
+    ) and not re.search(
+        r"(?:target|unit|enemy|playerUnit|player)\.hp\s*[-=]",
+        body,
+        re.IGNORECASE,
+    ):
+        return False
+    if re.search(
+        r"(?:target|unit|enemy|playerUnit|player)\.hp\s*[-=]|\.hp\s*[-+]?=",
+        body,
+        re.IGNORECASE,
+    ):
+        if _IMMUTABLE_UNITS_RETURN.search(body) and not re.search(
+            r"return\s+state\s*;|return\s*\{\s*\.\.\.state\s*\}\s*;",
+            body,
+            re.IGNORECASE,
+        ):
+            return False
+        return True
+    return False
+
+
+def _init_case_reseeds_battle(body: str, combined: str) -> bool:
+    if _is_noop_case_body(body, "INIT"):
+        return False
+    if _PLAYER_UNIT_MARKER.search(body) and _ENEMY_UNIT_MARKER.search(body):
+        return True
+    if re.search(r"return\s+initial(?:Game)?State\b", body, re.IGNORECASE):
+        return not _canonical_units_empty(combined)
+    return bool(
+        re.search(r"units\s*:\s*\[\s*\{", body, re.IGNORECASE)
+        and _PLAYER_UNIT_MARKER.search(body)
+        and _ENEMY_UNIT_MARKER.search(body)
+    )
+
+
+def _has_enemy_turn_mutation(combined: str, reducer_actions: dict[str, str]) -> bool:
+    for action_type in ("ENEMY_TURN", "END_TURN", "RESOLVE_ENEMY", "ENEMY_ACTION", "RUN_ENEMY"):
+        body = reducer_actions.get(action_type, "")
+        if not body:
+            continue
+        if re.search(r"isPlayer:\s*false|enemy|!.*isPlayer", body, re.IGNORECASE) and re.search(
+            r"hp|position|damage|attack|move",
+            body,
+            re.IGNORECASE,
+        ):
+            return True
+    if re.search(
+        r"(?:enemyTurn|runEnemyTurn|executeEnemyTurn|handleEnemyTurn|processEnemyTurn)\s*\(",
+        combined,
+        re.IGNORECASE,
+    ) and re.search(r"hp|position|dispatch|units|damage", combined, re.IGNORECASE):
+        return True
+    return False
+
+
+def _has_tactics_battle_result(combined: str, prompt: str) -> bool:
+    needs_win = bool(_PROMPT_TACTICS_WIN.search(prompt))
+    needs_loss = bool(_PROMPT_TACTICS_LOSS.search(prompt))
+    has_win = not needs_win or bool(
+        re.search(
+            r"all enemies|every enemy|enemies\.every|enemies\.filter|enemies\.length\s*===?\s*0|"
+            r"!.*enemies\.(?:some|find)|defeat.*enem|win|victory|You Won|Battle Won|"
+            r"gameState\s*===?\s*['\"]win['\"]",
+            combined,
+            re.IGNORECASE,
+        )
+    )
+    has_loss = not needs_loss or bool(
+        re.search(
+            r"all player|playerUnits.*every|player.*defeat|player.*hp\s*<=\s*0|"
+            r"lose|loss|You Lose|Battle Lost|all player units|"
+            r"gameState\s*===?\s*['\"]lose['\"]",
+            combined,
+            re.IGNORECASE,
+        )
+    )
+    has_result_ui = bool(
+        re.search(r"result|gameOver|battleResult|ResultsPanel|TacticsResults", combined, re.IGNORECASE)
+    )
+    return has_win and has_loss and has_result_ui
+
+
+def _restart_reseeds_tactics(combined: str, reducer_actions: dict[str, str]) -> bool:
+    for action_type, body in reducer_actions.items():
+        if action_type.upper() not in {"RESTART", "RESTART_GAME", "NEW_GAME", "RESET"}:
+            continue
+        if _init_case_reseeds_battle(body, combined):
+            return True
+        if re.search(
+            rf"return\s+reducer\s*\(\s*state\s*,\s*\{{\s*type:\s*['\"](?:{'|'.join(_TACTICS_INIT_ACTIONS)})['\"]",
+            body,
+            re.IGNORECASE,
+        ):
+            for init_action in _TACTICS_INIT_ACTIONS:
+                init_body = reducer_actions.get(init_action, "")
+                if init_body and _init_case_reseeds_battle(init_body, combined):
+                    return True
+        if re.search(r"return\s+initial(?:Game)?State\b", body, re.IGNORECASE) and not _canonical_units_empty(
+            combined
+        ):
+            return True
+        if re.search(
+            rf"dispatch\s*\(\s*\{{\s*type:\s*['\"](?:{'|'.join(_TACTICS_INIT_ACTIONS)})['\"]",
+            body,
+            re.IGNORECASE,
+        ):
+            for init_action in _TACTICS_INIT_ACTIONS:
+                init_body = reducer_actions.get(init_action, "")
+                if init_body and _init_case_reseeds_battle(init_body, combined):
+                    return True
+    init_targets = "|".join(_TACTICS_INIT_ACTIONS)
+    if re.search(
+        rf"RESTART(?:_GAME)?[^;{{]{{0,160}}dispatch\s*\(\s*\{{\s*type:\s*['\"](?:{init_targets})['\"]",
+        combined,
+        re.IGNORECASE | re.DOTALL,
+    ):
+        for init_action in _TACTICS_INIT_ACTIONS:
+            init_body = reducer_actions.get(init_action, "")
+            if init_body and _init_case_reseeds_battle(init_body, combined):
+                return True
+        return False
+    if re.search(
+        r"onClick[^;{]{0,120}Restart[^;{]{0,160}dispatch\s*\(\s*\{\s*type:\s*['\"](?:INIT|INIT_GAME)",
+        combined,
+        re.IGNORECASE | re.DOTALL,
+    ):
+        for init_action in _TACTICS_INIT_ACTIONS:
+            init_body = reducer_actions.get(init_action, "")
+            if init_body and _init_case_reseeds_battle(init_body, combined):
+                return True
+        return False
+    return False
+
+
+def _inspect_tactics_unit_seeding(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_is_tactics_game(plan.user_message):
+        return []
+    combined = _combined_js_source(file_changes)
+    if not re.search(r"unit|grid|tactics", combined, re.IGNORECASE):
+        return []
+    reducer_actions = _collect_reducer_actions(file_changes)
+    path = _first_path_matching(_js_sources(file_changes), r"reducer|Game|units|App")
+    issues: list[ScaffoldQualityIssue] = []
+    has_player = bool(_PLAYER_UNIT_MARKER.search(combined))
+    has_enemy = bool(_ENEMY_UNIT_MARKER.search(combined))
+    if not has_player or not has_enemy:
+        issues.append(
+            ScaffoldQualityIssue(
+                code="tactics_empty_unit_seed",
+                message=(
+                    "Tactics prompt expects seeded player and enemy units but generated "
+                    "source lacks non-empty player/enemy unit definitions"
+                ),
+                path=path,
+            )
+        )
+    has_seed_case = _seed_case_includes_both_sides(reducer_actions) or bool(
+        re.search(r"INIT_GAME|START_GAME|NEW_GAME", combined, re.IGNORECASE)
+    )
+    if has_seed_case and not _init_applied_to_state(combined, reducer_actions):
+        issues.append(
+            ScaffoldQualityIssue(
+                code="tactics_seed_not_applied",
+                message=(
+                    "Tactics seed/init action exists but canonical state starts empty or "
+                    "init is never dispatched on mount/restart"
+                ),
+                path=path,
+            )
+        )
+    elif _canonical_units_empty(combined) and not _has_mounted_game_init(combined):
+        issues.append(
+            ScaffoldQualityIssue(
+                code="tactics_seed_not_applied",
+                message=(
+                    "Tactics units array is empty in initial state with no mount-time init dispatch"
+                ),
+                path=path,
+            )
+        )
+    return issues
+
+
+def _inspect_tactics_interaction_wiring(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_is_tactics_game(plan.user_message):
+        return []
+    combined = _combined_js_source(file_changes)
+    reducer_actions = _collect_reducer_actions(file_changes)
+    if not reducer_actions:
+        return []
+    issues: list[ScaffoldQualityIssue] = []
+    implemented = _implemented_tactics_actions(reducer_actions, _TACTICS_UI_ACTIONS)
+    select_implemented = _implemented_tactics_actions(reducer_actions, _TACTICS_SELECT_ACTIONS)
+    attack_implemented = _implemented_tactics_actions(reducer_actions, _TACTICS_ATTACK_ACTIONS)
+    missing_dispatches = sorted(
+        action
+        for action in implemented
+        if not _has_dispatch_for_action(combined, action)
+        and not (
+            action.upper() in _TACTICS_ATTACK_ACTIONS and _has_attack_ui_dispatch(combined)
+        )
+    )
+    if missing_dispatches:
+        path = _first_path_matching(
+            _js_sources(file_changes),
+            r"Grid|Board|Game|ActionBar|App",
+        )
+        select_missing = [
+            action for action in missing_dispatches if action.upper() in _TACTICS_SELECT_ACTIONS
+        ]
+        attack_missing = [
+            action for action in missing_dispatches if action.upper() in _TACTICS_ATTACK_ACTIONS
+        ]
+        message = (
+            "Tactics reducer actions are implemented but UI never dispatches: "
+            + ", ".join(missing_dispatches)
+        )
+        if select_missing:
+            message += (
+                "; clicking/tapping a player unit must dispatch "
+                + "/".join(select_missing)
+                + " so selectedUnit can change and enable move/attack decisions"
+            )
+        if attack_missing:
+            message += (
+                "; ATTACK/ATTACK_UNIT must be reachable from UI — dispatch when clicking/tapping "
+                "an in-range enemy with a selected player unit, or from an Attack button/control "
+                "using the selected attacker and target enemy"
+            )
+        issues.append(
+            ScaffoldQualityIssue(
+                code="tactics_action_not_wired",
+                message=message,
+                path=path,
+            )
+        )
+    if _grid_source_present(combined) and implemented.intersection(
+        {"SELECT_UNIT", "SELECT", "MOVE_UNIT", "MOVE", "ATTACK_UNIT", "ATTACK"}
+    ):
+        if not _grid_has_click_handlers(combined):
+            path = _first_path_matching(_js_sources(file_changes), r"Grid|Board|tile|cell")
+            issues.append(
+                ScaffoldQualityIssue(
+                    code="tactics_grid_not_wired",
+                    message=(
+                        "Tactics grid renders cells but lacks click handlers wired to "
+                        "select/move/attack actions"
+                    ),
+                    path=path,
+                )
+            )
+        elif select_implemented and not (
+            _has_dispatch_for_action(combined, "SELECT_UNIT")
+            or _has_dispatch_for_action(combined, "SELECT")
+        ):
+            path = _first_path_matching(_js_sources(file_changes), r"Grid|Board|tile|cell")
+            issues.append(
+                ScaffoldQualityIssue(
+                    code="tactics_grid_not_wired",
+                    message=(
+                        "Tactics grid renders units/cells with click handlers but never wires "
+                        "player unit selection (SELECT/SELECT_UNIT); selectedUnit cannot change"
+                    ),
+                    path=path,
+                )
+            )
+        elif select_implemented and not _grid_has_select_click_handlers(combined):
+            if _has_dispatch_for_action(combined, "SELECT_UNIT") or _has_dispatch_for_action(
+                combined, "SELECT"
+            ):
+                pass
+            else:
+                path = _first_path_matching(_js_sources(file_changes), r"Grid|Board|tile|cell")
+                issues.append(
+                    ScaffoldQualityIssue(
+                        code="tactics_grid_not_wired",
+                        message=(
+                            "Tactics grid lacks unit/cell click handlers that dispatch "
+                            "SELECT/SELECT_UNIT for player units"
+                        ),
+                        path=path,
+                    )
+                )
+    if select_implemented and re.search(
+        r"selectedUnit|selectedUnitId",
+        combined,
+        re.IGNORECASE,
+    ) and not (
+        _has_dispatch_for_action(combined, "SELECT_UNIT")
+        or _has_dispatch_for_action(combined, "SELECT")
+    ):
+        path = _first_path_matching(_js_sources(file_changes), r"Grid|Board|App|reducer")
+        if not any(i.code == "tactics_action_not_wired" for i in issues):
+            issues.append(
+                ScaffoldQualityIssue(
+                    code="tactics_action_not_wired",
+                    message=(
+                        "Tactics selectedUnit state exists but UI never dispatches "
+                        "SELECT/SELECT_UNIT, so the player cannot change selection"
+                    ),
+                    path=path,
+                )
+            )
+    if attack_implemented and not _has_attack_ui_dispatch(combined):
+        path = _first_path_matching(_js_sources(file_changes), r"Grid|Board|ActionBar|App")
+        if not any(
+            i.code == "tactics_action_not_wired"
+            and "ATTACK" in i.message.upper()
+            for i in issues
+        ):
+            issues.append(
+                ScaffoldQualityIssue(
+                    code="tactics_action_not_wired",
+                    message=(
+                        "Tactics ATTACK/ATTACK_UNIT reducer case exists but UI never dispatches it; "
+                        "wire enemy cell/unit click or an Attack button using selected player unit "
+                        "and target enemy"
+                    ),
+                    path=path,
+                )
+            )
+    return issues
+
+
+def _inspect_tactics_ranges_and_enemy_turn(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_is_tactics_game(plan.user_message):
+        return []
+    combined = _combined_js_source(file_changes)
+    reducer_actions = _collect_reducer_actions(file_changes)
+    issues: list[ScaffoldQualityIssue] = []
+    path = _first_path_matching(_js_sources(file_changes), r"reducer|Game|move|attack")
+    if _PROMPT_TACTICS_MOVEMENT_RANGE.search(plan.user_message):
+        move_body = ""
+        for action in sorted(_TACTICS_MOVE_ACTIONS):
+            body = reducer_actions.get(action, "")
+            if body and not _is_noop_case_body(body, action):
+                move_body = body
+                break
+        move_missing_range = bool(
+            move_body
+            and _move_case_changes_position(move_body)
+            and not _move_case_has_range_check(move_body)
+        )
+        if move_missing_range or (
+            not move_body and not _MOVEMENT_RANGE_MARKERS.search(combined)
+        ):
+            issues.append(
+                ScaffoldQualityIssue(
+                    code="tactics_missing_movement_range",
+                    message=(
+                        "Tactics prompt requests constrained movement but MOVE action lacks "
+                        "legal movement range/distance/adjacency/Manhattan checks before "
+                        "changing unit position"
+                    ),
+                    path=path,
+                )
+            )
+    if _PROMPT_TACTICS_ATTACK_RANGE.search(plan.user_message):
+        attack_body = ""
+        for action in sorted(_TACTICS_ATTACK_ACTIONS):
+            body = reducer_actions.get(action, "")
+            if body and not _is_noop_case_body(body, action):
+                attack_body = body
+                break
+        attack_missing_range = bool(
+            attack_body
+            and _attack_case_mutates_hp(attack_body)
+            and not _attack_case_has_range_check(attack_body)
+        )
+        if not attack_missing_range and not _reducer_has_player_attack_with_range(reducer_actions):
+            player_attack_cases = [
+                (action, body)
+                for action, body in reducer_actions.items()
+                if action != "default"
+                and not _is_noop_case_body(body, action)
+                and (_attack_case_mutates_hp(body) or _case_mutates_enemy_hp(body))
+            ]
+            attack_missing_range = bool(player_attack_cases) or bool(attack_body)
+        if attack_missing_range:
+            issues.append(
+                ScaffoldQualityIssue(
+                    code="tactics_missing_attack_range",
+                    message=(
+                        "Tactics prompt requests player attacks on enemies but ATTACK action "
+                        "lacks player-side distance/range/adjacency/Manhattan checks before "
+                        "HP mutation; enemy-turn range logic does not satisfy this requirement"
+                    ),
+                    path=path,
+                )
+            )
+    if _PROMPT_TACTICS_ENEMY_TURN.search(
+        plan.user_message
+    ) and not _has_enemy_turn_mutation(combined, reducer_actions):
+        issues.append(
+            ScaffoldQualityIssue(
+                code="tactics_enemy_turn_not_wired",
+                message=(
+                    "Tactics prompt requests an enemy turn but enemy units never move, "
+                    "attack, or mutate player/enemy HP"
+                ),
+                path=path,
+            )
+        )
+    return issues
+
+
+def _inspect_tactics_attack_mutation(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_is_tactics_game(plan.user_message):
+        return []
+    reducer_actions = _collect_reducer_actions(file_changes)
+    issues: list[ScaffoldQualityIssue] = []
+    path = _first_path_matching(_js_sources(file_changes), r"reducer|attack|Game")
+    for action in sorted(_TACTICS_ATTACK_ACTIONS):
+        body = reducer_actions.get(action, "")
+        if not body:
+            continue
+        if _attack_case_has_inplace_hp_mutation(body):
+            issues.append(
+                ScaffoldQualityIssue(
+                    code="tactics_inplace_attack_mutation",
+                    message=(
+                        f"Tactics {action} mutates unit HP in place or returns stale state; "
+                        "compute next units immutably, reduce target HP through returned state, "
+                        "and remove/mark defeated enemies before win/loss checks"
+                    ),
+                    path=path,
+                )
+            )
+            break
+    return issues
+
+
+def _inspect_tactics_battle_result_and_restart(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_is_tactics_game(plan.user_message):
+        return []
+    combined = _combined_js_source(file_changes)
+    reducer_actions = _collect_reducer_actions(file_changes)
+    issues: list[ScaffoldQualityIssue] = []
+    path = _first_path_matching(_js_sources(file_changes), r"result|Game|reducer|Restart")
+    if (
+        _PROMPT_TACTICS_WIN.search(plan.user_message)
+        or _PROMPT_TACTICS_LOSS.search(plan.user_message)
+    ) and not _has_tactics_battle_result(combined, plan.user_message):
+        issues.append(
+            ScaffoldQualityIssue(
+                code="tactics_missing_battle_result",
+                message=(
+                    "Tactics prompt requires win/loss battle result but code lacks visible "
+                    "win-on-all-enemies-defeated and loss-on-all-player-units-defeated handling"
+                ),
+                path=path,
+            )
+        )
+    if _PROMPT_TACTICS_RESTART.search(plan.user_message) and re.search(
+        r"RESTART|Restart|restart", combined, re.IGNORECASE
+    ):
+        if not _restart_reseeds_tactics(combined, reducer_actions):
+            issues.append(
+                ScaffoldQualityIssue(
+                    code="tactics_restart_not_seeded",
+                    message=(
+                        "Tactics restart/new battle control resets to empty state without "
+                        "re-seeding grid units"
+                    ),
+                    path=path,
+                )
+            )
+    return issues
+
+
+def _inspect_tactics_quality(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    issues: list[ScaffoldQualityIssue] = []
+    issues.extend(_inspect_tactics_unit_seeding(plan, file_changes))
+    issues.extend(_inspect_tactics_interaction_wiring(plan, file_changes))
+    issues.extend(_inspect_tactics_ranges_and_enemy_turn(plan, file_changes))
+    issues.extend(_inspect_tactics_attack_mutation(plan, file_changes))
+    issues.extend(_inspect_tactics_battle_result_and_restart(plan, file_changes))
+    return issues
+
+
 def _inspect_import_export(
     file_changes: list[tuple[str, str]],
 ) -> list[ScaffoldQualityIssue]:
@@ -1032,6 +1830,7 @@ def inspect_generated_scaffold_quality(
         issues.extend(_inspect_deck_builder_run_result_missing(plan, file_changes))
         issues.extend(_inspect_missing_victory_wiring(plan, file_changes))
         issues.extend(_inspect_ignored_seed_payload(plan, file_changes))
+        issues.extend(_inspect_tactics_quality(plan, file_changes))
     issues.extend(_inspect_import_export(file_changes))
     issues.extend(_inspect_dispatch_reducer_mismatch(file_changes))
     # De-dupe by (code, path, message)
@@ -1163,6 +1962,43 @@ def build_scaffold_repair_prompt(
             "- Show visible run result / win-loss state when the run completes.\n"
             "- Add restart/new-run/play-again that resets deck, hand, discard, enemy, and run state.\n"
             "- Do not leave rewards[], discard, or deck disconnected from reducer mutations.\n"
+        )
+    tactics_codes = issue_codes & {
+        "tactics_empty_unit_seed",
+        "tactics_seed_not_applied",
+        "tactics_grid_not_wired",
+        "tactics_action_not_wired",
+        "tactics_missing_movement_range",
+        "tactics_missing_attack_range",
+        "tactics_enemy_turn_not_wired",
+        "tactics_missing_battle_result",
+        "tactics_restart_not_seeded",
+        "tactics_inplace_attack_mutation",
+        "noop_reducer_action",
+        "dispatch_reducer_mismatch",
+    }
+    if tactics_codes and _prompt_is_tactics_game(plan.user_message):
+        repair_system += (
+            "\nTurn-based tactics repair focus:\n"
+            "- Use a fixed non-empty grid (e.g. 5x5) with player and enemy units in canonical state.\n"
+            "- Dispatch INIT_GAME/START on mount or provide non-empty initial units in reducer state.\n"
+            "- Clicking/tapping a player unit must dispatch SELECT/SELECT_UNIT; track selectedUnit "
+            "visually/structurally and use it to enable move/attack decisions.\n"
+            "- Wire grid/unit click handlers to SELECT/MOVE/ATTACK dispatches (not move-only clicks).\n"
+            "- Constrain moves with legal movement range (prefer Manhattan distance), disallow "
+            "moving outside range or onto occupied cells, and update unit position immutably.\n"
+            "- Wire ATTACK/ATTACK_UNIT from UI: enemy cell/unit click with selected player unit, "
+            "or an Attack button/control; never leave ATTACK reducer case undispatched.\n"
+            "- Constrain player attacks with attack range or distance checks on the ATTACK case "
+            "before mutating HP; reject/ignore/disable out-of-range attacks (enemy-turn range "
+            "logic alone is insufficient).\n"
+            "- For ATTACK/ATTACK_UNIT: compute next units immutably (map/filter), reduce target HP "
+            "through returned state, remove/mark defeated enemies, and derive win/loss from next state.\n"
+            "- After player end turn, run a simple enemy turn that moves or attacks and mutates state.\n"
+            "- Win when all enemies are defeated; loss when all player units are defeated; show result UI.\n"
+            "- Restart/new battle must reseed grid, player units, enemy units, turn state, selected unit, "
+            "and result state; INIT/RESET must not be no-op.\n"
+            "- Do not leave reducer cases for SELECT/MOVE/ATTACK/END_TURN that are never dispatched.\n"
         )
     user_content = (
         f"User request: {plan.user_message}\n\n"
