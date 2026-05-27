@@ -11,12 +11,14 @@ from src.ham.build_registry import (
     compose_build_recipe,
     load_registry_pack,
     render_playbook_context,
+    validate_registry_pack,
 )
 from src.ham.build_registry.models import DEFAULT_RENDER_CHAR_BUDGET
 from src.ham.build_registry.intent import select_registry_v2_app_type_for_prompt
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WEBSITE_PACK_ROOT = REPO_ROOT / "docs/build-kit-registry-v2/website-pack"
+WEBSITE_PACK_MANIFEST = WEBSITE_PACK_ROOT / "registry-pack.yaml"
 APP_TYPE_ID = "site.landing-page-core"
 
 EXPECTED_SECTION_ORDER = (
@@ -154,3 +156,31 @@ def test_module_count(website_pack):
     # 1 app + 1 stack + 7 sections + 5 components + 7 validators + 6 recovery
     # + 1 progress + 1 learning = 29
     assert len(website_pack.modules) == 29
+
+
+def test_validate_registry_pack_passes(website_pack):
+    validate_registry_pack(website_pack)
+
+
+def test_reference_checker_passes():
+    import importlib.util
+    import sys
+
+    script_path = REPO_ROOT / "scripts/check_build_registry_references.py"
+    spec = importlib.util.spec_from_file_location(
+        "check_build_registry_references_website",
+        script_path,
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    result = module.run_reference_checks(
+        WEBSITE_PACK_MANIFEST,
+        app_type=APP_TYPE_ID,
+        check_orphans=True,
+        check_render_budget=True,
+    )
+    assert result.errors == []
+    assert result.summary_counts["error"] == 0

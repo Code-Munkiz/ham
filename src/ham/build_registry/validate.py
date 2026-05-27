@@ -18,6 +18,8 @@ from src.ham.build_registry.models import (
     RegistryPack,
 )
 
+SUPPORTED_PACK_IDS = frozenset({"pack.game", "pack.site"})
+
 
 def _flatten_module_index(module_index: dict[str, Any]) -> list[str]:
     ids: list[str] = []
@@ -299,8 +301,12 @@ def _collect_validation_errors(pack: RegistryPack) -> list[str]:
         except BuildRegistryConfigError as exc:
             errors.append(f"{app_id}: {exc}")
 
-    if not errors and pack_id != "pack.game":
-        errors.append(f"registry-pack.yaml: expected id 'pack.game', got {pack_id!r}")
+    if not errors and pack_id not in SUPPORTED_PACK_IDS:
+        supported = ", ".join(sorted(SUPPORTED_PACK_IDS))
+        errors.append(
+            f"registry-pack.yaml: unsupported pack id {pack_id!r} "
+            f"(supported: {supported})"
+        )
 
     return errors
 

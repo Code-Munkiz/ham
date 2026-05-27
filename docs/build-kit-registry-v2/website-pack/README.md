@@ -53,10 +53,15 @@ python3 -m pytest tests/test_website_pack_registry.py -q
 python3 scripts/validate_game_pack_registry.py \
   --pack-root docs/build-kit-registry-v2/website-pack \
   --app-type site.landing-page-core \
-  --render-sample /dev/stdout
+  --check
+python3 scripts/check_build_registry_references.py \
+  --pack docs/build-kit-registry-v2/website-pack/registry-pack.yaml \
+  --app-type site.landing-page-core \
+  --check-orphans \
+  --check-render-budget
 ```
 
-Note: `validate_registry_pack()` still expects `pack.game` — website pack uses focused tests for load/compose/render until pack validation generalizes.
+`validate_registry_pack()` and the reference checker both support `pack.site` with website-pack directory conventions (`sections/`, `components/`, `recovery/`).
 
 ## Related docs
 

@@ -13,7 +13,9 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GAME_PACK_ROOT = REPO_ROOT / "docs/build-kit-registry-v2/game-pack"
+WEBSITE_PACK_ROOT = REPO_ROOT / "docs/build-kit-registry-v2/website-pack"
 DEFAULT_PACK = GAME_PACK_ROOT / "registry-pack.yaml"
+WEBSITE_PACK = WEBSITE_PACK_ROOT / "registry-pack.yaml"
 
 
 def _load_checker_module():
@@ -54,11 +56,34 @@ class TestCurrentRegistry:
         assert result.errors == []
         assert result.summary_counts["error"] == 0
 
+    def test_website_pack_has_no_hard_errors(self):
+        result = checker.run_reference_checks(
+            WEBSITE_PACK,
+            app_type="site.landing-page-core",
+            check_orphans=True,
+            check_render_budget=True,
+        )
+        assert result.errors == []
+        assert result.summary_counts["error"] == 0
+
     def test_cli_main_real_registry_exits_zero(self):
         exit_code = checker.main(
             [
                 "--pack",
                 str(DEFAULT_PACK),
+                "--check-orphans",
+                "--check-render-budget",
+            ]
+        )
+        assert exit_code == 0
+
+    def test_cli_main_website_pack_exits_zero(self):
+        exit_code = checker.main(
+            [
+                "--pack",
+                str(WEBSITE_PACK),
+                "--app-type",
+                "site.landing-page-core",
                 "--check-orphans",
                 "--check-render-budget",
             ]

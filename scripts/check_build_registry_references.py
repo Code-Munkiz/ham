@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Local reference checker for Build Kit Registry v2 Game Pack YAML.
+"""Local reference checker for Build Kit Registry v2 registry packs.
 
+Supports game-pack (``pack.game``) and website-pack (``pack.site``).
 Warning/report oriented — not wired into runtime, CI, or API paths.
 """
 
@@ -36,7 +37,7 @@ Severity = Literal["info", "warning", "error"]
 NEAR_BUDGET_RATIO = 0.9
 RENDER_PROBE_BUDGET = 999_999
 
-INDEX_DIRECTORY: dict[str, tuple[str, bool]] = {
+GAME_PACK_INDEX_DIRECTORY: dict[str, tuple[str, bool]] = {
     "app_types": ("app-types", True),
     "stack_kits": ("stack-kits", False),
     "mechanics": ("mechanics", False),
@@ -46,6 +47,19 @@ INDEX_DIRECTORY: dict[str, tuple[str, bool]] = {
     "progress_labels": ("progress-labels", False),
     "learning_hooks": ("learning-hooks", False),
 }
+
+WEBSITE_PACK_INDEX_DIRECTORY: dict[str, tuple[str, bool]] = {
+    "app_types": ("app-types", True),
+    "stack_kits": ("stack-kits", False),
+    "mechanics": ("sections", False),
+    "component_contracts": ("components", False),
+    "validators": ("validators", False),
+    "recovery_playbooks": ("recovery", False),
+    "progress_labels": ("progress-labels", False),
+    "learning_hooks": ("learning-hooks", False),
+}
+
+INDEX_DIRECTORY = GAME_PACK_INDEX_DIRECTORY
 
 NON_TEMPLATE_KINDS = frozenset(
     {
@@ -58,10 +72,11 @@ NON_TEMPLATE_KINDS = frozenset(
         "recovery_playbook",
         "progress_label",
         "learning_hook",
+        "section",
     }
 )
 
-APP_TYPE_REF = re.compile(r"^(?:game|app)\.[a-z0-9-]+$")
+APP_TYPE_REF = re.compile(r"^(?:game|app|site)\.[a-z0-9-]+$")
 
 
 @dataclass(frozen=True)
@@ -128,8 +143,19 @@ def _add_issue(result: CheckResult, issue: CheckIssue) -> None:
     result.issues.append(issue)
 
 
-def _expected_module_path(pack_root: Path, index_key: str, module_id: str) -> Path:
-    directory, use_full_id = INDEX_DIRECTORY[index_key]
+def index_directory_for_pack_id(pack_id: str) -> dict[str, tuple[str, bool]]:
+    if pack_id == "pack.site":
+        return WEBSITE_PACK_INDEX_DIRECTORY
+    return GAME_PACK_INDEX_DIRECTORY
+
+
+def _expected_module_path(
+    pack_root: Path,
+    index_key: str,
+    module_id: str,
+    index_directory: dict[str, tuple[str, bool]],
+) -> Path:
+    directory, use_full_id = index_directory[index_key]
     if use_full_id:
         filename = f"{module_id}.yaml"
     else:
@@ -225,10 +251,11 @@ def _check_index_references(
     result: CheckResult,
     pack_root: Path,
     grouped_index: dict[str, list[str]],
+    index_directory: dict[str, tuple[str, bool]],
 ) -> set[str]:
     indexed_ids: set[str] = set()
     for index_key, module_ids in grouped_index.items():
-        if index_key not in INDEX_DIRECTORY:
+        if index_key not in index_directory:
             continue
         seen: set[str] = set()
         for module_id in module_ids:
@@ -244,7 +271,12 @@ def _check_index_references(
                 )
             seen.add(module_id)
             indexed_ids.add(module_id)
-            expected = _expected_module_path(pack_root, index_key, module_id)
+            expected = _expected_module_path(
+                pack_root,
+                index_key,
+                module_id,
+                index_directory,
+            )
             if not expected.is_file():
                 _add_issue(
                     result,
@@ -331,13 +363,19 @@ def _check_filename_id_mismatch(
     result: CheckResult,
     grouped_index: dict[str, list[str]],
     ids_to_paths: dict[str, Path],
+    index_directory: dict[str, tuple[str, bool]],
 ) -> None:
     for index_key, module_ids in grouped_index.items():
-        if index_key not in INDEX_DIRECTORY:
+        if index_key not in index_directory:
             continue
         pack_root = Path(result.pack_root or ".")
         for module_id in module_ids:
-            expected = _expected_module_path(pack_root, index_key, module_id)
+            expected = _expected_module_path(
+                pack_root,
+                index_key,
+                module_id,
+                index_directory,
+            )
             actual = ids_to_paths.get(module_id)
             if actual is None:
                 continue
@@ -352,7 +390,7 @@ def _check_filename_id_mismatch(
                             f"but convention expects {expected}"
                         ),
                         path=actual,
-                        suggestion="Rename file or update id to match Game Pack conventions",
+                        suggestion="Rename file or update id to match pack conventions",
                     ),
                 )
 
@@ -538,8 +576,27 @@ def run_reference_checks(
         )
         return result
 
+    pack_id = manifest.get("id")
+    if not isinstance(pack_id, str) or not pack_id.strip():
+        _add_issue(
+            result,
+            _issue(
+                "missing_pack_id",
+                "error",
+                "registry-pack.yaml: missing or empty id",
+                path=pack_path,
+            ),
+        )
+        return result
+    index_directory = index_directory_for_pack_id(pack_id.strip())
+
     grouped_index = _flatten_module_index(module_index)
-    indexed_ids = _check_index_references(result, pack_root, grouped_index)
+    indexed_ids = _check_index_references(
+        result,
+        pack_root,
+        grouped_index,
+        index_directory,
+    )
     ids_to_paths = _scan_module_files(result, pack_root)
 
     missing_indexed = sorted(indexed_ids - set(ids_to_paths))
@@ -557,7 +614,12 @@ def run_reference_checks(
     if check_orphans:
         _check_orphans(result, pack_root, indexed_ids, ids_to_paths)
 
-    _check_filename_id_mismatch(result, grouped_index, ids_to_paths)
+    _check_filename_id_mismatch(
+        result,
+        grouped_index,
+        ids_to_paths,
+        index_directory,
+    )
     _check_applies_to(result, grouped_index, ids_to_paths)
     _check_non_template_statements(result, ids_to_paths)
 
@@ -678,7 +740,7 @@ def format_json_report(result: CheckResult) -> str:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Check Build Kit Registry v2 Game Pack references and drift."
+        description="Check Build Kit Registry v2 pack references and drift."
     )
     parser.add_argument(
         "--pack",
