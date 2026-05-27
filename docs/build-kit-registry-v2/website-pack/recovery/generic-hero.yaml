@@ -1,0 +1,34 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.generic-hero
+kind: recovery_playbook
+name: Fix generic hero slop
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs vague centered hero with no specific value proposition.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - site.landing-page-core
+
+repairs_validators:
+  - validator.landing-section-presence
+  - validator.anti-slop-patterns
+
+steps:
+  - id: step.rewrite_headline
+    action: rewrite_headline
+    detail: "Headline names audience and outcome"
+  - id: step.add_subhead
+    action: add_subhead
+    detail: "Subhead explains how offer works in one sentence"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.landing-section-presence"
+
+user_facing_summary: >
+  I tightened the hero so the headline and subhead explain who this is for and why it matters.

@@ -1,0 +1,29 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.copy-specificity
+kind: validator
+name: Copy specificity
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Headlines and body copy are specific to offer — not vague AI slogans.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - site.landing-page-core
+
+severity: warning
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Hero mentions audience product or outcome"
+  - "Feature headings differ from each other"
+
+fail_conditions:
+  - "Revolutionize your workflow without specifics"
+  - "Identical feature card copy repeated"
+
+recovery_playbooks:
+  - recovery.vague-copy

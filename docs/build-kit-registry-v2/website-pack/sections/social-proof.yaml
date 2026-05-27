@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.social-proof
+kind: section
+name: Social proof section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Optional trust strip: testimonials logos stats or credibility markers.
+
+non_template_statement: Section playbook only.
+
+applies_to:
+  - site.landing-page-core
+
+depends_on:
+  - section.feature-value-grid
+
+binds_components:
+  - component.testimonial-strip
+
+guidance:
+  - "Include only when prompt requests proof or credibility"
+  - "Structured quotes or stats — not filler lorem names"
+  - "Omit section entirely if irrelevant to prompt"

@@ -1,0 +1,34 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.weak-cta
+kind: recovery_playbook
+name: Fix weak CTA hierarchy
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs generic or competing CTAs and dead submit buttons.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - site.landing-page-core
+
+repairs_validators:
+  - validator.cta-clarity
+  - validator.no-lorem-dead-cta
+
+steps:
+  - id: step.label_primary
+    action: label_primary
+    detail: "Primary CTA label matches offer action"
+  - id: step.demote_secondary
+    action: demote_secondary
+    detail: "Secondary link styled as text link not equal button"
+  - id: step.fix_dead_submit
+    action: fix_dead_submit
+    detail: "Replace fake form submit with link or documented handler"
+
+user_facing_summary: >
+  I clarified the main call to action so it is obvious what happens when you click.

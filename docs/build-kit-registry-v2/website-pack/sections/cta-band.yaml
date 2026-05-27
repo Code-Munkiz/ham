@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.cta-band
+kind: section
+name: CTA band section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Mid-page conversion band repeating primary action with supporting copy.
+
+non_template_statement: Section playbook only.
+
+applies_to:
+  - site.landing-page-core
+
+depends_on:
+  - section.social-proof
+
+binds_components:
+  - component.cta-button-group
+
+guidance:
+  - "Repeat primary CTA label from hero for consistency"
+  - "Short supporting line reinforces urgency or benefit"
+  - "Single primary button — avoid competing equal-weight CTAs"

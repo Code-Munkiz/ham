@@ -1,0 +1,29 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.semantic-heading-order
+kind: validator
+name: Semantic heading order
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Single h1 and logical h2/h3 nesting across sections.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - site.landing-page-core
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Exactly one h1 on page"
+  - "Section titles use h2 without skipped levels"
+
+fail_conditions:
+  - "Multiple h1 elements"
+  - "h4 used for main section titles without h2/h3 structure"
+
+recovery_playbooks:
+  - recovery.inaccessible-buttons

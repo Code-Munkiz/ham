@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.landing-hero
+kind: section
+name: Landing hero section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Above-the-fold hero: headline, supporting subhead, primary CTA, optional secondary action.
+
+non_template_statement: Section playbook only — not a checked-in hero component.
+
+applies_to:
+  - site.landing-page-core
+
+depends_on: []
+
+binds_components:
+  - component.hero-block
+
+guidance:
+  - "Headline names audience or outcome — avoid vague revolution copy"
+  - "One primary CTA with specific label tied to offer"
+  - "Optional secondary link de-emphasized visually"
+  - "Hero background or imagery supports narrative — not decorative noise"

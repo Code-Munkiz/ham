@@ -1,0 +1,27 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.testimonial-strip
+kind: component_contract
+name: Testimonial strip contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Social proof row: quotes logos or stat chips.
+
+non_template_statement: Layout contract only.
+
+applies_to:
+  - site.landing-page-core
+
+binds_mechanics:
+  - section.social-proof
+
+expected_props:
+  - testimonials: array of { quote, name, role? }
+  - logos: array of { name, alt } | null
+
+accessibility_notes:
+  - "Blockquote for quotes; alt text on logo images"
+
+responsive_notes:
+  - "Wrap or stack items without horizontal overflow"

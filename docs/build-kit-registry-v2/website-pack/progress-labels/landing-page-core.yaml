@@ -1,0 +1,36 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: progress.landing-page-core
+kind: progress_label
+name: Landing page core build progress
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Normie-friendly phase labels for landing page builds.
+
+non_template_statement: Progress copy module only.
+
+source_phase_owner: site.landing-page-core
+
+applies_to:
+  - site.landing-page-core
+
+phase_message_map:
+  phase.understand:
+    title: "Getting your landing page idea"
+    message: "I'm turning your description into a one-page marketing plan."
+  phase.compose:
+    title: "Planning page sections"
+    message: "I'm lining up hero, features, proof, and call-to-action sections."
+  phase.generate:
+    title: "Building your landing page"
+    message: "I'm creating the custom code for your marketing preview."
+  phase.validate:
+    title: "Checking page clarity"
+    message: "I'm verifying headings, CTAs, and mobile-friendly layout."
+  phase.preview:
+    title: "Opening your preview"
+    message: "Your landing page is almost ready to view."
+  phase.recover:
+    title: "Polishing a section"
+    message: "I'm fixing a weak hero, CTA, or layout issue."

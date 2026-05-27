@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.final-conversion
+kind: section
+name: Final conversion section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Closing section reinforcing primary CTA before footer.
+
+non_template_statement: Section playbook only.
+
+applies_to:
+  - site.landing-page-core
+
+depends_on:
+  - section.faq-block
+
+binds_components:
+  - component.cta-button-group
+
+guidance:
+  - "Final headline restates core benefit"
+  - "Primary CTA matches hero label"
+  - "Minimal distraction — no new feature lists here"

@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.cta-clarity
+kind: validator
+name: CTA clarity
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Primary CTA labels are specific and hierarchy is clear.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - site.landing-page-core
+
+validates_modules:
+  - component.cta-button-group
+  - section.cta-band
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Primary CTA label names action or offer"
+  - "One visually dominant primary per section"
+
+fail_conditions:
+  - "Generic lone Learn more with no context"
+  - "Multiple equal-weight primary buttons"
+
+recovery_playbooks:
+  - recovery.weak-cta

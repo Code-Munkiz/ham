@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.hero-block
+kind: component_contract
+name: Hero block contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Hero region: headline, subhead, primary CTA, optional secondary link.
+
+non_template_statement: Layout contract only — not a copy-paste React file.
+
+applies_to:
+  - site.landing-page-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.landing-hero
+
+expected_props:
+  - headline: string
+  - subhead: string
+  - primaryCtaLabel: string
+  - primaryCtaHref: string
+  - secondaryCtaLabel: string | null
+
+accessibility_notes:
+  - "Single h1 for headline"
+  - "Primary CTA is button or link with accessible name"
+
+responsive_notes:
+  - "Stack headline subhead and CTAs on narrow viewports"

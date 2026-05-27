@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.mobile-layout-ignored
+kind: recovery_playbook
+name: Fix mobile layout issues
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs fixed widths overflow and tiny tap targets on narrow viewports.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - site.landing-page-core
+
+repairs_validators:
+  - validator.responsive-accessibility-basics
+
+steps:
+  - id: step.fluid_width
+    action: fluid_width
+    detail: "Replace fixed px widths with max-w and w-full patterns"
+  - id: step.stack_sections
+    action: stack_sections
+    detail: "Single column grid on sm breakpoint"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.responsive-accessibility-basics"
+
+user_facing_summary: >
+  I adjusted the layout so the landing page reads cleanly on mobile screens.

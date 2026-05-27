@@ -1,0 +1,34 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: learning.landing-page-core
+kind: learning_hook
+name: Landing page core learning hooks
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Future Hermes evolution signals for landing page builds. Not wired at runtime.
+
+non_template_statement: Learning hook schema only.
+
+applies_to:
+  - site.landing-page-core
+
+source_phase_owner: site.landing-page-core
+
+signal_categories:
+  - hero_specificity
+  - cta_clarity
+  - section_presence
+  - heading_semantics
+  - mobile_layout
+  - anti_slop_patterns
+
+outcome_fact_fields:
+  - preview_boot_success: boolean
+  - lorem_ipsum_detected: boolean
+  - dead_cta_detected: boolean
+  - validator_failures: array of validator id
+
+guidance:
+  - "Capture bounded evidence from preview and conceptual validator results"
+  - "Align with OUTCOME_FACTS.md when Hermes loop lands"

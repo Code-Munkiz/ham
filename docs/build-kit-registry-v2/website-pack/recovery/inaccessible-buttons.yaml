@@ -1,0 +1,34 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.inaccessible-buttons
+kind: recovery_playbook
+name: Fix inaccessible buttons
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs div click targets and heading order issues affecting controls.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - site.landing-page-core
+
+repairs_validators:
+  - validator.semantic-heading-order
+  - validator.responsive-accessibility-basics
+
+steps:
+  - id: step.semantic_controls
+    action: semantic_controls
+    detail: "Use button or anchor for CTAs and FAQ toggles"
+  - id: step.fix_headings
+    action: fix_headings
+    detail: "Single h1; section titles as h2"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.semantic-heading-order"
+
+user_facing_summary: >
+  I fixed buttons and headings so the page is easier to use with keyboard and screen readers.

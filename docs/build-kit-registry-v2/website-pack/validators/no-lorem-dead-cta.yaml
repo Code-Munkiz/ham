@@ -1,0 +1,29 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.no-lorem-dead-cta
+kind: validator
+name: No lorem or dead CTA
+status: proposed
+schema_version: "0.1"
+
+description: >
+  No lorem ipsum; CTAs are real links or handlers — not fake submit forms.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - site.landing-page-core
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "No lorem ipsum strings in visible copy"
+  - "Primary CTAs href or onClick documented — not inert submit to nowhere"
+
+fail_conditions:
+  - "Lorem ipsum placeholder text"
+  - "Submit button with no action pretending to work"
+
+recovery_playbooks:
+  - recovery.weak-cta

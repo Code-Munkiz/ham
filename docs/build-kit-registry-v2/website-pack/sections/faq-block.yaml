@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.faq-block
+kind: section
+name: FAQ block section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Optional FAQ accordion addressing objections before final conversion.
+
+non_template_statement: Section playbook only.
+
+applies_to:
+  - site.landing-page-core
+
+depends_on:
+  - section.cta-band
+
+binds_components:
+  - component.faq-list
+
+guidance:
+  - "Three to six questions relevant to offer"
+  - "Answers concise; keyboard-accessible disclosure"
+  - "Omit if prompt does not need FAQ"

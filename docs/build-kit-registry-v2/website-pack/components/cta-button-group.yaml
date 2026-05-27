@@ -1,0 +1,30 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.cta-button-group
+kind: component_contract
+name: CTA button group contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Primary and optional secondary call-to-action controls.
+
+non_template_statement: Layout contract only.
+
+applies_to:
+  - site.landing-page-core
+
+binds_mechanics:
+  - section.cta-band
+  - section.final-conversion
+
+expected_props:
+  - primaryLabel: string
+  - primaryHref: string
+  - secondaryLabel: string | null
+
+accessibility_notes:
+  - "Use button or anchor — not inert div click targets"
+  - "Primary visually dominant; secondary subdued"
+
+responsive_notes:
+  - "Full-width primary button on mobile when appropriate"

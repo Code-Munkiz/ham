@@ -1,0 +1,93 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: pack.site
+kind: registry_pack
+name: Website Pack
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Root manifest for Build Registry v2 Website Pack. Indexes marketing/landing-page
+  playbooks starting with site.landing-page-core. Separate from game-pack; generative
+  guidance only — no templates, starter source, or routing in this pack land.
+
+non_template_statement: >
+  Registry index and compose defaults only. Does not ship landing page starters,
+  cloned marketing templates, or executable validators. HAM generates custom code from
+  composed playbook context when wired — never from checked-in templates.
+
+module_index:
+  app_types:
+    - site.landing-page-core
+  stack_kits:
+    - stack.dom-marketing-minimal
+  mechanics:
+    - section.landing-hero
+    - section.value-proposition
+    - section.feature-value-grid
+    - section.social-proof
+    - section.cta-band
+    - section.faq-block
+    - section.final-conversion
+  component_contracts:
+    - component.hero-block
+    - component.feature-card-grid
+    - component.testimonial-strip
+    - component.cta-button-group
+    - component.faq-list
+  validators:
+    - validator.landing-section-presence
+    - validator.cta-clarity
+    - validator.copy-specificity
+    - validator.semantic-heading-order
+    - validator.responsive-accessibility-basics
+    - validator.no-lorem-dead-cta
+    - validator.anti-slop-patterns
+  recovery_playbooks:
+    - recovery.generic-hero
+    - recovery.weak-cta
+    - recovery.section-repetition
+    - recovery.inaccessible-buttons
+    - recovery.mobile-layout-ignored
+    - recovery.vague-copy
+  progress_labels:
+    - progress.landing-page-core
+  learning_hooks:
+    - learning.landing-page-core
+
+compose_defaults:
+  compose_order:
+    - intent
+    - assumptions
+    - stack
+    - mechanics
+    - components
+    - phases
+    - validators
+    - recovery
+    - progress
+  max_modules: 30
+  default_stack_kit_id: stack.dom-marketing-minimal
+  validator_policy:
+    run_after: [scaffold, section_edit]
+    severity_blocking_default: blocking
+    runner_default: conceptual
+    check_type_default: conceptual
+  recovery_policy:
+    max_attempts_default: 2
+    re_validate_after_repair: true
+    user_facing_on_exhausted: honest_failure
+
+render_sections:
+  - intent
+  - assumptions
+  - stack
+  - mechanics
+  - components
+  - phases
+  - validators
+  - recovery
+  - progress
+
+non_runtime_notice: >
+  Website Pack lives under docs/build-kit-registry-v2/website-pack/. Not routed;
+  HAM_BUILD_REGISTRY_V2_ENABLED unchanged. v1 Builder Kit JSON remains default.

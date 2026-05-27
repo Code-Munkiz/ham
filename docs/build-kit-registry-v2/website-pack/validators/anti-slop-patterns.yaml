@@ -1,0 +1,30 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.anti-slop-patterns
+kind: validator
+name: Anti-slop patterns
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Flags generic AI landing tropes: purple gradient hero three identical cards.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - site.landing-page-core
+
+severity: warning
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Distinct section backgrounds or spacing rhythm"
+  - "Feature blocks not copy-paste identical structure"
+
+fail_conditions:
+  - "Three emoji icon cards with one-line blurbs only"
+  - "Centered generic hero with no value prop detail"
+
+recovery_playbooks:
+  - recovery.generic-hero
+  - recovery.section-repetition

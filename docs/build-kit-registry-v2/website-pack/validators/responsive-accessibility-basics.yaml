@@ -1,0 +1,30 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.responsive-accessibility-basics
+kind: validator
+name: Responsive accessibility basics
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Mobile layout usable; focusable controls; viewport meta present.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - site.landing-page-core
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "No obvious horizontal overflow at 360px"
+  - "Interactive controls keyboard focusable"
+
+fail_conditions:
+  - "Fixed width traps content on mobile"
+  - "div-onClick without role for primary actions"
+
+recovery_playbooks:
+  - recovery.mobile-layout-ignored
+  - recovery.inaccessible-buttons

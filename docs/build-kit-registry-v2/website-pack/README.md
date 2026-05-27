@@ -1,0 +1,65 @@
+# Website Pack — Build Registry v2
+
+**Status:** Schema pilot · **Pack id:** `pack.site` · **First recipe:** `site.landing-page-core` (schema-only, **not routed**)
+
+Generative playbooks for DOM-native marketing and landing pages. This pack is **separate from** [game-pack/](../game-pack/) — no game mechanics, no templates, no starter source trees.
+
+## Purpose
+
+- Guide HAM to compose **custom** one-page marketing/landing pages from user prompts plus structured YAML modules.
+- Enforce section rhythm (hero → value → features → proof → CTA → FAQ/close), accessibility basics, and anti-slop quality intent.
+- Stay **schema/docs/registry only** until explicit routing approval.
+
+## Non-template posture
+
+- No checked-in React/Vite landing starters.
+- No clone baselines of named sites.
+- `non_template_statement` on every module.
+- Generated output targets `/tmp/` or preview bootstrap only — never repo-native template trees.
+
+## First recipe: `site.landing-page-core`
+
+One-page static marketing/landing playbook:
+
+| In scope | Out of scope |
+|----------|--------------|
+| Hero, value prop, feature sections, social proof, CTA, FAQ | Backend, auth, live forms, payments, CMS |
+| Responsive layout + semantic headings | Dashboard, ecommerce, multi-page app routing |
+| Meaningful placeholder copy (no lorem ipsum) | Template cloning, pixel-perfect brand copies |
+
+**Routing:** deferred — see [LANDING_PAGE_CORE_READINESS_REVIEW.md](../LANDING_PAGE_CORE_READINESS_REVIEW.md) and [ROUTING_STRATEGY.md](../ROUTING_STRATEGY.md).
+
+## Layout
+
+```text
+website-pack/
+├── registry-pack.yaml
+├── app-types/site.landing-page-core.yaml
+├── stack-kits/dom-marketing-minimal.yaml
+├── sections/          # indexed as mechanics for loader compatibility
+├── components/
+├── validators/
+├── recovery/
+├── progress-labels/
+└── learning-hooks/
+```
+
+Section modules live under `sections/` but appear in `module_index.mechanics` until loader gains a dedicated `sections` key (see [WEBSITE_PACK_STRUCTURE_PLAN.md](../WEBSITE_PACK_STRUCTURE_PLAN.md)).
+
+## Validation (local)
+
+```bash
+python3 -m pytest tests/test_website_pack_registry.py -q
+python3 scripts/validate_game_pack_registry.py \
+  --pack-root docs/build-kit-registry-v2/website-pack \
+  --app-type site.landing-page-core \
+  --render-sample /dev/stdout
+```
+
+Note: `validate_registry_pack()` still expects `pack.game` — website pack uses focused tests for load/compose/render until pack validation generalizes.
+
+## Related docs
+
+- [WEBSITE_PACK_STRUCTURE_PLAN.md](../WEBSITE_PACK_STRUCTURE_PLAN.md)
+- [WEBSITE_DESIGN_QUALITY_PRINCIPLES.md](../WEBSITE_DESIGN_QUALITY_PRINCIPLES.md)
+- [AUTHORING_GUIDE.md](../AUTHORING_GUIDE.md) — game-pack patterns apply to module shape

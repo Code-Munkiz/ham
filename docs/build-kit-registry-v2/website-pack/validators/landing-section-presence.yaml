@@ -1,0 +1,35 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.landing-section-presence
+kind: validator
+name: Landing section presence
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Required marketing sections present for prompt scope — hero value features CTA minimum.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - site.landing-page-core
+
+validates_modules:
+  - section.landing-hero
+  - section.value-proposition
+  - section.feature-value-grid
+  - section.cta-band
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Hero value and CTA sections render in DOM"
+  - "Feature section present when prompt requests features"
+
+fail_conditions:
+  - "Hero missing or empty headline"
+  - "No CTA section anywhere on page"
+
+recovery_playbooks:
+  - recovery.generic-hero

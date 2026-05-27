@@ -1,0 +1,40 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: stack.dom-marketing-minimal
+kind: stack_kit
+name: DOM-native minimal marketing stack
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Default stack for static marketing/landing pages: React + Vite-style SPA, Tailwind-style
+  utilities, semantic HTML sections. Client-only; no backend for MVP.
+
+non_template_statement: >
+  Stack playbook only. Does not ship a checked-in landing starter or design asset bundle.
+
+applies_to:
+  - site.landing-page-core
+  - tag:dom-marketing-page
+
+capabilities:
+  - local-state
+  - dom-rendering
+  - semantic-sections
+  - responsive-layout
+  - no-network
+
+guidance:
+  - "Single-page scroll layout with semantic section landmarks"
+  - "React components per section; Tailwind-style spacing and type scale"
+  - "Static links/buttons only — no live form POST for MVP"
+  - "Mobile-first stacking; max-width content column on desktop"
+  - "No CMS, auth SDK, or payment libraries unless user explicitly scopes elsewhere"
+
+accessibility_baseline:
+  - "One h1; logical h2/h3 nesting per section"
+  - "Buttons and links use semantic elements with visible focus"
+  - "Sufficient contrast for body and CTA text"
+
+mobile_baseline:
+  - "Usable at 360px without horizontal scroll"
+  - "Primary CTA tap target ≥ 44px where practical"

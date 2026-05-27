@@ -1,0 +1,22 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.value-proposition
+kind: section
+name: Value proposition section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Problem/solution framing — why the offer matters before feature detail.
+
+non_template_statement: Section playbook only.
+
+applies_to:
+  - site.landing-page-core
+
+depends_on:
+  - section.landing-hero
+
+guidance:
+  - "State who it is for and what outcome they get"
+  - "Contrast before/after or pain/solution in plain language"
+  - "Keep copy specific — no generic platform slogans"

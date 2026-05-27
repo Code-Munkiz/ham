@@ -1,0 +1,27 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.faq-list
+kind: component_contract
+name: FAQ list contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Accessible FAQ list with expandable answers.
+
+non_template_statement: Layout contract only.
+
+applies_to:
+  - site.landing-page-core
+
+binds_mechanics:
+  - section.faq-block
+
+expected_props:
+  - items: array of { question, answer }
+
+accessibility_notes:
+  - "button + region pattern or details/summary with keyboard support"
+  - "Associate question text with answer region"
+
+responsive_notes:
+  - "Readable line length; tap targets for disclosure controls"

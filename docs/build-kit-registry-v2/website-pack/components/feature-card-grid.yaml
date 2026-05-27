@@ -1,0 +1,26 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.feature-card-grid
+kind: component_contract
+name: Feature card grid contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Grid of feature or benefit cards with title body and optional icon.
+
+non_template_statement: Layout contract only.
+
+applies_to:
+  - site.landing-page-core
+
+binds_mechanics:
+  - section.feature-value-grid
+
+expected_props:
+  - items: array of { title, body, icon? }
+
+accessibility_notes:
+  - "Each card heading uses h2 or h3 consistent with page outline"
+
+responsive_notes:
+  - "Single column on mobile; two or three columns on desktop"

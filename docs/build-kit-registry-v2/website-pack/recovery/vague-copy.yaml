@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.vague-copy
+kind: recovery_playbook
+name: Fix vague marketing copy
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs generic revolution/next-gen copy without audience or offer detail.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - site.landing-page-core
+
+repairs_validators:
+  - validator.copy-specificity
+
+steps:
+  - id: step.inject_audience
+    action: inject_audience
+    detail: "Name who the product helps in hero or value section"
+  - id: step.specify_outcome
+    action: specify_outcome
+    detail: "State measurable or concrete outcome in value prop"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.copy-specificity"
+
+user_facing_summary: >
+  I made the copy more specific about who this helps and what they get.

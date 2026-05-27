@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.feature-value-grid
+kind: section
+name: Feature value grid section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Two to four feature or benefit blocks with distinct headings — not identical icon rows.
+
+non_template_statement: Section playbook only.
+
+applies_to:
+  - site.landing-page-core
+
+depends_on:
+  - section.value-proposition
+
+binds_components:
+  - component.feature-card-grid
+
+guidance:
+  - "Each block has unique heading and supporting copy"
+  - "Avoid three identical emoji icon cards"
+  - "Order benefits by user journey not arbitrary alphabet"

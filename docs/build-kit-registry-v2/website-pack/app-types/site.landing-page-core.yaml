@@ -1,0 +1,203 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: site.landing-page-core
+kind: app_type
+name: Landing page core
+status: proposed
+schema_version: "0.1"
+
+description: >
+  One-page static marketing/landing playbook: hero, value proposition, feature/value
+  sections, optional social proof, CTA band, FAQ or final conversion. Responsive layout,
+  accessibility basics, visual hierarchy. No backend, live forms, payments, or CMS.
+
+non_template_statement: >
+  Generative playbook only. No checked-in landing templates, clone baselines, or starter
+  source trees. HAM composes guidance — never copies repo-native marketing kits.
+
+legacy_v1_fallback: generic
+
+safety_constraints:
+  - no-network-egress-for-mvp
+  - no-eval
+  - no-user-accounts-for-mvp
+  - no-live-form-post-for-mvp
+  - no-payment-processing-for-mvp
+  - no-cms-or-blog-for-mvp
+  - dom-native-ui-only-for-mvp
+  - static-content-only-for-mvp
+
+guidance:
+  - "Narrative arc: problem → solution → proof → action"
+  - "One primary CTA repeated with consistent label; optional secondary de-emphasized"
+  - "Section rhythm: distinct spacing and type scale — not identical card rows"
+  - "Placeholder copy names audience or outcome — no lorem ipsum"
+  - "CTAs are links or explicit handlers — not fake submit forms"
+
+default_assumptions:
+  - "Single scroll page; 5–7 sections max"
+  - "Static content; no API fetch for MVP"
+  - "Primary CTA above the fold and repeated near footer"
+  - "Mobile stack; centered content column on desktop"
+
+hard_constraints:
+  - no-template-cloning
+  - no-backend-api-for-mvp
+  - no-live-form-handling-for-mvp
+  - no-payments-or-checkout-for-mvp
+  - no-cms-blog-or-docs-site-for-mvp
+  - no-dashboard-or-app-shell-for-mvp
+  - no-lorem-ipsum-placeholder
+  - no-dead-cta-pretending-to-submit
+  - preserve-safe-local-mvp-scope
+
+soft_defaults:
+  - hero with headline subhead and primary CTA
+  - two to four feature/value blocks
+  - optional testimonials or logo strip
+  - optional FAQ accordion
+  - final conversion section before footer
+
+user_overridable:
+  - brand name and offer copy tone
+  - section count within 5–7 cap
+  - color palette and typography mood
+  - CTA label text when specific to offer
+  - whether social proof or FAQ sections appear
+
+clarify_if_changed:
+  - replacing landing page with multi-page app routing
+  - adding authentication or user accounts
+  - adding live email capture or form POST
+  - adding payment or checkout flows
+  - replacing marketing page with dashboard or data UI
+
+out_of_scope_unless_explicit:
+  - user accounts or auth flows
+  - backend APIs or databases
+  - live form submission or waitlist capture
+  - payments checkout or subscriptions
+  - CMS blog or documentation site
+  - ecommerce catalog or cart
+  - admin dashboard or analytics app
+  - multiplayer or realtime features
+
+conflict_policy:
+  user_explicit_overrides_soft_defaults: true
+  safety_constraints_override_user_request: true
+  core_loop_conflicts_require_clarification: true
+  out_of_scope_items_require_explicit_request: true
+  fallback_to_v1_or_generic_when_recipe_no_longer_fits: true
+
+user_prompt_examples:
+  positive:
+    - "Build a landing page for a SaaS product with a hero, features, testimonials, CTA, FAQ, and responsive layout."
+    - "Create a product landing page with a clear value proposition, feature sections, social proof, and final CTA."
+    - "Build a launch page for a startup with hero copy, benefits, trust section, FAQ, and waitlist CTA."
+    - "Create a responsive marketing landing page for a developer tool with feature cards, credibility section, and strong CTA."
+  negative:
+    - "Build an admin dashboard."
+    - "Build an ecommerce checkout."
+    - "Build a blog CMS."
+    - "Build a full web app with authentication."
+    - "Clone Stripe's homepage exactly."
+    - "Build a game."
+    - "Build a data dashboard."
+    - "Build a project management app."
+    - "Build a store with cart and payments."
+    - "Build a documentation site."
+
+intent_signals:
+  note: "For future routing only — not wired in intent.py"
+  weak_alone:
+    - website
+    - homepage
+    - page
+    - design
+    - modern
+    - SaaS
+    - startup
+    - beautiful
+    - responsive
+  positive_combined:
+    - "landing page + hero + features + CTA"
+    - "marketing page + value proposition + social proof"
+    - "product landing + FAQ + responsive"
+
+stack_kit_id: stack.dom-marketing-minimal
+
+composed_modules:
+  stack_kit_id: stack.dom-marketing-minimal
+  mechanics:
+    - section.landing-hero
+    - section.value-proposition
+    - section.feature-value-grid
+    - section.social-proof
+    - section.cta-band
+    - section.faq-block
+    - section.final-conversion
+  component_contracts:
+    - component.hero-block
+    - component.feature-card-grid
+    - component.testimonial-strip
+    - component.cta-button-group
+    - component.faq-list
+  validators:
+    - validator.landing-section-presence
+    - validator.cta-clarity
+    - validator.copy-specificity
+    - validator.semantic-heading-order
+    - validator.responsive-accessibility-basics
+    - validator.no-lorem-dead-cta
+    - validator.anti-slop-patterns
+  recovery_playbooks:
+    - recovery.generic-hero
+    - recovery.weak-cta
+    - recovery.section-repetition
+    - recovery.inaccessible-buttons
+    - recovery.mobile-layout-ignored
+    - recovery.vague-copy
+  progress_labels: progress.landing-page-core
+  learning_hooks: learning.landing-page-core
+
+build_phases:
+  - id: phase.understand
+    title: Understand the landing page request
+    order: 1
+    modules_used: [app_type]
+  - id: phase.compose
+    title: Compose sections and UI contracts
+    order: 2
+    modules_used: [mechanics, component_contracts]
+  - id: phase.generate
+    title: Generate custom landing page code
+    order: 3
+    modules_used: [stack_kit_id, guidance]
+  - id: phase.validate
+    title: Check section rhythm and CTA clarity
+    order: 4
+    modules_used: [validators]
+  - id: phase.preview
+    title: Prepare Workbench preview
+    order: 5
+    modules_used: []
+  - id: phase.recover
+    title: Fix known landing page issues if needed
+    order: 6
+    optional: true
+    modules_used: [recovery_playbooks]
+
+acceptance_criteria:
+  - "Page loads in preview without runtime console errors"
+  - "Hero presents specific value proposition and primary CTA"
+  - "Feature sections are non-repetitive with distinct headings"
+  - "Semantic heading order with single h1"
+  - "Responsive layout usable at 360px width"
+  - "No lorem ipsum; CTAs are actionable links or buttons"
+
+out_of_scope:
+  - Backend APIs auth accounts or databases
+  - Live form POST email capture or payments
+  - CMS blog documentation site or multi-page app routing
+  - Dashboard ecommerce storefront or admin UI
+  - Template cloning or pixel-perfect copies of named brands
+  - Game or app-builder semantics
