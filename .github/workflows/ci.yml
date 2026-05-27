@@ -2,8 +2,10 @@ name: CI
 
 # Phase B baseline (PR2):
 # - Existing pytest + frontend tsc remain BLOCKING (already green on main).
-# - New ruff/mypy/coverage/docs steps land as WARNING-ONLY first; we ratchet
-#   them to blocking in follow-up PRs after one cleanup pass.
+# - New ruff/mypy/docs steps land as WARNING-ONLY first; we ratchet them to
+#   blocking in follow-up PRs after one cleanup pass.
+# - Full-suite pytest --cov was removed from push/PR CI (duplicate ~8–11m run);
+#   run locally or add a scheduled/manual workflow when coverage ratchet resumes.
 # - large-file-guard is BLOCKING but constrained to git-tracked files >1MB,
 #   so it cannot fail on the current tree.
 
@@ -78,39 +80,13 @@ jobs:
         continue-on-error: true
         run: deptry .
 
-      # ---------- WARNING-ONLY: coverage report ---------------------------
-      # We do NOT enforce a --cov-fail-under threshold yet; this step exists
-      # to surface the current floor so a future PR can ratchet to blocking.
-      - name: Pytest with coverage (warning-only)
-        continue-on-error: true
-        run: |
-          python -m pytest tests/ -q \
-            --cov=src \
-            --cov-report=term-missing:skip-covered \
-            --cov-report=xml:coverage.xml \
-            --no-header
-
-      - name: Upload coverage artifact
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage-xml
-          path: coverage.xml
-          if-no-files-found: ignore
-          retention-days: 14
-
       # ---------- WARNING-ONLY: docs freshness ---------------------------
       - name: Docs freshness + reference check (warning-only)
         continue-on-error: true
         run: python scripts/check_docs_freshness.py
 
       # ---------- WARNING-ONLY: Build Kit Registry v2 Game Pack pilot -----
-      # Unwired loader/composer only — not chat/scaffold/API integration.
-      # Ratchet to blocking after one green main run if desired.
-      - name: Build registry tests (warning-only)
-        continue-on-error: true
-        run: python -m pytest tests/test_build_registry.py -q
-
+      # Registry pytest lives in the blocking full-suite step above.
       - name: Game pack registry validation (warning-only)
         continue-on-error: true
         run: |
