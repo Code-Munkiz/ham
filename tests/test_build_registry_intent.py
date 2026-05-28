@@ -27,6 +27,7 @@ from src.ham.build_registry.intent import (
     TURN_BASED_TACTICS_LITE_APP_TYPE,
     CITY_BUILDER_LITE_APP_TYPE,
     LANDING_PAGE_CORE_APP_TYPE,
+    DASHBOARD_UI_CORE_APP_TYPE,
     enrich_plan_metadata_with_registry_v2,
     select_registry_v2_app_type_for_prompt,
 )
@@ -51,6 +52,11 @@ _CANONICAL_CITY_BUILDER_GATE_PROMPT = (
 _CANONICAL_LANDING_PAGE_GATE_PROMPT = (
     "Build a landing page for a SaaS product with a hero, features, testimonials, CTA, FAQ, "
     "and responsive layout."
+)
+
+_CANONICAL_DASHBOARD_UI_CORE_GATE_PROMPT = (
+    "Build a read-only dashboard overview with KPI cards, simple charts, a table, "
+    "filters, empty states, and responsive layout."
 )
 
 _IDLE_POSITIVE_PROMPTS = (
@@ -485,6 +491,10 @@ _CROSS_EXCLUSION_PROMPTS = (
         "Build a local city-builder with a 5x5 grid, building palette, resource counters, day button, placement rules, happiness, and restart.",
         CITY_BUILDER_LITE_APP_TYPE,
     ),
+    (
+        _CANONICAL_DASHBOARD_UI_CORE_GATE_PROMPT,
+        DASHBOARD_UI_CORE_APP_TYPE,
+    ),
 )
 
 
@@ -780,6 +790,71 @@ _LANDING_PAGE_CORE_CROSS_RECIPE_NEGATIVE_PROMPTS = (
 )
 
 
+_DASHBOARD_UI_CORE_POSITIVE_PROMPTS = (
+    _CANONICAL_DASHBOARD_UI_CORE_GATE_PROMPT,
+    "Create a static dashboard UI for a SaaS metrics overview with KPIs, line chart, bar chart, recent activity table, and accessible headings.",
+    "Build a local sample-data dashboard with status cards, trend charts, a simple table, and no backend.",
+    "Create a dashboard overview page with bounded KPI cards, meaningful sample data, loading/empty/error states, and responsive stacking.",
+    "Build a static metrics dashboard with KPI cards, bar chart, line chart, simple table, and local-only filters.",
+    "Build a read-only metrics overview dashboard with KPI cards, trend charts, recent activity table, and responsive layout.",
+)
+
+_DASHBOARD_UI_CORE_WEAK_NEGATIVE_PROMPTS = (
+    "dashboard",
+    "app",
+    "admin",
+    "analytics",
+    "metrics",
+    "chart",
+    "table",
+    "data",
+    "report",
+    "portal",
+    "overview",
+    "Build me a dashboard",
+)
+
+_DASHBOARD_UI_CORE_ADMIN_CRUD_NEGATIVE_PROMPTS = (
+    "Build an admin dashboard with user management and CRUD.",
+    "Create a backoffice admin panel with role-based permissions and CRUD.",
+)
+
+_DASHBOARD_UI_CORE_ANALYTICS_WORKBENCH_NEGATIVE_PROMPTS = (
+    "Build an analytics workbench with ad-hoc queries and pivot tables.",
+    "Create a drill-down analytics dashboard with ad hoc query builder.",
+)
+
+_DASHBOARD_UI_CORE_BACKEND_AUTH_NEGATIVE_PROMPTS = (
+    "Build a SaaS app dashboard with auth, accounts, billing, and tenant state.",
+    "Create a backend API dashboard wired to a database and login.",
+)
+
+_DASHBOARD_UI_CORE_CRM_PM_NEGATIVE_PROMPTS = (
+    "Build a CRM dashboard with leads and tickets.",
+    "Create a project management dashboard with kanban and ticket workflow.",
+)
+
+_DASHBOARD_UI_CORE_FINTECH_NEGATIVE_PROMPTS = (
+    "Build a fintech trading dashboard with order book and candlestick charts.",
+    "Create a portfolio trading dashboard with live exchange data.",
+)
+
+_DASHBOARD_UI_CORE_REALTIME_MAPS_NEGATIVE_PROMPTS = (
+    "Build a real-time operations dashboard with live monitoring and maps.",
+    "Create an observability dashboard with websocket live metrics and geospatial map view.",
+)
+
+_DASHBOARD_UI_CORE_GAME_HUD_NEGATIVE_PROMPTS = (
+    "Build a game HUD overlay with health bars and score.",
+    "Create an in-game HUD for player status and minimap.",
+)
+
+_DASHBOARD_UI_CORE_LANDING_SCREENSHOT_PROMPTS = (
+    "Build a landing page with a fake dashboard screenshot hero.",
+    "Create a marketing landing page that advertises a dashboard screenshot.",
+)
+
+
 class TestSelectRegistryV2AppTypeForPrompt:
     @pytest.mark.parametrize("prompt", _IDLE_POSITIVE_PROMPTS)
     def test_matches_idle_incremental_prompts(self, prompt: str):
@@ -978,6 +1053,50 @@ class TestSelectRegistryV2AppTypeForPrompt:
     )
     def test_real_backend_feature_requests_do_not_route_to_landing_page_core(self, prompt: str):
         assert select_registry_v2_app_type_for_prompt(prompt) != LANDING_PAGE_CORE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _DASHBOARD_UI_CORE_POSITIVE_PROMPTS)
+    def test_matches_dashboard_ui_core_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) == DASHBOARD_UI_CORE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _DASHBOARD_UI_CORE_WEAK_NEGATIVE_PROMPTS)
+    def test_weak_dashboard_terms_do_not_route(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != DASHBOARD_UI_CORE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _DASHBOARD_UI_CORE_ADMIN_CRUD_NEGATIVE_PROMPTS)
+    def test_admin_crud_prompts_do_not_route_to_dashboard_ui_core(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != DASHBOARD_UI_CORE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _DASHBOARD_UI_CORE_ANALYTICS_WORKBENCH_NEGATIVE_PROMPTS)
+    def test_analytics_workbench_prompts_do_not_route_to_dashboard_ui_core(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != DASHBOARD_UI_CORE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _DASHBOARD_UI_CORE_BACKEND_AUTH_NEGATIVE_PROMPTS)
+    def test_backend_auth_prompts_do_not_route_to_dashboard_ui_core(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != DASHBOARD_UI_CORE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _DASHBOARD_UI_CORE_CRM_PM_NEGATIVE_PROMPTS)
+    def test_crm_project_management_prompts_do_not_route_to_dashboard_ui_core(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != DASHBOARD_UI_CORE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _DASHBOARD_UI_CORE_FINTECH_NEGATIVE_PROMPTS)
+    def test_fintech_prompts_do_not_route_to_dashboard_ui_core(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != DASHBOARD_UI_CORE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _DASHBOARD_UI_CORE_REALTIME_MAPS_NEGATIVE_PROMPTS)
+    def test_realtime_or_maps_prompts_do_not_route_to_dashboard_ui_core(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != DASHBOARD_UI_CORE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _DASHBOARD_UI_CORE_GAME_HUD_NEGATIVE_PROMPTS)
+    def test_game_hud_prompts_do_not_route_to_dashboard_ui_core(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != DASHBOARD_UI_CORE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _DASHBOARD_UI_CORE_LANDING_SCREENSHOT_PROMPTS)
+    def test_landing_page_dashboard_screenshot_prompts_do_not_route_to_dashboard_ui_core(
+        self, prompt: str
+    ):
+        routed = select_registry_v2_app_type_for_prompt(prompt)
+        assert routed != DASHBOARD_UI_CORE_APP_TYPE
+        assert routed in {None, LANDING_PAGE_CORE_APP_TYPE}
 
     @pytest.mark.parametrize("prompt,expected", _CROSS_EXCLUSION_PROMPTS)
     def test_recipes_do_not_steal_each_other(self, prompt: str, expected: str):
@@ -1810,6 +1929,15 @@ class TestEnrichPlanMetadataWithRegistryV2:
         assert "registry_v2_app_type" not in metadata
         assert metadata["template_kind"] == "generic"
 
+    def test_flag_disabled_dashboard_prompt_does_not_add_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            _CANONICAL_DASHBOARD_UI_CORE_GATE_PROMPT,
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
+
     def test_flag_enabled_canonical_deck_builder_gate_prompt_adds_registry_metadata(self):
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "generic", "originated_from": "builder_chat_scaffold"},
@@ -2010,6 +2138,16 @@ class TestEnrichPlanMetadataWithRegistryV2:
             env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
         )
         assert metadata["registry_v2_app_type"] == LANDING_PAGE_CORE_APP_TYPE
+        assert metadata["template_kind"] == "generic"
+        assert metadata["originated_from"] == "builder_chat_scaffold"
+
+    def test_flag_enabled_dashboard_prompt_adds_registry_metadata(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic", "originated_from": "builder_chat_scaffold"},
+            _CANONICAL_DASHBOARD_UI_CORE_GATE_PROMPT,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        assert metadata["registry_v2_app_type"] == DASHBOARD_UI_CORE_APP_TYPE
         assert metadata["template_kind"] == "generic"
         assert metadata["originated_from"] == "builder_chat_scaffold"
 
@@ -2454,6 +2592,18 @@ class TestChatScaffoldSyntheticPlanMetadata:
         metadata = _synthetic_plan_metadata(_CANONICAL_LANDING_PAGE_GATE_PROMPT)
         assert metadata.get("template_kind") == "landing-page"
         assert metadata.get("registry_v2_app_type") == LANDING_PAGE_CORE_APP_TYPE
+
+    def test_flag_disabled_dashboard_prompt_has_no_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = _synthetic_plan_metadata(_CANONICAL_DASHBOARD_UI_CORE_GATE_PROMPT)
+        assert metadata.get("template_kind") == "dashboard"
+        assert "registry_v2_app_type" not in metadata
+
+    def test_flag_enabled_dashboard_prompt_adds_registry_metadata_synthetic(self, monkeypatch):
+        monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
+        metadata = _synthetic_plan_metadata(_CANONICAL_DASHBOARD_UI_CORE_GATE_PROMPT)
+        assert metadata.get("template_kind") == "dashboard"
+        assert metadata.get("registry_v2_app_type") == DASHBOARD_UI_CORE_APP_TYPE
 
     def test_flag_enabled_non_idle_prompt_has_no_registry_metadata(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
@@ -3347,6 +3497,65 @@ class TestEndToEndScaffoldMessages:
             project_id="proj_test",
             user_message=prompt,
             steps=[Step(title="Scaffold landing page", description="Create landing page files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(plan)[1]["content"]
+        assert "registry_v2_app_type" not in metadata
+        assert "Builder Kit context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" not in content
+
+
+    def test_flag_enabled_dashboard_prompt_produces_v2_context(self):
+        prompt = _CANONICAL_DASHBOARD_UI_CORE_GATE_PROMPT
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            prompt,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_dashboard_e2e",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message=prompt,
+            steps=[Step(title="Scaffold dashboard", description="Create dashboard files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(
+            plan,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )[1]["content"]
+        assert metadata["registry_v2_app_type"] == DASHBOARD_UI_CORE_APP_TYPE
+        assert "Build Registry v2 playbook context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" in content
+        assert "site.dashboard-ui-core" in content
+        for section_id in (
+            "section.dashboard-shell",
+            "section.dashboard-kpi-row",
+            "section.dashboard-chart-region",
+            "section.dashboard-table-region",
+            "section.dashboard-filter-bar",
+            "section.dashboard-empty-loading-error-states",
+            "section.dashboard-responsive-structure",
+        ):
+            assert section_id in content
+        assert "Builder Kit context:" not in content
+        assert content.count("Builder Kit:") == 0
+
+    def test_flag_disabled_dashboard_prompt_produces_v1_context_only(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        prompt = _CANONICAL_DASHBOARD_UI_CORE_GATE_PROMPT
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            prompt,
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_dashboard_v1",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message=prompt,
+            steps=[Step(title="Scaffold dashboard", description="Create dashboard files")],
             planner_confidence="high",
             metadata=metadata,
         )

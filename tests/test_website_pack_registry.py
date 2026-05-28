@@ -15,6 +15,7 @@ from src.ham.build_registry import (
 )
 from src.ham.build_registry.models import DEFAULT_RENDER_CHAR_BUDGET
 from src.ham.build_registry.intent import (
+    DASHBOARD_UI_CORE_APP_TYPE,
     LANDING_PAGE_CORE_APP_TYPE,
     select_registry_v2_app_type_for_prompt,
 )
@@ -114,8 +115,7 @@ EXPECTED_DASHBOARD_RECOVERY_IDS = frozenset(
     }
 )
 
-# Representative dashboard prompts that must NOT route to site.dashboard-ui-core
-# (the recipe is schema-only — no intent.py wiring yet).
+# Representative strong dashboard prompts that should route to site.dashboard-ui-core.
 DASHBOARD_PROMPTS = (
     "Build a read-only dashboard overview with KPI cards, simple charts, a table, "
     "filters, empty states, and responsive layout.",
@@ -125,6 +125,18 @@ DASHBOARD_PROMPTS = (
     "table, and no backend.",
     "Create a dashboard overview page with bounded KPI cards, meaningful sample data, "
     "loading/empty/error states, and responsive stacking.",
+)
+
+DASHBOARD_NEGATIVE_PROMPTS = (
+    "Build me a dashboard",
+    "Build an admin dashboard with user management and CRUD",
+    "Build an analytics workbench with ad-hoc queries and pivots",
+    "Build a SaaS app dashboard with auth, accounts, billing, and tenant state",
+    "Create a backend API dashboard wired to a database",
+    "Build a CRM dashboard with leads and tickets",
+    "Build a fintech trading dashboard with order book and candlestick charts",
+    "Build a real-time operations dashboard with live monitoring and maps",
+    "Build a game HUD overlay with health bars and score",
 )
 
 NEAR_BUDGET_THRESHOLD = 11_400
@@ -304,16 +316,23 @@ def test_dashboard_adaptive_policy_prompt_examples_exist():
     assert app["hard_constraints"]
 
 
-def test_dashboard_ui_core_is_not_routed():
-    # Schema-only: no intent.py wiring. No prompt should resolve to the dashboard
-    # app type, and it must not be exposed as a routed app-type constant.
-    import src.ham.build_registry.intent as intent
-
+def test_dashboard_ui_core_routes_for_strong_prompts():
     for prompt in DASHBOARD_PROMPTS:
-        assert (
-            select_registry_v2_app_type_for_prompt(prompt) != APP_TYPE_ID_DASHBOARD
-        )
-    assert not hasattr(intent, "DASHBOARD_UI_CORE_APP_TYPE")
+        assert select_registry_v2_app_type_for_prompt(prompt) == APP_TYPE_ID_DASHBOARD
+        assert select_registry_v2_app_type_for_prompt(prompt) == DASHBOARD_UI_CORE_APP_TYPE
+
+
+def test_dashboard_ui_core_does_not_route_for_weak_or_excluded_prompts():
+    for prompt in DASHBOARD_NEGATIVE_PROMPTS:
+        assert select_registry_v2_app_type_for_prompt(prompt) != APP_TYPE_ID_DASHBOARD
+
+
+def test_landing_page_dashboard_screenshot_prompt_does_not_route_to_dashboard():
+    routed = select_registry_v2_app_type_for_prompt(
+        "Build a landing page with a fake dashboard screenshot hero."
+    )
+    assert routed != APP_TYPE_ID_DASHBOARD
+    assert routed in {None, LANDING_PAGE_CORE_APP_TYPE}
 
 
 def test_module_count(website_pack):

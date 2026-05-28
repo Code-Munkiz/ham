@@ -134,6 +134,32 @@ class TestResolveScaffoldContextV2Success:
             assert section_id in result.context
         assert "Builder Kit:" not in result.context
 
+    def test_returns_v2_playbook_context_for_dashboard_ui_core(self):
+        result = resolve_scaffold_context(
+            metadata={"registry_v2_app_type": "site.dashboard-ui-core"},
+            template_kind="generic",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "1"},
+            repo_root=REPO_ROOT,
+        )
+        assert result.source == "v2"
+        assert result.header == V2_HEADER
+        assert result.fallback_reason is None
+        assert result.registry_v2_app_type == "site.dashboard-ui-core"
+        assert result.registry_v2_pack_id == "pack.site"
+        assert "site.dashboard-ui-core" in result.context
+        assert "stack.dom-dashboard-minimal" in result.context
+        for section_id in (
+            "section.dashboard-shell",
+            "section.dashboard-kpi-row",
+            "section.dashboard-chart-region",
+            "section.dashboard-table-region",
+            "section.dashboard-filter-bar",
+            "section.dashboard-empty-loading-error-states",
+            "section.dashboard-responsive-structure",
+        ):
+            assert section_id in result.context
+        assert "Builder Kit:" not in result.context
+
 
 class TestResolveScaffoldContextUnknownAppType:
     def test_falls_back_to_v1_on_unknown_app_type(self):

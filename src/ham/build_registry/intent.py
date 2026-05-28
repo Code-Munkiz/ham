@@ -26,6 +26,7 @@ DECK_BUILDER_LITE_APP_TYPE = "game.deck-builder-lite"
 TURN_BASED_TACTICS_LITE_APP_TYPE = "game.turn-based-tactics-lite"
 CITY_BUILDER_LITE_APP_TYPE = "game.city-builder-lite"
 LANDING_PAGE_CORE_APP_TYPE = "site.landing-page-core"
+DASHBOARD_UI_CORE_APP_TYPE = "site.dashboard-ui-core"
 
 _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES: tuple[str, ...] = (
     r"\bhangman(-style)?\b",
@@ -166,7 +167,7 @@ _CITY_BUILDER_LITE_CROSS_RECIPE_NEGATIVES: tuple[str, ...] = (
 )
 
 _GLOBAL_NEGATIVE_PATTERNS: tuple[str, ...] = (
-    r"\b(dashboard|calculator|todo|to[-\s]?do|crm)\b",
+    r"\b(calculator|todo|to[-\s]?do|crm)\b",
     r"\b(crypto|trading)\s+(dashboard|app|platform)\b",
     r"\b(snake|pong|asteroids|flappy)\b",
     r"\b(tetris|tetromino|platformer)\b",
@@ -1237,6 +1238,87 @@ def _matches_city_builder_lite(text: str) -> bool:
     )
 
 
+_DASHBOARD_UI_CORE_NEGATIVE_PATTERNS: tuple[str, ...] = (
+    r"\b(idle|incremental|clicker|tycoon|trivia|quiz|wordle|hangman|tactics|city[- ]?builder|deck[- ]?building)\b",
+    r"\b(admin|backoffice|back-office|user\s+management|permissions?|role[- ]?based|rbac|crud)\b",
+    r"\b(analytics\s+workbench|ad[- ]?hoc\s+quer(y|ies)|pivot\s+tables?|drill[- ]?down)\b",
+    r"\b(auth|authentication|accounts?|login|sign[- ]?in|sign[- ]?up|tenant|multi[- ]?tenant|billing|checkout|payments?)\b",
+    r"\b(backend|api|database|postgres|mysql|mongodb|server|endpoint|websocket|sse)\b",
+    r"\b(crm|project\s+management|kanban|tickets?|leads?)\b",
+    r"\b(fintech|trading|order\s+book|candlestick|candles?|exchange|portfolio\s+tracker)\b",
+    r"\b(real[- ]?time|live\s+(monitoring|updates?|data)|ops\s+dashboard|operations\s+dashboard|observability)\b",
+    r"\b(map|maps|geospatial|geo\s*json|leaflet|mapbox)\b",
+    r"\b(game\s+hud|hud\s+overlay|in[- ]?game\s+hud)\b",
+    r"\blanding\s+page\b",
+    r"\b(fake\s+dashboard\s+screenshot|dashboard\s+screenshot)\b",
+    r"\b(clone|pixel[- ]?perfect|exact\s+copy)\b",
+    r"^dashboard$",
+    r"^app$",
+    r"^admin$",
+    r"^analytics$",
+    r"^metrics$",
+    r"^chart$",
+    r"^table$",
+    r"^data$",
+    r"^report$",
+    r"^portal$",
+    r"^overview$",
+    r"^build\s+me\s+a\s+dashboard$",
+)
+
+_DASHBOARD_UI_CORE_OVERVIEW_POSITIVE_PATTERNS: tuple[str, ...] = (
+    r"\bread[- ]?only\s+dashboard\b",
+    r"\bstatic\s+dashboard\b",
+    r"\bstatic\b.{0,80}\bdashboard\b",
+    r"\bdashboard\s+overview\b",
+    r"\bmetrics\s+overview\b",
+    r"\blocal\s+sample[- ]?data\s+dashboard\b",
+    r"\bno\s+backend\b.{0,80}\bdashboard\b",
+    r"\bdashboard\b.{0,120}\b(no\s+backend|read[- ]?only|static|overview|local\s+sample)\b",
+)
+
+_DASHBOARD_UI_CORE_KPI_POSITIVE_PATTERNS: tuple[str, ...] = (
+    r"\bkpi\s+cards?\b",
+    r"\bkpis?\b",
+    r"\bmetric\s+cards?\b",
+    r"\bstatus\s+cards?\b",
+)
+
+_DASHBOARD_UI_CORE_CHART_POSITIVE_PATTERNS: tuple[str, ...] = (
+    r"\b(line\s+chart|bar\s+chart|trend\s+charts?|charts?)\b",
+)
+
+_DASHBOARD_UI_CORE_TABLE_POSITIVE_PATTERNS: tuple[str, ...] = (
+    r"\b(simple\s+)?(data\s+)?table\b",
+    r"\bdatagrid\b",
+    r"\brecent\s+activity\s+table\b",
+)
+
+_DASHBOARD_UI_CORE_STATE_LAYOUT_POSITIVE_PATTERNS: tuple[str, ...] = (
+    r"\b(empty|loading|error)\s+states?\b",
+    r"\bloading/empty/error\s+states?\b",
+    r"\bresponsive\s+(layout|stacking|structure)\b",
+    r"\blocal[- ]only\s+filters?\b",
+)
+
+
+def _matches_dashboard_ui_core(text: str) -> bool:
+    # Respect explicit "no backend/auth/..." disclaimers similarly to landing routing.
+    effective = _strip_negated_exclusions(text)
+    if _matches_any(effective, _DASHBOARD_UI_CORE_NEGATIVE_PATTERNS):
+        return False
+    if not _matches_any(text, _DASHBOARD_UI_CORE_OVERVIEW_POSITIVE_PATTERNS):
+        return False
+    if not _matches_any(text, _DASHBOARD_UI_CORE_KPI_POSITIVE_PATTERNS):
+        return False
+    has_chart = _matches_any(text, _DASHBOARD_UI_CORE_CHART_POSITIVE_PATTERNS)
+    has_table = _matches_any(text, _DASHBOARD_UI_CORE_TABLE_POSITIVE_PATTERNS)
+    has_state_layout = _matches_any(text, _DASHBOARD_UI_CORE_STATE_LAYOUT_POSITIVE_PATTERNS)
+    if not (has_chart or has_table or has_state_layout):
+        return False
+    return True
+
+
 _LANDING_PAGE_CORE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(idle|incremental|clicker|tycoon)\b",
     r"\b(trivia|quiz)\b.{0,80}\b(game|timer|challenge)\b",
@@ -1347,7 +1429,7 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
     # Precedence: trivia → idle → branching narrative → memory match → word daily
     # → daily puzzle grid → resource management sim → hangman lite → typing speed racer
     # → word builder → card deck turn-based → reaction time challenge → rhythm tap lite
-    # → deck builder lite → turn-based tactics lite → city builder lite → landing page core.
+    # → deck builder lite → turn-based tactics lite → city builder lite → landing page core → dashboard ui core.
     if _matches_trivia(text):
         return TRIVIA_TIMER_APP_TYPE
     if _matches_idle(text):
@@ -1382,6 +1464,8 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
         return CITY_BUILDER_LITE_APP_TYPE
     if _matches_landing_page_core(text):
         return LANDING_PAGE_CORE_APP_TYPE
+    if _matches_dashboard_ui_core(text):
+        return DASHBOARD_UI_CORE_APP_TYPE
     return None
 
 
