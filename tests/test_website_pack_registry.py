@@ -117,6 +117,7 @@ EXPECTED_DASHBOARD_RECOVERY_IDS = frozenset(
 
 # Representative strong dashboard prompts that should route to site.dashboard-ui-core.
 DASHBOARD_PROMPTS = (
+    "Build a read-only dashboard overview for a developer tool team. Include 4 KPI cards, a line chart for build quality over time, a bar chart for issue categories, a simple recent builds table, a local filter bar, empty/loading/error state examples, meaningful sample data, responsive layout, and accessible headings/table structure. No backend, no auth, no CRUD, no live data.",
     "Build a read-only dashboard overview with KPI cards, simple charts, a table, "
     "filters, empty states, and responsive layout.",
     "Create a static dashboard UI for a SaaS metrics overview with KPIs, line chart, "
@@ -125,17 +126,26 @@ DASHBOARD_PROMPTS = (
     "table, and no backend.",
     "Create a dashboard overview page with bounded KPI cards, meaningful sample data, "
     "loading/empty/error states, and responsive stacking.",
+    "Build a static dashboard with KPI cards, line chart, bar chart, and recent builds table without CRUD or live data.",
+    "Build a local sample-data dashboard with filters, trend charts, and a simple table; no backend, no database, no auth.",
 )
 
 DASHBOARD_NEGATIVE_PROMPTS = (
     "Build me a dashboard",
+    "build a dashboard with no CRUD",
+    "build an app with no backend",
+    "build a metrics page",
     "Build an admin dashboard with user management and CRUD",
+    "Build an admin dashboard with CRUD forms and user management",
     "Build an analytics workbench with ad-hoc queries and pivots",
     "Build a SaaS app dashboard with auth, accounts, billing, and tenant state",
     "Create a backend API dashboard wired to a database",
+    "Build a dashboard with auth, accounts, database, and API integration",
+    "Build a dashboard connected to live backend data",
     "Build a CRM dashboard with leads and tickets",
     "Build a fintech trading dashboard with order book and candlestick charts",
     "Build a real-time operations dashboard with live monitoring and maps",
+    "Build a payment and billing management dashboard",
     "Build a game HUD overlay with health bars and score",
 )
 

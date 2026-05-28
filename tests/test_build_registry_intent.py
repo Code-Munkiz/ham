@@ -59,6 +59,14 @@ _CANONICAL_DASHBOARD_UI_CORE_GATE_PROMPT = (
     "filters, empty states, and responsive layout."
 )
 
+_CANONICAL_DASHBOARD_UI_CORE_GATE_REVIEW_PROMPT = (
+    "Build a read-only dashboard overview for a developer tool team. Include 4 KPI "
+    "cards, a line chart for build quality over time, a bar chart for issue "
+    "categories, a simple recent builds table, a local filter bar, empty/loading/"
+    "error state examples, meaningful sample data, responsive layout, and accessible "
+    "headings/table structure. No backend, no auth, no CRUD, no live data."
+)
+
 _IDLE_POSITIVE_PROMPTS = (
     "build me an idle clicker game",
     "make a cookie clicker style game",
@@ -799,6 +807,18 @@ _DASHBOARD_UI_CORE_POSITIVE_PROMPTS = (
     "Build a read-only metrics overview dashboard with KPI cards, trend charts, recent activity table, and responsive layout.",
 )
 
+_DASHBOARD_UI_CORE_NEGATED_CONSTRAINT_POSITIVE_PROMPTS = (
+    _CANONICAL_DASHBOARD_UI_CORE_GATE_REVIEW_PROMPT,
+    (
+        "Build a static dashboard with KPI cards, line chart, bar chart, and recent "
+        "builds table without CRUD or live data."
+    ),
+    (
+        "Build a local sample-data dashboard with filters, trend charts, and a simple "
+        "table; no backend, no database, no auth."
+    ),
+)
+
 _DASHBOARD_UI_CORE_WEAK_NEGATIVE_PROMPTS = (
     "dashboard",
     "app",
@@ -812,6 +832,9 @@ _DASHBOARD_UI_CORE_WEAK_NEGATIVE_PROMPTS = (
     "portal",
     "overview",
     "Build me a dashboard",
+    "build a dashboard with no CRUD",
+    "build an app with no backend",
+    "build a metrics page",
 )
 
 _DASHBOARD_UI_CORE_ADMIN_CRUD_NEGATIVE_PROMPTS = (
@@ -852,6 +875,14 @@ _DASHBOARD_UI_CORE_GAME_HUD_NEGATIVE_PROMPTS = (
 _DASHBOARD_UI_CORE_LANDING_SCREENSHOT_PROMPTS = (
     "Build a landing page with a fake dashboard screenshot hero.",
     "Create a marketing landing page that advertises a dashboard screenshot.",
+)
+
+_DASHBOARD_UI_CORE_FEATURE_REQUEST_NEGATIVE_PROMPTS = (
+    "Build an admin dashboard with CRUD forms and user management.",
+    "Build a dashboard connected to live backend data.",
+    "Build a real-time operations dashboard with live monitoring.",
+    "Build a dashboard with auth, accounts, database, and API integration.",
+    "Build a payment and billing management dashboard.",
 )
 
 
@@ -1058,6 +1089,12 @@ class TestSelectRegistryV2AppTypeForPrompt:
     def test_matches_dashboard_ui_core_prompts(self, prompt: str):
         assert select_registry_v2_app_type_for_prompt(prompt) == DASHBOARD_UI_CORE_APP_TYPE
 
+    @pytest.mark.parametrize(
+        "prompt", _DASHBOARD_UI_CORE_NEGATED_CONSTRAINT_POSITIVE_PROMPTS
+    )
+    def test_negated_constraints_still_route_to_dashboard_ui_core(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) == DASHBOARD_UI_CORE_APP_TYPE
+
     @pytest.mark.parametrize("prompt", _DASHBOARD_UI_CORE_WEAK_NEGATIVE_PROMPTS)
     def test_weak_dashboard_terms_do_not_route(self, prompt: str):
         assert select_registry_v2_app_type_for_prompt(prompt) != DASHBOARD_UI_CORE_APP_TYPE
@@ -1097,6 +1134,10 @@ class TestSelectRegistryV2AppTypeForPrompt:
         routed = select_registry_v2_app_type_for_prompt(prompt)
         assert routed != DASHBOARD_UI_CORE_APP_TYPE
         assert routed in {None, LANDING_PAGE_CORE_APP_TYPE}
+
+    @pytest.mark.parametrize("prompt", _DASHBOARD_UI_CORE_FEATURE_REQUEST_NEGATIVE_PROMPTS)
+    def test_real_feature_requests_do_not_route_to_dashboard_ui_core(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != DASHBOARD_UI_CORE_APP_TYPE
 
     @pytest.mark.parametrize("prompt,expected", _CROSS_EXCLUSION_PROMPTS)
     def test_recipes_do_not_steal_each_other(self, prompt: str, expected: str):
@@ -2145,6 +2186,16 @@ class TestEnrichPlanMetadataWithRegistryV2:
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "generic", "originated_from": "builder_chat_scaffold"},
             _CANONICAL_DASHBOARD_UI_CORE_GATE_PROMPT,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        assert metadata["registry_v2_app_type"] == DASHBOARD_UI_CORE_APP_TYPE
+        assert metadata["template_kind"] == "generic"
+        assert metadata["originated_from"] == "builder_chat_scaffold"
+
+    def test_flag_enabled_dashboard_gate_review_prompt_adds_registry_metadata(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic", "originated_from": "builder_chat_scaffold"},
+            _CANONICAL_DASHBOARD_UI_CORE_GATE_REVIEW_PROMPT,
             env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
         )
         assert metadata["registry_v2_app_type"] == DASHBOARD_UI_CORE_APP_TYPE

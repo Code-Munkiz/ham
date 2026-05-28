@@ -1302,19 +1302,44 @@ _DASHBOARD_UI_CORE_STATE_LAYOUT_POSITIVE_PATTERNS: tuple[str, ...] = (
 )
 
 
+_DASHBOARD_NEGATED_EXCLUSION_PATTERN = re.compile(
+    r"\b(?:no|without|sans|zero|free\s+of)\s+"
+    r"(?:a\s+|an\s+|any\s+|the\s+|live\s+|real[- ]?time\s+|admin\s+)*"
+    r"(?:crud|back[- ]?ends?|servers?|apis?|auth|authentication|"
+    r"accounts?|logins?|log[- ]?in|sign[- ]?ups?|sign[- ]?ins?|"
+    r"databases?|db|payments?|billing|live\s+data|real[- ]?time\s+data|"
+    r"admin\s+permissions?)"
+    r"(?:\s*(?:,|and|or)\s*"
+    r"(?:a\s+|an\s+|any\s+|the\s+|live\s+|real[- ]?time\s+|admin\s+)*"
+    r"(?:crud|back[- ]?ends?|servers?|apis?|auth|authentication|"
+    r"accounts?|logins?|log[- ]?in|sign[- ]?ups?|sign[- ]?ins?|"
+    r"databases?|db|payments?|billing|live\s+data|real[- ]?time\s+data|"
+    r"admin\s+permissions?))*"
+)
+
+
+def _strip_dashboard_negated_exclusions(text: str) -> str:
+    """Remove explicitly-negated dashboard exclusions after strong-positive match."""
+    stripped = _strip_negated_exclusions(text)
+    return _DASHBOARD_NEGATED_EXCLUSION_PATTERN.sub(" ", stripped)
+
+
 def _matches_dashboard_ui_core(text: str) -> bool:
-    # Respect explicit "no backend/auth/..." disclaimers similarly to landing routing.
-    effective = _strip_negated_exclusions(text)
-    if _matches_any(effective, _DASHBOARD_UI_CORE_NEGATIVE_PATTERNS):
-        return False
     if not _matches_any(text, _DASHBOARD_UI_CORE_OVERVIEW_POSITIVE_PATTERNS):
         return False
-    if not _matches_any(text, _DASHBOARD_UI_CORE_KPI_POSITIVE_PATTERNS):
-        return False
+    has_kpi = _matches_any(text, _DASHBOARD_UI_CORE_KPI_POSITIVE_PATTERNS)
     has_chart = _matches_any(text, _DASHBOARD_UI_CORE_CHART_POSITIVE_PATTERNS)
     has_table = _matches_any(text, _DASHBOARD_UI_CORE_TABLE_POSITIVE_PATTERNS)
     has_state_layout = _matches_any(text, _DASHBOARD_UI_CORE_STATE_LAYOUT_POSITIVE_PATTERNS)
     if not (has_chart or has_table or has_state_layout):
+        return False
+    # Prefer explicit KPI language, but allow strong chart+table dashboard prompts.
+    if not (has_kpi or (has_chart and has_table)):
+        return False
+    # Keep the matcher conservative: only neutralize negated exclusions for
+    # prompts that already satisfy strong dashboard-positive signals.
+    effective = _strip_dashboard_negated_exclusions(text)
+    if _matches_any(effective, _DASHBOARD_UI_CORE_NEGATIVE_PATTERNS):
         return False
     return True
 
