@@ -22,4 +22,5 @@ binds_components:
 guidance:
   - "Header carries the title and a shallow topnav — no deep sidebar for MVP"
   - "Main orders content inverted-pyramid: KPIs, then charts, then table"
-  - "header/nav/main landmarks; single h1; static account controls only"
+  - "Semantic header/nav/main; main has accessible name or single h1; buttons/filters carry accessible labels"
+  - "Render detail data as a real table (table/thead/th/tbody) — never generic div soup"

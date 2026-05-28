@@ -28,5 +28,9 @@ accessibility_notes:
   - "Each control has an accessible label and visible focus"
   - "Selected/active filter state is visible, not color-only"
 
+content_notes:
+  - "mapsToRegion names the affected region (KPI row, chart, or table)"
+  - "If filtering is not implemented, render controls disabled/non-interactive — never dead controls"
+
 responsive_notes:
   - "Controls wrap onto multiple rows on narrow viewports"

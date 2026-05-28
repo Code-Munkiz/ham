@@ -243,6 +243,110 @@ _PROMPT_CITY_RESTART = re.compile(
     re.IGNORECASE,
 )
 
+_PROMPT_DASHBOARD_CORE = re.compile(
+    r"read[- ]only\s+dashboard|dashboard\s+overview|static\s+dashboard|"
+    r"dashboard.{0,120}(?:kpi|metric).{0,120}(?:chart|line|bar).{0,120}(?:table|data\s+table|recent\s+builds)",
+    re.IGNORECASE,
+)
+
+_PROMPT_DASHBOARD_KPI = re.compile(
+    r"\bkpi\b|kpi\s+cards?|metric\s+cards?|status\s+cards?",
+    re.IGNORECASE,
+)
+
+_PROMPT_DASHBOARD_CHART = re.compile(
+    r"\bchart\b|line\s+chart|bar\s+chart|trend",
+    re.IGNORECASE,
+)
+
+_PROMPT_DASHBOARD_TABLE = re.compile(
+    r"\btable\b|data\s+table|recent\s+builds|datagrid",
+    re.IGNORECASE,
+)
+
+_PROMPT_DASHBOARD_FILTER_REQUEST = re.compile(
+    r"\bfilter(?:s|ing)?\b|filter\s+bar|\bsearch\b",
+    re.IGNORECASE,
+)
+
+_PROMPT_DASHBOARD_STATE_REQUEST = re.compile(
+    r"empty\/loading\/error|empty,\s*loading,\s*and\s*error|empty.*loading.*error",
+    re.IGNORECASE,
+)
+
+_PROMPT_DASHBOARD_LINE_BAR_REQUEST = re.compile(
+    r"line\s+chart.*bar\s+chart|bar\s+chart.*line\s+chart",
+    re.IGNORECASE,
+)
+
+_PROMPT_DASHBOARD_EXCLUDED = re.compile(
+    r"landing\s+page.*dashboard\s+screenshot|fake\s+dashboard\s+screenshot|"
+    r"admin\s+dashboard|analytics\s+workbench|game\s+hud",
+    re.IGNORECASE,
+)
+
+_DASHBOARD_FILTER_CONTROL = re.compile(
+    r"<input\b|<select\b|filter\s*bar|filterbar|search",
+    re.IGNORECASE,
+)
+
+_DASHBOARD_FILTER_DISABLED = re.compile(
+    r"<(?:input|select)[^>]*\bdisabled\b|disabled\s*=\s*\{\s*true\s*\}|readOnly\s*=\s*\{\s*true\s*\}",
+    re.IGNORECASE,
+)
+
+_DASHBOARD_FILTER_STATE = re.compile(
+    r"useState\s*\([^)]*(?:filter|query|search)|set\w*(?:Filter|Query|Search)|"
+    r"(?:selected|active)(?:Filter|Query|Search)",
+    re.IGNORECASE,
+)
+
+_DASHBOARD_FILTER_HANDLER = re.compile(
+    r"onChange|onInput|handle\w*(?:Filter|Search|Query)|dispatch\s*\(\s*\{[^}]*FILTER",
+    re.IGNORECASE,
+)
+
+_DASHBOARD_FILTER_EFFECT = re.compile(
+    r"\.filter\s*\(|filtered(?:Rows|Data|Table|Kpis?|Charts?)|"
+    r"(?:table|chart|kpi)[^;\n]{0,80}(?:filter|query|search)",
+    re.IGNORECASE,
+)
+
+_DASHBOARD_EMPTY_STATE = re.compile(
+    r"\bempty\b|no\s+data|no\s+builds|nothing\s+to\s+show",
+    re.IGNORECASE,
+)
+
+_DASHBOARD_LOADING_STATE = re.compile(
+    r"\bloading\b|skeleton|isLoading|loadingState",
+    re.IGNORECASE,
+)
+
+_DASHBOARD_ERROR_STATE = re.compile(
+    r"\berror\b|failed|unable\s+to\s+load|errorState",
+    re.IGNORECASE,
+)
+
+_DASHBOARD_MAIN = re.compile(r"<main\b|role\s*=\s*['\"]main['\"]")
+
+_DASHBOARD_HEADER = re.compile(r"<header\b|role\s*=\s*['\"]banner['\"]")
+
+_DASHBOARD_NAV = re.compile(r"<nav\b|role\s*=\s*['\"]navigation['\"]")
+
+_DASHBOARD_H1 = re.compile(r"<h1\b")
+
+_DASHBOARD_TABLE = re.compile(r"<table\b")
+
+_DASHBOARD_LINE_CHART = re.compile(
+    r"line\s+chart|<Line\b|chartType\s*:\s*['\"]line['\"]|build\s+quality\s+over\s+time",
+    re.IGNORECASE,
+)
+
+_DASHBOARD_BAR_CHART = re.compile(
+    r"bar\s+chart|<Bar\b|chartType\s*:\s*['\"]bar['\"]|issues?\s+by\s+category",
+    re.IGNORECASE,
+)
+
 _BUILDING_PALETTE_MARKERS = re.compile(
     r"BuildingPalette|building-palette|buildingPalette|"
     r"selectedBuilding|selectedBuildingType|activeBuilding|currentBuilding|"
@@ -852,6 +956,231 @@ def _prompt_is_city_builder_game(prompt: str | None) -> bool:
     if _prompt_is_tactics_game(prompt):
         return False
     return bool(_PROMPT_CITY_BUILDER_GAME.search(prompt))
+
+
+def _prompt_is_dashboard_ui_core(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    if _PROMPT_DASHBOARD_EXCLUDED.search(prompt):
+        return False
+    if not _PROMPT_DASHBOARD_CORE.search(prompt):
+        return False
+    has_kpi = bool(_PROMPT_DASHBOARD_KPI.search(prompt))
+    has_chart = bool(_PROMPT_DASHBOARD_CHART.search(prompt))
+    has_table = bool(_PROMPT_DASHBOARD_TABLE.search(prompt))
+    # Keep this narrow: require chart + table and at least one KPI/dashboard-overview cue.
+    return has_chart and has_table and has_kpi
+
+
+def _prompt_requests_dashboard_filters(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    return bool(_PROMPT_DASHBOARD_FILTER_REQUEST.search(prompt))
+
+
+def _prompt_requests_dashboard_state_examples(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    return bool(_PROMPT_DASHBOARD_STATE_REQUEST.search(prompt))
+
+
+def _prompt_requests_line_and_bar(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    return bool(_PROMPT_DASHBOARD_LINE_BAR_REQUEST.search(prompt))
+
+
+def _inspect_dashboard_missing_requested_filter(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if (
+        plan is None
+        or not _prompt_is_dashboard_ui_core(plan.user_message)
+        or not _prompt_requests_dashboard_filters(plan.user_message)
+    ):
+        return []
+    combined = _combined_js_source(file_changes)
+    if _DASHBOARD_FILTER_CONTROL.search(combined):
+        return []
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"Dashboard|App|Table|Chart|KPI",
+    )
+    return [
+        ScaffoldQualityIssue(
+            code="dashboard_missing_requested_filter",
+            message=(
+                "Dashboard prompt requests a local filter/search bar, but generated output "
+                "contains no visible filter/search control"
+            ),
+            path=path,
+        )
+    ]
+
+
+def _inspect_dashboard_dead_filter_control(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if (
+        plan is None
+        or not _prompt_is_dashboard_ui_core(plan.user_message)
+        or not _prompt_requests_dashboard_filters(plan.user_message)
+    ):
+        return []
+    combined = _combined_js_source(file_changes)
+    if not _DASHBOARD_FILTER_CONTROL.search(combined):
+        return []
+    if _DASHBOARD_FILTER_DISABLED.search(combined):
+        # Explicitly disabled illustrative controls are non-deceptive.
+        return []
+    has_state = bool(_DASHBOARD_FILTER_STATE.search(combined)) or bool(
+        re.search(r"useState\s*\(", combined, re.IGNORECASE)
+        and re.search(r"value\s*=\s*\{[^}]+\}", combined, re.IGNORECASE)
+    )
+    has_handler = bool(_DASHBOARD_FILTER_HANDLER.search(combined))
+    has_effect = bool(_DASHBOARD_FILTER_EFFECT.search(combined))
+    if has_state and has_handler and has_effect:
+        return []
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"Filter|Search|Dashboard|Table|Chart|KPI|App",
+    )
+    return [
+        ScaffoldQualityIssue(
+            code="dashboard_dead_filter_control",
+            message=(
+                "Dashboard filter/search control appears interactive but has no clear "
+                "state+handler+visible mapping to KPI/chart/table data"
+            ),
+            path=path,
+        )
+    ]
+
+
+def _inspect_dashboard_missing_loading_error_states(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if (
+        plan is None
+        or not _prompt_is_dashboard_ui_core(plan.user_message)
+        or not _prompt_requests_dashboard_state_examples(plan.user_message)
+    ):
+        return []
+    combined = _combined_js_source(file_changes)
+    has_empty = bool(_DASHBOARD_EMPTY_STATE.search(combined))
+    has_loading = bool(_DASHBOARD_LOADING_STATE.search(combined))
+    has_error = bool(_DASHBOARD_ERROR_STATE.search(combined))
+    if has_empty and has_loading and has_error:
+        return []
+    missing_parts: list[str] = []
+    if not has_empty:
+        missing_parts.append("empty")
+    if not has_loading:
+        missing_parts.append("loading")
+    if not has_error:
+        missing_parts.append("error")
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"Dashboard|App|Table|Chart|State|Status",
+    )
+    return [
+        ScaffoldQualityIssue(
+            code="dashboard_missing_loading_error_states",
+            message=(
+                "Dashboard prompt requests empty/loading/error state examples, but missing: "
+                + ", ".join(missing_parts)
+            ),
+            path=path,
+        )
+    ]
+
+
+def _inspect_dashboard_missing_semantic_landmarks(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_is_dashboard_ui_core(plan.user_message):
+        return []
+    combined = _combined_js_source(file_changes)
+    has_main = bool(_DASHBOARD_MAIN.search(combined))
+    has_header = bool(_DASHBOARD_HEADER.search(combined))
+    has_nav = bool(_DASHBOARD_NAV.search(combined))
+    has_h1 = bool(_DASHBOARD_H1.search(combined))
+    has_table = bool(_DASHBOARD_TABLE.search(combined))
+    if has_main and has_header and has_nav and has_h1 and has_table:
+        return []
+    missing_parts: list[str] = []
+    if not has_main:
+        missing_parts.append("main")
+    if not has_header:
+        missing_parts.append("header")
+    if not has_nav:
+        missing_parts.append("nav")
+    if not has_h1:
+        missing_parts.append("h1")
+    if not has_table:
+        missing_parts.append("table")
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"Dashboard|App|Layout|Shell|Table|Nav|Header",
+    )
+    return [
+        ScaffoldQualityIssue(
+            code="dashboard_missing_semantic_landmarks",
+            message=(
+                "Dashboard semantic shell is incomplete; missing: "
+                + ", ".join(missing_parts)
+            ),
+            path=path,
+        )
+    ]
+
+
+def _inspect_dashboard_missing_requested_chart_type(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if (
+        plan is None
+        or not _prompt_is_dashboard_ui_core(plan.user_message)
+        or not _prompt_requests_line_and_bar(plan.user_message)
+    ):
+        return []
+    combined = _combined_js_source(file_changes)
+    has_line = bool(_DASHBOARD_LINE_CHART.search(combined))
+    has_bar = bool(_DASHBOARD_BAR_CHART.search(combined))
+    if has_line and has_bar:
+        return []
+    missing = "line chart" if not has_line else "bar chart"
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"Chart|Dashboard|App",
+    )
+    return [
+        ScaffoldQualityIssue(
+            code="dashboard_missing_requested_chart_type",
+            message=(
+                f"Dashboard prompt requests both line and bar charts, but output is missing: {missing}"
+            ),
+            path=path,
+        )
+    ]
+
+
+def _inspect_dashboard_quality(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    issues: list[ScaffoldQualityIssue] = []
+    issues.extend(_inspect_dashboard_missing_requested_filter(plan, file_changes))
+    issues.extend(_inspect_dashboard_dead_filter_control(plan, file_changes))
+    issues.extend(_inspect_dashboard_missing_loading_error_states(plan, file_changes))
+    issues.extend(_inspect_dashboard_missing_semantic_landmarks(plan, file_changes))
+    issues.extend(_inspect_dashboard_missing_requested_chart_type(plan, file_changes))
+    return issues
 
 
 def _has_playable_card_seed(combined: str) -> bool:
@@ -2543,6 +2872,7 @@ def inspect_generated_scaffold_quality(
         issues.extend(_inspect_deck_builder_run_result_missing(plan, file_changes))
         issues.extend(_inspect_missing_victory_wiring(plan, file_changes))
         issues.extend(_inspect_ignored_seed_payload(plan, file_changes))
+        issues.extend(_inspect_dashboard_quality(plan, file_changes))
         issues.extend(_inspect_tactics_quality(plan, file_changes))
         issues.extend(_inspect_city_builder_quality(plan, file_changes))
     issues.extend(_inspect_import_export(file_changes))
@@ -2763,6 +3093,25 @@ def build_scaffold_repair_prompt(
             "- Factor food shortage, resource pressure, and population/housing into next happiness.\n"
             "- Compute nextHappiness from those counts and update happiness together with day production.\n"
             "- Output ONLY valid JSON/file_changes — no prose outside JSON.\n"
+        )
+    dashboard_codes = issue_codes & {
+        "dashboard_missing_requested_filter",
+        "dashboard_dead_filter_control",
+        "dashboard_missing_loading_error_states",
+        "dashboard_missing_semantic_landmarks",
+        "dashboard_missing_requested_chart_type",
+    }
+    if dashboard_codes and _prompt_is_dashboard_ui_core(plan.user_message):
+        repair_system += (
+            "\nDashboard repair focus:\n"
+            "- Preserve a read-only/static dashboard lane: no backend/live data/auth/CRUD/payments behavior.\n"
+            "- Do not omit requested dashboard regions. If prompt requests a local filter/search bar, include it.\n"
+            "- Wire filter/search to canonical state (e.g. useState + onChange) and map visible effect to KPI/chart/table data.\n"
+            "- If a filter is illustrative only, render it explicitly disabled/non-interactive (do not fake behavior).\n"
+            "- Provide visible Empty / Loading / Error examples as static cards or panels (no live fetch implied).\n"
+            "- Use semantic dashboard shell landmarks: explicit <header>, <nav>, and <main>, clear h1, and a real table structure.\n"
+            "- Render every requested chart type (e.g. both line and bar) with meaningful sample data and labels.\n"
+            "- Output ONLY valid JSON matching file_changes schema.\n"
         )
     user_content = (
         f"User request: {plan.user_message}\n\n"

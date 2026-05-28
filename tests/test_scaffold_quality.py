@@ -2012,6 +2012,284 @@ class TestCityBuilderScaffoldQuality:
         assert "city_goal_not_wired" in codes
 
 
+_DASHBOARD_GATE_PROMPT = (
+    "Build a read-only dashboard overview for a developer tool team. Include 4 KPI cards, "
+    "a line chart for build quality over time, a bar chart for issue categories, a simple "
+    "recent builds table, a local filter bar, empty/loading/error state examples, meaningful "
+    "sample data, responsive layout, and accessible headings/table structure. No backend, "
+    "no auth, no CRUD, no live data."
+)
+
+_DASHBOARD_CHART_PAIR_PROMPT = (
+    "Build a read-only dashboard overview with KPI cards, a line chart for build quality over "
+    "time, a bar chart for issue categories, and a simple recent builds table."
+)
+
+_DASHBOARD_NO_FILTER_APP = """
+const Dashboard = () => (
+  <>
+    <header><h1>Developer Tool Dashboard</h1></header>
+    <nav aria-label="Primary dashboard nav"><a href="/overview">Overview</a></nav>
+    <main>
+      <section>
+        <h2>Build quality over time (line chart)</h2>
+        <p>Line chart with build quality by week.</p>
+      </section>
+      <section>
+        <h2>Issues by category (bar chart)</h2>
+        <p>Bar chart grouped by issue category.</p>
+      </section>
+      <section role="status">Empty: no builds yet</section>
+      <section role="status">Loading: sample dashboard state</section>
+      <section role="alert">Error: unable to load sample dashboard state</section>
+      <table>
+        <thead><tr><th>Build</th></tr></thead>
+        <tbody><tr><td>123</td></tr></tbody>
+      </table>
+    </main>
+  </>
+);
+"""
+
+_DASHBOARD_FILTER_WIRED_APP = """
+const Dashboard = () => {
+  const [selectedStatus, setSelectedStatus] = useState('all');
+  const rows = [{ id: 1, status: 'success' }, { id: 2, status: 'failed' }];
+  const filteredRows = rows.filter((row) => selectedStatus === 'all' || row.status === selectedStatus);
+  return (
+    <>
+      <header><h1>Developer Tool Dashboard</h1></header>
+      <nav aria-label="Primary dashboard nav"><a href="/overview">Overview</a></nav>
+      <main>
+        <label htmlFor="status-filter">Filter builds</label>
+        <select
+          id="status-filter"
+          value={selectedStatus}
+          onChange={(event) => setSelectedStatus(event.target.value)}
+        >
+          <option value="all">All</option>
+          <option value="success">Success</option>
+          <option value="failed">Failed</option>
+        </select>
+        <section>
+          <h2>Build quality over time (line chart)</h2>
+          <p>Line chart with build quality by week.</p>
+        </section>
+        <section>
+          <h2>Issues by category (bar chart)</h2>
+          <p>Bar chart grouped by issue category.</p>
+        </section>
+        <section role="status">Empty: no builds match filters</section>
+        <section role="status">Loading: sample dashboard state</section>
+        <section role="alert">Error: unable to load sample dashboard state</section>
+        <table>
+          <thead><tr><th>Build</th><th>Status</th></tr></thead>
+          <tbody>
+            {filteredRows.map((row) => (
+              <tr key={row.id}><td>{row.id}</td><td>{row.status}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </main>
+    </>
+  );
+};
+"""
+
+_DASHBOARD_FILTER_DEAD_APP = """
+const Dashboard = () => (
+  <>
+    <header><h1>Developer Tool Dashboard</h1></header>
+    <nav aria-label="Primary dashboard nav"><a href="/overview">Overview</a></nav>
+    <main>
+      <label htmlFor="status-filter">Filter builds</label>
+      <select id="status-filter">
+        <option>All</option>
+        <option>Success</option>
+      </select>
+      <section>
+        <h2>Build quality over time (line chart)</h2>
+        <p>Line chart with build quality by week.</p>
+      </section>
+      <section>
+        <h2>Issues by category (bar chart)</h2>
+        <p>Bar chart grouped by issue category.</p>
+      </section>
+      <section role="status">Empty: no builds match filters</section>
+      <section role="status">Loading: sample dashboard state</section>
+      <section role="alert">Error: unable to load sample dashboard state</section>
+      <table>
+        <thead><tr><th>Build</th></tr></thead>
+        <tbody><tr><td>123</td></tr></tbody>
+      </table>
+    </main>
+  </>
+);
+"""
+
+_DASHBOARD_EMPTY_ONLY_APP = """
+const Dashboard = () => {
+  const [selectedStatus, setSelectedStatus] = useState('all');
+  const rows = [{ id: 1, status: 'success' }];
+  const filteredRows = rows.filter((row) => selectedStatus === 'all' || row.status === selectedStatus);
+  return (
+    <>
+      <header><h1>Developer Tool Dashboard</h1></header>
+      <nav aria-label="Primary dashboard nav"><a href="/overview">Overview</a></nav>
+      <main>
+        <label htmlFor="status-filter">Filter builds</label>
+        <input id="status-filter" value={selectedStatus} onChange={(event) => setSelectedStatus(event.target.value)} />
+        <section><h2>Build quality over time (line chart)</h2></section>
+        <section><h2>Issues by category (bar chart)</h2></section>
+        <section role="status">Empty: no builds match filters</section>
+        <table>
+          <thead><tr><th>Build</th></tr></thead>
+          <tbody>{filteredRows.map((row) => <tr key={row.id}><td>{row.id}</td></tr>)}</tbody>
+        </table>
+      </main>
+    </>
+  );
+};
+"""
+
+_DASHBOARD_MISSING_LANDMARKS_APP = """
+const Dashboard = () => {
+  const [selectedStatus, setSelectedStatus] = useState('all');
+  const rows = [{ id: 1, status: 'success' }];
+  const filteredRows = rows.filter((row) => selectedStatus === 'all' || row.status === selectedStatus);
+  return (
+    <section>
+      <h1>Developer Tool Dashboard</h1>
+      <label htmlFor="status-filter">Filter builds</label>
+      <input id="status-filter" value={selectedStatus} onChange={(event) => setSelectedStatus(event.target.value)} />
+      <section><h2>Build quality over time (line chart)</h2></section>
+      <section><h2>Issues by category (bar chart)</h2></section>
+      <section role="status">Empty: no builds match filters</section>
+      <section role="status">Loading: sample dashboard state</section>
+      <section role="alert">Error: unable to load sample dashboard state</section>
+      <table>
+        <thead><tr><th>Build</th></tr></thead>
+        <tbody>{filteredRows.map((row) => <tr key={row.id}><td>{row.id}</td></tr>)}</tbody>
+      </table>
+    </section>
+  );
+};
+"""
+
+_DASHBOARD_LINE_ONLY_APP = """
+const Dashboard = () => (
+  <>
+    <header><h1>Developer Tool Dashboard</h1></header>
+    <nav aria-label="Primary dashboard nav"><a href="/overview">Overview</a></nav>
+    <main>
+      <section><h2>Build quality over time (line chart)</h2></section>
+      <table>
+        <thead><tr><th>Build</th></tr></thead>
+        <tbody><tr><td>123</td></tr></tbody>
+      </table>
+    </main>
+  </>
+);
+"""
+
+
+class TestDashboardScaffoldQuality:
+    def _dashboard_plan(self, prompt: str = _DASHBOARD_GATE_PROMPT) -> Plan:
+        plan = _plan()
+        plan.user_message = prompt
+        return plan
+
+    def test_missing_requested_filter_is_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            [("src/Dashboard.tsx", _DASHBOARD_NO_FILTER_APP)],
+            plan=self._dashboard_plan(),
+        )
+        assert any(i.code == "dashboard_missing_requested_filter" for i in issues)
+
+    def test_filter_control_with_state_handler_and_mapping_is_accepted(self):
+        issues = inspect_generated_scaffold_quality(
+            [("src/Dashboard.tsx", _DASHBOARD_FILTER_WIRED_APP)],
+            plan=self._dashboard_plan(),
+        )
+        assert not any(i.code == "dashboard_missing_requested_filter" for i in issues)
+        assert not any(i.code == "dashboard_dead_filter_control" for i in issues)
+
+    def test_dead_filter_control_is_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            [("src/Dashboard.tsx", _DASHBOARD_FILTER_DEAD_APP)],
+            plan=self._dashboard_plan(),
+        )
+        assert any(i.code == "dashboard_dead_filter_control" for i in issues)
+
+    def test_missing_loading_error_states_is_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            [("src/Dashboard.tsx", _DASHBOARD_EMPTY_ONLY_APP)],
+            plan=self._dashboard_plan(),
+        )
+        assert any(i.code == "dashboard_missing_loading_error_states" for i in issues)
+
+    def test_static_empty_loading_error_panels_are_accepted(self):
+        issues = inspect_generated_scaffold_quality(
+            [("src/Dashboard.tsx", _DASHBOARD_FILTER_WIRED_APP)],
+            plan=self._dashboard_plan(),
+        )
+        assert not any(i.code == "dashboard_missing_loading_error_states" for i in issues)
+
+    def test_missing_semantic_landmarks_is_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            [("src/Dashboard.tsx", _DASHBOARD_MISSING_LANDMARKS_APP)],
+            plan=self._dashboard_plan(),
+        )
+        assert any(i.code == "dashboard_missing_semantic_landmarks" for i in issues)
+
+    def test_semantic_landmarks_header_nav_main_h1_table_are_accepted(self):
+        issues = inspect_generated_scaffold_quality(
+            [("src/Dashboard.tsx", _DASHBOARD_FILTER_WIRED_APP)],
+            plan=self._dashboard_plan(),
+        )
+        assert not any(i.code == "dashboard_missing_semantic_landmarks" for i in issues)
+
+    def test_missing_requested_chart_type_is_flagged_when_prompt_requests_line_and_bar(self):
+        issues = inspect_generated_scaffold_quality(
+            [("src/Dashboard.tsx", _DASHBOARD_LINE_ONLY_APP)],
+            plan=self._dashboard_plan(prompt=_DASHBOARD_CHART_PAIR_PROMPT),
+        )
+        assert any(i.code == "dashboard_missing_requested_chart_type" for i in issues)
+
+    def test_dashboard_repair_prompt_includes_dashboard_focus_guidance(self):
+        issues = [
+            ScaffoldQualityIssue(
+                code="dashboard_missing_requested_filter",
+                message="Filter bar missing",
+                path="src/Dashboard.tsx",
+            ),
+            ScaffoldQualityIssue(
+                code="dashboard_missing_loading_error_states",
+                message="Loading/error states missing",
+                path="src/Dashboard.tsx",
+            ),
+            ScaffoldQualityIssue(
+                code="dashboard_missing_semantic_landmarks",
+                message="header/nav missing",
+                path="src/Dashboard.tsx",
+            ),
+        ]
+        messages = build_scaffold_repair_prompt(
+            self._dashboard_plan(),
+            [("src/Dashboard.tsx", _DASHBOARD_NO_FILTER_APP)],
+            issues,
+            base_system_prompt="BASE",
+        )
+        body = messages[0]["content"]
+        assert "Dashboard repair focus" in body
+        assert "local filter/search bar" in body
+        assert "Empty / Loading / Error" in body
+        assert "<header>" in body and "<nav>" in body and "<main>" in body
+        assert "line and bar" in body.lower()
+        assert "no backend/live data/auth/crud/payments" in body.lower()
+        assert "valid JSON" in body
+
+
 class TestBuildScaffoldRepairPrompt:
     def test_repair_prompt_includes_detected_issues_and_mutation_guidance(self):
         issues = [

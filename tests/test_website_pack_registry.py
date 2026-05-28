@@ -316,6 +316,59 @@ def test_dashboard_render_under_budget(dashboard_recipe):
     assert "no-template-cloning" in rendered or "Non-template" in rendered
 
 
+def test_dashboard_render_requires_line_and_bar_chart(dashboard_recipe):
+    rendered = render_playbook_context(dashboard_recipe)
+    lowered = rendered.lower()
+    # Both requested chart types must be represented in the guidance.
+    assert "line chart" in lowered
+    assert "bar chart" in lowered
+    # Chart semantics: time/trend vs categorical comparison.
+    assert "time/trend" in lowered or "trend" in lowered
+    assert "categorical" in lowered
+
+
+def test_dashboard_render_discourages_empty_canvas_placeholder(dashboard_recipe):
+    rendered = render_playbook_context(dashboard_recipe)
+    lowered = rendered.lower()
+    assert "empty canvas" in lowered
+    assert "placeholder" in lowered
+
+
+def test_dashboard_render_includes_filter_mapping_guidance(dashboard_recipe):
+    rendered = render_playbook_context(dashboard_recipe)
+    lowered = rendered.lower()
+    # Filters must name their target region and avoid dead controls.
+    assert "kpi row" in lowered
+    assert "dead control" in lowered or "no dead controls" in lowered or "dead controls" in lowered
+    assert "disabled" in lowered
+
+
+def test_dashboard_render_includes_empty_loading_error_guidance(dashboard_recipe):
+    rendered = render_playbook_context(dashboard_recipe)
+    lowered = rendered.lower()
+    assert "empty" in lowered
+    assert "loading" in lowered
+    assert "error" in lowered
+    # States are static examples, not live fetches.
+    assert "static" in lowered
+    assert "no live fetch" in lowered or "no live data" in lowered or "not imply live" in lowered
+
+
+def test_dashboard_render_includes_semantic_landmark_guidance(dashboard_recipe):
+    rendered = render_playbook_context(dashboard_recipe)
+    lowered = rendered.lower()
+    assert "header/nav/main" in lowered or ("header" in lowered and "nav" in lowered and "main" in lowered)
+    assert "single h1" in lowered or "accessible name" in lowered
+    assert "table" in lowered
+    assert "div soup" in lowered
+
+
+def test_dashboard_render_stays_under_near_budget(dashboard_recipe):
+    rendered = render_playbook_context(dashboard_recipe)
+    assert len(rendered) <= DEFAULT_RENDER_CHAR_BUDGET
+    assert len(rendered) < NEAR_BUDGET_THRESHOLD
+
+
 def test_dashboard_adaptive_policy_prompt_examples_exist():
     app_path = WEBSITE_PACK_ROOT / "app-types/site.dashboard-ui-core.yaml"
     app = yaml.safe_load(app_path.read_text(encoding="utf-8"))

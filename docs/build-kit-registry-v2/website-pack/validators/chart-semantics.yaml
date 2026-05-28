@@ -22,13 +22,15 @@ runner: conceptual
 check_type: conceptual
 
 pass_conditions:
-  - "Each chart has labeled axes and units"
+  - "Each chart has labeled axes and units; every requested chart type is present (e.g. line and bar)"
   - "Series use meaningful domain sample data; legend present for multi-series"
   - "Chart count stays within 1–2 basic line/bar charts"
 
 fail_conditions:
   - "Chart over arbitrary filler arrays with no labels or units"
   - "Decorative chart chrome with no real series"
+  - "A requested chart replaced by an empty canvas or generic placeholder"
+  - "A requested chart type (line or bar) silently dropped"
 
 recovery_playbooks:
   - recovery.fake-chart-data

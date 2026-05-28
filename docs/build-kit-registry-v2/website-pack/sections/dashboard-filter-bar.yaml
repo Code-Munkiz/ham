@@ -21,6 +21,6 @@ binds_components:
   - component.filter-bar
 
 guidance:
-  - "Include only if it maps to a visible region (table rows or chart range)"
-  - "Filters run on local sample data; every control has an accessible label"
-  - "Omit the bar entirely rather than ship a control that changes nothing"
+  - "Include only if it maps to a visible region; name the target (KPI row, chart cards, or table)"
+  - "Filters run on local sample data with accessible labels; if unimplemented, show disabled examples"
+  - "Omit the bar entirely rather than ship a dead dropdown or search that changes nothing"

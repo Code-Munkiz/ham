@@ -33,11 +33,11 @@ safety_constraints:
 guidance:
   - "Information architecture: inverted pyramid — KPIs on top, charts in the middle, table below"
   - "KPI row bounded to 3–5 differentiated cards with label, value, and unit — no card spam"
-  - "Charts: 1–2 basic line/bar with labeled axes and units — never chrome over arbitrary arrays"
-  - "Filters/search only if locally mapped to a visible region — no dead controls"
+  - "Charts: render each requested type (line AND bar) with axes/units and a text summary — no empty canvas or placeholder"
+  - "Filters/search only if mapped to a named region (KPI row, chart, table) — disabled or omit; no dead controls"
   - "Sample data is meaningful for the domain — no filler arrays; no fake backend/live-data claims"
-  - "Async-looking regions define empty, loading, and error states honestly"
-  - "Semantic header/nav/main + single h1; responsive stacking; status via text/icon, not color alone"
+  - "Show visible empty, loading, and error examples honestly — static, no live fetch"
+  - "Semantic header/nav/main + single h1; real table not div soup; status via text/icon, not color alone"
 
 default_assumptions:
   - "Single dashboard page; one overview surface"

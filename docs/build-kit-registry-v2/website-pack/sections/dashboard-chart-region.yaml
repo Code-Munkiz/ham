@@ -22,5 +22,6 @@ binds_components:
 
 guidance:
   - "1–2 basic line/bar charts max — defer heatmaps, treemaps, candlesticks, multi-axis"
-  - "Labeled axes and units; legend for multi-series; meaningful domain sample data"
-  - "Each chart has a heading and text alternative; no fake live updates for MVP"
+  - "Render every requested type with axes/units: a line chart for time/trend, a bar chart for categorical comparison"
+  - "Each chart has a heading and text summary/caption; sample data tied to the prompt domain"
+  - "Never replace a requested chart with an empty canvas or generic placeholder"

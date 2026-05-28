@@ -21,6 +21,6 @@ binds_components:
   - component.status-badge
 
 guidance:
-  - "Any region implying fetched data defines empty, loading, and error presentation"
+  - "Show visible empty, loading, and error examples as static cards — no backend, no live fetch"
   - "Empty explains what is missing; loading is a bounded skeleton — no infinite spinner"
-  - "Error copy is honest — does not pretend a backend exists for MVP"
+  - "Status/feedback regions are semantic where practical — role/status text, not color alone"

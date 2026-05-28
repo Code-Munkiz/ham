@@ -22,13 +22,14 @@ runner: conceptual
 check_type: conceptual
 
 pass_conditions:
-  - "Each filter/search control visibly affects a region (table rows or chart range)"
-  - "Filtering runs on local sample data"
+  - "Each filter/search control names and visibly affects a region (KPI row, chart, or table)"
+  - "Filtering runs on local sample data; unimplemented filters appear disabled, not dead"
   - "Filter bar is omitted entirely if it would map to nothing"
 
 fail_conditions:
   - "Filter or search control that changes nothing visible (dead control)"
   - "Filter implies a backend query that does not exist"
+  - "Interactive-looking filter that does not name or affect any visible region"
 
 recovery_playbooks:
   - recovery.dead-filters

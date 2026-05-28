@@ -24,8 +24,8 @@ runner: conceptual
 check_type: conceptual
 
 pass_conditions:
-  - "header/nav/main landmarks; single h1; regions stack; usable at 360px"
-  - "Table headers, labeled controls, and chart text alternatives present"
+  - "Semantic header/nav/main landmarks; main has an accessible name or single h1; regions stack; usable at 360px"
+  - "Real table headers, labeled controls, and chart textual summaries/captions present"
 
 fail_conditions:
   - "Fixed-width grid or horizontal scroll on small screens"

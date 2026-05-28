@@ -32,5 +32,10 @@ accessibility_notes:
   - "Chart has a heading and a text alternative (caption/summary/aria-label)"
   - "Series colors are distinguishable; meaning not conveyed by color alone"
 
+content_notes:
+  - "When the prompt names multiple chart types, render each (e.g. a line chart and a bar chart)"
+  - "Line charts carry time/trend series; bar charts carry categorical comparison series"
+  - "Never substitute a requested chart with an empty canvas or generic placeholder"
+
 responsive_notes:
   - "Chart scales to container width and stacks below other regions on mobile"
