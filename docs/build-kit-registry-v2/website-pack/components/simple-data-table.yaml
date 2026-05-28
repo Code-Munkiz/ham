@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.simple-data-table
+kind: component_contract
+name: Simple data table contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Readable detail table: caption/heading, column headers, and a bounded set of sample rows
+  with optional status cells.
+
+non_template_statement: Layout contract only — not a copy-paste datagrid file.
+
+applies_to:
+  - site.dashboard-ui-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.dashboard-table-region
+
+expected_props:
+  - caption: string
+  - columns: "array of header labels (bounded, readable)"
+  - rows: "array of sample-data rows"
+  - statusColumn: string | null
+
+accessibility_notes:
+  - "Uses table/thead/th/tbody; th carries column scope"
+  - "Status cells use text or icon plus color — never color alone"
+
+responsive_notes:
+  - "Table scrolls within its region or collapses to stacked rows on mobile — no page-level horizontal scroll"

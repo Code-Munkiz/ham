@@ -1,0 +1,36 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: progress.dashboard-ui-core
+kind: progress_label
+name: Dashboard UI core build progress
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Normie-friendly phase labels for read-only dashboard builds.
+
+non_template_statement: Progress copy module only.
+
+source_phase_owner: site.dashboard-ui-core
+
+applies_to:
+  - site.dashboard-ui-core
+
+phase_message_map:
+  phase.understand:
+    title: "Getting your dashboard idea"
+    message: "I'm turning your description into a read-only dashboard overview plan."
+  phase.compose:
+    title: "Planning dashboard regions"
+    message: "I'm lining up KPI cards, charts, and a detail table."
+  phase.generate:
+    title: "Building your dashboard"
+    message: "I'm creating the custom code with meaningful sample data."
+  phase.validate:
+    title: "Checking dashboard clarity"
+    message: "I'm verifying KPI bounds, chart labels, table readability, and responsive layout."
+  phase.preview:
+    title: "Opening your preview"
+    message: "Your dashboard is almost ready to view."
+  phase.recover:
+    title: "Polishing a region"
+    message: "I'm fixing a KPI, chart, filter, or table issue."

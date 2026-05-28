@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.kpi-spam
+kind: recovery_playbook
+name: Fix KPI card spam
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs an over-stuffed KPI row by bounding to the few headline metrics that matter.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - site.dashboard-ui-core
+
+repairs_validators:
+  - validator.kpi-count-bounds
+
+steps:
+  - id: step.rank_metrics
+    action: rank_metrics
+    detail: "Rank metrics by decision value; keep the top 3–5"
+  - id: step.demote_extras
+    action: demote_extras
+    detail: "Move lower-priority numbers into the chart or table region"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.kpi-count-bounds"
+
+user_facing_summary: >
+  I trimmed the metric cards down to the few KPIs that actually matter for this dashboard.

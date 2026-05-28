@@ -1,0 +1,32 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.filter-bar
+kind: component_contract
+name: Filter bar contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Optional static/local filter or search bar: labeled controls that narrow a visible data
+  region over local sample data.
+
+non_template_statement: Layout contract only — not a copy-paste filter file.
+
+applies_to:
+  - site.dashboard-ui-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.dashboard-filter-bar
+
+expected_props:
+  - controls: "array of labeled filter/search controls"
+  - mapsToRegion: "id of the visible region the filter affects"
+  - appliesOn: "local sample data only"
+
+accessibility_notes:
+  - "Each control has an accessible label and visible focus"
+  - "Selected/active filter state is visible, not color-only"
+
+responsive_notes:
+  - "Controls wrap onto multiple rows on narrow viewports"

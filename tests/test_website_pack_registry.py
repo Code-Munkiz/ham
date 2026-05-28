@@ -23,6 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 WEBSITE_PACK_ROOT = REPO_ROOT / "docs/build-kit-registry-v2/website-pack"
 WEBSITE_PACK_MANIFEST = WEBSITE_PACK_ROOT / "registry-pack.yaml"
 APP_TYPE_ID = "site.landing-page-core"
+APP_TYPE_ID_DASHBOARD = "site.dashboard-ui-core"
 
 EXPECTED_SECTION_ORDER = (
     "section.landing-hero",
@@ -67,6 +68,65 @@ EXPECTED_RECOVERY_IDS = frozenset(
     }
 )
 
+EXPECTED_DASHBOARD_SECTION_IDS = frozenset(
+    {
+        "section.dashboard-shell",
+        "section.dashboard-kpi-row",
+        "section.dashboard-chart-region",
+        "section.dashboard-table-region",
+        "section.dashboard-filter-bar",
+        "section.dashboard-empty-loading-error-states",
+        "section.dashboard-responsive-structure",
+    }
+)
+
+EXPECTED_DASHBOARD_COMPONENT_IDS = frozenset(
+    {
+        "component.kpi-card",
+        "component.chart-card",
+        "component.simple-data-table",
+        "component.filter-bar",
+        "component.status-badge",
+    }
+)
+
+EXPECTED_DASHBOARD_VALIDATOR_IDS = frozenset(
+    {
+        "validator.dashboard-region-presence",
+        "validator.kpi-count-bounds",
+        "validator.chart-semantics",
+        "validator.table-readability",
+        "validator.filter-mapping",
+        "validator.sample-data-relevance",
+        "validator.dashboard-responsive-a11y",
+        "validator.dashboard-anti-component-soup",
+    }
+)
+
+EXPECTED_DASHBOARD_RECOVERY_IDS = frozenset(
+    {
+        "recovery.kpi-spam",
+        "recovery.fake-chart-data",
+        "recovery.dead-filters",
+        "recovery.dense-table",
+        "recovery.component-soup",
+        "recovery.admin-drift",
+    }
+)
+
+# Representative dashboard prompts that must NOT route to site.dashboard-ui-core
+# (the recipe is schema-only — no intent.py wiring yet).
+DASHBOARD_PROMPTS = (
+    "Build a read-only dashboard overview with KPI cards, simple charts, a table, "
+    "filters, empty states, and responsive layout.",
+    "Create a static dashboard UI for a SaaS metrics overview with KPIs, line chart, "
+    "bar chart, recent activity table, and accessible headings.",
+    "Build a local sample-data dashboard with status cards, trend charts, a simple "
+    "table, and no backend.",
+    "Create a dashboard overview page with bounded KPI cards, meaningful sample data, "
+    "loading/empty/error states, and responsive stacking.",
+)
+
 NEAR_BUDGET_THRESHOLD = 11_400
 
 
@@ -78,6 +138,11 @@ def website_pack():
 @pytest.fixture(scope="module")
 def landing_recipe(website_pack):
     return compose_build_recipe(website_pack, APP_TYPE_ID)
+
+
+@pytest.fixture(scope="module")
+def dashboard_recipe(website_pack):
+    return compose_build_recipe(website_pack, APP_TYPE_ID_DASHBOARD)
 
 
 def test_registry_yaml_parses():
@@ -189,10 +254,75 @@ def test_site_landing_page_core_routes_when_flagged_intent_matches():
     assert select_registry_v2_app_type_for_prompt("build a landing page") is None
 
 
+def test_dashboard_ui_core_loads(website_pack):
+    assert APP_TYPE_ID_DASHBOARD in website_pack.modules
+    assert website_pack.modules[APP_TYPE_ID_DASHBOARD].kind == "app_type"
+
+
+def test_module_index_covers_dashboard_ids(website_pack):
+    index = dict(website_pack.manifest)["module_index"]
+    assert APP_TYPE_ID_DASHBOARD in index["app_types"]
+    assert "stack.dom-dashboard-minimal" in index["stack_kits"]
+    assert EXPECTED_DASHBOARD_SECTION_IDS <= set(index["mechanics"])
+    assert EXPECTED_DASHBOARD_COMPONENT_IDS <= set(index["component_contracts"])
+    assert EXPECTED_DASHBOARD_VALIDATOR_IDS <= set(index["validators"])
+    assert EXPECTED_DASHBOARD_RECOVERY_IDS <= set(index["recovery_playbooks"])
+    assert "progress.dashboard-ui-core" in index["progress_labels"]
+    assert "learning.dashboard-ui-core" in index["learning_hooks"]
+
+
+def test_dashboard_ui_core_composes(dashboard_recipe):
+    assert dashboard_recipe.app_type_id == APP_TYPE_ID_DASHBOARD
+    assert dashboard_recipe.stack_kit_id == "stack.dom-dashboard-minimal"
+    assert set(dashboard_recipe.mechanic_ids) == EXPECTED_DASHBOARD_SECTION_IDS
+    assert set(dashboard_recipe.component_ids) == EXPECTED_DASHBOARD_COMPONENT_IDS
+    assert set(dashboard_recipe.validator_ids) == EXPECTED_DASHBOARD_VALIDATOR_IDS
+    assert set(dashboard_recipe.recovery_ids) == EXPECTED_DASHBOARD_RECOVERY_IDS
+    assert dashboard_recipe.progress_label_id == "progress.dashboard-ui-core"
+    assert dashboard_recipe.learning_hook_id == "learning.dashboard-ui-core"
+
+
+def test_dashboard_render_under_budget(dashboard_recipe):
+    rendered = render_playbook_context(dashboard_recipe)
+    assert len(rendered) <= DEFAULT_RENDER_CHAR_BUDGET
+    assert len(rendered) < NEAR_BUDGET_THRESHOLD
+    assert APP_TYPE_ID_DASHBOARD in rendered
+    assert "section.dashboard-kpi-row" in rendered
+    assert "validator.kpi-count-bounds" in rendered
+    lowered = rendered.lower()
+    assert "inverted pyramid" in lowered
+    assert "no-template-cloning" in rendered or "Non-template" in rendered
+
+
+def test_dashboard_adaptive_policy_prompt_examples_exist():
+    app_path = WEBSITE_PACK_ROOT / "app-types/site.dashboard-ui-core.yaml"
+    app = yaml.safe_load(app_path.read_text(encoding="utf-8"))
+    examples = app["user_prompt_examples"]
+    assert len(examples["positive"]) >= 4
+    assert len(examples["negative"]) >= 8
+    assert app["conflict_policy"]["user_explicit_overrides_soft_defaults"] is True
+    assert app["hard_constraints"]
+
+
+def test_dashboard_ui_core_is_not_routed():
+    # Schema-only: no intent.py wiring. No prompt should resolve to the dashboard
+    # app type, and it must not be exposed as a routed app-type constant.
+    import src.ham.build_registry.intent as intent
+
+    for prompt in DASHBOARD_PROMPTS:
+        assert (
+            select_registry_v2_app_type_for_prompt(prompt) != APP_TYPE_ID_DASHBOARD
+        )
+    assert not hasattr(intent, "DASHBOARD_UI_CORE_APP_TYPE")
+
+
 def test_module_count(website_pack):
-    # 1 app + 1 stack + 7 sections + 5 components + 7 validators + 6 recovery
-    # + 1 progress + 1 learning = 29
-    assert len(website_pack.modules) == 29
+    # Landing: 1 app + 1 stack + 7 sections + 5 components + 7 validators
+    #   + 6 recovery + 1 progress + 1 learning = 29
+    # Dashboard: 1 app + 1 stack + 7 sections + 5 components + 8 validators
+    #   + 6 recovery + 1 progress + 1 learning = 30
+    # Total = 59
+    assert len(website_pack.modules) == 59
 
 
 def test_validate_registry_pack_passes(website_pack):

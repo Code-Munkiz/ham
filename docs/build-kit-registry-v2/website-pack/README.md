@@ -1,8 +1,8 @@
 # Website Pack — Build Registry v2
 
-**Status:** Schema pilot · **Pack id:** `pack.site` · **First recipe:** `site.landing-page-core` (schema-only, **not routed**)
+**Status:** Schema pilot · **Pack id:** `pack.site` · **Recipes:** `site.landing-page-core` (routed when flagged) · `site.dashboard-ui-core` (schema-only, **not routed**)
 
-Generative playbooks for DOM-native marketing and landing pages. This pack is **separate from** [game-pack/](../game-pack/) — no game mechanics, no templates, no starter source trees.
+Generative playbooks for DOM-native marketing/landing pages and read-only dashboard/app-surface overviews. This pack is **separate from** [game-pack/](../game-pack/) — no game mechanics, no templates, no starter source trees.
 
 ## Purpose
 
@@ -27,7 +27,20 @@ One-page static marketing/landing playbook:
 | Responsive layout + semantic headings | Dashboard, ecommerce, multi-page app routing |
 | Meaningful placeholder copy (no lorem ipsum) | Template cloning, pixel-perfect brand copies |
 
-**Routing:** deferred — see [LANDING_PAGE_CORE_READINESS_REVIEW.md](../LANDING_PAGE_CORE_READINESS_REVIEW.md) and [ROUTING_STRATEGY.md](../ROUTING_STRATEGY.md).
+**Routing:** see [LANDING_PAGE_CORE_READINESS_REVIEW.md](../LANDING_PAGE_CORE_READINESS_REVIEW.md) and [ROUTING_STRATEGY.md](../ROUTING_STRATEGY.md).
+
+## Second recipe: `site.dashboard-ui-core`
+
+Read-only / mostly static dashboard overview playbook (**schema-only, not routed**):
+
+| In scope | Out of scope |
+|----------|--------------|
+| Dashboard shell, bounded KPI row (3–5), 1–2 basic charts, simple table | Backend, auth, accounts, CRUD, payments, admin permissions |
+| Optional local/static filters, empty/loading/error states | Analytics workbench, ad-hoc querying, real-time streams |
+| Responsive 12-col layout + accessibility semantics | Maps/geospatial, fintech/trading order books, game HUD |
+| Meaningful local sample data | Template cloning, marketing fake-dashboard screenshots |
+
+**Routing:** deferred — see [DASHBOARD_UI_CORE_READINESS_REVIEW.md](../DASHBOARD_UI_CORE_READINESS_REVIEW.md), [DASHBOARD_BUILD_KIT_DIRECTION.md](../DASHBOARD_BUILD_KIT_DIRECTION.md), and [DASHBOARD_KIT_RESEARCH.md](../DASHBOARD_KIT_RESEARCH.md). `site.dashboard-ui-core` is **not wired in `intent.py`**.
 
 ## Layout
 
@@ -35,7 +48,9 @@ One-page static marketing/landing playbook:
 website-pack/
 ├── registry-pack.yaml
 ├── app-types/site.landing-page-core.yaml
+├── app-types/site.dashboard-ui-core.yaml
 ├── stack-kits/dom-marketing-minimal.yaml
+├── stack-kits/dom-dashboard-minimal.yaml
 ├── sections/          # indexed as mechanics for loader compatibility
 ├── components/
 ├── validators/
@@ -54,9 +69,12 @@ python3 scripts/validate_game_pack_registry.py \
   --pack-root docs/build-kit-registry-v2/website-pack \
   --app-type site.landing-page-core \
   --check
+python3 scripts/validate_game_pack_registry.py \
+  --pack-root docs/build-kit-registry-v2/website-pack \
+  --app-type site.dashboard-ui-core \
+  --check
 python3 scripts/check_build_registry_references.py \
   --pack docs/build-kit-registry-v2/website-pack/registry-pack.yaml \
-  --app-type site.landing-page-core \
   --check-orphans \
   --check-render-budget
 ```

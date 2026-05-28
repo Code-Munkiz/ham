@@ -1,0 +1,34 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.filter-mapping
+kind: validator
+name: Filter mapping
+status: proposed
+schema_version: "0.1"
+
+description: >
+  If filters/search exist, each control maps to a visible data region — no dead controls.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - site.dashboard-ui-core
+
+validates_modules:
+  - section.dashboard-filter-bar
+  - component.filter-bar
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Each filter/search control visibly affects a region (table rows or chart range)"
+  - "Filtering runs on local sample data"
+  - "Filter bar is omitted entirely if it would map to nothing"
+
+fail_conditions:
+  - "Filter or search control that changes nothing visible (dead control)"
+  - "Filter implies a backend query that does not exist"
+
+recovery_playbooks:
+  - recovery.dead-filters

@@ -1,0 +1,27 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.dashboard-kpi-row
+kind: section
+name: Dashboard KPI row section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Top row of bounded KPI/metric cards giving an at-a-glance overview of the most important
+  numbers for the dashboard's domain.
+
+non_template_statement: Section playbook only — not a checked-in KPI grid component.
+
+applies_to:
+  - site.dashboard-ui-core
+
+depends_on:
+  - section.dashboard-shell
+
+binds_components:
+  - component.kpi-card
+  - component.status-badge
+
+guidance:
+  - "Bounded 3–5 KPI cards — never a wall of undifferentiated cards"
+  - "Each card has a label, value, and unit (%, $, count, ms)"
+  - "Trend/delta uses text plus color — not color alone; lead metric upper-left"

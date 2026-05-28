@@ -1,0 +1,34 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.admin-drift
+kind: recovery_playbook
+name: Fix admin or app scope drift
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs drift into admin/CRUD/auth/analytics-workbench scope by returning to a read-only
+  overview or clarifying that the request exceeds this recipe.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - site.dashboard-ui-core
+
+repairs_validators:
+  - validator.dashboard-anti-component-soup
+
+steps:
+  - id: step.strip_mutation
+    action: strip_mutation
+    detail: "Remove CRUD forms, auth, and admin permission UI; keep the surface read-only"
+  - id: step.clarify_or_fallback
+    action: clarify_or_fallback
+    detail: "If the prompt truly needs admin/backend/analytics, clarify or fall back rather than force this recipe"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.dashboard-anti-component-soup"
+
+user_facing_summary: >
+  I kept the dashboard read-only and flagged that admin/backend features would need a different build path.

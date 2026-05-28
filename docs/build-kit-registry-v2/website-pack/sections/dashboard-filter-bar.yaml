@@ -1,0 +1,26 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.dashboard-filter-bar
+kind: section
+name: Dashboard filter bar section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Optional static/local filter or search bar that narrows the visible data regions. Only
+  included when it maps to a real, visible region — never a decorative dead control.
+
+non_template_statement: Section playbook only — not a checked-in filter component.
+
+applies_to:
+  - site.dashboard-ui-core
+
+depends_on:
+  - section.dashboard-shell
+
+binds_components:
+  - component.filter-bar
+
+guidance:
+  - "Include only if it maps to a visible region (table rows or chart range)"
+  - "Filters run on local sample data; every control has an accessible label"
+  - "Omit the bar entirely rather than ship a control that changes nothing"

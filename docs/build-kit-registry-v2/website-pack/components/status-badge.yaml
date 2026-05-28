@@ -1,0 +1,32 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.status-badge
+kind: component_contract
+name: Status badge contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Small status indicator used in KPI cards, table cells, and state messages: conveys
+  status with text or icon plus color — never color alone.
+
+non_template_statement: Layout contract only — not a copy-paste badge file.
+
+applies_to:
+  - site.dashboard-ui-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.dashboard-shell
+
+expected_props:
+  - label: string
+  - tone: "neutral | positive | warning | negative"
+  - icon: string | null
+
+accessibility_notes:
+  - "Status meaning is in the text label or icon — color is reinforcement only"
+  - "Sufficient contrast against its background"
+
+responsive_notes:
+  - "Badge stays inline and legible at small sizes"

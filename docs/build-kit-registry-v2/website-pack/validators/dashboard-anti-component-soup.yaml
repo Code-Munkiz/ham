@@ -1,0 +1,37 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.dashboard-anti-component-soup
+kind: validator
+name: Dashboard anti component soup
+status: proposed
+schema_version: "0.1"
+
+description: >
+  No random component gallery, generic admin-panel sludge, or admin/app scope drift — the
+  page is a composed, purposeful dashboard overview.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - site.dashboard-ui-core
+
+validates_modules:
+  - section.dashboard-shell
+  - section.dashboard-kpi-row
+  - section.dashboard-chart-region
+  - section.dashboard-table-region
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Every region has an IA purpose; output is domain-fit, not generic admin chrome"
+  - "Surface stays read-only — no CRUD forms, auth, or admin permission UI"
+
+fail_conditions:
+  - "Widgets dumped with no IA (random component gallery)"
+  - "Drift into admin CRUD, auth, or analytics-workbench scope"
+
+recovery_playbooks:
+  - recovery.component-soup
+  - recovery.admin-drift

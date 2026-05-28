@@ -1,0 +1,34 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.component-soup
+kind: recovery_playbook
+name: Fix dashboard component soup
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs a random component gallery by imposing inverted-pyramid IA and grouping regions by purpose.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - site.dashboard-ui-core
+
+repairs_validators:
+  - validator.dashboard-region-presence
+  - validator.dashboard-anti-component-soup
+
+steps:
+  - id: step.impose_ia
+    action: impose_ia
+    detail: "Order regions as KPIs → charts → table; group related widgets"
+  - id: step.drop_purposeless
+    action: drop_purposeless
+    detail: "Remove widgets with no decision-support purpose"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.dashboard-region-presence"
+
+user_facing_summary: >
+  I reorganized the scattered widgets into a clear KPI → charts → table dashboard layout.

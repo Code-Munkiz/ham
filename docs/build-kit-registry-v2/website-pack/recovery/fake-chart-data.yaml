@@ -1,0 +1,34 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.fake-chart-data
+kind: recovery_playbook
+name: Fix fake or meaningless chart data
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs charts built on arbitrary arrays by giving them meaningful sample data, labels, and units.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - site.dashboard-ui-core
+
+repairs_validators:
+  - validator.chart-semantics
+  - validator.sample-data-relevance
+
+steps:
+  - id: step.replace_filler
+    action: replace_filler
+    detail: "Replace arbitrary arrays with meaningful domain sample data"
+  - id: step.label_axes
+    action: label_axes
+    detail: "Add axis labels, units, and a legend for multi-series charts"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.chart-semantics"
+
+user_facing_summary: >
+  I replaced the placeholder chart numbers with meaningful sample data and labeled the axes and units.

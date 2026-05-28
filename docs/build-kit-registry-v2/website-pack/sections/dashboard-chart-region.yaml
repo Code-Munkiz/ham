@@ -1,0 +1,26 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.dashboard-chart-region
+kind: section
+name: Dashboard chart region section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Middle band of one or two basic line/bar charts that explain the KPI trends over time or
+  across categories, rendered from meaningful local sample data.
+
+non_template_statement: Section playbook only — not a checked-in chart widget.
+
+applies_to:
+  - site.dashboard-ui-core
+
+depends_on:
+  - section.dashboard-kpi-row
+
+binds_components:
+  - component.chart-card
+
+guidance:
+  - "1–2 basic line/bar charts max — defer heatmaps, treemaps, candlesticks, multi-axis"
+  - "Labeled axes and units; legend for multi-series; meaningful domain sample data"
+  - "Each chart has a heading and text alternative; no fake live updates for MVP"

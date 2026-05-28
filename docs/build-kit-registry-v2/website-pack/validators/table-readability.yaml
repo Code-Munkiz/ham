@@ -1,0 +1,34 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.table-readability
+kind: validator
+name: Table readability
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Detail table is readable and bounded with real headers — not a dense unreadable grid.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - site.dashboard-ui-core
+
+validates_modules:
+  - section.dashboard-table-region
+  - component.simple-data-table
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Table uses thead/th column headers and tbody rows"
+  - "Column count is bounded and readable"
+  - "Rows use meaningful sample data consistent with KPIs/charts"
+
+fail_conditions:
+  - "Too many columns, missing headers, or unreadable density"
+  - "Table page-overflows horizontally on small screens"
+
+recovery_playbooks:
+  - recovery.dense-table

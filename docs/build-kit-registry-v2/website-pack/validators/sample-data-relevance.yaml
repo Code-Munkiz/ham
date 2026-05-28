@@ -1,0 +1,36 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.sample-data-relevance
+kind: validator
+name: Sample data relevance
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Sample data across KPIs, charts, and table is meaningful for the domain — no arbitrary
+  filler and no fake backend/live-data claims.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - site.dashboard-ui-core
+
+validates_modules:
+  - section.dashboard-kpi-row
+  - section.dashboard-chart-region
+  - section.dashboard-table-region
+  - section.dashboard-empty-loading-error-states
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "KPI, chart, and table values tell a coherent domain story with units"
+  - "Static sample data presented honestly — no fake live wiring; states represented"
+
+fail_conditions:
+  - "Arbitrary filler arrays or lorem-style placeholder data"
+  - "Copy claims real-time/backend data that does not exist"
+
+recovery_playbooks:
+  - recovery.fake-chart-data

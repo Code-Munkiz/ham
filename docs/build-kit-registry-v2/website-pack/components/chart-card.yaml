@@ -1,0 +1,36 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.chart-card
+kind: component_contract
+name: Chart card contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Basic line/bar chart card: title, labeled axes with units, one or more data series from
+  local sample data, optional legend, and a text alternative.
+
+non_template_statement: Layout contract only — not a copy-paste charting file.
+
+applies_to:
+  - site.dashboard-ui-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.dashboard-chart-region
+
+expected_props:
+  - title: string
+  - chartType: "line | bar"
+  - xAxisLabel: string
+  - yAxisLabel: string
+  - unit: string | null
+  - series: "array of labeled sample-data points"
+  - textAlternative: string
+
+accessibility_notes:
+  - "Chart has a heading and a text alternative (caption/summary/aria-label)"
+  - "Series colors are distinguishable; meaning not conveyed by color alone"
+
+responsive_notes:
+  - "Chart scales to container width and stacks below other regions on mobile"

@@ -1,0 +1,35 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.dashboard-responsive-a11y
+kind: validator
+name: Dashboard responsive and accessibility basics
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Responsive stacking and accessibility basics — semantic landmarks, single h1, table
+  headers, labeled controls, chart text alternatives, and non-color-only status.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - site.dashboard-ui-core
+
+validates_modules:
+  - section.dashboard-responsive-structure
+  - section.dashboard-shell
+  - component.status-badge
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "header/nav/main landmarks; single h1; regions stack; usable at 360px"
+  - "Table headers, labeled controls, and chart text alternatives present"
+
+fail_conditions:
+  - "Fixed-width grid or horizontal scroll on small screens"
+  - "Status conveyed by color alone; missing headings/landmarks"
+
+recovery_playbooks:
+  - recovery.dense-table

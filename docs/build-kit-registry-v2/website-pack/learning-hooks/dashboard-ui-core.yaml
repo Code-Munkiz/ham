@@ -1,0 +1,38 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: learning.dashboard-ui-core
+kind: learning_hook
+name: Dashboard UI core learning hooks
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Future Hermes evolution signals for read-only dashboard builds. Not wired at runtime.
+
+non_template_statement: Learning hook schema only.
+
+applies_to:
+  - site.dashboard-ui-core
+
+source_phase_owner: site.dashboard-ui-core
+
+signal_categories:
+  - region_presence
+  - kpi_bounds
+  - chart_semantics
+  - table_readability
+  - filter_mapping
+  - sample_data_relevance
+  - responsive_a11y
+  - component_soup
+
+outcome_fact_fields:
+  - preview_boot_success: boolean
+  - kpi_card_count: integer
+  - chart_count: integer
+  - dead_filter_detected: boolean
+  - fake_chart_data_detected: boolean
+  - validator_failures: array of validator id
+
+guidance:
+  - "Capture bounded evidence from preview and conceptual validator results"
+  - "Align with OUTCOME_FACTS.md when Hermes loop lands"

@@ -1,0 +1,37 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.dense-table
+kind: recovery_playbook
+name: Fix unreadable dense table
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs an overloaded table by bounding columns, adding headers, and fixing small-screen overflow.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - site.dashboard-ui-core
+
+repairs_validators:
+  - validator.table-readability
+  - validator.dashboard-responsive-a11y
+
+steps:
+  - id: step.bound_columns
+    action: bound_columns
+    detail: "Reduce to a readable, bounded set of the most useful columns"
+  - id: step.add_headers
+    action: add_headers
+    detail: "Add caption and thead/th column headers with scope"
+  - id: step.fix_overflow
+    action: fix_overflow
+    detail: "Contain or stack the table so the page does not scroll horizontally on mobile"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.table-readability"
+
+user_facing_summary: >
+  I trimmed the table to readable columns, added proper headers, and fixed the mobile overflow.

@@ -1,0 +1,35 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.dashboard-region-presence
+kind: validator
+name: Dashboard region presence
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Required dashboard regions present — shell, KPI row, at least one chart, and a detail table.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - site.dashboard-ui-core
+
+validates_modules:
+  - section.dashboard-shell
+  - section.dashboard-kpi-row
+  - section.dashboard-chart-region
+  - section.dashboard-table-region
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Dashboard shell with header/main renders"
+  - "KPI row, at least one chart, and one table region all render in inverted-pyramid order"
+
+fail_conditions:
+  - "Missing KPI row, chart region, or table region"
+  - "Page is a flat component dump with no dashboard shell"
+
+recovery_playbooks:
+  - recovery.component-soup

@@ -1,0 +1,34 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.kpi-count-bounds
+kind: validator
+name: KPI count bounds
+status: proposed
+schema_version: "0.1"
+
+description: >
+  KPI row is bounded (roughly 3–5 differentiated cards) — not a wall of metric cards.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - site.dashboard-ui-core
+
+validates_modules:
+  - section.dashboard-kpi-row
+  - component.kpi-card
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Between 3 and 5 KPI cards render"
+  - "Each card has a label, value, and unit"
+  - "Cards are differentiated — not repeated placeholders"
+
+fail_conditions:
+  - "More than ~6 undifferentiated KPI cards (card spam)"
+  - "KPI cards missing labels, values, or units"
+
+recovery_playbooks:
+  - recovery.kpi-spam

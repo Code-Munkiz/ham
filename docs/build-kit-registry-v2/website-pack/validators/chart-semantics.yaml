@@ -1,0 +1,34 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.chart-semantics
+kind: validator
+name: Chart semantics
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Charts have labeled axes, units, and meaningful series — not fake chrome over arbitrary arrays.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - site.dashboard-ui-core
+
+validates_modules:
+  - section.dashboard-chart-region
+  - component.chart-card
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Each chart has labeled axes and units"
+  - "Series use meaningful domain sample data; legend present for multi-series"
+  - "Chart count stays within 1–2 basic line/bar charts"
+
+fail_conditions:
+  - "Chart over arbitrary filler arrays with no labels or units"
+  - "Decorative chart chrome with no real series"
+
+recovery_playbooks:
+  - recovery.fake-chart-data

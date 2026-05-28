@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.dead-filters
+kind: recovery_playbook
+name: Fix dead filters or search
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs filter/search controls that change nothing by mapping them to a visible region or removing them.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - site.dashboard-ui-core
+
+repairs_validators:
+  - validator.filter-mapping
+
+steps:
+  - id: step.map_to_region
+    action: map_to_region
+    detail: "Wire each control to filter visible table rows or chart range on local data"
+  - id: step.remove_unmapped
+    action: remove_unmapped
+    detail: "Remove any control that cannot map to a visible region"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.filter-mapping"
+
+user_facing_summary: >
+  I made the filters actually narrow the visible data and removed any control that did nothing.

@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.kpi-card
+kind: component_contract
+name: KPI card contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Single metric card: label, value, unit, optional delta/trend indicator.
+
+non_template_statement: Layout contract only — not a copy-paste React file.
+
+applies_to:
+  - site.dashboard-ui-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.dashboard-kpi-row
+
+expected_props:
+  - label: string
+  - value: string | number
+  - unit: string | null
+  - deltaLabel: string | null
+  - status: "neutral | positive | negative | null"
+
+accessibility_notes:
+  - "Label is a real heading or labeled text; value is readable"
+  - "Delta/status conveyed with text or icon plus color — never color alone"
+
+responsive_notes:
+  - "Cards wrap to one or two per row on narrow viewports"

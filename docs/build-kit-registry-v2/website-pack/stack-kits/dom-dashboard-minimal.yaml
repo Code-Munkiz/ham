@@ -1,0 +1,43 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: stack.dom-dashboard-minimal
+kind: stack_kit
+name: DOM-native minimal dashboard stack
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Default stack for read-only / mostly static dashboards: React + Vite-style SPA,
+  Tailwind-style utilities, semantic HTML landmarks, and lightweight DOM/SVG charts over
+  local sample data. Client-only; no backend, no live data for MVP.
+
+non_template_statement: >
+  Stack playbook only. Does not ship a checked-in dashboard starter, charting library
+  lock-in, or admin-panel asset bundle.
+
+applies_to:
+  - site.dashboard-ui-core
+  - tag:dom-dashboard-page
+
+capabilities:
+  - local-state
+  - dom-rendering
+  - semantic-landmarks
+  - responsive-grid
+  - static-sample-data
+  - no-network
+
+guidance:
+  - "Single dashboard page with header, nav, and main landmarks"
+  - "12-column responsive grid; KPI row wraps, chart/table regions stack on mobile"
+  - "Charts render from local sample data via lightweight SVG/DOM — no live fetch for MVP"
+  - "No data-fetching SDK, auth SDK, or payment libraries unless user scopes elsewhere"
+  - "Prefer accessible primitives: real table markup, labeled controls, text + color for status"
+
+accessibility_baseline:
+  - "One h1; logical h2/h3 per region (KPIs, charts, table)"
+  - "Charts expose a text alternative (caption, summary, or aria-label)"
+  - "Tables use thead/th headers; controls have accessible names and visible focus"
+
+mobile_baseline:
+  - "Usable at 360px without horizontal scroll"
+  - "KPI cards and chart/table regions stack; tap targets ≥ 44px where practical"

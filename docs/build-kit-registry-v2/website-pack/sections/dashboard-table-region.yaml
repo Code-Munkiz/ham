@@ -1,0 +1,27 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.dashboard-table-region
+kind: section
+name: Dashboard table region section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Lower detail region: one simple, readable data table (or recent-activity list) with
+  headers and a bounded column count for row-level inspection.
+
+non_template_statement: Section playbook only — not a checked-in datagrid component.
+
+applies_to:
+  - site.dashboard-ui-core
+
+depends_on:
+  - section.dashboard-chart-region
+
+binds_components:
+  - component.simple-data-table
+  - component.status-badge
+
+guidance:
+  - "One simple table with a bounded, readable column count — not a dense grid"
+  - "Real table markup: caption, thead, th headers, tbody rows; meaningful sample rows"
+  - "Status cells use text or icon plus color; optional sort must be keyboard-accessible"

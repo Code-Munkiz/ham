@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.dashboard-shell
+kind: section
+name: Dashboard shell section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Page shell: header with title, topnav, optional account/status controls, and a main
+  region that hosts the KPI row, chart region, and table region in priority order.
+
+non_template_statement: Section playbook only — not a checked-in dashboard layout file.
+
+applies_to:
+  - site.dashboard-ui-core
+
+depends_on: []
+
+binds_components:
+  - component.status-badge
+
+guidance:
+  - "Header carries the title and a shallow topnav — no deep sidebar for MVP"
+  - "Main orders content inverted-pyramid: KPIs, then charts, then table"
+  - "header/nav/main landmarks; single h1; static account controls only"

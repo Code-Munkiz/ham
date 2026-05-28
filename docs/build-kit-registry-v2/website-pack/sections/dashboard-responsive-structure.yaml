@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.dashboard-responsive-structure
+kind: section
+name: Dashboard responsive structure section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Responsive layout and semantic-structure guidance binding the dashboard regions to a
+  12-column grid with predictable stacking and accessible landmarks.
+
+non_template_statement: Section playbook only — not a checked-in layout grid file.
+
+applies_to:
+  - site.dashboard-ui-core
+
+depends_on:
+  - section.dashboard-shell
+
+binds_components: []
+
+guidance:
+  - "12-column responsive grid with consistent gutters on an 8px baseline"
+  - "KPI row wraps; chart and table regions stack to one column on small screens"
+  - "No fixed-width or horizontal-scroll traps below 768px; header/nav/main + single h1"

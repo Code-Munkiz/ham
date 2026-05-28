@@ -6,20 +6,23 @@ status: proposed
 schema_version: "0.1"
 
 description: >
-  Root manifest for Build Registry v2 Website Pack. Indexes marketing/landing-page
-  playbooks starting with site.landing-page-core. Separate from game-pack; generative
-  guidance only — no templates, starter source, or routing in this pack land.
+  Root manifest for Build Registry v2 Website Pack. Indexes marketing/landing-page and
+  read-only dashboard/app-surface playbooks: site.landing-page-core (routed when flagged)
+  and schema-only site.dashboard-ui-core (not routed). Separate from game-pack; generative
+  guidance only — no templates, starter source, or routing added in this pack land.
 
 non_template_statement: >
-  Registry index and compose defaults only. Does not ship landing page starters,
-  cloned marketing templates, or executable validators. HAM generates custom code from
+  Registry index and compose defaults only. Does not ship landing page or dashboard
+  starters, cloned templates, or executable validators. HAM generates custom code from
   composed playbook context when wired — never from checked-in templates.
 
 module_index:
   app_types:
     - site.landing-page-core
+    - site.dashboard-ui-core
   stack_kits:
     - stack.dom-marketing-minimal
+    - stack.dom-dashboard-minimal
   mechanics:
     - section.landing-hero
     - section.value-proposition
@@ -28,12 +31,24 @@ module_index:
     - section.cta-band
     - section.faq-block
     - section.final-conversion
+    - section.dashboard-shell
+    - section.dashboard-kpi-row
+    - section.dashboard-chart-region
+    - section.dashboard-table-region
+    - section.dashboard-filter-bar
+    - section.dashboard-empty-loading-error-states
+    - section.dashboard-responsive-structure
   component_contracts:
     - component.hero-block
     - component.feature-card-grid
     - component.testimonial-strip
     - component.cta-button-group
     - component.faq-list
+    - component.kpi-card
+    - component.chart-card
+    - component.simple-data-table
+    - component.filter-bar
+    - component.status-badge
   validators:
     - validator.landing-section-presence
     - validator.cta-clarity
@@ -42,6 +57,14 @@ module_index:
     - validator.responsive-accessibility-basics
     - validator.no-lorem-dead-cta
     - validator.anti-slop-patterns
+    - validator.dashboard-region-presence
+    - validator.kpi-count-bounds
+    - validator.chart-semantics
+    - validator.table-readability
+    - validator.filter-mapping
+    - validator.sample-data-relevance
+    - validator.dashboard-responsive-a11y
+    - validator.dashboard-anti-component-soup
   recovery_playbooks:
     - recovery.generic-hero
     - recovery.weak-cta
@@ -49,10 +72,18 @@ module_index:
     - recovery.inaccessible-buttons
     - recovery.mobile-layout-ignored
     - recovery.vague-copy
+    - recovery.kpi-spam
+    - recovery.fake-chart-data
+    - recovery.dead-filters
+    - recovery.dense-table
+    - recovery.component-soup
+    - recovery.admin-drift
   progress_labels:
     - progress.landing-page-core
+    - progress.dashboard-ui-core
   learning_hooks:
     - learning.landing-page-core
+    - learning.dashboard-ui-core
 
 compose_defaults:
   compose_order:
