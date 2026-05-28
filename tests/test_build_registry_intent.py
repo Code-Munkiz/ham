@@ -26,6 +26,7 @@ from src.ham.build_registry.intent import (
     DECK_BUILDER_LITE_APP_TYPE,
     TURN_BASED_TACTICS_LITE_APP_TYPE,
     CITY_BUILDER_LITE_APP_TYPE,
+    LANDING_PAGE_CORE_APP_TYPE,
     enrich_plan_metadata_with_registry_v2,
     select_registry_v2_app_type_for_prompt,
 )
@@ -45,6 +46,11 @@ _CANONICAL_TACTICS_GATE_PROMPT = (
 _CANONICAL_CITY_BUILDER_GATE_PROMPT = (
     "Build a browser city-building game where the player places houses and farms on a small grid, "
     "advances days, produces food and coins, and wins by reaching a population goal."
+)
+
+_CANONICAL_LANDING_PAGE_GATE_PROMPT = (
+    "Build a landing page for a SaaS product with a hero, features, testimonials, CTA, FAQ, "
+    "and responsive layout."
 )
 
 _IDLE_POSITIVE_PROMPTS = (
@@ -700,6 +706,80 @@ _CITY_BUILDER_LITE_CROSS_RECIPE_NEGATIVE_PROMPTS = (
 )
 
 
+_LANDING_PAGE_CORE_POSITIVE_PROMPTS = (
+    _CANONICAL_LANDING_PAGE_GATE_PROMPT,
+    "Create a product landing page with a clear value proposition, feature sections, social proof, and final CTA.",
+    "Build a launch page for a startup with hero copy, benefits, trust section, FAQ, and waitlist CTA.",
+    "Create a responsive marketing landing page for a developer tool with feature cards, credibility section, and strong CTA.",
+    "Build a SaaS landing page with hero, value proposition, features, demo CTA, and FAQ.",
+    "Build a one-page marketing site with hero section, feature blocks, and CTA band.",
+)
+
+# Strong landing positives that also explicitly *disclaim* backend/form/payment/CMS
+# behavior. These must still route (negated constraints are not feature requests).
+_LANDING_PAGE_CORE_NEGATED_CONSTRAINT_POSITIVE_PROMPTS = (
+    _CANONICAL_LANDING_PAGE_GATE_PROMPT,
+    (
+        "Build a landing page for a developer tool with a specific hero value "
+        "proposition, feature/value sections, social proof, primary and secondary CTAs, "
+        "and a FAQ, and no backend or live form handling."
+    ),
+    (
+        "Build a static landing page for a SaaS app with hero, features, testimonials, "
+        "CTA, and FAQ — no auth, no payments, no CMS."
+    ),
+    (
+        "Build a responsive product landing page with a value proposition, feature "
+        "sections, social proof, and final CTA, without a backend."
+    ),
+    (
+        "Build a landing page with hero, features, social proof, CTA and FAQ. "
+        "No API, no accounts, static only."
+    ),
+)
+
+# Genuine backend/app/ecommerce feature *requests* must still block, even when
+# landing vocabulary appears.
+_LANDING_PAGE_CORE_FEATURE_REQUEST_NEGATIVE_PROMPTS = (
+    "build a landing page with backend auth and user accounts",
+    "build a landing page with hero, features, FAQ and connect to an API with user accounts",
+    "build a full web app with authentication",
+    "build an ecommerce checkout with payments",
+    "build an admin dashboard",
+    "build a website with no backend",
+    "build a beautiful homepage",
+)
+
+_LANDING_PAGE_CORE_NEGATIVE_PROMPTS = (
+    "build me a landing page",
+    "Build a beautiful homepage",
+    "Build a website",
+    "Build a modern responsive page",
+    "Build a startup product page",
+    "Build an admin dashboard.",
+    "Build an analytics dashboard.",
+    "Build a data dashboard.",
+    "Build an ecommerce checkout.",
+    "Build a cart and payments page.",
+    "Build a blog CMS.",
+    "Build a documentation site.",
+    "Build a backend API with authentication.",
+    "Build a full web app with authentication and accounts.",
+    "Build a project management app.",
+    "Build a CRM.",
+    "Build an exact clone of stripe.com.",
+    "Build a pixel-perfect copy of apple.com.",
+)
+
+_LANDING_PAGE_CORE_CROSS_RECIPE_NEGATIVE_PROMPTS = (
+    "Build an idle clicker game",
+    "Build me a trivia quiz with a timer",
+    _CANONICAL_CITY_BUILDER_GATE_PROMPT,
+    _CANONICAL_TACTICS_GATE_PROMPT,
+    _CANONICAL_DECK_BUILDER_GATE_PROMPT,
+)
+
+
 class TestSelectRegistryV2AppTypeForPrompt:
     @pytest.mark.parametrize("prompt", _IDLE_POSITIVE_PROMPTS)
     def test_matches_idle_incremental_prompts(self, prompt: str):
@@ -874,6 +954,30 @@ class TestSelectRegistryV2AppTypeForPrompt:
     @pytest.mark.parametrize("prompt", _CITY_BUILDER_LITE_CROSS_RECIPE_NEGATIVE_PROMPTS)
     def test_other_recipe_prompts_do_not_route_to_city_builder_lite_param(self, prompt: str):
         assert select_registry_v2_app_type_for_prompt(prompt) != CITY_BUILDER_LITE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _LANDING_PAGE_CORE_POSITIVE_PROMPTS)
+    def test_matches_landing_page_core_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) == LANDING_PAGE_CORE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _LANDING_PAGE_CORE_NEGATIVE_PROMPTS)
+    def test_rejects_non_landing_page_core_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != LANDING_PAGE_CORE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _LANDING_PAGE_CORE_CROSS_RECIPE_NEGATIVE_PROMPTS)
+    def test_other_recipe_prompts_do_not_route_to_landing_page_core_param(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != LANDING_PAGE_CORE_APP_TYPE
+
+    @pytest.mark.parametrize(
+        "prompt", _LANDING_PAGE_CORE_NEGATED_CONSTRAINT_POSITIVE_PROMPTS
+    )
+    def test_negated_backend_constraints_still_route_to_landing_page_core(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) == LANDING_PAGE_CORE_APP_TYPE
+
+    @pytest.mark.parametrize(
+        "prompt", _LANDING_PAGE_CORE_FEATURE_REQUEST_NEGATIVE_PROMPTS
+    )
+    def test_real_backend_feature_requests_do_not_route_to_landing_page_core(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != LANDING_PAGE_CORE_APP_TYPE
 
     @pytest.mark.parametrize("prompt,expected", _CROSS_EXCLUSION_PROMPTS)
     def test_recipes_do_not_steal_each_other(self, prompt: str, expected: str):
@@ -1697,6 +1801,15 @@ class TestEnrichPlanMetadataWithRegistryV2:
         assert "registry_v2_app_type" not in metadata
         assert metadata["template_kind"] == "generic"
 
+    def test_flag_disabled_landing_page_prompt_does_not_add_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            _CANONICAL_LANDING_PAGE_GATE_PROMPT,
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
+
     def test_flag_enabled_canonical_deck_builder_gate_prompt_adds_registry_metadata(self):
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "generic", "originated_from": "builder_chat_scaffold"},
@@ -1889,6 +2002,36 @@ class TestEnrichPlanMetadataWithRegistryV2:
         assert metadata["registry_v2_app_type"] == CITY_BUILDER_LITE_APP_TYPE
         assert metadata["template_kind"] == "generic"
         assert metadata["originated_from"] == "builder_chat_scaffold"
+
+    def test_flag_enabled_landing_page_prompt_adds_registry_metadata(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic", "originated_from": "builder_chat_scaffold"},
+            _CANONICAL_LANDING_PAGE_GATE_PROMPT,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        assert metadata["registry_v2_app_type"] == LANDING_PAGE_CORE_APP_TYPE
+        assert metadata["template_kind"] == "generic"
+        assert metadata["originated_from"] == "builder_chat_scaffold"
+
+    def test_flag_enabled_landing_page_prompt_with_negated_backend_adds_registry_metadata(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic", "originated_from": "builder_chat_scaffold"},
+            (
+                "Build a landing page for a developer tool with a specific hero value "
+                "proposition, feature/value sections, social proof, primary and secondary "
+                "CTAs, and a FAQ, and no backend or live form handling."
+            ),
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        assert metadata["registry_v2_app_type"] == LANDING_PAGE_CORE_APP_TYPE
+
+    def test_flag_enabled_landing_page_with_real_backend_request_does_not_route(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            "build a landing page with backend auth and user accounts",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        assert "registry_v2_app_type" not in metadata
 
     def test_flag_enabled_non_idle_prompt_leaves_registry_metadata_absent(self):
         metadata = enrich_plan_metadata_with_registry_v2(
@@ -2299,6 +2442,18 @@ class TestChatScaffoldSyntheticPlanMetadata:
         metadata = _synthetic_plan_metadata(_CANONICAL_CITY_BUILDER_GATE_PROMPT)
         assert metadata.get("template_kind") == "generic"
         assert metadata.get("registry_v2_app_type") == CITY_BUILDER_LITE_APP_TYPE
+
+    def test_flag_disabled_landing_page_prompt_has_no_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = _synthetic_plan_metadata(_CANONICAL_LANDING_PAGE_GATE_PROMPT)
+        assert metadata.get("template_kind") == "landing-page"
+        assert "registry_v2_app_type" not in metadata
+
+    def test_flag_enabled_landing_page_prompt_adds_registry_metadata_synthetic(self, monkeypatch):
+        monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
+        metadata = _synthetic_plan_metadata(_CANONICAL_LANDING_PAGE_GATE_PROMPT)
+        assert metadata.get("template_kind") == "landing-page"
+        assert metadata.get("registry_v2_app_type") == LANDING_PAGE_CORE_APP_TYPE
 
     def test_flag_enabled_non_idle_prompt_has_no_registry_metadata(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
@@ -3133,6 +3288,65 @@ class TestEndToEndScaffoldMessages:
             project_id="proj_test",
             user_message=prompt,
             steps=[Step(title="Scaffold game", description="Create city builder game files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(plan)[1]["content"]
+        assert "registry_v2_app_type" not in metadata
+        assert "Builder Kit context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" not in content
+
+    def test_flag_enabled_landing_page_prompt_produces_v2_context(self):
+        prompt = _CANONICAL_LANDING_PAGE_GATE_PROMPT
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            prompt,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_landing_page_e2e",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message=prompt,
+            steps=[Step(title="Scaffold landing page", description="Create landing page files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(
+            plan,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )[1]["content"]
+        assert metadata["registry_v2_app_type"] == LANDING_PAGE_CORE_APP_TYPE
+        assert "Build Registry v2 playbook context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" in content
+        assert "site.landing-page-core" in content
+        assert "stack.dom-marketing-minimal" in content
+        for section_id in (
+            "section.landing-hero",
+            "section.value-proposition",
+            "section.feature-value-grid",
+            "section.social-proof",
+            "section.cta-band",
+            "section.faq-block",
+            "section.final-conversion",
+        ):
+            assert section_id in content
+        assert "Builder Kit context:" not in content
+        assert content.count("Builder Kit:") == 0
+
+    def test_flag_disabled_landing_page_prompt_produces_v1_context_only(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        prompt = _CANONICAL_LANDING_PAGE_GATE_PROMPT
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            prompt,
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_landing_page_v1",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message=prompt,
+            steps=[Step(title="Scaffold landing page", description="Create landing page files")],
             planner_confidence="high",
             metadata=metadata,
         )

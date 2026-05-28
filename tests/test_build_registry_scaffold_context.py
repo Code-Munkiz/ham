@@ -108,6 +108,32 @@ class TestResolveScaffoldContextV2Success:
             assert mechanic_id in result.context
         assert "Builder Kit:" not in result.context
 
+    def test_returns_v2_playbook_context_for_landing_page_core(self):
+        result = resolve_scaffold_context(
+            metadata={"registry_v2_app_type": "site.landing-page-core"},
+            template_kind="landing-page",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "1"},
+            repo_root=REPO_ROOT,
+        )
+        assert result.source == "v2"
+        assert result.header == V2_HEADER
+        assert result.fallback_reason is None
+        assert result.registry_v2_app_type == "site.landing-page-core"
+        assert result.registry_v2_pack_id == "pack.site"
+        assert "site.landing-page-core" in result.context
+        assert "stack.dom-marketing-minimal" in result.context
+        for section_id in (
+            "section.landing-hero",
+            "section.value-proposition",
+            "section.feature-value-grid",
+            "section.social-proof",
+            "section.cta-band",
+            "section.faq-block",
+            "section.final-conversion",
+        ):
+            assert section_id in result.context
+        assert "Builder Kit:" not in result.context
+
 
 class TestResolveScaffoldContextUnknownAppType:
     def test_falls_back_to_v1_on_unknown_app_type(self):

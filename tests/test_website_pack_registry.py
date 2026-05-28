@@ -1,4 +1,4 @@
-"""Tests for Build Registry v2 Website Pack (schema-only; not routed)."""
+"""Tests for Build Registry v2 Website Pack (schema-only routing behind flag)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,10 @@ from src.ham.build_registry import (
     validate_registry_pack,
 )
 from src.ham.build_registry.models import DEFAULT_RENDER_CHAR_BUDGET
-from src.ham.build_registry.intent import select_registry_v2_app_type_for_prompt
+from src.ham.build_registry.intent import (
+    LANDING_PAGE_CORE_APP_TYPE,
+    select_registry_v2_app_type_for_prompt,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WEBSITE_PACK_ROOT = REPO_ROOT / "docs/build-kit-registry-v2/website-pack"
@@ -143,12 +146,13 @@ def test_adaptive_policy_prompt_examples_exist():
     assert app["hard_constraints"]
 
 
-def test_site_landing_page_core_not_routed():
+def test_site_landing_page_core_routes_when_flagged_intent_matches():
     positive = (
         "Build a landing page for a SaaS product with a hero, features, "
         "testimonials, CTA, FAQ, and responsive layout."
     )
-    assert select_registry_v2_app_type_for_prompt(positive) != APP_TYPE_ID
+    assert select_registry_v2_app_type_for_prompt(positive) == APP_TYPE_ID
+    assert select_registry_v2_app_type_for_prompt(positive) == LANDING_PAGE_CORE_APP_TYPE
     assert select_registry_v2_app_type_for_prompt("build a landing page") is None
 
 

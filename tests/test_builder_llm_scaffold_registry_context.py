@@ -71,6 +71,23 @@ class TestRegistryContextV2Success:
         assert "Builder Kit context:" not in content
         assert content.count("Builder Kit:") == 0
 
+    def test_flag_enabled_with_landing_page_app_type_injects_v2_playbook(self, monkeypatch):
+        monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "1")
+        plan = _make_plan(
+            template_kind="landing-page",
+            metadata={"registry_v2_app_type": "site.landing-page-core"},
+        )
+        messages = _build_scaffold_messages(plan)
+        content = _user_content(messages)
+        assert "Build Registry v2 playbook context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" in content
+        assert "site.landing-page-core" in content
+        assert "stack.dom-marketing-minimal" in content
+        assert "section.landing-hero" in content
+        assert "section.final-conversion" in content
+        assert "Builder Kit context:" not in content
+        assert content.count("Builder Kit:") == 0
+
 
 class TestRegistryContextBadAppType:
     def test_unknown_app_type_falls_back_to_v1_without_exception(self, monkeypatch):

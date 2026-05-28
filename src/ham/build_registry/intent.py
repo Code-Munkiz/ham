@@ -25,6 +25,7 @@ RHYTHM_TAP_LITE_APP_TYPE = "game.rhythm-tap-lite"
 DECK_BUILDER_LITE_APP_TYPE = "game.deck-builder-lite"
 TURN_BASED_TACTICS_LITE_APP_TYPE = "game.turn-based-tactics-lite"
 CITY_BUILDER_LITE_APP_TYPE = "game.city-builder-lite"
+LANDING_PAGE_CORE_APP_TYPE = "site.landing-page-core"
 
 _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES: tuple[str, ...] = (
     r"\bhangman(-style)?\b",
@@ -165,7 +166,7 @@ _CITY_BUILDER_LITE_CROSS_RECIPE_NEGATIVES: tuple[str, ...] = (
 )
 
 _GLOBAL_NEGATIVE_PATTERNS: tuple[str, ...] = (
-    r"\b(dashboard|landing\s*page|saas|calculator|todo|to[-\s]?do|crm)\b",
+    r"\b(dashboard|calculator|todo|to[-\s]?do|crm)\b",
     r"\b(crypto|trading)\s+(dashboard|app|platform)\b",
     r"\b(snake|pong|asteroids|flappy)\b",
     r"\b(tetris|tetromino|platformer)\b",
@@ -1236,8 +1237,108 @@ def _matches_city_builder_lite(text: str) -> bool:
     )
 
 
+_LANDING_PAGE_CORE_NEGATIVE_PATTERNS: tuple[str, ...] = (
+    r"\b(idle|incremental|clicker|tycoon)\b",
+    r"\b(trivia|quiz)\b.{0,80}\b(game|timer|challenge)\b",
+    r"\bmemory\s+(card|match)\b",
+    r"\bbranching\s+story\b",
+    r"\bchoose\s+your\s+own\s+adventure\b",
+    r"\b(wordle|daily\s+word|word\s+guess)\b",
+    r"\bdaily\s+puzzle\s+grid\b",
+    r"\bresource\s+management\b.{0,80}\b(sim|simulation|game)\b",
+    r"\bhangman(-style)?\b",
+    r"\btyping\s+speed\b",
+    r"\bword\s+build(er|ing)\b",
+    r"\bturn[- ]based\b.{0,80}\bcard\b",
+    r"\breaction[- ]time\b.{0,80}\bgame\b",
+    r"\brhythm\s+tap\b",
+    r"\bdeck[- ]building\b.{0,80}\bcard\b",
+    r"\bturn[- ]based\b.{0,80}\btactics\b",
+    r"\bcity[- ]build(ing|er)\b",
+    r"\bbuild\b.{0,40}\b(game|clicker|trivia|hangman|puzzle)\b",
+    r"\bgame\b.{0,80}\b(player|score|level|turns?|grid|units?|enemies?)\b",
+    r"\b(admin|analytics|data)\s+dashboard\b",
+    r"\bdashboard\b",
+    r"\bproject\s+management\b",
+    r"\bcrm\b",
+    r"\b(ecommerce|checkout|cart|payment|stripe|storefront|online\s+store|shop\s+page)\b",
+    r"\b(blog|cms|documentation\s+site|docs\s+site|help\s+center)\b",
+    r"\b(backend|api|authentication|auth|accounts|login|signup)\b",
+    r"\bfull\s+web\s+app\b",
+    r"\bweb\s+app\b.{0,80}\b(auth|authentication|login|accounts)\b",
+    r"\b(clone|pixel[- ]perfect|exact\s+copy)\b",
+    r"\bclone\b.{0,80}\b(stripe|apple|google)\b",
+    r"^website$",
+    r"^homepage$",
+    r"^page$",
+    r"^design$",
+    r"^modern$",
+    r"^saas$",
+    r"^startup$",
+    r"^product$",
+    r"^beautiful$",
+    r"^responsive$",
+    r"^app$",
+    r"^dashboard$",
+    r"^build a website$",
+    r"^make a homepage$",
+    r"^build a homepage$",
+    r"^make a website$",
+    r"^build a page$",
+    r"^make a page$",
+)
+
+_LANDING_PAGE_CORE_POSITIVE_PATTERNS: tuple[str, ...] = (
+    r"\blanding\s+page\b.{0,180}\b(hero|features|testimonial|cta|faq|value\s+proposition)\b",
+    r"\b(hero|features|testimonial|cta|faq|value\s+proposition)\b.{0,180}\blanding\s+page\b",
+    r"\bproduct\s+landing\s+page\b.{0,120}\b(value\s+proposition|features|social\s+proof|cta)\b",
+    r"\bmarketing\s+(landing\s+)?page\b.{0,120}\b(hero|features|cta|sections?)\b",
+    r"\bstartup\s+launch\s+page\b.{0,120}\b(hero|benefits|trust|cta|waitlist|faq)\b",
+    r"\bresponsive\s+marketing\s+landing\s+page\b.{0,120}\b(feature\s+cards?|cta|credibility)\b",
+    r"\b(one[- ]page|single[- ]page)\b.{0,80}\b(marketing|landing|product)\b.{0,120}\b(hero|features|cta)\b",
+    r"\bsaas\b.{0,80}\blanding\s+page\b.{0,120}\b(hero|value\s+proposition|features|cta|faq)\b",
+    r"\bbuild\b.{0,40}\b(product\s+)?landing\s+page\b.{0,120}\b(hero|features|social\s+proof|final\s+cta)\b",
+    r"\bcreate\b.{0,40}\b(product\s+)?landing\s+page\b.{0,120}\b(value\s+proposition|feature\s+sections?|trust)\b",
+    r"\bbuild\b.{0,40}\blaunch\s+page\b.{0,120}\b(hero|benefits|trust|waitlist\s+cta|faq)\b",
+    r"\bmarketing\s+landing\s+page\b.{0,120}\b(hero|feature\s+cards?|credibility|strong\s+cta)\b",
+)
+
+
+# Explicitly-negated exclusion phrases. When a strong landing positive is present,
+# these are neutralized before negative matching so a static marketing page that
+# *disclaims* a backend/form/payment/CMS ("no backend", "without a backend",
+# "no payments", "no CMS") still routes — while genuine feature *requests*
+# ("build a backend", "with a backend", "connect to an API", "payment checkout")
+# keep their feature word and continue to block. Conservative: applied only when
+# a strong landing positive already matched.
+_LANDING_NEGATED_EXCLUSION_PATTERN = re.compile(
+    r"\b(?:no|without|sans|zero|free\s+of)\s+"
+    r"(?:a\s+|an\s+|any\s+|the\s+|live\s+|real\s+|server[- ]?side\s+|user\s+)*"
+    r"(?:back[- ]?ends?|servers?|apis?|auth|authentication|"
+    r"accounts?|logins?|log[- ]?in|sign[- ]?ups?|sign[- ]?ins?|"
+    r"forms?|form\s+submissions?|form\s+handling|live\s+forms?|"
+    r"payments?|checkouts?|carts?|cms|content\s+management(?:\s+system)?|"
+    r"databases?|db)"
+    r"(?:\s+(?:handling|submissions?|management|integrations?|systems?))?"
+)
+
+
+def _strip_negated_exclusions(text: str) -> str:
+    """Remove explicitly-negated backend/form/payment/CMS constraint phrases."""
+    return _LANDING_NEGATED_EXCLUSION_PATTERN.sub(" ", text)
+
+
+def _matches_landing_page_core(text: str) -> bool:
+    if not _matches_any(text, _LANDING_PAGE_CORE_POSITIVE_PATTERNS):
+        return False
+    effective = _strip_negated_exclusions(text)
+    if _matches_any(effective, _LANDING_PAGE_CORE_NEGATIVE_PATTERNS):
+        return False
+    return True
+
+
 def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
-    """Return a Game Pack app type id for clear prompt matches, else ``None``."""
+    """Return a registry v2 app type id for clear prompt matches, else ``None``."""
     text = _normalized_prompt(prompt)
     if not text:
         return None
@@ -1246,7 +1347,7 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
     # Precedence: trivia → idle → branching narrative → memory match → word daily
     # → daily puzzle grid → resource management sim → hangman lite → typing speed racer
     # → word builder → card deck turn-based → reaction time challenge → rhythm tap lite
-    # → deck builder lite → turn-based tactics lite → city builder lite.
+    # → deck builder lite → turn-based tactics lite → city builder lite → landing page core.
     if _matches_trivia(text):
         return TRIVIA_TIMER_APP_TYPE
     if _matches_idle(text):
@@ -1279,6 +1380,8 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
         return TURN_BASED_TACTICS_LITE_APP_TYPE
     if _matches_city_builder_lite(text):
         return CITY_BUILDER_LITE_APP_TYPE
+    if _matches_landing_page_core(text):
+        return LANDING_PAGE_CORE_APP_TYPE
     return None
 
 

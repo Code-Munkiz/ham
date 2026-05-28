@@ -21,6 +21,7 @@ from src.ham.build_registry.validate import validate_registry_pack
 V2_HEADER = "Build Registry v2 playbook context:"
 V1_HEADER = "Builder Kit context:"
 DEFAULT_GAME_PACK_REL = Path("docs/build-kit-registry-v2/game-pack")
+DEFAULT_WEBSITE_PACK_REL = Path("docs/build-kit-registry-v2/website-pack")
 
 _TRUTHY_ENV = frozenset({"1", "true", "yes", "on"})
 
@@ -52,8 +53,9 @@ def resolve_pack_root(
     metadata: Mapping[str, Any] | None,
     *,
     repo_root: Path,
+    app_type_id: str | None = None,
 ) -> Path:
-    """Resolve registry pack directory from metadata override or default."""
+    """Resolve registry pack directory from metadata override or app type."""
     if metadata:
         override = metadata.get("registry_v2_pack_root")
         if isinstance(override, str) and override.strip():
@@ -61,6 +63,8 @@ def resolve_pack_root(
             if not path.is_absolute():
                 path = (repo_root / path).resolve()
             return path.resolve()
+    if app_type_id and app_type_id.startswith("site."):
+        return (repo_root / DEFAULT_WEBSITE_PACK_REL).resolve()
     return (repo_root / DEFAULT_GAME_PACK_REL).resolve()
 
 
@@ -144,7 +148,7 @@ def _try_v2_context(
     repo_root: Path,
     max_chars: int,
 ) -> ScaffoldContextResult:
-    pack_root = resolve_pack_root(metadata, repo_root=repo_root)
+    pack_root = resolve_pack_root(metadata, repo_root=repo_root, app_type_id=app_type_id)
     pack = load_registry_pack(pack_root)
     validate_registry_pack(pack)
     recipe = compose_build_recipe(pack, app_type_id)
@@ -193,7 +197,7 @@ def resolve_scaffold_context(
             max_chars=max_chars,
         )
     except BuildRegistryConfigError as exc:
-        pack_root = resolve_pack_root(metadata, repo_root=root)
+        pack_root = resolve_pack_root(metadata, repo_root=root, app_type_id=app_type_id)
         try:
             pack = load_registry_pack(pack_root)
         except BuildRegistryConfigError:
