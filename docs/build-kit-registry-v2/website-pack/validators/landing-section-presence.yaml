@@ -26,10 +26,12 @@ check_type: conceptual
 pass_conditions:
   - "Hero value and CTA sections render in DOM"
   - "Feature section present when prompt requests features"
+  - "Distinct social proof / trust section present when prompt requests proof or testimonials"
 
 fail_conditions:
   - "Hero missing or empty headline"
   - "No CTA section anywhere on page"
+  - "Social proof requested but omitted from the page"
 
 recovery_playbooks:
   - recovery.generic-hero

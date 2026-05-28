@@ -136,6 +136,39 @@ def test_render_context_under_budget(landing_recipe):
     assert "no-template-cloning" in rendered or "Non-template" in rendered
 
 
+def test_render_context_requires_social_proof_when_requested(landing_recipe):
+    rendered = render_playbook_context(landing_recipe)
+    lowered = rendered.lower()
+    assert "social proof" in lowered
+    # Required-when-requested framing (app-type guidance + social-proof section + validator)
+    assert "do not silently omit" in lowered
+    assert "required as a distinct section" in lowered
+
+
+def test_render_context_includes_primary_and_secondary_cta_guidance(landing_recipe):
+    rendered = render_playbook_context(landing_recipe)
+    lowered = rendered.lower()
+    assert "secondary cta" in lowered
+    assert "primary and secondary" in lowered or "primary AND secondary".lower() in lowered
+    # Does not collapse requested dual CTAs into one button
+    assert "collapse" in lowered
+
+
+def test_render_context_discourages_dead_anchor_cta(landing_recipe):
+    rendered = render_playbook_context(landing_recipe)
+    assert 'href="#"' in rendered
+    lowered = rendered.lower()
+    assert "in-page anchor" in lowered or "anchor target" in lowered
+
+
+def test_no_lorem_dead_cta_validator_mentions_fake_forms_and_dead_anchors():
+    path = WEBSITE_PACK_ROOT / "validators/no-lorem-dead-cta.yaml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    joined = " ".join(data["pass_conditions"] + data["fail_conditions"]).lower()
+    assert 'href="#"' in joined or "dead anchor" in joined
+    assert "fake form" in joined or "no live form" in joined or "no action pretending" in joined
+
+
 def test_adaptive_policy_prompt_examples_exist():
     app_path = WEBSITE_PACK_ROOT / "app-types/site.landing-page-core.yaml"
     app = yaml.safe_load(app_path.read_text(encoding="utf-8"))

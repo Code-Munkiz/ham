@@ -28,10 +28,13 @@ safety_constraints:
 
 guidance:
   - "Narrative arc: problem → solution → proof → action"
-  - "One primary CTA repeated with consistent label; optional secondary de-emphasized"
+  - "Hero: primary CTA always; include a secondary CTA too when the prompt asks for primary AND secondary — do not collapse requested dual CTAs into one button"
   - "Section rhythm: distinct spacing and type scale — not identical card rows"
   - "Placeholder copy names audience or outcome — no lorem ipsum"
-  - "CTAs are links or explicit handlers — not fake submit forms"
+  - "CTAs are links or explicit handlers — not fake submit forms; never use href=\"#\" for a meaningful CTA"
+  - "Use safe in-page anchor targets for static CTAs (e.g. #features, #faq, #contact, #waitlist) or static button copy with no fake submission"
+  - "Include a distinct social proof / trust section when the prompt requests proof, trust, testimonials, or social proof — do not silently omit it"
+  - "When real names or logos are unknown, use generic but plausible placeholders (e.g. \"Engineering lead, mid-size SaaS\") — never fabricate specific named brand claims"
 
 default_assumptions:
   - "Single scroll page; 5–7 sections max"

@@ -24,10 +24,12 @@ check_type: conceptual
 pass_conditions:
   - "Primary CTA label names action or offer"
   - "One visually dominant primary per section"
+  - "Secondary CTA present when prompt requests primary AND secondary, de-emphasized but real"
 
 fail_conditions:
   - "Generic lone Learn more with no context"
   - "Multiple equal-weight primary buttons"
+  - "Requested dual CTAs collapsed into a single button"
 
 recovery_playbooks:
   - recovery.weak-cta

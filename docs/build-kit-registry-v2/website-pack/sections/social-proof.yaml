@@ -6,7 +6,8 @@ status: proposed
 schema_version: "0.1"
 
 description: >
-  Optional trust strip: testimonials logos stats or credibility markers.
+  Trust strip: testimonials, logo/trust row, credibility stats, quote cards, or
+  adoption proof. Required as a distinct section when the prompt asks for it.
 
 non_template_statement: Section playbook only.
 
@@ -20,6 +21,8 @@ binds_components:
   - component.testimonial-strip
 
 guidance:
-  - "Include only when prompt requests proof or credibility"
+  - "REQUIRED as a distinct section when the prompt requests social proof, trust, testimonials, or credibility — do not silently omit it"
+  - "Acceptable forms: testimonial strip, logo/trust row, credibility stats, quote cards, or adoption proof"
   - "Structured quotes or stats — not filler lorem names"
-  - "Omit section entirely if irrelevant to prompt"
+  - "If real names/logos are unknown, use safe generic but plausible placeholders (e.g. \"Senior engineer, growth-stage startup\") — never fabricate specific named brand claims"
+  - "Omit the section only when proof/trust is genuinely irrelevant to the prompt"

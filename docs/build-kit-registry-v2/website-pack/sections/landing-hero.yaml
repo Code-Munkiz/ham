@@ -20,6 +20,8 @@ binds_components:
 
 guidance:
   - "Headline names audience or outcome — avoid vague revolution copy"
-  - "One primary CTA with specific label tied to offer"
-  - "Optional secondary link de-emphasized visually"
+  - "Primary CTA with a specific label tied to the offer (not a bare \"Get Started\")"
+  - "Include a secondary CTA when the prompt asks for primary AND secondary — keep it visually de-emphasized but present (e.g. \"See how it works\", \"View examples\", \"Read the playbook\")"
+  - "Do not collapse requested dual CTAs into a single button"
+  - "CTA targets are real anchors or handlers — never href=\"#\""
   - "Hero background or imagery supports narrative — not decorative noise"

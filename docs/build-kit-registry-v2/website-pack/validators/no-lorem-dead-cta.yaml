@@ -6,7 +6,8 @@ status: proposed
 schema_version: "0.1"
 
 description: >
-  No lorem ipsum; CTAs are real links or handlers — not fake submit forms.
+  No lorem ipsum; CTAs are real links or handlers — no dead href="#" anchors and
+  no fake submit forms.
 
 non_template_statement: Conceptual validator only.
 
@@ -20,10 +21,14 @@ check_type: conceptual
 pass_conditions:
   - "No lorem ipsum strings in visible copy"
   - "Primary CTAs href or onClick documented — not inert submit to nowhere"
+  - "CTA hrefs are real in-page anchors or handlers — no dead href=\"#\""
+  - "No fake form submission; static CTA copy when there is no live form handling"
 
 fail_conditions:
   - "Lorem ipsum placeholder text"
   - "Submit button with no action pretending to work"
+  - "Meaningful CTA using href=\"#\" (dead anchor)"
+  - "Form that appears to submit but has no handling"
 
 recovery_playbooks:
   - recovery.weak-cta

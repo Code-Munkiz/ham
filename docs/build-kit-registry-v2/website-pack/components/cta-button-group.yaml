@@ -21,6 +21,12 @@ expected_props:
   - primaryLabel: string
   - primaryHref: string
   - secondaryLabel: string | null
+  - secondaryHref: string | null
+
+guidance:
+  - "Render the secondary CTA when the prompt requests primary AND secondary — do not drop it"
+  - "primaryHref / secondaryHref are real in-page anchors (#features, #faq, #contact, #waitlist) or handlers — never href=\"#\""
+  - "Meaningful labels on both CTAs; no fake submit-to-nowhere behavior"
 
 accessibility_notes:
   - "Use button or anchor — not inert div click targets"

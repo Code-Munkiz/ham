@@ -20,6 +20,8 @@ binds_components:
   - component.cta-button-group
 
 guidance:
+  - "Distinct closing section — not a verbatim reuse of the mid-page CTA band"
   - "Final headline restates core benefit"
-  - "Primary CTA matches hero label"
+  - "Primary CTA matches hero label and uses a real anchor target (e.g. #waitlist, #contact, #features) or static button copy — never href=\"#\""
+  - "No fake form submission; static CTA copy is fine when there is no live form handling"
   - "Minimal distraction — no new feature lists here"
