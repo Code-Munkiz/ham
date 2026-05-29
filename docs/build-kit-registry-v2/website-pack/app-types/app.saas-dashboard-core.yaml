@@ -1,0 +1,197 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: app.saas-dashboard-core
+kind: app_type
+name: SaaS dashboard core
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Static, app-shell-light SaaS product home with workspace context, usage summary,
+  plan status, activity feed, resource list, one upgrade CTA, and settings/help
+  shortcuts. Local sample data only.
+
+non_template_statement: >
+  Generative playbook only. No checked-in SaaS template, clone baseline, or starter tree.
+
+legacy_v1_fallback: generic
+
+safety_constraints:
+  - no-network-egress-for-mvp
+  - no-eval
+  - no-user-accounts-for-mvp
+  - no-backend-api-for-mvp
+  - no-crud-mutation-for-mvp
+  - no-payment-processing-for-mvp
+  - no-admin-permissions-for-mvp
+  - no-real-time-streams-for-mvp
+  - no-maps-geospatial-for-mvp
+  - dom-native-ui-only-for-mvp
+  - static-sample-data-only-for-mvp
+
+guidance:
+  - "Use a bounded app shell: sidebar/topbar plus one main overview surface"
+  - "Include workspace/account/project selector placeholder; never imply real auth"
+  - "Render usage/KPI cards, plan/status card, recent activity, and one resource list"
+  - "Use one upgrade CTA region plus settings/help shortcuts"
+  - "Show empty/loading/error states and semantic header/nav/main/list/table structure"
+  - "Keep all data local/static and domain-meaningful"
+
+default_assumptions:
+  - "Single page SaaS home; no deep app routing"
+  - "Static local sample data; no backend/API/database"
+  - "Responsive shell at desktop and 360px mobile widths"
+  - "No billing/auth/admin/CRUD behavior"
+
+hard_constraints:
+  - no-template-cloning
+  - no-auth-or-account-implementation
+  - no-backend-api-or-database
+  - no-billing-or-payment-processing
+  - no-invoices-or-subscription-management
+  - no-admin-user-management-or-rbac
+  - no-crud-heavy-forms-or-mutation
+  - no-analytics-workbench-or-ad-hoc-query
+  - no-crm-or-kanban-or-project-management-suite
+  - no-real-time-streaming-or-monitoring
+  - no-fintech-trading-order-book
+  - no-ecommerce-admin
+  - no-maps-or-geospatial-operations
+  - no-exact-clone
+
+soft_defaults:
+  - bounded app shell with sidebar nav and topbar
+  - workspace selector placeholder and account context chip
+  - 3-4 usage cards plus one plan/status card
+  - recent activity list and simple resource list/table
+  - one upgrade CTA and one settings/help shortcut region
+  - explicit empty/loading/error examples
+
+user_overridable:
+  - domain labels and sample-data values
+  - section ordering within shell
+  - card emphasis and color style
+  - activity and resource item naming
+
+clarify_if_changed:
+  - adding login/signup/session flows
+  - adding backend/API/database wiring
+  - adding payment processing or invoice management
+  - adding admin permissions, user management, or CRUD forms
+  - adding analytics workbench, realtime streams, or map operations
+
+out_of_scope_unless_explicit:
+  - auth, accounts, sessions
+  - backend API, database, server state
+  - billing, payment processing, invoices
+  - admin user management, permissions, RBAC
+  - CRUD create/update/delete workflows
+  - analytics workbench and ad-hoc querying
+  - CRM, kanban, or project-management suites
+  - realtime monitoring or websocket updates
+  - fintech/trading dashboards and order books
+  - ecommerce admin surfaces
+  - maps and geospatial operations
+
+conflict_policy:
+  user_explicit_overrides_soft_defaults: true
+  safety_constraints_override_user_request: true
+  core_loop_conflicts_require_clarification: true
+  out_of_scope_items_require_explicit_request: true
+  fallback_to_v1_or_generic_when_recipe_no_longer_fits: true
+
+user_prompt_examples:
+  positive:
+    - "Build a static SaaS dashboard home with app shell, usage cards, plan status, activity list, and resource table."
+    - "Create an app-like workspace overview with sidebar, topbar, local sample data, and no backend."
+    - "Design a SaaS product home showing quota usage, current plan, recent activity, and an upgrade CTA."
+    - "Make a responsive SaaS dashboard shell with settings/help shortcuts and empty/loading/error states."
+  negative:
+    - "Build auth login/signup and account session flows."
+    - "Wire this dashboard to my API and database."
+    - "Add Stripe checkout, invoices, and subscription billing logic."
+    - "Create admin user management with roles and permissions."
+    - "Add CRUD forms for projects, users, and resources."
+    - "Build an analytics workbench with ad-hoc queries."
+    - "Build a realtime monitoring dashboard with live streams."
+    - "Clone an existing SaaS product pixel-perfect."
+
+stack_kit_id: stack.dom-saas-dashboard-minimal
+
+composed_modules:
+  stack_kit_id: stack.dom-saas-dashboard-minimal
+  mechanics:
+    - section.saas-app-shell
+    - section.saas-workspace-context
+    - section.saas-usage-summary
+    - section.saas-plan-status
+    - section.saas-activity-feed
+    - section.saas-resource-list
+    - section.saas-upgrade-cta
+    - section.saas-empty-loading-error-states
+    - section.saas-responsive-structure
+  component_contracts:
+    - component.app-shell
+    - component.sidebar-nav
+    - component.topbar
+    - component.workspace-switcher
+    - component.usage-card
+    - component.plan-status-card
+    - component.activity-item
+    - component.resource-list
+    - component.upgrade-card
+    - component.settings-shortcut
+  validators:
+    - validator.app-shell-bounds
+    - validator.no-auth-backend-claims
+    - validator.no-billing-implementation
+    - validator.usage-data-meaningful
+    - validator.activity-feed-bounded
+    - validator.resource-list-readable
+    - validator.no-admin-crud-drift
+    - validator.responsive-a11y-basics
+    - validator.no-dead-nav-deception
+  recovery_playbooks:
+    - recovery.auth-drift
+    - recovery.billing-drift
+    - recovery.admin-drift
+    - recovery.crud-sprawl
+    - recovery.dead-nav-shell
+    - recovery.meaningless-saas-metrics
+    - recovery.upgrade-cta-spam
+  progress_labels: progress.app-saas-dashboard-core
+  learning_hooks: learning.app-saas-dashboard-core
+
+build_phases:
+  - id: phase.understand
+    title: Understand the SaaS dashboard ask
+    order: 1
+    modules_used: [app_type]
+  - id: phase.compose
+    title: Compose shell, sections, and contracts
+    order: 2
+    modules_used: [mechanics, component_contracts]
+  - id: phase.generate
+    title: Generate static SaaS home code
+    order: 3
+    modules_used: [stack_kit_id, guidance]
+  - id: phase.validate
+    title: Validate bounds and exclusions
+    order: 4
+    modules_used: [validators]
+  - id: phase.preview
+    title: Prepare Workbench preview
+    order: 5
+    modules_used: []
+  - id: phase.recover
+    title: Repair common SaaS drift
+    order: 6
+    optional: true
+    modules_used: [recovery_playbooks]
+
+acceptance_criteria:
+  - "Bounded app shell with sidebar/topbar and one main overview area renders"
+  - "Workspace selector placeholder, usage cards, plan/status, activity, and resource list are present"
+  - "One upgrade CTA and settings/help shortcuts render without deception"
+  - "Empty/loading/error states are visible for async-looking regions"
+  - "Semantic header/nav/main/list/table structure and responsive layout are present"
+  - "No auth/backend/billing/admin/CRUD claims appear"

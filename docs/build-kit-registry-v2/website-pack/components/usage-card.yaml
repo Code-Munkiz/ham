@@ -1,0 +1,29 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.usage-card
+kind: component_contract
+name: Usage card contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Usage/KPI card contract with metric label, value, unit, and optional trend.
+
+non_template_statement: Layout contract only — not a copy-paste metric card component.
+
+applies_to:
+  - app.saas-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.saas-usage-summary
+
+expected_props:
+  - label: string
+  - value: string | number
+  - unit: string | null
+  - trendLabel: string | null
+
+accessibility_notes:
+  - "Metric text is readable with explicit labels"
+  - "Trend meaning is text-supported, not color-only"

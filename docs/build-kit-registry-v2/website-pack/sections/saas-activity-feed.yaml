@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.saas-activity-feed
+kind: section
+name: SaaS activity feed section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Recent activity feed showing bounded sample events relevant to the workspace.
+
+non_template_statement: Section playbook only — not a checked-in event timeline component.
+
+applies_to:
+  - app.saas-dashboard-core
+
+depends_on:
+  - section.saas-plan-status
+
+binds_components:
+  - component.activity-item
+
+guidance:
+  - "Render a bounded, readable list of recent events"
+  - "Use meaningful event text and relative timestamps from local sample data"
+  - "Avoid fake realtime claims, websocket language, or endless scrolling feeds"

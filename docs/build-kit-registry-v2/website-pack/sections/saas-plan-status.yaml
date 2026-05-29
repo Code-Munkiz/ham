@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.saas-plan-status
+kind: section
+name: SaaS plan status section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Plan/tier status card that summarizes current plan and simple status hints.
+
+non_template_statement: Section playbook only — not a checked-in billing panel.
+
+applies_to:
+  - app.saas-dashboard-core
+
+depends_on:
+  - section.saas-usage-summary
+
+binds_components:
+  - component.plan-status-card
+
+guidance:
+  - "Show plan tier/status copy only; do not imply active billing implementation"
+  - "Pair with one upgrade CTA area elsewhere; avoid repeated paywall messaging"
+  - "Keep language descriptive and non-transactional"

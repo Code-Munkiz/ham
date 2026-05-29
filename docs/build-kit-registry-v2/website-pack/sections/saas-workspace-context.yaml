@@ -1,0 +1,26 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.saas-workspace-context
+kind: section
+name: SaaS workspace context section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Workspace/account/project context area with static selector placeholder and context chips.
+
+non_template_statement: Section playbook only — not a checked-in account switcher widget.
+
+applies_to:
+  - app.saas-dashboard-core
+
+depends_on:
+  - section.saas-app-shell
+
+binds_components:
+  - component.workspace-switcher
+  - component.settings-shortcut
+
+guidance:
+  - "Show current workspace/account/project context with local sample labels"
+  - "Selector is placeholder-only; never imply real auth or account switching backend"
+  - "Keep settings/help shortcut affordances secondary and non-deceptive"

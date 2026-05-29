@@ -1,0 +1,40 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: learning.app-saas-dashboard-core
+kind: learning_hook
+name: SaaS dashboard core learning hooks
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Future Hermes learning signals for bounded SaaS dashboard core outcomes.
+
+non_template_statement: Learning hook schema only.
+
+applies_to:
+  - app.saas-dashboard-core
+
+source_phase_owner: app.saas-dashboard-core
+
+signal_categories:
+  - shell_bounds
+  - auth_backend_drift
+  - billing_drift
+  - usage_meaningfulness
+  - activity_quality
+  - resource_readability
+  - admin_crud_drift
+  - responsive_a11y
+  - dead_nav_deception
+
+outcome_fact_fields:
+  - preview_boot_success: boolean
+  - usage_card_count: integer
+  - activity_item_count: integer
+  - auth_backend_claim_detected: boolean
+  - billing_claim_detected: boolean
+  - crud_ui_detected: boolean
+  - validator_failures: array of validator id
+
+guidance:
+  - "Capture bounded evidence from preview and conceptual validator outcomes"
+  - "Record whether shell stayed honest and static/local constraints held"

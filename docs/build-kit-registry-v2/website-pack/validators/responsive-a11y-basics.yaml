@@ -1,0 +1,35 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.responsive-a11y-basics
+kind: validator
+name: Responsive and accessibility basics
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Checks responsive stacking and semantic accessibility fundamentals for SaaS dashboard UI.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - app.saas-dashboard-core
+
+validates_modules:
+  - section.saas-responsive-structure
+  - component.app-shell
+  - component.resource-list
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Semantic header/nav/main plus list/table landmarks are present"
+  - "Layout remains usable at 360px without page-level horizontal scroll"
+  - "Focus visibility and text-plus-style status communication are preserved"
+
+fail_conditions:
+  - "Landmark-free layout or inaccessible heading/navigation structure"
+  - "Mobile layout overflows horizontally or collapses readability"
+
+recovery_playbooks:
+  - recovery.dead-nav-shell

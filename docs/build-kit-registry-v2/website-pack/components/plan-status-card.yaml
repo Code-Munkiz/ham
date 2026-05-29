@@ -1,0 +1,27 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.plan-status-card
+kind: component_contract
+name: Plan status card contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Plan status card contract with tier, renewal/status copy, and neutral status markers.
+
+non_template_statement: Layout contract only — not a copy-paste billing widget.
+
+applies_to:
+  - app.saas-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.saas-plan-status
+
+expected_props:
+  - planTier: string
+  - statusText: string
+  - quotaHint: string | null
+
+content_notes:
+  - "Plan text must not imply payment processing or active billing workflows"

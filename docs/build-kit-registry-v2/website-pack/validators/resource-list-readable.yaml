@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.resource-list-readable
+kind: validator
+name: Resource list readable
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Ensures project/team/resource list or table is semantic, legible, and bounded.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - app.saas-dashboard-core
+
+validates_modules:
+  - section.saas-resource-list
+  - component.resource-list
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "List/table has clear labels with bounded density"
+  - "Semantic list or table structure is used for readability"
+
+fail_conditions:
+  - "Dense unreadable data wall or div-only pseudo-table"
+  - "Resource area implies CRUD management workflows"
+
+recovery_playbooks:
+  - recovery.crud-sprawl

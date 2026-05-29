@@ -1,0 +1,34 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.crud-sprawl
+kind: recovery_playbook
+name: Fix CRUD sprawl
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs create/edit/delete drift by collapsing mutation UIs back into read-only overview lists.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - app.saas-dashboard-core
+
+repairs_validators:
+  - validator.no-admin-crud-drift
+  - validator.resource-list-readable
+
+steps:
+  - id: step.remove_mutation_controls
+    action: remove_mutation_controls
+    detail: "Remove create/edit/delete forms and destructive actions"
+  - id: step_restore_readonly_list
+    action: restore_readonly_list
+    detail: "Keep one bounded, readable resource list/table with static sample rows"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run admin/CRUD and resource readability validators"
+
+user_facing_summary: >
+  I converted admin-style CRUD controls back into a static, readable resource overview.

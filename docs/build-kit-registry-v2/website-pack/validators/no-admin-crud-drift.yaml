@@ -1,0 +1,34 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.no-admin-crud-drift
+kind: validator
+name: No admin/CRUD drift
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Prevents drift into admin panels, user management, permissions, or CRUD-heavy flows.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - app.saas-dashboard-core
+
+validates_modules:
+  - section.saas-resource-list
+  - section.saas-workspace-context
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Surface remains overview-oriented with no mutation workflows"
+  - "No users/roles/permissions management controls are implemented"
+
+fail_conditions:
+  - "Create/edit/delete forms and admin management controls appear"
+  - "Permissions or RBAC workflows are implied"
+
+recovery_playbooks:
+  - recovery.admin-drift
+  - recovery.crud-sprawl

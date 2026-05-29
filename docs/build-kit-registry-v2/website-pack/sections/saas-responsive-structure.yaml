@@ -1,0 +1,26 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.saas-responsive-structure
+kind: section
+name: SaaS responsive structure section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Responsive and accessibility structure guidance for shell, cards, feeds, and list/table content.
+
+non_template_statement: Section playbook only — not a checked-in responsive CSS baseline.
+
+applies_to:
+  - app.saas-dashboard-core
+
+depends_on:
+  - section.saas-empty-loading-error-states
+
+binds_components:
+  - component.app-shell
+  - component.resource-list
+
+guidance:
+  - "Preserve semantic header/nav/main plus list/table landmarks and heading hierarchy"
+  - "Ensure layout stacks cleanly on mobile with no page-level horizontal scroll"
+  - "Maintain visible focus states and text-plus-style status communication"

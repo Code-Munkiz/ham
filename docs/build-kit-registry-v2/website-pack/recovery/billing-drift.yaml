@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.billing-drift
+kind: recovery_playbook
+name: Fix billing/payment drift
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs drift into checkout, invoices, subscriptions, or payment workflows.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - app.saas-dashboard-core
+
+repairs_validators:
+  - validator.no-billing-implementation
+
+steps:
+  - id: step.strip_payment_workflows
+    action: strip_payment_workflows
+    detail: "Remove card forms, checkout references, and invoice/subscription operations"
+  - id: step.keep_upgrade_informational
+    action: keep_upgrade_informational
+    detail: "Retain one informational upgrade CTA with non-transactional language"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.no-billing-implementation"
+
+user_facing_summary: >
+  I kept upgrade messaging informational and removed payment-processing behavior.

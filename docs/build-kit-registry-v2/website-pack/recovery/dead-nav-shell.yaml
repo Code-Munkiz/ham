@@ -1,0 +1,35 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.dead-nav-shell
+kind: recovery_playbook
+name: Fix dead nav shell
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs deceptive or dead shell navigation by aligning nav affordances with real static sections.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - app.saas-dashboard-core
+
+repairs_validators:
+  - validator.app-shell-bounds
+  - validator.no-dead-nav-deception
+  - validator.responsive-a11y-basics
+
+steps:
+  - id: step.audit_nav_targets
+    action: audit_nav_targets
+    detail: "List nav/shortcut affordances and remove links with no honest target"
+  - id: step.align_shell_to_sections
+    action: align_shell_to_sections
+    detail: "Map shell nav to existing static sections and mark placeholders clearly"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run shell/dead-nav/responsive validators"
+
+user_facing_summary: >
+  I removed deceptive dead links and aligned shell navigation to real static sections.

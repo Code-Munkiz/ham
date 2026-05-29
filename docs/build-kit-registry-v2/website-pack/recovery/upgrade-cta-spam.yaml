@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.upgrade-cta-spam
+kind: recovery_playbook
+name: Fix upgrade CTA spam
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs repeated or aggressive upgrade prompts by reducing to one calm, informative CTA area.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - app.saas-dashboard-core
+
+repairs_validators:
+  - validator.no-billing-implementation
+
+steps:
+  - id: step.reduce_to_single_cta
+    action: reduce_to_single_cta
+    detail: "Collapse multiple upgrade prompts into one section"
+  - id: step.tone_down_copy
+    action: tone_down_copy
+    detail: "Use neutral value-focused language without payment urgency"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.no-billing-implementation"
+
+user_facing_summary: >
+  I reduced upgrade messaging to one clear CTA and removed paywall-style spam.

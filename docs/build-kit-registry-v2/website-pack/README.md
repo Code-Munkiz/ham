@@ -1,6 +1,6 @@
 # Website Pack — Build Registry v2
 
-**Status:** Schema pilot · **Pack id:** `pack.site` · **Recipes:** `site.landing-page-core` (routed when flagged) · `site.dashboard-ui-core` (schema-only, **not routed**)
+**Status:** Schema pilot · **Pack id:** `pack.site` · **Recipes:** `site.landing-page-core` (routed when flagged) · `site.dashboard-ui-core` (routed when flagged) · `app.saas-dashboard-core` (schema-only, **not routed**)
 
 Generative playbooks for DOM-native marketing/landing pages and read-only dashboard/app-surface overviews. This pack is **separate from** [game-pack/](../game-pack/) — no game mechanics, no templates, no starter source trees.
 
@@ -31,7 +31,7 @@ One-page static marketing/landing playbook:
 
 ## Second recipe: `site.dashboard-ui-core`
 
-Read-only / mostly static dashboard overview playbook (**schema-only, not routed**):
+Read-only / mostly static dashboard overview playbook:
 
 | In scope | Out of scope |
 |----------|--------------|
@@ -40,7 +40,19 @@ Read-only / mostly static dashboard overview playbook (**schema-only, not routed
 | Responsive 12-col layout + accessibility semantics | Maps/geospatial, fintech/trading order books, game HUD |
 | Meaningful local sample data | Template cloning, marketing fake-dashboard screenshots |
 
-**Routing:** deferred — see [DASHBOARD_UI_CORE_READINESS_REVIEW.md](../DASHBOARD_UI_CORE_READINESS_REVIEW.md), [DASHBOARD_BUILD_KIT_DIRECTION.md](../DASHBOARD_BUILD_KIT_DIRECTION.md), and [DASHBOARD_KIT_RESEARCH.md](../DASHBOARD_KIT_RESEARCH.md). `site.dashboard-ui-core` is **not wired in `intent.py`**.
+**Routing:** narrowly routed behind `HAM_BUILD_REGISTRY_V2_ENABLED` for strict read-only dashboard intent.
+
+## Third recipe: `app.saas-dashboard-core`
+
+Static, app-shell-light SaaS product-home playbook (**schema-only, not routed**):
+
+| In scope | Out of scope |
+|----------|--------------|
+| Bounded app shell (sidebar/topbar), workspace selector placeholder, usage cards, plan/status card | Real auth/accounts/sessions, backend/API/database |
+| Recent activity feed, simple resource list/table, one upgrade CTA, settings/help shortcuts | Billing/payment processing, invoices/subscriptions implementation |
+| Empty/loading/error states, responsive and semantic structure, local sample data only | Admin user management, RBAC, CRUD-heavy workflows, analytics workbench, realtime, fintech/trading, ecommerce admin, maps |
+
+**Routing:** deferred by design. `app.saas-dashboard-core` is intentionally **not wired in `intent.py`** yet.
 
 ## Layout
 
@@ -49,8 +61,10 @@ website-pack/
 ├── registry-pack.yaml
 ├── app-types/site.landing-page-core.yaml
 ├── app-types/site.dashboard-ui-core.yaml
+├── app-types/app.saas-dashboard-core.yaml
 ├── stack-kits/dom-marketing-minimal.yaml
 ├── stack-kits/dom-dashboard-minimal.yaml
+├── stack-kits/dom-saas-dashboard-minimal.yaml
 ├── sections/          # indexed as mechanics for loader compatibility
 ├── components/
 ├── validators/
@@ -72,6 +86,10 @@ python3 scripts/validate_game_pack_registry.py \
 python3 scripts/validate_game_pack_registry.py \
   --pack-root docs/build-kit-registry-v2/website-pack \
   --app-type site.dashboard-ui-core \
+  --check
+python3 scripts/validate_game_pack_registry.py \
+  --pack-root docs/build-kit-registry-v2/website-pack \
+  --app-type app.saas-dashboard-core \
   --check
 python3 scripts/check_build_registry_references.py \
   --pack docs/build-kit-registry-v2/website-pack/registry-pack.yaml \

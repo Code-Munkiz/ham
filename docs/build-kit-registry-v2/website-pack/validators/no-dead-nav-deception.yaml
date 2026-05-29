@@ -1,0 +1,34 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.no-dead-nav-deception
+kind: validator
+name: No dead nav deception
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Prevents deceptive shell navigation and fake affordances that imply unavailable behavior.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - app.saas-dashboard-core
+
+validates_modules:
+  - section.saas-app-shell
+  - component.sidebar-nav
+  - component.settings-shortcut
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Nav and shortcut affordances are honest placeholders or clearly scoped actions"
+  - "No fake links suggesting hidden pages or backend settings exist"
+
+fail_conditions:
+  - "Dead links, fake tab bars, or deceptive controls imply missing app functionality"
+  - "Shell promises routes/workflows not represented by this static lane"
+
+recovery_playbooks:
+  - recovery.dead-nav-shell

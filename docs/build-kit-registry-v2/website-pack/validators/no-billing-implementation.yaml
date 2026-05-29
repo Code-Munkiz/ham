@@ -1,0 +1,35 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.no-billing-implementation
+kind: validator
+name: No billing implementation
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Allows plan and upgrade messaging but forbids payment processing and billing workflows.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - app.saas-dashboard-core
+
+validates_modules:
+  - section.saas-plan-status
+  - section.saas-upgrade-cta
+  - component.upgrade-card
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Plan status and upgrade CTA are informational only"
+  - "No checkout, invoice, card form, or payment processing behavior appears"
+
+fail_conditions:
+  - "Payment capture fields or checkout flow implied"
+  - "Invoice/subscription management implementation implied"
+
+recovery_playbooks:
+  - recovery.billing-drift
+  - recovery.upgrade-cta-spam

@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.usage-data-meaningful
+kind: validator
+name: Usage data meaningful
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Requires usage cards and status metrics to be coherent and domain-meaningful.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - app.saas-dashboard-core
+
+validates_modules:
+  - section.saas-usage-summary
+  - component.usage-card
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Usage cards have clear labels, values, and units tied to domain context"
+  - "Metric values are plausible and non-random"
+
+fail_conditions:
+  - "Arbitrary filler metrics with no semantic meaning"
+  - "Missing units or labels that make metrics unreadable"
+
+recovery_playbooks:
+  - recovery.meaningless-saas-metrics

@@ -1,0 +1,36 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: progress.app-saas-dashboard-core
+kind: progress_label
+name: SaaS dashboard core build progress
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Normie-friendly phase labels for static SaaS dashboard core builds.
+
+non_template_statement: Progress copy module only.
+
+source_phase_owner: app.saas-dashboard-core
+
+applies_to:
+  - app.saas-dashboard-core
+
+phase_message_map:
+  phase.understand:
+    title: "Reading your SaaS dashboard goal"
+    message: "I'm translating your request into a bounded app-home plan."
+  phase.compose:
+    title: "Planning the dashboard structure"
+    message: "I'm assembling shell, usage, plan, activity, and resource regions."
+  phase.generate:
+    title: "Building your dashboard UI"
+    message: "I'm generating the static SaaS home with local sample data."
+  phase.validate:
+    title: "Checking boundaries and clarity"
+    message: "I'm verifying layout quality and no auth/billing/admin/CRUD drift."
+  phase.preview:
+    title: "Preparing preview"
+    message: "Your SaaS dashboard preview is almost ready."
+  phase.recover:
+    title: "Polishing a drifted region"
+    message: "I'm correcting shell, data, or CTA issues."

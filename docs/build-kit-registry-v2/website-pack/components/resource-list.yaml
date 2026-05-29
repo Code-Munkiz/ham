@@ -1,0 +1,28 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.resource-list
+kind: component_contract
+name: Resource list contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Simple resource list/table contract for projects, teams, or assets in current context.
+
+non_template_statement: Layout contract only — not a copy-paste data grid component.
+
+applies_to:
+  - app.saas-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.saas-resource-list
+
+expected_props:
+  - columnsOrFields: "array of labels"
+  - items: "array of bounded sample rows"
+  - statusField: string | null
+
+accessibility_notes:
+  - "Prefer semantic list/table markup with readable labels"
+  - "Keep row density moderate for scanability"

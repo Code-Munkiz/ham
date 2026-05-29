@@ -15,9 +15,11 @@ max_attempts: 2
 
 applies_to:
   - site.dashboard-ui-core
+  - app.saas-dashboard-core
 
 repairs_validators:
   - validator.dashboard-anti-component-soup
+  - validator.no-admin-crud-drift
 
 steps:
   - id: step.strip_mutation
@@ -28,7 +30,7 @@ steps:
     detail: "If the prompt truly needs admin/backend/analytics, clarify or fall back rather than force this recipe"
   - id: step.re_validate
     action: re_validate
-    detail: "Re-run validator.dashboard-anti-component-soup"
+    detail: "Re-run admin-drift validators for the active dashboard lane"
 
 user_facing_summary: >
-  I kept the dashboard read-only and flagged that admin/backend features would need a different build path.
+  I kept the dashboard read-only and flagged that admin/backend features need a different build path.

@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.saas-resource-list
+kind: section
+name: SaaS resource list section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Simple project/team/resource list or table for current workspace inventory.
+
+non_template_statement: Section playbook only — not a checked-in data table component.
+
+applies_to:
+  - app.saas-dashboard-core
+
+depends_on:
+  - section.saas-activity-feed
+
+binds_components:
+  - component.resource-list
+
+guidance:
+  - "Provide one readable list/table with bounded columns or fields"
+  - "Use semantic list/table markup and clear row labels"
+  - "Avoid CRUD affordances that imply create/edit/delete workflows"

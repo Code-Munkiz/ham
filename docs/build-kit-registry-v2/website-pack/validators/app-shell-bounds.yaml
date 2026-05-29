@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.app-shell-bounds
+kind: validator
+name: App shell bounds
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Ensures SaaS shell exists but stays bounded to one overview page without deep app routing.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - app.saas-dashboard-core
+
+validates_modules:
+  - section.saas-app-shell
+  - component.app-shell
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Shell has sidebar/topbar/main with one overview surface"
+  - "Navigation remains shallow and honest"
+
+fail_conditions:
+  - "No shell structure or no main overview region"
+  - "Deep multi-route app behavior implied in this static lane"
+
+recovery_playbooks:
+  - recovery.dead-nav-shell

@@ -25,6 +25,7 @@ WEBSITE_PACK_ROOT = REPO_ROOT / "docs/build-kit-registry-v2/website-pack"
 WEBSITE_PACK_MANIFEST = WEBSITE_PACK_ROOT / "registry-pack.yaml"
 APP_TYPE_ID = "site.landing-page-core"
 APP_TYPE_ID_DASHBOARD = "site.dashboard-ui-core"
+APP_TYPE_ID_SAAS = "app.saas-dashboard-core"
 
 EXPECTED_SECTION_ORDER = (
     "section.landing-hero",
@@ -115,6 +116,62 @@ EXPECTED_DASHBOARD_RECOVERY_IDS = frozenset(
     }
 )
 
+# app.saas-dashboard-core expected module IDs
+EXPECTED_SAAS_SECTION_IDS = frozenset(
+    {
+        "section.saas-app-shell",
+        "section.saas-workspace-context",
+        "section.saas-usage-summary",
+        "section.saas-plan-status",
+        "section.saas-activity-feed",
+        "section.saas-resource-list",
+        "section.saas-upgrade-cta",
+        "section.saas-empty-loading-error-states",
+        "section.saas-responsive-structure",
+    }
+)
+
+EXPECTED_SAAS_COMPONENT_IDS = frozenset(
+    {
+        "component.app-shell",
+        "component.sidebar-nav",
+        "component.topbar",
+        "component.workspace-switcher",
+        "component.usage-card",
+        "component.plan-status-card",
+        "component.activity-item",
+        "component.resource-list",
+        "component.upgrade-card",
+        "component.settings-shortcut",
+    }
+)
+
+EXPECTED_SAAS_VALIDATOR_IDS = frozenset(
+    {
+        "validator.app-shell-bounds",
+        "validator.no-auth-backend-claims",
+        "validator.no-billing-implementation",
+        "validator.usage-data-meaningful",
+        "validator.activity-feed-bounded",
+        "validator.resource-list-readable",
+        "validator.no-admin-crud-drift",
+        "validator.responsive-a11y-basics",
+        "validator.no-dead-nav-deception",
+    }
+)
+
+EXPECTED_SAAS_RECOVERY_IDS = frozenset(
+    {
+        "recovery.auth-drift",
+        "recovery.billing-drift",
+        "recovery.admin-drift",
+        "recovery.crud-sprawl",
+        "recovery.dead-nav-shell",
+        "recovery.meaningless-saas-metrics",
+        "recovery.upgrade-cta-spam",
+    }
+)
+
 # Representative strong dashboard prompts that should route to site.dashboard-ui-core.
 DASHBOARD_PROMPTS = (
     "Build a read-only dashboard overview for a developer tool team. Include 4 KPI cards, a line chart for build quality over time, a bar chart for issue categories, a simple recent builds table, a local filter bar, empty/loading/error state examples, meaningful sample data, responsive layout, and accessible headings/table structure. No backend, no auth, no CRUD, no live data.",
@@ -165,6 +222,11 @@ def landing_recipe(website_pack):
 @pytest.fixture(scope="module")
 def dashboard_recipe(website_pack):
     return compose_build_recipe(website_pack, APP_TYPE_ID_DASHBOARD)
+
+
+@pytest.fixture(scope="module")
+def saas_recipe(website_pack):
+    return compose_build_recipe(website_pack, APP_TYPE_ID_SAAS)
 
 
 def test_registry_yaml_parses():
@@ -293,6 +355,23 @@ def test_module_index_covers_dashboard_ids(website_pack):
     assert "learning.dashboard-ui-core" in index["learning_hooks"]
 
 
+def test_saas_dashboard_core_loads(website_pack):
+    assert APP_TYPE_ID_SAAS in website_pack.modules
+    assert website_pack.modules[APP_TYPE_ID_SAAS].kind == "app_type"
+
+
+def test_module_index_covers_saas_ids(website_pack):
+    index = dict(website_pack.manifest)["module_index"]
+    assert APP_TYPE_ID_SAAS in index["app_types"]
+    assert "stack.dom-saas-dashboard-minimal" in index["stack_kits"]
+    assert EXPECTED_SAAS_SECTION_IDS <= set(index["mechanics"])
+    assert EXPECTED_SAAS_COMPONENT_IDS <= set(index["component_contracts"])
+    assert EXPECTED_SAAS_VALIDATOR_IDS <= set(index["validators"])
+    assert EXPECTED_SAAS_RECOVERY_IDS <= set(index["recovery_playbooks"])
+    assert "progress.app-saas-dashboard-core" in index["progress_labels"]
+    assert "learning.app-saas-dashboard-core" in index["learning_hooks"]
+
+
 def test_dashboard_ui_core_composes(dashboard_recipe):
     assert dashboard_recipe.app_type_id == APP_TYPE_ID_DASHBOARD
     assert dashboard_recipe.stack_kit_id == "stack.dom-dashboard-minimal"
@@ -302,6 +381,17 @@ def test_dashboard_ui_core_composes(dashboard_recipe):
     assert set(dashboard_recipe.recovery_ids) == EXPECTED_DASHBOARD_RECOVERY_IDS
     assert dashboard_recipe.progress_label_id == "progress.dashboard-ui-core"
     assert dashboard_recipe.learning_hook_id == "learning.dashboard-ui-core"
+
+
+def test_saas_dashboard_core_composes(saas_recipe):
+    assert saas_recipe.app_type_id == APP_TYPE_ID_SAAS
+    assert saas_recipe.stack_kit_id == "stack.dom-saas-dashboard-minimal"
+    assert set(saas_recipe.mechanic_ids) == EXPECTED_SAAS_SECTION_IDS
+    assert set(saas_recipe.component_ids) == EXPECTED_SAAS_COMPONENT_IDS
+    assert set(saas_recipe.validator_ids) == EXPECTED_SAAS_VALIDATOR_IDS
+    assert set(saas_recipe.recovery_ids) == EXPECTED_SAAS_RECOVERY_IDS
+    assert saas_recipe.progress_label_id == "progress.app-saas-dashboard-core"
+    assert saas_recipe.learning_hook_id == "learning.app-saas-dashboard-core"
 
 
 def test_dashboard_render_under_budget(dashboard_recipe):
@@ -369,8 +459,58 @@ def test_dashboard_render_stays_under_near_budget(dashboard_recipe):
     assert len(rendered) < NEAR_BUDGET_THRESHOLD
 
 
+def test_saas_render_under_budget(saas_recipe):
+    rendered = render_playbook_context(saas_recipe)
+    assert len(rendered) <= DEFAULT_RENDER_CHAR_BUDGET
+    assert len(rendered) < NEAR_BUDGET_THRESHOLD
+
+
+def test_saas_render_contains_key_sections_and_components(saas_recipe):
+    rendered = render_playbook_context(saas_recipe)
+    lowered = rendered.lower()
+    assert APP_TYPE_ID_SAAS in rendered
+    assert "section.saas-app-shell" in rendered
+    assert "section.saas-workspace-context" in rendered
+    assert "section.saas-usage-summary" in rendered
+    assert "section.saas-plan-status" in rendered
+    assert "section.saas-activity-feed" in rendered
+    assert "section.saas-resource-list" in rendered
+    assert "section.saas-upgrade-cta" in rendered
+    assert "section.saas-empty-loading-error-states" in rendered
+    assert "section.saas-responsive-structure" in rendered
+    assert "component.workspace-switcher" in rendered
+    assert "component.settings-shortcut" in rendered
+    assert "semantic header/nav/main" in lowered or (
+        "header" in lowered and "nav" in lowered and "main" in lowered
+    )
+    assert "local/static" in lowered or "static local sample data" in lowered
+
+
+def test_saas_render_contains_hard_exclusions(saas_recipe):
+    rendered = render_playbook_context(saas_recipe).lower()
+    assert "never imply real auth" in rendered
+    assert "no backend/api/database" in rendered
+    assert "no billing/auth/admin/crud behavior" in rendered
+    assert "no login/signup/session/backend/api/database implementation claims" in rendered
+    assert "no checkout, invoice, card form, or payment processing behavior appears" in rendered
+    assert "avoid fake realtime claims" in rendered
+    assert "avoid crud affordances that imply create/edit/delete workflows" in rendered
+    assert "no fake links suggesting hidden pages or backend settings exist" in rendered
+    assert "no checked-in saas template, clone baseline, or starter tree" in rendered
+
+
 def test_dashboard_adaptive_policy_prompt_examples_exist():
     app_path = WEBSITE_PACK_ROOT / "app-types/site.dashboard-ui-core.yaml"
+    app = yaml.safe_load(app_path.read_text(encoding="utf-8"))
+    examples = app["user_prompt_examples"]
+    assert len(examples["positive"]) >= 4
+    assert len(examples["negative"]) >= 8
+    assert app["conflict_policy"]["user_explicit_overrides_soft_defaults"] is True
+    assert app["hard_constraints"]
+
+
+def test_saas_adaptive_policy_prompt_examples_exist():
+    app_path = WEBSITE_PACK_ROOT / "app-types/app.saas-dashboard-core.yaml"
     app = yaml.safe_load(app_path.read_text(encoding="utf-8"))
     examples = app["user_prompt_examples"]
     assert len(examples["positive"]) >= 4
@@ -398,13 +538,32 @@ def test_landing_page_dashboard_screenshot_prompt_does_not_route_to_dashboard():
     assert routed in {None, LANDING_PAGE_CORE_APP_TYPE}
 
 
+def test_saas_dashboard_core_not_routed_yet():
+    prompt = (
+        "Build a static SaaS app home with sidebar, topbar, workspace context, usage cards, "
+        "plan status, activity list, resource list, and one upgrade CTA."
+    )
+    routed = select_registry_v2_app_type_for_prompt(prompt)
+    assert routed != APP_TYPE_ID_SAAS
+    assert routed in {None, DASHBOARD_UI_CORE_APP_TYPE, LANDING_PAGE_CORE_APP_TYPE}
+
+
+def test_no_saas_dashboard_intent_constants_or_matchers_exist_yet():
+    intent_path = REPO_ROOT / "src/ham/build_registry/intent.py"
+    text = intent_path.read_text(encoding="utf-8")
+    assert "SAAS_DASHBOARD_CORE_APP_TYPE" not in text
+    assert "app.saas-dashboard-core" not in text
+
+
 def test_module_count(website_pack):
     # Landing: 1 app + 1 stack + 7 sections + 5 components + 7 validators
     #   + 6 recovery + 1 progress + 1 learning = 29
     # Dashboard: 1 app + 1 stack + 7 sections + 5 components + 8 validators
     #   + 6 recovery + 1 progress + 1 learning = 30
-    # Total = 59
-    assert len(website_pack.modules) == 59
+    # SaaS: 1 app + 1 stack + 9 sections + 10 components + 9 validators
+    #   + 6 new recovery (+ shared recovery.admin-drift) + 1 progress + 1 learning = 38 new
+    # Total = 97
+    assert len(website_pack.modules) == 97
 
 
 def test_validate_registry_pack_passes(website_pack):
@@ -428,6 +587,30 @@ def test_reference_checker_passes():
     result = module.run_reference_checks(
         WEBSITE_PACK_MANIFEST,
         app_type=APP_TYPE_ID,
+        check_orphans=True,
+        check_render_budget=True,
+    )
+    assert result.errors == []
+    assert result.summary_counts["error"] == 0
+
+
+def test_reference_checker_passes_for_saas_app_type():
+    import importlib.util
+    import sys
+
+    script_path = REPO_ROOT / "scripts/check_build_registry_references.py"
+    spec = importlib.util.spec_from_file_location(
+        "check_build_registry_references_website_saas",
+        script_path,
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    result = module.run_reference_checks(
+        WEBSITE_PACK_MANIFEST,
+        app_type=APP_TYPE_ID_SAAS,
         check_orphans=True,
         check_render_budget=True,
     )

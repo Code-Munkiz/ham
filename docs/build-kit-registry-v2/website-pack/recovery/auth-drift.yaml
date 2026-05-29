@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.auth-drift
+kind: recovery_playbook
+name: Fix auth/backend drift
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs drift into auth, sessions, backend, or database claims by returning to static placeholder context.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - app.saas-dashboard-core
+
+repairs_validators:
+  - validator.no-auth-backend-claims
+
+steps:
+  - id: step.remove_auth_claims
+    action: remove_auth_claims
+    detail: "Strip login/signup/session/backend/API/database implementation language"
+  - id: step.restate_placeholder_context
+    action: restate_placeholder_context
+    detail: "Label workspace/account/project switcher as local/static placeholder context"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run validator.no-auth-backend-claims"
+
+user_facing_summary: >
+  I kept the workspace context as static placeholders and removed auth/backend implications.

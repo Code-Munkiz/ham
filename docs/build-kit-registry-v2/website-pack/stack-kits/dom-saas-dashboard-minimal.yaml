@@ -1,0 +1,41 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: stack.dom-saas-dashboard-minimal
+kind: stack_kit
+name: DOM-native minimal SaaS dashboard stack
+status: proposed
+schema_version: "0.1"
+
+description: >
+  App-shell-light static SaaS dashboard stack: semantic DOM layout, responsive grid,
+  local sample data, and accessibility-first patterns.
+
+non_template_statement: >
+  Stack playbook only. No checked-in starter app or framework template.
+
+applies_to:
+  - app.saas-dashboard-core
+  - tag:dom-saas-dashboard
+
+capabilities:
+  - local-state
+  - dom-rendering
+  - semantic-landmarks
+  - responsive-grid
+  - static-sample-data
+  - no-network
+
+guidance:
+  - "Use one app-shell layout with sidebar/topbar and a single main overview area"
+  - "Prefer semantic header/nav/main/section/list/table markup"
+  - "Use local/static data fixtures only; avoid data fetching clients"
+  - "Do not include auth, billing, admin, or CRUD libraries"
+  - "Keep sections scan-friendly and bounded for laptop + mobile"
+
+accessibility_baseline:
+  - "One h1 for page title and descriptive h2/h3 region headings"
+  - "Nav, lists, cards, and tables have readable labels and focus states"
+  - "Status and usage changes are communicated by text plus visual styling"
+
+mobile_baseline:
+  - "Usable at 360px without horizontal scrolling"
+  - "Sidebar can collapse; cards and lists stack cleanly"

@@ -7,9 +7,9 @@ schema_version: "0.1"
 
 description: >
   Root manifest for Build Registry v2 Website Pack. Indexes marketing/landing-page and
-  read-only dashboard/app-surface playbooks: site.landing-page-core (routed when flagged)
-  and schema-only site.dashboard-ui-core (not routed). Separate from game-pack; generative
-  guidance only — no templates, starter source, or routing added in this pack land.
+  dashboard/app-surface playbooks: site.landing-page-core and site.dashboard-ui-core
+  (routed when flagged), plus schema-only app.saas-dashboard-core (not routed). Separate
+  from game-pack; generative guidance only — no templates or starter source.
 
 non_template_statement: >
   Registry index and compose defaults only. Does not ship landing page or dashboard
@@ -20,9 +20,11 @@ module_index:
   app_types:
     - site.landing-page-core
     - site.dashboard-ui-core
+    - app.saas-dashboard-core
   stack_kits:
     - stack.dom-marketing-minimal
     - stack.dom-dashboard-minimal
+    - stack.dom-saas-dashboard-minimal
   mechanics:
     - section.landing-hero
     - section.value-proposition
@@ -38,6 +40,15 @@ module_index:
     - section.dashboard-filter-bar
     - section.dashboard-empty-loading-error-states
     - section.dashboard-responsive-structure
+    - section.saas-app-shell
+    - section.saas-workspace-context
+    - section.saas-usage-summary
+    - section.saas-plan-status
+    - section.saas-activity-feed
+    - section.saas-resource-list
+    - section.saas-upgrade-cta
+    - section.saas-empty-loading-error-states
+    - section.saas-responsive-structure
   component_contracts:
     - component.hero-block
     - component.feature-card-grid
@@ -49,6 +60,16 @@ module_index:
     - component.simple-data-table
     - component.filter-bar
     - component.status-badge
+    - component.app-shell
+    - component.sidebar-nav
+    - component.topbar
+    - component.workspace-switcher
+    - component.usage-card
+    - component.plan-status-card
+    - component.activity-item
+    - component.resource-list
+    - component.upgrade-card
+    - component.settings-shortcut
   validators:
     - validator.landing-section-presence
     - validator.cta-clarity
@@ -65,6 +86,15 @@ module_index:
     - validator.sample-data-relevance
     - validator.dashboard-responsive-a11y
     - validator.dashboard-anti-component-soup
+    - validator.app-shell-bounds
+    - validator.no-auth-backend-claims
+    - validator.no-billing-implementation
+    - validator.usage-data-meaningful
+    - validator.activity-feed-bounded
+    - validator.resource-list-readable
+    - validator.no-admin-crud-drift
+    - validator.responsive-a11y-basics
+    - validator.no-dead-nav-deception
   recovery_playbooks:
     - recovery.generic-hero
     - recovery.weak-cta
@@ -78,12 +108,20 @@ module_index:
     - recovery.dense-table
     - recovery.component-soup
     - recovery.admin-drift
+    - recovery.auth-drift
+    - recovery.billing-drift
+    - recovery.crud-sprawl
+    - recovery.dead-nav-shell
+    - recovery.meaningless-saas-metrics
+    - recovery.upgrade-cta-spam
   progress_labels:
     - progress.landing-page-core
     - progress.dashboard-ui-core
+    - progress.app-saas-dashboard-core
   learning_hooks:
     - learning.landing-page-core
     - learning.dashboard-ui-core
+    - learning.app-saas-dashboard-core
 
 compose_defaults:
   compose_order:
@@ -96,7 +134,7 @@ compose_defaults:
     - validators
     - recovery
     - progress
-  max_modules: 30
+  max_modules: 45
   default_stack_kit_id: stack.dom-marketing-minimal
   validator_policy:
     run_after: [scaffold, section_edit]

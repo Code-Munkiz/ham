@@ -1,0 +1,26 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.saas-app-shell
+kind: section
+name: SaaS app shell section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Bounded SaaS shell with sidebar/topbar and one main overview area.
+
+non_template_statement: Section playbook only — not a checked-in shell template.
+
+applies_to:
+  - app.saas-dashboard-core
+
+depends_on: []
+
+binds_components:
+  - component.app-shell
+  - component.sidebar-nav
+  - component.topbar
+
+guidance:
+  - "Use one clear shell frame; avoid deep nested app routing"
+  - "Sidebar and topbar are illustrative and honest, not deceptive fake app chrome"
+  - "Main region anchors overview sections in scan order"

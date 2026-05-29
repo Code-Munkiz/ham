@@ -1,0 +1,27 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.settings-shortcut
+kind: component_contract
+name: Settings shortcut contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Lightweight settings/help shortcut contract for secondary navigation affordances.
+
+non_template_statement: Layout contract only — not a copy-paste settings panel.
+
+applies_to:
+  - app.saas-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.saas-workspace-context
+  - section.saas-upgrade-cta
+
+expected_props:
+  - shortcuts: "array of settings/help labels"
+  - placement: "topbar | sidebar | footer"
+
+content_notes:
+  - "Shortcuts are illustrative and should not fake full settings workflows"

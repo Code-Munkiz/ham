@@ -1,0 +1,28 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.upgrade-card
+kind: component_contract
+name: Upgrade card contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Restrained upgrade CTA card with plan value messaging and single action.
+
+non_template_statement: Layout contract only — not a copy-paste checkout card.
+
+applies_to:
+  - app.saas-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.saas-upgrade-cta
+
+expected_props:
+  - title: string
+  - valueMessage: string
+  - ctaLabel: string
+  - ctaHrefOrAction: string
+
+content_notes:
+  - "No payment fields, card forms, invoice references, or checkout implementation"

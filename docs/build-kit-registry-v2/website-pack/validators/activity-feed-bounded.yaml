@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.activity-feed-bounded
+kind: validator
+name: Activity feed bounded
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Ensures recent activity feed is present, readable, and bounded without realtime claims.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - app.saas-dashboard-core
+
+validates_modules:
+  - section.saas-activity-feed
+  - component.activity-item
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Activity feed has bounded recent events with readable labels/timestamps"
+  - "Events are represented as local/static sample activity"
+
+fail_conditions:
+  - "Feed missing or overloaded with noisy/unbounded entries"
+  - "Copy implies live stream, websocket, or realtime monitoring"
+
+recovery_playbooks:
+  - recovery.meaningless-saas-metrics

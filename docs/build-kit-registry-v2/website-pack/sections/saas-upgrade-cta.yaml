@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.saas-upgrade-cta
+kind: section
+name: SaaS upgrade CTA section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Single upgrade/plan CTA area with restrained copy and non-transactional behavior.
+
+non_template_statement: Section playbook only — not a checked-in checkout component.
+
+applies_to:
+  - app.saas-dashboard-core
+
+depends_on:
+  - section.saas-resource-list
+
+binds_components:
+  - component.upgrade-card
+
+guidance:
+  - "Render one clear upgrade CTA area only"
+  - "Do not include payment forms, card capture, invoices, or checkout flows"
+  - "Keep CTA informative and avoid repeated pressure messaging"

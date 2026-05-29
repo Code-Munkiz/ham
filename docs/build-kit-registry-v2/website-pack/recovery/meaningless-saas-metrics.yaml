@@ -1,0 +1,34 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.meaningless-saas-metrics
+kind: recovery_playbook
+name: Fix meaningless SaaS metrics
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs generic/filler metric and feed content by restoring domain-coherent local sample data.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - app.saas-dashboard-core
+
+repairs_validators:
+  - validator.usage-data-meaningful
+  - validator.activity-feed-bounded
+
+steps:
+  - id: step.rewrite_metric_labels
+    action: rewrite_metric_labels
+    detail: "Replace vague KPI labels/values with coherent domain metrics and units"
+  - id: step.bound_activity_examples
+    action: bound_activity_examples
+    detail: "Trim activity to meaningful recent events with readable timestamps"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run usage-data and activity-feed validators"
+
+user_facing_summary: >
+  I replaced filler metrics/events with clearer, domain-meaningful local sample data.

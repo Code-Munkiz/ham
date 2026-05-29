@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.saas-usage-summary
+kind: section
+name: SaaS usage summary section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Usage/KPI card band with bounded, meaningful account or project usage metrics.
+
+non_template_statement: Section playbook only — not a checked-in KPI card grid.
+
+applies_to:
+  - app.saas-dashboard-core
+
+depends_on:
+  - section.saas-workspace-context
+
+binds_components:
+  - component.usage-card
+
+guidance:
+  - "Keep KPI count bounded (3-4 cards) with label, value, and unit"
+  - "Use coherent SaaS metrics (quota, seats, usage, activity), not arbitrary filler"
+  - "Support quick scan and responsive wrapping"

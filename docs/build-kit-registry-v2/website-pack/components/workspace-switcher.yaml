@@ -1,0 +1,28 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.workspace-switcher
+kind: component_contract
+name: Workspace switcher contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Placeholder switcher contract for workspace/account/project context.
+
+non_template_statement: Layout contract only — not a copy-paste account selector.
+
+applies_to:
+  - app.saas-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.saas-workspace-context
+
+expected_props:
+  - workspaceName: string
+  - accountLabel: string
+  - projectLabel: string
+  - isPlaceholder: boolean
+
+content_notes:
+  - "Must be clearly placeholder/local context and not real auth identity"

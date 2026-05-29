@@ -1,0 +1,28 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.activity-item
+kind: component_contract
+name: Activity item contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Activity feed item contract for event label, actor/source, and relative timestamp.
+
+non_template_statement: Layout contract only — not a copy-paste activity timeline component.
+
+applies_to:
+  - app.saas-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.saas-activity-feed
+
+expected_props:
+  - eventLabel: string
+  - sourceLabel: string
+  - occurredAt: string
+  - status: "info | success | warning | neutral"
+
+content_notes:
+  - "Activity is local/static and must not claim realtime streaming"

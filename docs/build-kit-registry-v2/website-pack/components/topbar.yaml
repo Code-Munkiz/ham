@@ -1,0 +1,28 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.topbar
+kind: component_contract
+name: Topbar contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Topbar contract for page title, context chip, and lightweight utility actions.
+
+non_template_statement: Layout contract only — not a copy-paste topbar component.
+
+applies_to:
+  - app.saas-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.saas-app-shell
+
+expected_props:
+  - title: string
+  - contextLabel: string
+  - utilityActions: "array of shortcuts"
+
+accessibility_notes:
+  - "Topbar controls have accessible labels and visible focus states"
+  - "Context label is text-readable and not icon-only"
