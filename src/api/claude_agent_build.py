@@ -38,6 +38,7 @@ from src.api.dependencies.workspace import get_workspace_store
 from src.api.droid_build import _require_build_approver, _require_build_lane_project
 from src.ham.build_registry.intent import enrich_plan_metadata_with_registry_v2
 from src.ham.build_registry.scaffold_context import resolve_scaffold_context
+from src.ham.build_registry.user_copy_sanitize import sanitize_normal_user_copy
 from src.ham.builder_kit_router import select_kit_for_prompt
 from src.ham.claude_agent_runner import (
     ClaudeAgentPermissionPolicy,
@@ -77,35 +78,6 @@ _CLAUDE_AGENT_EXEC_TOKEN_ENV = "HAM_CLAUDE_AGENT_EXEC_TOKEN"  # noqa: S105
 _SUMMARY_FALLBACK = "Claude Agent mission finished."
 _ERROR_SUMMARY_FALLBACK = "Claude Agent mission failed."
 
-# Keep Build Registry v2 routing internals out of normal launch payload copy.
-_BUILD_REGISTRY_V2_FORBIDDEN_TOKENS = (
-    "registry_v2_app_type",
-    "pack.site",
-    "pack.game",
-    "site.landing-page-core",
-    "site.dashboard-ui-core",
-    "game.",
-    "build registry v2",
-    "registry route",
-    "route matched",
-    "fallback_reason",
-    "gate report",
-    "gate review",
-    "scaffold_quality",
-    "dashboard_",
-    "city_",
-    "tactics_",
-    "landing_",
-    "recipe id",
-    "pack id",
-    "yaml",
-    "render length",
-    "render budget",
-    "playbook context",
-    "build registry v2 playbook context:",
-)
-
-
 router = APIRouter(
     prefix="/api/claude-agent/build",
     tags=["control-plane"],
@@ -125,19 +97,6 @@ def _truthy_env(name: str) -> bool:
         "yes",
         "on",
     )
-
-
-def _contains_build_registry_v2_forbidden_token(text: str) -> bool:
-    lower = text.lower()
-    return any(token in lower for token in _BUILD_REGISTRY_V2_FORBIDDEN_TOKENS)
-
-
-def _sanitize_normal_user_copy(text: str | None, *, fallback: str | None) -> str | None:
-    if not text:
-        return text
-    if _contains_build_registry_v2_forbidden_token(text):
-        return fallback
-    return text
 
 
 def _enrich_internal_launch_prompt(user_prompt: str) -> str:
@@ -632,7 +591,7 @@ async def launch_claude_agent_build(
         policy=policy,
         actor=ham_actor,
     )
-    safe_assistant_summary = _sanitize_normal_user_copy(
+    safe_assistant_summary = sanitize_normal_user_copy(
         run_result.assistant_summary,
         fallback=_SUMMARY_FALLBACK,
     )
@@ -698,7 +657,7 @@ async def launch_claude_agent_build(
                 f"claude_agent run finished with status={run_result.status}",
                 cap=2000,
             )
-        error_summary = _sanitize_normal_user_copy(
+        error_summary = sanitize_normal_user_copy(
             error_summary,
             fallback=_ERROR_SUMMARY_FALLBACK,
         )
