@@ -102,6 +102,7 @@ def isolated_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         "HAM_OPENCODE_EXECUTION_ENABLED",
         "HAM_OPENCODE_EXEC_TOKEN",
         "HAM_OPENCODE_ALLOW_DELETIONS",
+        "HAM_BUILD_REGISTRY_V2_ENABLED",
         "OPENROUTER_API_KEY",
         "ANTHROPIC_API_KEY",
         "OPENAI_API_KEY",
@@ -192,6 +193,44 @@ def _preview_digest(project_id: str, user_prompt: str, model: str | None = None)
 
 def _bearer() -> dict[str, str]:
     return {"Authorization": f"Bearer {_EXEC_TOKEN_CANARY}"}
+
+
+# ---------------------------------------------------------------------------
+# Internal prompt enrichment seam
+# ---------------------------------------------------------------------------
+
+
+def test_internal_launch_prompt_enrichment_flag_off_no_v2_context(
+    isolated_env: None,
+) -> None:
+    prompt = "Build a landing page for a small SaaS with hero and CTA."
+    runner_prompt, app_type = build_api._enrich_internal_launch_prompt(prompt)
+    assert runner_prompt == prompt
+    assert app_type is None
+
+
+def test_internal_launch_prompt_enrichment_flag_on_landing_selects_site_landing_page_core(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+) -> None:
+    monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "1")
+    prompt = "Build a landing page for a small SaaS with hero and CTA."
+    runner_prompt, app_type = build_api._enrich_internal_launch_prompt(prompt)
+    assert app_type == "site.landing-page-core"
+    assert "Build Registry v2 playbook context:" in runner_prompt
+    assert "site.landing-page-core" in runner_prompt
+
+
+def test_internal_launch_prompt_enrichment_flag_on_dashboard_selects_site_dashboard_ui_core(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+) -> None:
+    monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "1")
+    prompt = "Build a read-only dashboard with KPI cards, chart, and data table."
+    runner_prompt, app_type = build_api._enrich_internal_launch_prompt(prompt)
+    assert app_type == "site.dashboard-ui-core"
+    assert "Build Registry v2 playbook context:" in runner_prompt
+    assert "site.dashboard-ui-core" in runner_prompt
 
 
 # ---------------------------------------------------------------------------
@@ -628,6 +667,64 @@ def test_launch_emits_snapshot_on_non_delete_change(
     assert saved[0].status_reason == "opencode:snapshot_emitted"
 
 
+def test_launch_ignores_client_supplied_registry_v2_app_type_override(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+    actor: HamActor,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXEC_TOKEN", _EXEC_TOKEN_CANARY)
+    rec = _project_rec()
+    user_prompt = "Build a landing page for a SaaS with hero and FAQ."
+    digest = _preview_digest(rec.id, user_prompt)
+    patches = _patch_gates(rec=rec)
+
+    seen_runner_prompt: dict[str, str] = {}
+    fake_app_type = "site.dashboard-ui-core"
+
+    def fake_runner(**kwargs: Any) -> OpenCodeRunResult:
+        seen_runner_prompt["value"] = str(kwargs.get("user_prompt") or "")
+        return OpenCodeRunResult(status="success", assistant_summary="ok.")
+
+    fake_snap = SimpleNamespace(
+        build_outcome="succeeded",
+        target_ref={"snapshot_id": "snap_override"},
+        error_summary=None,
+    )
+    fake_store = SimpleNamespace(save=lambda *a, **k: None)
+
+    try:
+        with (
+            patch.object(build_api, "run_opencode_mission", fake_runner),
+            patch.object(build_api, "compute_deleted_paths_against_parent", lambda common: ()),
+            patch.object(build_api, "emit_managed_workspace_snapshot", lambda c: fake_snap),
+            patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
+        ):
+            res = _client(actor).post(
+                "/api/opencode/build/launch",
+                json={
+                    "project_id": rec.id,
+                    "user_prompt": user_prompt,
+                    "proposal_digest": digest,
+                    "base_revision": build_api.OPENCODE_REGISTRY_REVISION,
+                    "confirmed": True,
+                    "registry_v2_app_type": fake_app_type,
+                },
+                headers=_bearer(),
+            )
+    finally:
+        _stop(patches)
+
+    assert res.status_code == 200, res.text
+    runner_prompt = seen_runner_prompt["value"]
+    assert "site.landing-page-core" in runner_prompt
+    assert fake_app_type not in runner_prompt
+    _assert_no_build_registry_v2_leakage(res.text)
+
+
 def test_launch_persists_output_requires_review_on_deletion(
     monkeypatch: pytest.MonkeyPatch,
     isolated_env: None,
@@ -927,6 +1024,61 @@ def test_no_secret_in_control_plane_error_summary(
         persisted = f"{saved[0].summary or ''} {saved[0].error_summary or ''}"
         assert _AUTH_CANARY not in persisted
         assert _EXEC_TOKEN_CANARY not in persisted
+
+
+def test_launch_sanitizes_forbidden_build_registry_tokens_in_user_visible_summary(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+    actor: HamActor,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXECUTION_ENABLED", "1")
+    monkeypatch.setenv("HAM_OPENCODE_EXEC_TOKEN", _EXEC_TOKEN_CANARY)
+    rec = _project_rec()
+    patches = _patch_gates(rec=rec)
+    user_prompt = "Build a read-only dashboard with KPI cards and charts."
+    digest = _preview_digest(rec.id, user_prompt)
+    leaky_summary = (
+        "Build Registry v2 playbook context: site.dashboard-ui-core "
+        "render budget 8000"
+    )
+
+    def fake_runner(**kwargs: Any) -> OpenCodeRunResult:
+        return OpenCodeRunResult(status="success", assistant_summary=leaky_summary)
+
+    fake_snap = SimpleNamespace(
+        build_outcome="succeeded",
+        target_ref={"snapshot_id": "snap_clean"},
+        error_summary=None,
+    )
+    fake_store = SimpleNamespace(save=lambda *a, **k: None)
+
+    try:
+        with (
+            patch.object(build_api, "run_opencode_mission", fake_runner),
+            patch.object(build_api, "compute_deleted_paths_against_parent", lambda common: ()),
+            patch.object(build_api, "emit_managed_workspace_snapshot", lambda c: fake_snap),
+            patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
+        ):
+            res = _client(actor).post(
+                "/api/opencode/build/launch",
+                json={
+                    "project_id": rec.id,
+                    "user_prompt": user_prompt,
+                    "proposal_digest": digest,
+                    "base_revision": build_api.OPENCODE_REGISTRY_REVISION,
+                    "confirmed": True,
+                },
+                headers=_bearer(),
+            )
+    finally:
+        _stop(patches)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["summary"] == "OpenCode mission finished."
+    _assert_no_build_registry_v2_leakage(res.text)
 
 
 def test_launch_does_not_open_pr_or_set_pr_fields(
