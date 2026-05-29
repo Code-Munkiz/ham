@@ -2290,6 +2290,215 @@ class TestDashboardScaffoldQuality:
         assert "valid JSON" in body
 
 
+_SAAS_GATE_PROMPT = (
+    "Build a static SaaS product dashboard for an AI developer platform. Include an app shell with "
+    "sidebar and topbar, a workspace/project selector placeholder, usage cards, a plan/status card, "
+    "recent activity, a simple project/resource list, one upgrade CTA, settings/help shortcuts, "
+    "empty/loading/error state examples, responsive layout, and accessible header/nav/main/list/table "
+    "structure. Use meaningful local sample data only. No backend, no auth, no billing or payments, "
+    "no CRUD, no admin user management, no permissions, and no live data."
+)
+
+_SAAS_MISSING_STATES_AND_TABLE_APP = """
+const App = () => (
+  <div>
+    <header><h1>Workspace dashboard</h1></header>
+    <nav aria-label="Primary nav"><a href="#">Overview</a></nav>
+    <main>
+      <section><h2>Usage</h2><p>42% quota used</p></section>
+      <section><h2>Plan status</h2><p>Starter</p></section>
+      <section><h2>Recent activity</h2><ul><li>Project created</li></ul></section>
+      <section><h2>Resources</h2><ul><li>Project Alpha</li></ul></section>
+      <section role="status">Empty: no projects yet</section>
+      <section><button>Upgrade</button><a href="#">Settings</a><a href="#">Help</a></section>
+    </main>
+  </div>
+);
+"""
+
+_SAAS_GOOD_STATES_AND_TABLE_APP = """
+const App = () => (
+  <div>
+    <header><h1>Workspace dashboard</h1></header>
+    <nav aria-label="Primary nav"><a href="#">Overview</a></nav>
+    <main>
+      <section><h2>Usage</h2><p>42% quota used</p></section>
+      <section><h2>Plan status</h2><p>Starter</p></section>
+      <section><h2>Recent activity</h2><ul><li>Project created</li></ul></section>
+      <section role="status">Empty: no resources in this workspace</section>
+      <section role="status">Loading: sample static dashboard state</section>
+      <section role="alert">Error: sample local error state only</section>
+      <section>
+        <h2>Project/resource table</h2>
+        <table>
+          <thead><tr><th>Project</th><th>Status</th></tr></thead>
+          <tbody><tr><td>Alpha</td><td>Active</td></tr></tbody>
+        </table>
+      </section>
+      <section><button>Upgrade</button><a href="#">Settings</a><a href="#">Help</a></section>
+    </main>
+  </div>
+);
+"""
+
+_SAAS_ASYNC_FETCH_APP = """
+const Dashboard = () => {
+  const [loading, setLoading] = useState(true);
+  const [rows, setRows] = useState([]);
+  useEffect(() => {
+    const fetchData = async () => {
+      // Simulate API call
+      setTimeout(() => {
+        setRows([{ name: 'Alpha', status: 'Active' }]);
+        setLoading(false);
+      }, 800);
+    };
+    fetchData();
+  }, []);
+  if (loading) return <div>Loading...</div>;
+  return (
+    <div>
+      <header><h1>Workspace dashboard</h1></header>
+      <nav aria-label="Primary nav"><a href="#">Overview</a></nav>
+      <main>
+        <table><tbody>{rows.map((row) => <tr key={row.name}><td>{row.name}</td></tr>)}</tbody></table>
+      </main>
+    </div>
+  );
+};
+"""
+
+
+class TestSaaSDashboardScaffoldQuality:
+    def _saas_plan(self, prompt: str = _SAAS_GATE_PROMPT) -> Plan:
+        plan = _plan()
+        plan.user_message = prompt
+        return plan
+
+    def test_missing_saas_loading_error_states_is_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            [("src/App.tsx", _SAAS_MISSING_STATES_AND_TABLE_APP)],
+            plan=self._saas_plan(),
+        )
+        assert any(i.code == "saas_missing_loading_error_states" for i in issues)
+
+    def test_missing_saas_semantic_resource_table_is_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            [("src/App.tsx", _SAAS_MISSING_STATES_AND_TABLE_APP)],
+            plan=self._saas_plan(),
+        )
+        assert any(i.code == "saas_missing_semantic_resource_table" for i in issues)
+
+    def test_saas_live_fetch_simulation_is_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            [("src/App.tsx", _SAAS_ASYNC_FETCH_APP)],
+            plan=self._saas_plan(),
+        )
+        assert any(i.code == "saas_live_fetch_impl_detected" for i in issues)
+
+    def test_saas_static_state_examples_and_semantic_table_are_accepted(self):
+        issues = inspect_generated_scaffold_quality(
+            [("src/App.tsx", _SAAS_GOOD_STATES_AND_TABLE_APP)],
+            plan=self._saas_plan(),
+        )
+        assert not any(i.code == "saas_missing_loading_error_states" for i in issues)
+        assert not any(i.code == "saas_missing_semantic_resource_table" for i in issues)
+
+    def test_saas_repair_prompt_includes_saas_focus_guidance(self):
+        issues = [
+            ScaffoldQualityIssue(
+                code="saas_missing_loading_error_states",
+                message="Missing static empty/loading/error examples",
+                path="src/App.tsx",
+            ),
+            ScaffoldQualityIssue(
+                code="saas_missing_semantic_resource_table",
+                message="Missing semantic table structure",
+                path="src/App.tsx",
+            ),
+            ScaffoldQualityIssue(
+                code="saas_live_fetch_impl_detected",
+                message="Fetch simulation is present",
+                path="src/App.tsx",
+            ),
+        ]
+        messages = build_scaffold_repair_prompt(
+            self._saas_plan(),
+            [("src/App.tsx", _SAAS_MISSING_STATES_AND_TABLE_APP)],
+            issues,
+            base_system_prompt="BASE",
+        )
+        body = messages[0]["content"]
+        assert "SaaS dashboard repair focus" in body
+        assert "Empty / Loading / Error" in body
+        assert "Do not use '/api', fetch(, axios, async backend simulation, or live polling" in body
+        assert "<header>" in body and "<nav>" in body and "<main>" in body
+        assert "<table>" in body
+        assert "static SaaS lane" in body
+        assert "valid JSON" in body
+
+    def test_saas_repair_prompt_explicitly_bans_live_fetch_api_impl(self):
+        issues = [
+            ScaffoldQualityIssue(
+                code="saas_live_fetch_impl_detected",
+                message="Found fetch/useEffect/setTimeout API-style flow",
+                path="src/App.tsx",
+            )
+        ]
+        messages = build_scaffold_repair_prompt(
+            self._saas_plan(),
+            [("src/App.tsx", _SAAS_ASYNC_FETCH_APP)],
+            issues,
+            base_system_prompt="BASE",
+        )
+        body = messages[0]["content"]
+        lowered = body.lower()
+        assert "remove fetch/axios/api calls/useeffect live-loading simulations/timers/server endpoints" in lowered
+        assert "do not use '/api', fetch(, axios, async backend simulation, or live polling" in lowered
+        assert "never require fetch, async calls, api endpoints, backend, timers, polling, or live data" in lowered
+
+    def test_saas_repair_prompt_requires_visible_static_state_examples(self):
+        issues = [
+            ScaffoldQualityIssue(
+                code="saas_missing_loading_error_states",
+                message="Missing empty/loading/error examples",
+                path="src/App.tsx",
+            )
+        ]
+        messages = build_scaffold_repair_prompt(
+            self._saas_plan(),
+            [("src/App.tsx", _SAAS_MISSING_STATES_AND_TABLE_APP)],
+            issues,
+            base_system_prompt="BASE",
+        )
+        body = messages[0]["content"]
+        assert "rendered in UI (not comments/text-only)" in body
+        assert "'No projects yet'" in body
+        assert "'Loading preview example'" in body
+        assert "'Unable to load local sample'" in body
+
+    def test_saas_repair_prompt_requires_semantic_table_tags_for_rows(self):
+        issues = [
+            ScaffoldQualityIssue(
+                code="saas_missing_semantic_resource_table",
+                message="Missing semantic resource table",
+                path="src/App.tsx",
+            )
+        ]
+        messages = build_scaffold_repair_prompt(
+            self._saas_plan(),
+            [("src/App.tsx", _SAAS_MISSING_STATES_AND_TABLE_APP)],
+            issues,
+            base_system_prompt="BASE",
+        )
+        body = messages[0]["content"]
+        assert "<thead>" in body
+        assert "<tbody>" in body
+        assert "<th>" in body
+        assert "<td>" in body
+        assert "Do not use div-soup cards pretending to be a table" in body
+
+
 class TestBuildScaffoldRepairPrompt:
     def test_repair_prompt_includes_detected_issues_and_mutation_guidance(self):
         issues = [
@@ -2695,3 +2904,95 @@ class TestGenerateScaffoldQualityRepairIntegration:
         assert "repair mode" in calls[1].lower()
         assert isinstance(result, ScaffoldResult)
         assert result.file_changes[0][0] == "src/App.tsx"
+
+    def test_generate_scaffold_saas_triggers_escalated_second_repair_pass(self, monkeypatch):
+        from src.ham.builder_llm_scaffold import ScaffoldResult, generate_scaffold
+
+        first_pass_bad = json.dumps(
+            {
+                "file_changes": [
+                    {"path": "src/App.tsx", "content": _SAAS_ASYNC_FETCH_APP},
+                    {"path": "package.json", "content": "{}"},
+                ],
+                "assertions": ["renders"],
+            }
+        )
+        second_pass_good = json.dumps(
+            {
+                "file_changes": [
+                    {"path": "src/App.tsx", "content": _SAAS_GOOD_STATES_AND_TABLE_APP},
+                    {"path": "package.json", "content": "{}"},
+                ],
+                "assertions": ["renders"],
+            }
+        )
+
+        calls: list[str] = []
+
+        def _complete_chat(messages, **_k):
+            calls.append(messages[0]["content"])
+            if len(calls) == 1:
+                return first_pass_bad
+            if len(calls) == 2:
+                return first_pass_bad
+            return second_pass_good
+
+        plan = _plan()
+        plan.user_message = _SAAS_GATE_PROMPT
+
+        monkeypatch.setattr(
+            "src.ham.builder_llm_scaffold.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test",
+        )
+        monkeypatch.setattr(
+            "src.ham.builder_llm_scaffold.complete_chat_messages_openrouter",
+            _complete_chat,
+        )
+        result = generate_scaffold(plan, project_id="p", workspace_id="w")
+        assert isinstance(result, ScaffoldResult)
+        assert len(calls) == 3
+        assert "SaaS enforcement (must satisfy all):" in calls[2]
+
+    def test_generate_scaffold_saas_applies_deterministic_fallback_when_repairs_still_fail(
+        self, monkeypatch
+    ):
+        from src.ham.builder_llm_scaffold import ScaffoldResult, generate_scaffold
+
+        bad_json = json.dumps(
+            {
+                "file_changes": [
+                    {"path": "src/App.tsx", "content": _SAAS_ASYNC_FETCH_APP},
+                    {"path": "package.json", "content": "{}"},
+                ],
+                "assertions": ["renders"],
+            }
+        )
+        calls: list[str] = []
+
+        def _complete_chat(messages, **_k):
+            calls.append(messages[0]["content"])
+            return bad_json
+
+        plan = _plan()
+        plan.user_message = _SAAS_GATE_PROMPT
+
+        monkeypatch.setattr(
+            "src.ham.builder_llm_scaffold.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test",
+        )
+        monkeypatch.setattr(
+            "src.ham.builder_llm_scaffold.complete_chat_messages_openrouter",
+            _complete_chat,
+        )
+        result = generate_scaffold(plan, project_id="p", workspace_id="w")
+        assert isinstance(result, ScaffoldResult)
+        assert len(calls) == 3
+        app_content = dict(result.file_changes).get("src/App.tsx", "").lower()
+        assert "<table" in app_content
+        assert "no projects yet" in app_content
+        assert "loading preview example" in app_content
+        assert "unable to load local sample" in app_content
+        assert "fetch(" not in app_content
+        assert "useeffect(" not in app_content
+        issues = inspect_generated_scaffold_quality(result.file_changes, plan=plan)
+        assert not any(i.code.startswith("saas_") for i in issues)

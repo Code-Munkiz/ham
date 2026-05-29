@@ -487,6 +487,37 @@ def test_saas_render_contains_key_sections_and_components(saas_recipe):
     assert "local/static" in lowered or "static local sample data" in lowered
 
 
+def test_saas_render_requires_visible_static_empty_loading_error_examples(saas_recipe):
+    rendered = render_playbook_context(saas_recipe)
+    lowered = rendered.lower()
+    assert "empty" in lowered
+    assert "loading" in lowered
+    assert "error" in lowered
+    assert "visible" in lowered
+    assert "card" in lowered or "panel" in lowered or "region" in lowered
+    assert "static/local" in lowered or "static local" in lowered or "static" in lowered
+    assert "never imply live fetch" in lowered or "no live fetch" in lowered
+    assert "backend retries" in lowered or "backend/api" in lowered
+
+
+def test_saas_render_prefers_semantic_resource_table_or_semantic_list(saas_recipe):
+    rendered = render_playbook_context(saas_recipe)
+    lowered = rendered.lower()
+    assert "resource" in lowered
+    assert "semantic table" in lowered
+    assert "table preferred" in lowered or "<table>/<thead>/<tbody>/<th>/<td>" in lowered
+    assert "semantic list" in lowered
+    assert "non-tabular" in lowered
+    assert "div-soup" in lowered or "div-only pseudo-table" in lowered
+
+
+def test_saas_render_forbids_live_fetch_interpretation_for_loading_error_states(saas_recipe):
+    rendered = render_playbook_context(saas_recipe).lower()
+    assert "states are static/local" in rendered
+    assert "never imply live fetch" in rendered
+    assert "or api wiring" in rendered or "backend/api" in rendered
+
+
 def test_saas_render_contains_hard_exclusions(saas_recipe):
     rendered = render_playbook_context(saas_recipe).lower()
     assert "never imply real auth" in rendered

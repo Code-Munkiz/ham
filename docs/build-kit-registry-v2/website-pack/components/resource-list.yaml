@@ -24,5 +24,6 @@ expected_props:
   - statusField: string | null
 
 accessibility_notes:
-  - "Prefer semantic list/table markup with readable labels"
+  - "Prefer semantic table for tabular rows; fallback to semantic list only when items are not tabular"
+  - "Use heading/caption context and readable labels; avoid div-only pseudo-table"
   - "Keep row density moderate for scanability"

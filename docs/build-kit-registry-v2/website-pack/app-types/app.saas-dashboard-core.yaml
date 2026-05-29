@@ -6,9 +6,9 @@ status: proposed
 schema_version: "0.1"
 
 description: >
-  Static, app-shell-light SaaS product home with workspace context, usage summary,
-  plan status, activity feed, resource list, one upgrade CTA, and settings/help
-  shortcuts. Local sample data only.
+  Static SaaS app home with workspace context, usage summary, plan status,
+  activity feed, resource list, upgrade CTA, and settings/help shortcuts.
+  Local data only.
 
 non_template_statement: >
   Generative playbook only. No checked-in SaaS template, clone baseline, or starter tree.
@@ -29,17 +29,17 @@ safety_constraints:
   - static-sample-data-only-for-mvp
 
 guidance:
-  - "Use a bounded app shell: sidebar/topbar plus one main overview surface"
-  - "Include workspace/account/project selector placeholder; never imply real auth"
-  - "Render usage/KPI cards, plan/status card, recent activity, and one resource list"
-  - "Use one upgrade CTA region plus settings/help shortcuts"
-  - "Show empty/loading/error states and semantic header/nav/main/list/table structure"
-  - "Keep all data local/static and domain-meaningful"
+  - "Use bounded app shell: sidebar/topbar plus one overview"
+  - "Include workspace/project selector placeholder; never imply real auth"
+  - "Render usage cards, plan status, activity, and one resource list/table"
+  - "Use one upgrade CTA plus settings/help shortcuts"
+  - "Show visible empty/loading/error examples (static/local) and semantic resource table/list"
+  - "Keep data local/static and domain-meaningful"
 
 default_assumptions:
-  - "Single page SaaS home; no deep app routing"
+  - "Single-page SaaS home; no deep routing"
   - "Static local sample data; no backend/API/database"
-  - "Responsive shell at desktop and 360px mobile widths"
+  - "Responsive shell at desktop and 360px mobile"
   - "No billing/auth/admin/CRUD behavior"
 
 hard_constraints:
@@ -61,10 +61,10 @@ hard_constraints:
 soft_defaults:
   - bounded app shell with sidebar nav and topbar
   - workspace selector placeholder and account context chip
-  - 3-4 usage cards plus one plan/status card
+  - 3-4 usage cards plus one plan card
   - recent activity list and simple resource list/table
-  - one upgrade CTA and one settings/help shortcut region
-  - explicit empty/loading/error examples
+  - one upgrade CTA and settings/help shortcut region
+  - explicit visible empty/loading/error examples (static/local)
 
 user_overridable:
   - domain labels and sample-data values
@@ -101,14 +101,14 @@ conflict_policy:
 
 user_prompt_examples:
   positive:
-    - "Build a static SaaS dashboard home with app shell, usage cards, plan status, activity list, and resource table."
-    - "Create an app-like workspace overview with sidebar, topbar, local sample data, and no backend."
-    - "Design a SaaS product home showing quota usage, current plan, recent activity, and an upgrade CTA."
-    - "Make a responsive SaaS dashboard shell with settings/help shortcuts and empty/loading/error states."
+    - "Build a static SaaS dashboard home with shell, usage cards, plan status, activity, and a resource table."
+    - "Create a workspace overview with sidebar/topbar, local sample data, and no backend."
+    - "Design a SaaS product home with quota usage, plan status, activity, and one upgrade CTA."
+    - "Make a responsive SaaS dashboard shell with settings/help shortcuts and empty/loading/error examples."
   negative:
-    - "Build auth login/signup and account session flows."
-    - "Wire this dashboard to my API and database."
-    - "Add Stripe checkout, invoices, and subscription billing logic."
+    - "Add login/signup and account sessions."
+    - "Wire this dashboard to an API and database."
+    - "Add checkout, invoices, and subscription billing logic."
     - "Create admin user management with roles and permissions."
     - "Add CRUD forms for projects, users, and resources."
     - "Build an analytics workbench with ad-hoc queries."
@@ -192,6 +192,6 @@ acceptance_criteria:
   - "Bounded app shell with sidebar/topbar and one main overview area renders"
   - "Workspace selector placeholder, usage cards, plan/status, activity, and resource list are present"
   - "One upgrade CTA and settings/help shortcuts render without deception"
-  - "Empty/loading/error states are visible for async-looking regions"
+  - "Empty/loading/error examples are visible and static/local (no live fetch/backend/API)"
   - "Semantic header/nav/main/list/table structure and responsive layout are present"
   - "No auth/backend/billing/admin/CRUD claims appear"

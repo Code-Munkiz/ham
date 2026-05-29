@@ -23,12 +23,12 @@ runner: conceptual
 check_type: conceptual
 
 pass_conditions:
-  - "Semantic header/nav/main plus list/table landmarks are present"
+  - "Semantic header/nav/main landmarks and semantic resource list/table structure are present (table preferred)"
   - "Layout remains usable at 360px without page-level horizontal scroll"
   - "Focus visibility and text-plus-style status communication are preserved"
 
 fail_conditions:
-  - "Landmark-free layout or inaccessible heading/navigation structure"
+  - "Landmark-free layout, inaccessible heading/navigation structure, or div-soup resource pseudo-table"
   - "Mobile layout overflows horizontally or collapses readability"
 
 recovery_playbooks:

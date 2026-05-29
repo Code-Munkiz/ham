@@ -21,6 +21,6 @@ binds_components:
   - component.resource-list
 
 guidance:
-  - "Show explicit empty/loading/error examples for activity/resource regions"
-  - "States are static and honest; never claim live fetch or backend retries"
-  - "Keep state copy short, actionable, and accessible"
+  - "Render empty/loading/error as visible cards for activity/resource surfaces"
+  - "States are static/local; never imply live fetch/backend/API wiring"
+  - "Keep copy short, actionable, and accessible"

@@ -20,6 +20,7 @@ binds_components:
   - component.resource-list
 
 guidance:
-  - "Provide one readable list/table with bounded columns or fields"
-  - "Use semantic list/table markup and clear row labels"
+  - "Provide one readable project/resource list/table with bounded rows"
+  - "Prefer semantic table for tabular rows; use semantic list for non-tabular content"
+  - "Include heading/caption context; avoid div-soup pseudo-tables"
   - "Avoid CRUD affordances that imply create/edit/delete workflows"

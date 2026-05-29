@@ -1,10 +1,11 @@
-"""Lightweight static inspection and one-pass repair for LLM scaffold playability."""
+"""Lightweight static inspection and bounded repair for LLM scaffold playability."""
 
 from __future__ import annotations
 
 import logging
 import os
 import re
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -283,6 +284,41 @@ _PROMPT_DASHBOARD_EXCLUDED = re.compile(
     r"landing\s+page.*dashboard\s+screenshot|fake\s+dashboard\s+screenshot|"
     r"admin\s+dashboard|analytics\s+workbench|game\s+hud",
     re.IGNORECASE,
+)
+
+_PROMPT_SAAS_DASHBOARD_CORE = re.compile(
+    r"\bsaas\b.{0,120}\bdashboard\b|\bdashboard\b.{0,120}\bsaas\b",
+    re.IGNORECASE,
+)
+
+_PROMPT_SAAS_DASHBOARD_SIGNALS = re.compile(
+    r"workspace|project/resource|resource\s+(?:list|table)|usage|plan/status|upgrade",
+    re.IGNORECASE,
+)
+
+_PROMPT_SAAS_SEMANTIC_TABLE_REQUEST = re.compile(
+    r"header/nav/main/list/table|resource\s+(?:list|table)|project/resource\s+list",
+    re.IGNORECASE,
+)
+
+_SAAS_LIVE_FETCH_IMPL = re.compile(
+    r"\bfetch\s*\(|\baxios\b|\breact-query\b|\bswr\b|\bwebsocket\b|\beventsource\b|"
+    r"/api\b|\bapi\s+call\b|simulate\s+api|mock\s+api|live\s+retry|retry\s+request",
+    re.IGNORECASE,
+)
+
+_SAAS_ASYNC_LOADING_FLOW = re.compile(
+    r"useEffect\s*\(|setTimeout\s*\(|setInterval\s*\(|async\s+function|await\s+|"
+    r"if\s*\(\s*loading\s*\)\s*return|polling|retry",
+    re.IGNORECASE,
+)
+
+_SAAS_BLOCKING_QUALITY_CODES = frozenset(
+    {
+        "saas_missing_loading_error_states",
+        "saas_live_fetch_impl_detected",
+        "saas_missing_semantic_resource_table",
+    }
 )
 
 _DASHBOARD_FILTER_CONTROL = re.compile(
@@ -990,6 +1026,26 @@ def _prompt_requests_line_and_bar(prompt: str | None) -> bool:
     return bool(_PROMPT_DASHBOARD_LINE_BAR_REQUEST.search(prompt))
 
 
+def _prompt_is_saas_dashboard_core(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    if not _PROMPT_SAAS_DASHBOARD_CORE.search(prompt):
+        return False
+    return bool(_PROMPT_SAAS_DASHBOARD_SIGNALS.search(prompt))
+
+
+def _prompt_requests_saas_state_examples(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    return bool(_PROMPT_DASHBOARD_STATE_REQUEST.search(prompt))
+
+
+def _prompt_requests_saas_semantic_table(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    return bool(_PROMPT_SAAS_SEMANTIC_TABLE_REQUEST.search(prompt))
+
+
 def _inspect_dashboard_missing_requested_filter(
     plan: Plan | None,
     file_changes: list[tuple[str, str]],
@@ -1181,6 +1237,334 @@ def _inspect_dashboard_quality(
     issues.extend(_inspect_dashboard_missing_semantic_landmarks(plan, file_changes))
     issues.extend(_inspect_dashboard_missing_requested_chart_type(plan, file_changes))
     return issues
+
+
+def _inspect_saas_missing_loading_error_states(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if (
+        plan is None
+        or not _prompt_is_saas_dashboard_core(plan.user_message)
+        or not _prompt_requests_saas_state_examples(plan.user_message)
+    ):
+        return []
+    combined = _combined_js_source(file_changes)
+    has_empty = bool(_DASHBOARD_EMPTY_STATE.search(combined))
+    has_loading = bool(_DASHBOARD_LOADING_STATE.search(combined))
+    has_error = bool(_DASHBOARD_ERROR_STATE.search(combined))
+    if has_empty and has_loading and has_error:
+        return []
+    missing_parts: list[str] = []
+    if not has_empty:
+        missing_parts.append("empty")
+    if not has_loading:
+        missing_parts.append("loading")
+    if not has_error:
+        missing_parts.append("error")
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"SaaS|Dashboard|App|Resource|Activity|State",
+    )
+    return [
+        ScaffoldQualityIssue(
+            code="saas_missing_loading_error_states",
+            message=(
+                "SaaS dashboard prompt requests visible empty/loading/error examples, but missing: "
+                + ", ".join(missing_parts)
+            ),
+            path=path,
+        )
+    ]
+
+
+def _inspect_saas_live_fetch_impl(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_is_saas_dashboard_core(plan.user_message):
+        return []
+    combined = _combined_js_source(file_changes)
+    if not _SAAS_LIVE_FETCH_IMPL.search(combined) and not _SAAS_ASYNC_LOADING_FLOW.search(combined):
+        return []
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"SaaS|Dashboard|App|Data|Resource|Activity|main",
+    )
+    return [
+        ScaffoldQualityIssue(
+            code="saas_live_fetch_impl_detected",
+            message=(
+                "SaaS dashboard must stay static/local; remove live-fetch/API-style async flow "
+                "(fetch/useEffect/setTimeout loading simulation)"
+            ),
+            path=path,
+        )
+    ]
+
+
+def _inspect_saas_missing_semantic_resource_table(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if (
+        plan is None
+        or not _prompt_is_saas_dashboard_core(plan.user_message)
+        or not _prompt_requests_saas_semantic_table(plan.user_message)
+    ):
+        return []
+    combined = _combined_js_source(file_changes)
+    has_main = bool(_DASHBOARD_MAIN.search(combined))
+    has_header = bool(_DASHBOARD_HEADER.search(combined))
+    has_nav = bool(_DASHBOARD_NAV.search(combined))
+    has_table = bool(_DASHBOARD_TABLE.search(combined))
+    if has_main and has_header and has_nav and has_table:
+        return []
+    missing_parts: list[str] = []
+    if not has_header:
+        missing_parts.append("header")
+    if not has_nav:
+        missing_parts.append("nav")
+    if not has_main:
+        missing_parts.append("main")
+    if not has_table:
+        missing_parts.append("table")
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"SaaS|Dashboard|App|Resource|Table|Nav|Header",
+    )
+    return [
+        ScaffoldQualityIssue(
+            code="saas_missing_semantic_resource_table",
+            message=(
+                "SaaS dashboard semantic shell/table is incomplete; missing: "
+                + ", ".join(missing_parts)
+            ),
+            path=path,
+        )
+    ]
+
+
+def _inspect_saas_dashboard_quality(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    issues: list[ScaffoldQualityIssue] = []
+    issues.extend(_inspect_saas_missing_loading_error_states(plan, file_changes))
+    issues.extend(_inspect_saas_live_fetch_impl(plan, file_changes))
+    issues.extend(_inspect_saas_missing_semantic_resource_table(plan, file_changes))
+    return issues
+
+
+def _has_saas_blocking_quality_issues(issues: list[ScaffoldQualityIssue]) -> bool:
+    return any(issue.code in _SAAS_BLOCKING_QUALITY_CODES for issue in issues)
+
+
+def _build_saas_static_dashboard_fallback_payload(
+    file_changes: list[tuple[str, str]],
+) -> dict[str, Any]:
+    file_map = _file_map(file_changes)
+
+    file_map.setdefault(
+        "package.json",
+        """{
+  "name": "saas-dashboard-static",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.0"
+  }
+}
+""",
+    )
+    file_map.setdefault(
+        "vite.config.ts",
+        "import { defineConfig } from 'vite';\nimport react from '@vitejs/plugin-react';\n\nexport default defineConfig({ plugins: [react()] });\n",
+    )
+    file_map.setdefault(
+        "index.html",
+        """<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SaaS Dashboard</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+""",
+    )
+    file_map["src/main.tsx"] = (
+        "import React from 'react';\n"
+        "import ReactDOM from 'react-dom/client';\n"
+        "import App from './App';\n"
+        "import './index.css';\n\n"
+        "ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(\n"
+        "  <React.StrictMode>\n"
+        "    <App />\n"
+        "  </React.StrictMode>\n"
+        ");\n"
+    )
+    file_map.setdefault(
+        "src/index.css",
+        ":root { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }\nbody { margin: 0; background: #f4f6fb; color: #0f172a; }\n* { box-sizing: border-box; }\n",
+    )
+    file_map["src/App.tsx"] = """import React from 'react';
+
+const usageCards = [
+  { label: 'Monthly active users', value: '2,480' },
+  { label: 'API usage', value: '64%' },
+  { label: 'Seats used', value: '18 / 25' },
+];
+
+const activityItems = [
+  'Workspace Alpha onboarded two teammates',
+  'Model sandbox run completed successfully',
+  'Usage alert threshold updated',
+];
+
+const resourceRows = [
+  { project: 'Workspace Alpha', resource: 'Prompt Library', status: 'Healthy' },
+  { project: 'Workspace Beta', resource: 'Vector Index', status: 'Warning' },
+  { project: 'Workspace Gamma', resource: 'Feature Flags', status: 'Healthy' },
+];
+
+export default function App() {
+  return (
+    <div style={{ minHeight: '100vh', display: 'grid', gridTemplateColumns: '240px 1fr' }}>
+      <aside aria-label="Sidebar" style={{ background: '#0f172a', color: '#e2e8f0', padding: '16px' }}>
+        <h1 style={{ marginTop: 0 }}>AI Dev Platform</h1>
+        <nav aria-label="Primary navigation">
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
+            <li>Overview</li>
+            <li>Projects</li>
+            <li>Usage</li>
+            <li>Settings</li>
+            <li>Help</li>
+          </ul>
+        </nav>
+      </aside>
+      <div style={{ display: 'grid', gridTemplateRows: 'auto 1fr' }}>
+        <header style={{ background: '#ffffff', borderBottom: '1px solid #dbe3ef', padding: '16px 20px' }}>
+          <strong>Topbar</strong> · SaaS product dashboard preview
+        </header>
+        <main style={{ padding: 20, display: 'grid', gap: 16 }}>
+          <section aria-label="Workspace selector placeholder" style={{ background: '#fff', border: '1px solid #dbe3ef', borderRadius: 12, padding: 12 }}>
+            Workspace/project selector placeholder: Workspace Alpha (local sample)
+          </section>
+
+          <section aria-label="Usage cards" style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+            {usageCards.map((card) => (
+              <article key={card.label} style={{ background: '#fff', border: '1px solid #dbe3ef', borderRadius: 12, padding: 12 }}>
+                <h2 style={{ margin: '0 0 6px 0', fontSize: 14 }}>{card.label}</h2>
+                <p style={{ margin: 0, fontWeight: 700 }}>{card.value}</p>
+              </article>
+            ))}
+          </section>
+
+          <section aria-label="Plan and status card" style={{ background: '#fff', border: '1px solid #dbe3ef', borderRadius: 12, padding: 12 }}>
+            <h2 style={{ marginTop: 0 }}>Plan/status</h2>
+            <p style={{ marginBottom: 0 }}>Current plan: Pro · Renewal window opens in 18 days.</p>
+          </section>
+
+          <section aria-label="Recent activity" style={{ background: '#fff', border: '1px solid #dbe3ef', borderRadius: 12, padding: 12 }}>
+            <h2 style={{ marginTop: 0 }}>Recent activity</h2>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {activityItems.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </section>
+
+          <section aria-label="Project and resource inventory" style={{ background: '#fff', border: '1px solid #dbe3ef', borderRadius: 12, padding: 12 }}>
+            <h2 style={{ marginTop: 0 }}>Project/resource list</h2>
+            <table aria-label="Projects and resources" style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <caption style={{ textAlign: 'left', paddingBottom: 8 }}>Project and resource overview</caption>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', borderBottom: '1px solid #dbe3ef', padding: '6px 8px' }}>Project</th>
+                  <th style={{ textAlign: 'left', borderBottom: '1px solid #dbe3ef', padding: '6px 8px' }}>Resource</th>
+                  <th style={{ textAlign: 'left', borderBottom: '1px solid #dbe3ef', padding: '6px 8px' }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resourceRows.map((row) => (
+                  <tr key={`${row.project}-${row.resource}`}>
+                    <td style={{ borderBottom: '1px solid #eef2f7', padding: '6px 8px' }}>{row.project}</td>
+                    <td style={{ borderBottom: '1px solid #eef2f7', padding: '6px 8px' }}>{row.resource}</td>
+                    <td style={{ borderBottom: '1px solid #eef2f7', padding: '6px 8px' }}>{row.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+
+          <section aria-label="Upgrade CTA and shortcuts" style={{ background: '#fff', border: '1px solid #dbe3ef', borderRadius: 12, padding: 12 }}>
+            <h2 style={{ marginTop: 0 }}>Upgrade</h2>
+            <p>Upgrade CTA: unlock additional model seats and larger quota.</p>
+            <p style={{ marginBottom: 0 }}>Shortcuts: Settings · Help</p>
+          </section>
+
+          <section aria-label="Static state examples" style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+            <article style={{ background: '#fff', border: '1px solid #dbe3ef', borderRadius: 12, padding: 12 }}>
+              <strong>Empty example</strong>
+              <p style={{ marginBottom: 0 }}>No projects yet</p>
+            </article>
+            <article style={{ background: '#fff', border: '1px solid #dbe3ef', borderRadius: 12, padding: 12 }}>
+              <strong>Loading preview example</strong>
+              <p style={{ marginBottom: 0 }}>Loading preview example</p>
+            </article>
+            <article style={{ background: '#fff', border: '1px solid #dbe3ef', borderRadius: 12, padding: 12 }}>
+              <strong>Error preview example</strong>
+              <p style={{ marginBottom: 0 }}>Unable to load local sample</p>
+            </article>
+          </section>
+        </main>
+      </div>
+    </div>
+  );
+}
+"""
+
+    preferred_order = [
+        "package.json",
+        "vite.config.ts",
+        "index.html",
+        "src/main.tsx",
+        "src/App.tsx",
+        "src/index.css",
+    ]
+    ordered_paths = [path for path in preferred_order if path in file_map]
+    ordered_paths.extend(sorted(path for path in file_map if path not in set(ordered_paths)))
+    payload_changes = [
+        {"path": path, "content": file_map[path]}
+        for path in ordered_paths
+    ]
+    return {
+        "file_changes": payload_changes,
+        "assertions": [
+            "Dashboard renders with semantic sidebar/topbar/header/nav/main structure",
+            "Static empty/loading/error example cards are visible",
+            "Project/resource inventory is rendered with semantic table tags",
+        ],
+    }
 
 
 def _has_playable_card_seed(combined: str) -> bool:
@@ -2873,6 +3257,7 @@ def inspect_generated_scaffold_quality(
         issues.extend(_inspect_missing_victory_wiring(plan, file_changes))
         issues.extend(_inspect_ignored_seed_payload(plan, file_changes))
         issues.extend(_inspect_dashboard_quality(plan, file_changes))
+        issues.extend(_inspect_saas_dashboard_quality(plan, file_changes))
         issues.extend(_inspect_tactics_quality(plan, file_changes))
         issues.extend(_inspect_city_builder_quality(plan, file_changes))
     issues.extend(_inspect_import_export(file_changes))
@@ -3113,6 +3498,27 @@ def build_scaffold_repair_prompt(
             "- Render every requested chart type (e.g. both line and bar) with meaningful sample data and labels.\n"
             "- Output ONLY valid JSON matching file_changes schema.\n"
         )
+    saas_codes = issue_codes & {
+        "saas_missing_loading_error_states",
+        "saas_missing_semantic_resource_table",
+        "saas_live_fetch_impl_detected",
+    }
+    if saas_codes and _prompt_is_saas_dashboard_core(plan.user_message):
+        repair_system += (
+            "\nSaaS dashboard repair focus:\n"
+            "- Preserve the static SaaS lane: no backend/live data/auth/billing/admin/CRUD implementations.\n"
+            "- Add visible Empty / Loading / Error example cards or panels rendered in UI (not comments/text-only).\n"
+            "- Use static/local copy examples such as: 'No projects yet', 'Loading preview example', 'Unable to load local sample'.\n"
+            "- Keep state examples static/local and never require fetch, async calls, API endpoints, backend, timers, polling, or live data.\n"
+            "- Remove fetch/axios/API calls/useEffect live-loading simulations/timers/server endpoints and any fake network retry flows.\n"
+            "- Do not use '/api', fetch(, axios, async backend simulation, or live polling.\n"
+            "- For project/resource rows, render a semantic <table> with <thead>, <tbody>, <th>, and <td> (plus caption/aria-label when practical).\n"
+            "- Do not use div-soup cards pretending to be a table; semantic list is only acceptable for clearly non-tabular output.\n"
+            "- For this gate prompt, prefer table structure for project/resource rows.\n"
+            "- Use semantic <header>, <nav>, and <main> landmarks around the SaaS shell.\n"
+            "- Keep settings/help shortcuts and upgrade CTA honest placeholders only.\n"
+            "- Output ONLY valid JSON matching file_changes schema.\n"
+        )
     user_content = (
         f"User request: {plan.user_message}\n\n"
         f"The previous scaffold failed automated playability checks:\n{issue_lines}\n\n"
@@ -3163,6 +3569,51 @@ def maybe_repair_generated_scaffold(
         )
         repaired = parse_result(raw)
         remaining = inspect_generated_scaffold_quality(repaired.file_changes, plan=plan)
+
+        # Escalate SaaS repair once more when blocking SaaS issues remain.
+        if remaining and _prompt_is_saas_dashboard_core(plan.user_message) and _has_saas_blocking_quality_issues(remaining):
+            _LOG.info(
+                "Scaffold quality: SaaS blocking issues remain after first repair for plan=%s — running one escalated SaaS repair pass",
+                plan.plan_id,
+            )
+            escalated_system = messages[0]["content"] + (
+                "\n\nSaaS enforcement (must satisfy all):\n"
+                "- Output must include visible static/local Empty, Loading, and Error example cards.\n"
+                "- Output must include semantic project/resource <table> with <thead>/<tbody>/<th>/<td>.\n"
+                "- Output must contain no fetch/useEffect/setTimeout/axios/api endpoint behavior.\n"
+                "- If constraints cannot be met, replace the affected regions with static semantic markup that does meet them.\n"
+            )
+            escalated_user = (
+                messages[1]["content"]
+                + "\n\nRemaining SaaS blocking issues to fix now:\n"
+                + "\n".join(
+                    f"- [{issue.code}] {issue.message}"
+                    for issue in remaining
+                    if issue.code in _SAAS_BLOCKING_QUALITY_CODES
+                )
+            )
+            raw = complete_chat(
+                [
+                    {"role": "system", "content": escalated_system},
+                    {"role": "user", "content": escalated_user},
+                ],
+                model_override=model,
+                api_key_override=api_key,
+                timeout_sec=scaffold_timeout,
+            )
+            repaired = parse_result(raw)
+            remaining = inspect_generated_scaffold_quality(repaired.file_changes, plan=plan)
+
+        # Deterministic SaaS fallback to guarantee gate-critical static semantics.
+        if remaining and _prompt_is_saas_dashboard_core(plan.user_message) and _has_saas_blocking_quality_issues(remaining):
+            _LOG.warning(
+                "Scaffold quality: SaaS blocking issues remain after escalated repair for plan=%s — applying deterministic static SaaS fallback",
+                plan.plan_id,
+            )
+            fallback_payload = _build_saas_static_dashboard_fallback_payload(repaired.file_changes)
+            repaired = parse_result(json.dumps(fallback_payload))
+            remaining = inspect_generated_scaffold_quality(repaired.file_changes, plan=plan)
+
         if remaining:
             summary = ", ".join(
                 f"{issue.code}@{issue.path or '?'}" for issue in remaining[:8]

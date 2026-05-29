@@ -23,10 +23,11 @@ check_type: conceptual
 
 pass_conditions:
   - "List/table has clear labels with bounded density"
-  - "Semantic list or table structure is used for readability"
+  - "Tabular rows use semantic table structure; non-tabular content uses semantic list structure"
 
 fail_conditions:
-  - "Dense unreadable data wall or div-only pseudo-table"
+  - "Dense unreadable data wall or non-meaningful sample rows"
+  - "Div-only pseudo-table used where tabular resource rows are rendered"
   - "Resource area implies CRUD management workflows"
 
 recovery_playbooks:
