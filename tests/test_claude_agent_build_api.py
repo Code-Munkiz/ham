@@ -33,6 +33,41 @@ from src.ham.managed_workspace.provisioning import ManagedWorkspaceSetupError
 
 _EXEC_TOKEN_CANARY = "test-token-canary"  # noqa: S105
 
+_FORBIDDEN_BUILD_REGISTRY_TOKENS = (
+    "registry_v2_app_type",
+    "pack.site",
+    "pack.game",
+    "site.landing-page-core",
+    "site.dashboard-ui-core",
+    "game.",
+    "build registry v2",
+    "registry route",
+    "route matched",
+    "fallback_reason",
+    "gate report",
+    "gate review",
+    "scaffold_quality",
+    "dashboard_",
+    "city_",
+    "tactics_",
+    "landing_",
+    "recipe id",
+    "pack id",
+    "yaml",
+    "render length",
+    "render budget",
+    "playbook context",
+    "build registry v2 playbook context:",
+)
+
+
+def _assert_no_build_registry_v2_leakage(text: str) -> None:
+    blob = text.lower()
+    for forbidden in _FORBIDDEN_BUILD_REGISTRY_TOKENS:
+        assert forbidden not in blob, (
+            f"claude build payload leaks build-registry token {forbidden!r}: {blob}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -147,6 +182,43 @@ def _patch_gates(
 def _stop(patches: list[Any]) -> None:
     for p in reversed(patches):
         p.stop()
+
+
+# ---------------------------------------------------------------------------
+# Internal prompt enrichment seam
+# ---------------------------------------------------------------------------
+
+
+def test_internal_launch_prompt_enrichment_flag_off_no_v2_context(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+) -> None:
+    monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+    prompt = "Build a landing page for a small SaaS with hero and CTA."
+    runner_prompt = build_api._enrich_internal_launch_prompt(prompt)
+    assert runner_prompt == prompt
+
+
+def test_internal_launch_prompt_enrichment_flag_on_landing_selects_site_landing_page_core(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+) -> None:
+    monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "1")
+    prompt = "Build a landing page for a small SaaS with hero and CTA."
+    runner_prompt = build_api._enrich_internal_launch_prompt(prompt)
+    assert "Build Registry v2 playbook context:" in runner_prompt
+    assert "site.landing-page-core" in runner_prompt
+
+
+def test_internal_launch_prompt_enrichment_flag_on_dashboard_selects_site_dashboard_ui_core(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+) -> None:
+    monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "1")
+    prompt = "Build a read-only dashboard with KPI cards, chart, and data table."
+    runner_prompt = build_api._enrich_internal_launch_prompt(prompt)
+    assert "Build Registry v2 playbook context:" in runner_prompt
+    assert "site.dashboard-ui-core" in runner_prompt
 
 
 # ---------------------------------------------------------------------------
@@ -273,6 +345,147 @@ def _preview_digest(project_id: str, user_prompt: str) -> str:
     return build_api.compute_claude_agent_proposal_digest(
         project_id=project_id, user_prompt=user_prompt
     )
+
+
+def test_launch_digest_integrity_with_internal_landing_enrichment(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+    actor: HamActor,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
+    monkeypatch.setenv("HAM_CLAUDE_AGENT_EXEC_TOKEN", _EXEC_TOKEN_CANARY)
+    monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "1")
+    rec = _project_rec()
+    patches = _patch_gates(rec=rec)
+    user_prompt = "Build a landing page for a SaaS with hero and FAQ."
+    digest = _preview_digest(rec.id, user_prompt)
+    seen_runner_prompt: dict[str, str] = {}
+
+    async def _fake_run(**kwargs: Any) -> ClaudeAgentRunResult:
+        seen_runner_prompt["value"] = str(kwargs.get("user_prompt") or "")
+        return ClaudeAgentRunResult(
+            status="success",
+            assistant_summary="finished.",
+            duration_seconds=0.1,
+        )
+
+    fake_snap = SimpleNamespace(
+        build_outcome="succeeded",
+        target_ref={"snapshot_id": "snap_landing"},
+        error_summary=None,
+    )
+    fake_store = SimpleNamespace(save=lambda *a, **k: None)
+
+    try:
+        with (
+            patch.object(build_api, "run_claude_agent_mission", _fake_run),
+            patch.object(build_api, "emit_managed_workspace_snapshot", lambda common: fake_snap),
+            patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
+        ):
+            res = _client(actor).post(
+                "/api/claude-agent/build/launch",
+                json={
+                    "project_id": rec.id,
+                    "user_prompt": user_prompt,
+                    "proposal_digest": digest,
+                    "base_revision": build_api.CLAUDE_AGENT_REGISTRY_REVISION,
+                    "confirmed": True,
+                },
+            )
+    finally:
+        _stop(patches)
+
+    assert res.status_code == 200, res.text
+    runner_prompt = seen_runner_prompt["value"]
+    assert "Build Registry v2 playbook context:" in runner_prompt
+    assert "site.landing-page-core" in runner_prompt
+    _assert_no_build_registry_v2_leakage(res.text)
+
+
+def test_launch_digest_integrity_with_internal_dashboard_enrichment(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+    actor: HamActor,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
+    monkeypatch.setenv("HAM_CLAUDE_AGENT_EXEC_TOKEN", _EXEC_TOKEN_CANARY)
+    monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "1")
+    rec = _project_rec()
+    patches = _patch_gates(rec=rec)
+    user_prompt = "Build a read-only dashboard with KPI cards, charts, and table."
+    digest = _preview_digest(rec.id, user_prompt)
+    seen_runner_prompt: dict[str, str] = {}
+
+    async def _fake_run(**kwargs: Any) -> ClaudeAgentRunResult:
+        seen_runner_prompt["value"] = str(kwargs.get("user_prompt") or "")
+        return ClaudeAgentRunResult(
+            status="success",
+            assistant_summary="finished.",
+            duration_seconds=0.1,
+        )
+
+    fake_snap = SimpleNamespace(
+        build_outcome="succeeded",
+        target_ref={"snapshot_id": "snap_dashboard"},
+        error_summary=None,
+    )
+    fake_store = SimpleNamespace(save=lambda *a, **k: None)
+
+    try:
+        with (
+            patch.object(build_api, "run_claude_agent_mission", _fake_run),
+            patch.object(build_api, "emit_managed_workspace_snapshot", lambda common: fake_snap),
+            patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
+        ):
+            res = _client(actor).post(
+                "/api/claude-agent/build/launch",
+                json={
+                    "project_id": rec.id,
+                    "user_prompt": user_prompt,
+                    "proposal_digest": digest,
+                    "base_revision": build_api.CLAUDE_AGENT_REGISTRY_REVISION,
+                    "confirmed": True,
+                },
+            )
+    finally:
+        _stop(patches)
+
+    assert res.status_code == 200, res.text
+    runner_prompt = seen_runner_prompt["value"]
+    assert "Build Registry v2 playbook context:" in runner_prompt
+    assert "site.dashboard-ui-core" in runner_prompt
+    _assert_no_build_registry_v2_leakage(res.text)
+
+
+def test_launch_rejects_client_supplied_registry_v2_app_type_field(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+    actor: HamActor,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
+    monkeypatch.setenv("HAM_CLAUDE_AGENT_EXEC_TOKEN", _EXEC_TOKEN_CANARY)
+    rec = _project_rec()
+    patches = _patch_gates(rec=rec)
+    digest = _preview_digest(rec.id, "tidy README")
+    try:
+        res = _client(actor).post(
+            "/api/claude-agent/build/launch",
+            json={
+                "project_id": rec.id,
+                "user_prompt": "tidy README",
+                "proposal_digest": digest,
+                "base_revision": build_api.CLAUDE_AGENT_REGISTRY_REVISION,
+                "confirmed": True,
+                "registry_v2_app_type": "site.dashboard-ui-core",
+            },
+        )
+    finally:
+        _stop(patches)
+
+    assert res.status_code == 422
 
 
 def test_launch_requires_confirmed_true(
@@ -1064,6 +1277,57 @@ def test_launch_non_delete_doc_change_still_emits_snapshot(
     assert body["ok"] is True
     assert len(saved) == 1
     assert saved[0].status_reason == "claude_agent:snapshot_emitted"
+
+
+def test_launch_sanitizes_forbidden_build_registry_tokens_in_user_visible_payload(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_env: None,
+    actor: HamActor,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("CLAUDE_AGENT_ENABLED", "1")
+    monkeypatch.setenv("HAM_CLAUDE_AGENT_EXEC_TOKEN", _EXEC_TOKEN_CANARY)
+    monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "1")
+    rec = _project_rec()
+    patches = _patch_gates(rec=rec)
+    digest = _preview_digest(rec.id, "Build a read-only dashboard with KPI cards.")
+
+    leaky_summary = "Build Registry v2 playbook context: site.dashboard-ui-core"
+    leaky_error = "fallback_reason=registry_v2_error route matched dashboard_123"
+
+    async def _fake_run(**_kwargs: Any) -> ClaudeAgentRunResult:
+        return ClaudeAgentRunResult(
+            status="sdk_error",
+            assistant_summary=leaky_summary,
+            error_summary=leaky_error,
+            duration_seconds=0.1,
+        )
+
+    fake_store = SimpleNamespace(save=lambda *a, **k: None)
+
+    try:
+        with (
+            patch.object(build_api, "run_claude_agent_mission", _fake_run),
+            patch.object(build_api, "get_control_plane_run_store", lambda: fake_store),
+        ):
+            res = _client(actor).post(
+                "/api/claude-agent/build/launch",
+                json={
+                    "project_id": rec.id,
+                    "user_prompt": "Build a read-only dashboard with KPI cards.",
+                    "proposal_digest": digest,
+                    "base_revision": build_api.CLAUDE_AGENT_REGISTRY_REVISION,
+                    "confirmed": True,
+                },
+            )
+    finally:
+        _stop(patches)
+
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["summary"] == "Claude Agent mission finished."
+    assert body["error_summary"] == "Claude Agent mission failed."
+    _assert_no_build_registry_v2_leakage(res.text)
 
 
 def test_launch_output_requires_review_does_not_open_pr_or_set_output_ref(

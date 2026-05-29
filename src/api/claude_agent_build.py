@@ -36,6 +36,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.dependencies.workspace import get_workspace_store
 from src.api.droid_build import _require_build_approver, _require_build_lane_project
+from src.ham.build_registry.intent import enrich_plan_metadata_with_registry_v2
+from src.ham.build_registry.scaffold_context import resolve_scaffold_context
+from src.ham.builder_kit_router import select_kit_for_prompt
 from src.ham.claude_agent_runner import (
     ClaudeAgentPermissionPolicy,
     run_claude_agent_mission,
@@ -72,6 +75,35 @@ CLAUDE_AGENT_REGISTRY_REVISION = "claude-agent-v1"
 CLAUDE_AGENT_ENABLED_ENV_NAME = "CLAUDE_AGENT_ENABLED"
 _CLAUDE_AGENT_EXEC_TOKEN_ENV = "HAM_CLAUDE_AGENT_EXEC_TOKEN"  # noqa: S105
 _SUMMARY_FALLBACK = "Claude Agent mission finished."
+_ERROR_SUMMARY_FALLBACK = "Claude Agent mission failed."
+
+# Keep Build Registry v2 routing internals out of normal launch payload copy.
+_BUILD_REGISTRY_V2_FORBIDDEN_TOKENS = (
+    "registry_v2_app_type",
+    "pack.site",
+    "pack.game",
+    "site.landing-page-core",
+    "site.dashboard-ui-core",
+    "game.",
+    "build registry v2",
+    "registry route",
+    "route matched",
+    "fallback_reason",
+    "gate report",
+    "gate review",
+    "scaffold_quality",
+    "dashboard_",
+    "city_",
+    "tactics_",
+    "landing_",
+    "recipe id",
+    "pack id",
+    "yaml",
+    "render length",
+    "render budget",
+    "playbook context",
+    "build registry v2 playbook context:",
+)
 
 
 router = APIRouter(
@@ -93,6 +125,51 @@ def _truthy_env(name: str) -> bool:
         "yes",
         "on",
     )
+
+
+def _contains_build_registry_v2_forbidden_token(text: str) -> bool:
+    lower = text.lower()
+    return any(token in lower for token in _BUILD_REGISTRY_V2_FORBIDDEN_TOKENS)
+
+
+def _sanitize_normal_user_copy(text: str | None, *, fallback: str | None) -> str | None:
+    if not text:
+        return text
+    if _contains_build_registry_v2_forbidden_token(text):
+        return fallback
+    return text
+
+
+def _enrich_internal_launch_prompt(user_prompt: str) -> str:
+    """Append v2 playbook context to the Claude runner prompt when available.
+
+    This is backend-internal only and never changes the API response schema.
+    """
+    prompt = str(user_prompt or "")
+    if not prompt.strip():
+        return prompt
+    try:
+        template_kind = select_kit_for_prompt(prompt)
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {
+                "template_kind": template_kind,
+                "originated_from": "claude_agent_build_launch",
+            },
+            prompt,
+        )
+        app_type = metadata.get("registry_v2_app_type")
+        if not isinstance(app_type, str) or not app_type.strip():
+            return prompt
+        resolved = resolve_scaffold_context(
+            metadata=metadata,
+            template_kind=template_kind,
+        )
+        if resolved.source != "v2" or not resolved.context.strip():
+            return prompt
+        return f"{prompt}\n\n{resolved.header}\n{resolved.context}"
+    except Exception:  # noqa: BLE001
+        # Never let internal enrichment failures change launch behavior.
+        return prompt
 
 
 def _require_claude_agent_enabled() -> None:
@@ -529,6 +606,7 @@ async def launch_claude_agent_build(
         )
     # Token gate last so non-operators cannot probe configured-vs-not.
     _require_claude_agent_exec_token()
+    enriched_prompt = _enrich_internal_launch_prompt(body.user_prompt)
 
     project_root = _project_managed_root(rec)
     try:
@@ -550,9 +628,13 @@ async def launch_claude_agent_build(
 
     run_result = await run_claude_agent_mission(
         project_root=project_root,
-        user_prompt=body.user_prompt,
+        user_prompt=enriched_prompt,
         policy=policy,
         actor=ham_actor,
+    )
+    safe_assistant_summary = _sanitize_normal_user_copy(
+        run_result.assistant_summary,
+        fallback=_SUMMARY_FALLBACK,
     )
 
     snapshot_outcome: str | None = None
@@ -563,7 +645,7 @@ async def launch_claude_agent_build(
         common = PostExecCommon(
             project_id=rec.id,
             project_root=project_root,
-            summary=run_result.assistant_summary or _SUMMARY_FALLBACK,
+            summary=safe_assistant_summary or _SUMMARY_FALLBACK,
             change_id=change_id,
             pr_inputs=None,
             workspace_id=getattr(rec, "workspace_id", None),
@@ -600,8 +682,8 @@ async def launch_claude_agent_build(
     status, status_reason = _status_from_run(run_result.status, snapshot_outcome)
 
     summary_text: str | None
-    if run_result.assistant_summary:
-        summary_text = run_result.assistant_summary
+    if safe_assistant_summary:
+        summary_text = safe_assistant_summary
     else:
         summary_text = None
 
@@ -616,6 +698,10 @@ async def launch_claude_agent_build(
                 f"claude_agent run finished with status={run_result.status}",
                 cap=2000,
             )
+        error_summary = _sanitize_normal_user_copy(
+            error_summary,
+            fallback=_ERROR_SUMMARY_FALLBACK,
+        )
     else:
         error_summary = None
 
