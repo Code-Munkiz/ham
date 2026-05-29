@@ -12,6 +12,32 @@ _SECRET_PATTERNS = [
     re.compile(r"\bsk-[a-zA-Z0-9_\-]{8,}\b"),
     re.compile(r"\bBearer\s+[A-Za-z0-9\-\._~\+\/=]{8,}\b", re.I),
 ]
+_BUILD_REGISTRY_V2_FORBIDDEN_TOKENS = (
+    "registry_v2_app_type",
+    "pack.site",
+    "pack.game",
+    "site.landing-page-core",
+    "site.dashboard-ui-core",
+    "game.",
+    "build registry v2",
+    "registry route",
+    "route matched",
+    "fallback_reason",
+    "gate report",
+    "gate review",
+    "scaffold_quality",
+    "dashboard_",
+    "city_",
+    "tactics_",
+    "landing_",
+    "recipe id",
+    "pack id",
+    "yaml",
+    "render length",
+    "render budget",
+    "playbook context",
+    "build registry v2 playbook context:",
+)
 
 
 def provider_capability_matrix() -> dict[str, dict[str, Any]]:
@@ -92,6 +118,19 @@ def _safe_text(raw: Any, *, limit: int = 260) -> str:
     return s
 
 
+def _contains_build_registry_v2_forbidden_token(text: str) -> bool:
+    lower = text.lower()
+    return any(token in lower for token in _BUILD_REGISTRY_V2_FORBIDDEN_TOKENS)
+
+
+def _sanitize_provider_user_copy(text: str, *, fallback: str) -> str:
+    if not text:
+        return text
+    if _contains_build_registry_v2_forbidden_token(text):
+        return fallback
+    return text
+
+
 def _redact_shallow_metadata(raw: dict[str, Any] | None) -> dict[str, Any]:
     if not raw:
         return {}
@@ -103,11 +142,17 @@ def _redact_shallow_metadata(raw: dict[str, Any] | None) -> dict[str, Any]:
         if not ks:
             continue
         if isinstance(v, str):
-            out[ks] = _safe_text(v, limit=_METADATA_STR_LIMIT)
+            out[ks] = _sanitize_provider_user_copy(
+                _safe_text(v, limit=_METADATA_STR_LIMIT),
+                fallback="[REDACTED]",
+            )
         elif isinstance(v, (int, float, bool)) or v is None:
             out[ks] = v
         else:
-            out[ks] = _safe_text(str(v), limit=_METADATA_STR_LIMIT)
+            out[ks] = _sanitize_provider_user_copy(
+                _safe_text(str(v), limit=_METADATA_STR_LIMIT),
+                fallback="[REDACTED]",
+            )
     return out
 
 
@@ -219,6 +264,10 @@ def map_cursor_conversation_to_feed_events(
             or "Provider event",
             limit=260,
         )
+        message = _sanitize_provider_user_copy(
+            message,
+            fallback="Provider event redacted.",
+        )
         if not message:
             continue
         source = "cursor"
@@ -284,6 +333,10 @@ def map_cursor_sdk_bridge_to_feed_events(
         }:
             kind = "status"
         message = _safe_text(row.get("message") or "", limit=260)
+        message = _sanitize_provider_user_copy(
+            message,
+            fallback="Provider event redacted.",
+        )
         if not message:
             continue
         provider_id = _safe_text(row.get("event_id"), limit=128) or None

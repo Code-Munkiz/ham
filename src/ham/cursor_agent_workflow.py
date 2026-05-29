@@ -18,6 +18,9 @@ from src.integrations.cursor_cloud_client import (
     cursor_api_get_agent,
     cursor_api_launch_agent,
 )
+from src.ham.build_registry.intent import enrich_plan_metadata_with_registry_v2
+from src.ham.build_registry.scaffold_context import resolve_scaffold_context
+from src.ham.builder_kit_router import select_kit_for_prompt
 from src.persistence.control_plane_run import (
     ControlPlaneAuditRef,
     ControlPlaneProviderAuditRef,
@@ -37,6 +40,79 @@ from src.persistence.managed_mission import derive_mission_checkpoint
 CURSOR_AGENT_BASE_REVISION = "cursor-agent-v2"
 
 _METADATA_REPO_KEY = "cursor_cloud_repository"
+_SUMMARY_FALLBACK = "Cursor mission in progress."
+_ERROR_SUMMARY_FALLBACK = "Cursor mission failed."
+_BUILD_REGISTRY_V2_FORBIDDEN_TOKENS = (
+    "registry_v2_app_type",
+    "pack.site",
+    "pack.game",
+    "site.landing-page-core",
+    "site.dashboard-ui-core",
+    "game.",
+    "build registry v2",
+    "registry route",
+    "route matched",
+    "fallback_reason",
+    "gate report",
+    "gate review",
+    "scaffold_quality",
+    "dashboard_",
+    "city_",
+    "tactics_",
+    "landing_",
+    "recipe id",
+    "pack id",
+    "yaml",
+    "render length",
+    "render budget",
+    "playbook context",
+    "build registry v2 playbook context:",
+)
+
+
+def _contains_build_registry_v2_forbidden_token(text: str) -> bool:
+    lower = text.lower()
+    return any(token in lower for token in _BUILD_REGISTRY_V2_FORBIDDEN_TOKENS)
+
+
+def _sanitize_normal_user_copy(text: str | None, *, fallback: str | None) -> str | None:
+    if not text:
+        return text
+    if _contains_build_registry_v2_forbidden_token(text):
+        return fallback
+    return text
+
+
+def _enrich_internal_launch_prompt(user_prompt: str) -> str:
+    """Append v2 playbook context to the Cursor runner prompt when available.
+
+    This is backend-internal only and never changes API response schema.
+    """
+    prompt = str(user_prompt or "")
+    if not prompt.strip():
+        return prompt
+    try:
+        template_kind = select_kit_for_prompt(prompt)
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {
+                "template_kind": template_kind,
+                "originated_from": "cursor_agent_launch",
+            },
+            prompt,
+        )
+        app_type = metadata.get("registry_v2_app_type")
+        if not isinstance(app_type, str) or not app_type.strip():
+            return prompt
+        resolved = resolve_scaffold_context(
+            metadata=metadata,
+            template_kind=template_kind,
+        )
+        if resolved.source != "v2" or not resolved.context.strip():
+            return prompt
+        return f"{prompt}\n\n{resolved.header}\n{resolved.context}"
+    except Exception:  # noqa: BLE001
+        # Never let internal enrichment failures alter launch behavior.
+        return prompt
 
 
 def central_audit_file_path() -> Path:
@@ -253,6 +329,10 @@ def summarize_cursor_agent_payload(raw: dict[str, Any]) -> dict[str, Any]:
     agent_id = raw.get("id") or raw.get("agentId")
     status = raw.get("status")
     summary = raw.get("summary") or raw.get("name") or ""
+    safe_summary = _sanitize_normal_user_copy(
+        str(summary)[:8000] if summary else None,
+        fallback=_SUMMARY_FALLBACK,
+    )
     pr_url: str | None = None
     target = raw.get("target")
     if isinstance(target, dict):
@@ -269,7 +349,7 @@ def summarize_cursor_agent_payload(raw: dict[str, Any]) -> dict[str, Any]:
         "status": str(status) if status is not None else None,
         "repository": str(repo) if repo else None,
         "ref": str(ref) if ref else None,
-        "summary": str(summary)[:8000] if summary else None,
+        "summary": safe_summary,
         "pr_url": str(pr_url) if pr_url else None,
     }
 
@@ -543,6 +623,17 @@ def run_cursor_agent_launch(
         ref=ref,
         mission_handling=mission_handling,
     )
+    enriched_task_prompt = _enrich_internal_launch_prompt(task_prompt)
+    if enriched_task_prompt == task_prompt:
+        launch_prompt_text = prompt_text
+    else:
+        launch_prompt_text = effective_cursor_launch_task_prompt(
+            task_prompt=enriched_task_prompt,
+            expected_deliverable=expected_deliverable,
+            repository=repository,
+            ref=ref,
+            mission_handling=mission_handling,
+        )
     excerpt: str | None = None
     pr_root: str | None = None
     if project_root_for_mirror and str(project_root_for_mirror).strip():
@@ -553,7 +644,7 @@ def run_cursor_agent_launch(
     try:
         raw = cursor_api_launch_agent(
             api_key=api_key,
-            prompt_text=prompt_text,
+            prompt_text=launch_prompt_text,
             repository=repository,
             ref=ref,
             model=model,
@@ -657,6 +748,10 @@ def run_cursor_agent_launch(
         )
         fail_id = new_ham_run_id()
         err_text = str(exc)
+        safe_err_text = (
+            _sanitize_normal_user_copy(err_text, fallback=_ERROR_SUMMARY_FALLBACK)
+            or _ERROR_SUMMARY_FALLBACK
+        )
         frun = ControlPlaneRun(
             ham_run_id=fail_id,
             provider="cursor_cloud_agent",
@@ -676,7 +771,7 @@ def run_cursor_agent_launch(
             external_id=None,
             workflow_id=None,
             summary=None,
-            error_summary=cap_error_summary(err_text),
+            error_summary=cap_error_summary(safe_err_text),
             last_provider_status=None,
             audit_ref=_cursor_control_plane_audit_ref(),
             project_root=pr_root,
@@ -685,13 +780,13 @@ def run_cursor_agent_launch(
         return (
             False,
             {
-                "error": err_text,
+                "error": safe_err_text,
                 "status_code": exc.status_code,
                 "ham_run_id": fail_id,
                 "control_plane_status": "failed",
                 "provider": "cursor_cloud_agent",
             },
-            err_text,
+            safe_err_text,
             fail_id,
         )
 
@@ -778,6 +873,10 @@ def run_cursor_agent_status(
         return True, out, None, (existing.ham_run_id if existing else None)
     except CursorCloudApiError as exc:
         excerpt = exc.body_excerpt
+        safe_error = (
+            _sanitize_normal_user_copy(str(exc), fallback=_ERROR_SUMMARY_FALLBACK)
+            or _ERROR_SUMMARY_FALLBACK
+        )
         append_cursor_agent_audit(
             _audit_row_common(
                 action="status",
@@ -786,7 +885,7 @@ def run_cursor_agent_status(
                 repository=None,
                 ref=None,
                 ok=False,
-                summary=str(exc),
+                summary=safe_error,
                 agent_id=agent_id,
                 provider_excerpt=excerpt,
             ),
@@ -800,18 +899,18 @@ def run_cursor_agent_status(
                     "last_observed_at": n,
                     "status": "unknown",
                     "status_reason": "status_poll:cursor_api_error",
-                    "error_summary": cap_error_summary(str(exc)),
+                    "error_summary": cap_error_summary(safe_error),
                 },
             )
             st_global.save(upd, project_root_for_mirror=pr_root)
         return (
             False,
             {
-                "error": str(exc),
+                "error": safe_error,
                 "status_code": exc.status_code,
                 "provider": "cursor_cloud_agent",
             },
-            str(exc),
+            safe_error,
             (existing.ham_run_id if existing else None),
         )
 

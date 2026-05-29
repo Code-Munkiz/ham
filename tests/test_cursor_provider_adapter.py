@@ -60,6 +60,23 @@ def test_map_cursor_redacts_secrets_in_message() -> None:
     assert "[REDACTED]" in out[0]["message"]
 
 
+def test_map_cursor_redacts_build_registry_v2_tokens_in_message() -> None:
+    payload = {
+        "events": [
+            {
+                "createdAt": "2026-01-01T00:00:00Z",
+                "type": "message",
+                "role": "assistant",
+                "message": "Build Registry v2 playbook context: site.dashboard-ui-core route matched",
+            }
+        ]
+    }
+    out = map_cursor_conversation_to_feed_events(agent_id="ag_test", payload=payload)
+    assert len(out) == 1
+    assert out[0]["message"] == "Provider event redacted."
+    assert "site.dashboard-ui-core" not in out[0]["message"].lower()
+
+
 def test_provider_projection_envelope_ok_and_unavailable() -> None:
     ok = provider_projection_envelope(provider_error=None)
     assert ok["mode"] == "rest_projection"
@@ -129,3 +146,21 @@ def test_map_cursor_sdk_bridge_rows_to_feed_events() -> None:
     assert "[REDACTED]" in out[0]["message"]
     assert out[0]["metadata"]["run_id"] == "run-1"
     assert out[1]["kind"] == "tool_event"
+
+
+def test_map_cursor_sdk_bridge_redacts_build_registry_v2_tokens() -> None:
+    rows = [
+        {
+            "provider": "cursor",
+            "agent_id": "bc-x",
+            "run_id": "run-1",
+            "event_id": "sdk_evt_1",
+            "kind": "assistant_message",
+            "message": "Build Registry v2 playbook context: site.landing-page-core",
+            "time": "2026-01-01T00:00:00Z",
+        }
+    ]
+    out = map_cursor_sdk_bridge_to_feed_events(agent_id="bc-x", rows=rows)
+    assert len(out) == 1
+    assert out[0]["message"] == "Provider event redacted."
+    assert "site.landing-page-core" not in out[0]["message"].lower()

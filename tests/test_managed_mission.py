@@ -675,7 +675,10 @@ def test_mission_feed_projects_provider_conversation_events_safely(
                 {
                     "createdAt": "2026-01-01T00:00:00Z",
                     "type": "tool_progress",
-                    "message": "Running checks with token crsr_ABCDEF1234567890",
+                    "message": (
+                        "Running checks with token crsr_ABCDEF1234567890 and "
+                        "Build Registry v2 playbook context: site.dashboard-ui-core"
+                    ),
                 }
             ]
         },
@@ -690,6 +693,8 @@ def test_mission_feed_projects_provider_conversation_events_safely(
     events = body["events"]
     assert any(e.get("kind") == "status" for e in events)
     assert all("crsr_ABCDEF1234567890" not in str(e.get("message")) for e in events)
+    assert all("site.dashboard-ui-core" not in str(e.get("message")).lower() for e in events)
+    assert all("build registry v2" not in str(e.get("message")).lower() for e in events)
 
 
 def test_mission_feed_falls_back_when_provider_conversation_unavailable(
@@ -1079,6 +1084,38 @@ def test_managed_mission_truth_endpoint(client: TestClient) -> None:
     topics = [row["topic"] for row in body["rows"]]
     assert "Agent execution" in topics
     assert "Mission record & feed" in topics
+
+
+def test_public_mission_sanitizes_forbidden_build_registry_tokens(client: TestClient) -> None:
+    st = cmm._store
+    assert st is not None
+    mid = new_mission_registry_id()
+    n = utc_now_iso()
+    st.save(
+        ManagedMission(
+            mission_registry_id=mid,
+            cursor_agent_id="public-sanitize-agent",
+            control_plane_ham_run_id=None,
+            mission_handling="managed",
+            uplink_id=None,
+            repo_key="a/b",
+            mission_lifecycle="failed",
+            cursor_status_last_observed="FAILED",
+            status_reason_last_observed="Build Registry v2 playbook context: site.landing-page-core",
+            last_post_deploy_reason_code="registry_v2_app_type leaked",
+            created_at=n,
+            updated_at=n,
+            last_server_observed_at=n,
+        )
+    )
+    r = client.get(f"/api/cursor/managed/missions/{mid}")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    blob = json.dumps(body).lower()
+    assert "site.landing-page-core" not in blob
+    assert "registry_v2_app_type" not in blob
+    assert body.get("title") == "Cloud Agent mission"
+    assert body.get("error_summary") == "Mission failed."
 
 
 def test_managed_mission_correlation_embeds_control_plane_run(
