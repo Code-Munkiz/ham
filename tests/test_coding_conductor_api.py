@@ -164,11 +164,44 @@ _FORBIDDEN_TOKENS = (
     "https://",
 )
 
+_FORBIDDEN_BUILD_REGISTRY_TOKENS = (
+    "registry_v2_app_type",
+    "pack.site",
+    "pack.game",
+    "site.landing-page-core",
+    "site.dashboard-ui-core",
+    "game.",
+    "build registry v2",
+    "registry route",
+    "route matched",
+    "fallback_reason",
+    "gate report",
+    "gate review",
+    "scaffold_quality",
+    "dashboard_",
+    "city_",
+    "tactics_",
+    "landing_",
+    "recipe id",
+    "pack id",
+    "yaml",
+    "render length",
+    "render budget",
+    "playbook context",
+    "build registry v2 playbook context:",
+)
+
 
 def _assert_no_secret_leakage(text: str) -> None:
     blob = text.lower()
     for forbidden in _FORBIDDEN_TOKENS:
         assert forbidden not in blob, f"response leaks {forbidden!r}: {blob}"
+
+
+def _assert_no_build_registry_leakage(text: str) -> None:
+    blob = text.lower()
+    for forbidden in _FORBIDDEN_BUILD_REGISTRY_TOKENS:
+        assert forbidden not in blob, f"response leaks build-registry token {forbidden!r}: {blob}"
 
 
 def _post(
@@ -512,6 +545,7 @@ def test_preview_response_never_leaks_secrets_or_internals(
         res = _post(_client(normie_actor), user_prompt=prompt, project_id=rec.id)
         assert res.status_code == 200, res.text
         _assert_no_secret_leakage(res.text)
+        _assert_no_build_registry_leakage(res.text)
         # Specific value checks for defence in depth.
         blob = res.text.lower()
         assert "test-only-not-deployed" not in blob
@@ -520,6 +554,32 @@ def test_preview_response_never_leaks_secrets_or_internals(
         assert "runner.example/private" not in blob
         # And the github_repo string itself never appears.
         assert "code-munkiz/ham" not in blob
+
+
+def test_preview_response_never_exposes_build_registry_v2_internals(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    normie_actor: HamActor,
+    tmp_path: Path,
+    cleanup_overrides: None,
+) -> None:
+    """Normal conductor payloads stay outcome-focused and omit registry-v2 internals."""
+    _make_build_ready(monkeypatch)
+    _make_cursor_ready(monkeypatch)
+    rec = _register_project(
+        isolated_store,
+        name="p_registry_guardrail",
+        root=tmp_path,
+        build_lane_enabled=True,
+        github_repo="Code-Munkiz/ham",
+    )
+    res = _post(
+        _client(normie_actor),
+        user_prompt="Refactor the chat router for clarity.",
+        project_id=rec.id,
+    )
+    assert res.status_code == 200, res.text
+    _assert_no_build_registry_leakage(res.text)
 
 
 def test_preview_does_not_expose_internal_workflow_ids(

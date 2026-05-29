@@ -34,6 +34,41 @@ from src.ham.worker_adapters.opencode_adapter import (
 _EXEC_TOKEN_CANARY = "test-token-canary"  # noqa: S105
 _AUTH_CANARY = "opencode-test-canary-not-a-real-key"
 
+_FORBIDDEN_BUILD_REGISTRY_TOKENS = (
+    "registry_v2_app_type",
+    "pack.site",
+    "pack.game",
+    "site.landing-page-core",
+    "site.dashboard-ui-core",
+    "game.",
+    "build registry v2",
+    "registry route",
+    "route matched",
+    "fallback_reason",
+    "gate report",
+    "gate review",
+    "scaffold_quality",
+    "dashboard_",
+    "city_",
+    "tactics_",
+    "landing_",
+    "recipe id",
+    "pack id",
+    "yaml",
+    "render length",
+    "render budget",
+    "playbook context",
+    "build registry v2 playbook context:",
+)
+
+
+def _assert_no_build_registry_v2_leakage(text: str) -> None:
+    blob = text.lower()
+    for forbidden in _FORBIDDEN_BUILD_REGISTRY_TOKENS:
+        assert forbidden not in blob, (
+            f"opencode build payload leaks build-registry token {forbidden!r}: {blob}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -235,6 +270,7 @@ def test_preview_returns_proposal_digest_when_gates_pass(
     assert body["base_revision"] == build_api.OPENCODE_REGISTRY_REVISION
     assert body["output_target"] == "managed_workspace"
     assert body["will_open_pull_request"] is False
+    _assert_no_build_registry_v2_leakage(res.text)
 
 
 def test_preview_does_not_spawn_opencode_serve(

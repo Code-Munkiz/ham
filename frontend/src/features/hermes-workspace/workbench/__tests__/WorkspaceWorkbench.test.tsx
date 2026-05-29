@@ -129,6 +129,40 @@ function downloadMenuItem() {
   return screen.getByText(/Download project/i).closest('[role="menuitem"]') as HTMLElement;
 }
 
+const FORBIDDEN_BUILD_REGISTRY_TOKENS = [
+  "registry_v2_app_type",
+  "pack.site",
+  "pack.game",
+  "site.landing-page-core",
+  "site.dashboard-ui-core",
+  "game.",
+  "build registry v2",
+  "registry route",
+  "route matched",
+  "fallback_reason",
+  "gate report",
+  "gate review",
+  "scaffold_quality",
+  "dashboard_",
+  "city_",
+  "tactics_",
+  "landing_",
+  "recipe id",
+  "pack id",
+  "yaml",
+  "render length",
+  "render budget",
+  "playbook context",
+  "build registry v2 playbook context:",
+] as const;
+
+function expectNoBuildRegistryLeakage(text: string) {
+  const lower = text.toLowerCase();
+  for (const token of FORBIDDEN_BUILD_REGISTRY_TOKENS) {
+    expect(lower).not.toContain(token);
+  }
+}
+
 function mockProjectWithActiveSnapshot() {
   listBuilderProjectSourcesMock.mockResolvedValue({
     project_id: "proj_abc",
@@ -2739,5 +2773,36 @@ describe("WorkspaceWorkbench", () => {
     expect(dom).not.toMatch(/\bgcs\b/i);
     expect(dom).not.toMatch(/\bpod\b/i);
     expect(screen.getByTestId("hww-preview-retry")).toBeInTheDocument();
+  });
+
+  it("Preview UI never shows Build Registry v2 internals in normal visible copy", async () => {
+    mockProjectWithActiveSnapshot();
+    getBuilderPreviewStatusMock.mockResolvedValue({
+      project_id: "proj_abc",
+      workspace_id: "ws_abc",
+      mode: "cloud",
+      status: "waiting",
+      health: "unknown",
+      preview_url: null,
+      message:
+        "Build Registry v2 playbook context: registry_v2_app_type=site.dashboard-ui-core pack.site fallback_reason=registry_v2_metadata_missing gate review dashboard_missing_top_nav",
+      updated_at: "2026-01-01T00:00:00Z",
+      source_snapshot_id: "ssnp_1",
+      runtime_session_id: "rtms_1",
+      preview_endpoint_id: null,
+      logs_hint:
+        "pack id=pack.site recipe id=site.dashboard-ui-core yaml=src/ham/build_registry/registry-pack.yaml render length=12000",
+    });
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-primary-title")).toBeInTheDocument();
+    });
+    const visibleCopy =
+      screen.getByTestId("hww-preview-canvas").textContent || document.body.textContent || "";
+    expectNoBuildRegistryLeakage(visibleCopy);
   });
 });

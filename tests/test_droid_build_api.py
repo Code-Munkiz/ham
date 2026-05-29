@@ -156,6 +156,42 @@ def _make_outcome(
     )
 
 
+_FORBIDDEN_BUILD_REGISTRY_TOKENS = (
+    "registry_v2_app_type",
+    "pack.site",
+    "pack.game",
+    "site.landing-page-core",
+    "site.dashboard-ui-core",
+    "game.",
+    "build registry v2",
+    "registry route",
+    "route matched",
+    "fallback_reason",
+    "gate report",
+    "gate review",
+    "scaffold_quality",
+    "dashboard_",
+    "city_",
+    "tactics_",
+    "landing_",
+    "recipe id",
+    "pack id",
+    "yaml",
+    "render length",
+    "render budget",
+    "playbook context",
+    "build registry v2 playbook context:",
+)
+
+
+def _assert_no_build_registry_v2_leakage(text: str) -> None:
+    blob = text.lower()
+    for forbidden in _FORBIDDEN_BUILD_REGISTRY_TOKENS:
+        assert forbidden not in blob, (
+            f"droid build preview leaks build-registry token {forbidden!r}: {blob}"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Preview gates
 # ---------------------------------------------------------------------------
@@ -286,6 +322,7 @@ def test_preview_succeeds_for_operator(
     assert body["requires_approval"] is True
     assert isinstance(body["proposal_digest"], str) and len(body["proposal_digest"]) == 64
     assert body["base_revision"] == REGISTRY_REVISION
+    _assert_no_build_registry_v2_leakage(res.text)
 
 
 def test_preview_response_does_not_leak_workflow_internals(
@@ -315,6 +352,7 @@ def test_preview_response_does_not_leak_workflow_internals(
         "registry_revision",
     ):
         assert forbidden not in raw, f"preview leaks {forbidden!r}: {raw}"
+    _assert_no_build_registry_v2_leakage(raw)
     body = res.json()
     assert "workflow_id" not in body
 

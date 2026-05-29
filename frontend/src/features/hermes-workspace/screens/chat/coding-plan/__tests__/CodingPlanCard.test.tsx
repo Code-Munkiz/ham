@@ -56,10 +56,40 @@ function renderWithDigest(p: CodingConductorPreviewPayload) {
   return { ...utils, card };
 }
 
+const FORBIDDEN_BUILD_REGISTRY_TOKENS = [
+  "registry_v2_app_type",
+  "pack.site",
+  "pack.game",
+  "site.landing-page-core",
+  "site.dashboard-ui-core",
+  "game.",
+  "build registry v2",
+  "registry route",
+  "route matched",
+  "fallback_reason",
+  "gate report",
+  "gate review",
+  "scaffold_quality",
+  "dashboard_",
+  "city_",
+  "tactics_",
+  "landing_",
+  "recipe id",
+  "pack id",
+  "yaml",
+  "render length",
+  "render budget",
+  "playbook context",
+  "build registry v2 playbook context:",
+] as const;
+
 function assertNoForbiddenTokens(node: HTMLElement) {
   const blob = node.textContent?.toLowerCase() ?? "";
   for (const token of FORBIDDEN_CARD_TOKENS) {
     expect(blob, `card leaks ${token}`).not.toContain(token);
+  }
+  for (const token of FORBIDDEN_BUILD_REGISTRY_TOKENS) {
+    expect(blob, `card leaks build-registry token ${token}`).not.toContain(token);
   }
   // Also lock against runner URL leakage and PII-shaped patterns.
   expect(blob).not.toMatch(/https?:\/\//);
