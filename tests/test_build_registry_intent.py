@@ -74,6 +74,15 @@ _CANONICAL_SAAS_DASHBOARD_CORE_GATE_PROMPT = (
     "No backend, no auth, no billing, no CRUD, no live data."
 )
 
+_EXACT_SAAS_DASHBOARD_CORE_GATE_REVIEW_PROMPT = (
+    "Build a static SaaS product dashboard for an AI developer platform. Include an app shell with "
+    "sidebar and topbar, a workspace/project selector placeholder, usage cards, a plan/status card, "
+    "recent activity, a simple project/resource list, one upgrade CTA, settings/help shortcuts, "
+    "empty/loading/error state examples, responsive layout, and accessible header/nav/main/list/table "
+    "structure. Use meaningful local sample data only. No backend, no auth, no billing or payments, "
+    "no CRUD, no admin user management, no permissions, and no live data."
+)
+
 _IDLE_POSITIVE_PROMPTS = (
     "build me an idle clicker game",
     "make a cookie clicker style game",
@@ -898,6 +907,7 @@ _DASHBOARD_UI_CORE_FEATURE_REQUEST_NEGATIVE_PROMPTS = (
 
 _SAAS_DASHBOARD_CORE_POSITIVE_PROMPTS = (
     _CANONICAL_SAAS_DASHBOARD_CORE_GATE_PROMPT,
+    _EXACT_SAAS_DASHBOARD_CORE_GATE_REVIEW_PROMPT,
     (
         "Create a product dashboard app home with app shell, workspace context switcher, "
         "usage KPI cards, plan status, activity feed, project resource list, one upgrade CTA, "
@@ -911,6 +921,7 @@ _SAAS_DASHBOARD_CORE_POSITIVE_PROMPTS = (
 
 _SAAS_DASHBOARD_CORE_NEGATED_CONSTRAINT_POSITIVE_PROMPTS = (
     _CANONICAL_SAAS_DASHBOARD_CORE_GATE_PROMPT,
+    _EXACT_SAAS_DASHBOARD_CORE_GATE_REVIEW_PROMPT,
     (
         "Build a SaaS dashboard app home with app shell, workspace selector, usage cards, "
         "plan status, recent activity, resource list, upgrade CTA, and settings shortcuts, "
@@ -923,14 +934,20 @@ _SAAS_DASHBOARD_CORE_WEAK_NEGATIVE_PROMPTS = (
     "build a SaaS app",
     "build an app dashboard",
     "build a portal",
+    "build a dashboard with no admin user management, no permissions, and no billing or payments",
 )
 
 _SAAS_DASHBOARD_CORE_EXCLUSION_NEGATIVE_PROMPTS = (
+    "build an admin dashboard with user management and permissions",
     "Build an admin dashboard with user management and CRUD",
+    "build a billing dashboard with subscriptions and invoices",
     "Build a billing dashboard with invoices and subscriptions",
+    "build a SaaS app with auth, backend, database, and CRUD",
     "Build a SaaS app with auth, login, backend API, and database",
     "Build a CRUD admin panel with create edit delete forms",
+    "build an analytics workbench",
     "Build an analytics workbench dashboard with ad hoc queries",
+    "build a trading dashboard",
     "Build an ecommerce admin dashboard for orders and products",
     "Build a fintech trading dashboard with order book and candlestick charts",
     "Build a landing page with dashboard screenshot hero",
@@ -1201,8 +1218,21 @@ class TestSelectRegistryV2AppTypeForPrompt:
     def test_negated_constraints_still_route_to_saas_dashboard_core(self, prompt: str):
         assert select_registry_v2_app_type_for_prompt(prompt) == SAAS_DASHBOARD_CORE_APP_TYPE
 
+    def test_exact_gate_review_prompt_routes_to_saas_dashboard_core(self):
+        assert (
+            select_registry_v2_app_type_for_prompt(_EXACT_SAAS_DASHBOARD_CORE_GATE_REVIEW_PROMPT)
+            == SAAS_DASHBOARD_CORE_APP_TYPE
+        )
+
     @pytest.mark.parametrize("prompt", _SAAS_DASHBOARD_CORE_WEAK_NEGATIVE_PROMPTS)
     def test_weak_saas_terms_do_not_route(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != SAAS_DASHBOARD_CORE_APP_TYPE
+
+    def test_negated_saas_exclusions_without_strong_positives_do_not_route(self):
+        prompt = (
+            "Build a dashboard with no admin user management, no permissions, "
+            "no billing or payments, no backend, no auth, no CRUD, and no live data."
+        )
         assert select_registry_v2_app_type_for_prompt(prompt) != SAAS_DASHBOARD_CORE_APP_TYPE
 
     @pytest.mark.parametrize("prompt", _SAAS_DASHBOARD_CORE_EXCLUSION_NEGATIVE_PROMPTS)
@@ -2063,6 +2093,17 @@ class TestEnrichPlanMetadataWithRegistryV2:
         assert "registry_v2_app_type" not in metadata
         assert metadata["template_kind"] == "generic"
 
+    def test_flag_disabled_exact_saas_gate_review_prompt_does_not_add_registry_metadata(
+        self, monkeypatch
+    ):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            _EXACT_SAAS_DASHBOARD_CORE_GATE_REVIEW_PROMPT,
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
+
     def test_flag_enabled_canonical_deck_builder_gate_prompt_adds_registry_metadata(self):
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "generic", "originated_from": "builder_chat_scaffold"},
@@ -2290,6 +2331,16 @@ class TestEnrichPlanMetadataWithRegistryV2:
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "generic", "originated_from": "builder_chat_scaffold"},
             _CANONICAL_SAAS_DASHBOARD_CORE_GATE_PROMPT,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        assert metadata["registry_v2_app_type"] == SAAS_DASHBOARD_CORE_APP_TYPE
+        assert metadata["template_kind"] == "generic"
+        assert metadata["originated_from"] == "builder_chat_scaffold"
+
+    def test_flag_enabled_exact_saas_gate_review_prompt_adds_registry_metadata(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic", "originated_from": "builder_chat_scaffold"},
+            _EXACT_SAAS_DASHBOARD_CORE_GATE_REVIEW_PROMPT,
             env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
         )
         assert metadata["registry_v2_app_type"] == SAAS_DASHBOARD_CORE_APP_TYPE
@@ -3804,6 +3855,46 @@ class TestEndToEndScaffoldMessages:
         assert "Builder Kit context:" not in content
         assert content.count("Builder Kit:") == 0
 
+    def test_flag_enabled_exact_saas_gate_review_prompt_produces_v2_context(self):
+        prompt = _EXACT_SAAS_DASHBOARD_CORE_GATE_REVIEW_PROMPT
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            prompt,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_saas_gate_review_e2e",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message=prompt,
+            steps=[Step(title="Scaffold dashboard", description="Create saas dashboard files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(
+            plan,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )[1]["content"]
+        assert metadata["registry_v2_app_type"] == SAAS_DASHBOARD_CORE_APP_TYPE
+        assert "Build Registry v2 playbook context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" in content
+        assert "app.saas-dashboard-core" in content
+        assert "pack.site" in content
+        for section_id in (
+            "section.saas-app-shell",
+            "section.saas-workspace-context",
+            "section.saas-usage-summary",
+            "section.saas-plan-status",
+            "section.saas-activity-feed",
+            "section.saas-resource-list",
+            "section.saas-upgrade-cta",
+            "section.saas-empty-loading-error-states",
+            "section.saas-responsive-structure",
+        ):
+            assert section_id in content
+        assert "Builder Kit context:" not in content
+        assert content.count("Builder Kit:") == 0
+
     def test_flag_disabled_saas_prompt_produces_v1_context_only(self, monkeypatch):
         monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
         prompt = _CANONICAL_SAAS_DASHBOARD_CORE_GATE_PROMPT
@@ -3813,6 +3904,29 @@ class TestEndToEndScaffoldMessages:
         )
         plan = Plan(
             plan_id="pln_registry_intent_saas_v1",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message=prompt,
+            steps=[Step(title="Scaffold dashboard", description="Create saas dashboard files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(plan)[1]["content"]
+        assert "registry_v2_app_type" not in metadata
+        assert "Builder Kit context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" not in content
+
+    def test_flag_disabled_exact_saas_gate_review_prompt_produces_v1_context_only(
+        self, monkeypatch
+    ):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        prompt = _EXACT_SAAS_DASHBOARD_CORE_GATE_REVIEW_PROMPT
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            prompt,
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_saas_gate_review_v1",
             workspace_id="ws_test",
             project_id="proj_test",
             user_message=prompt,

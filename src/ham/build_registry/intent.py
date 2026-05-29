@@ -1384,16 +1384,22 @@ def _strip_dashboard_negated_exclusions(text: str) -> str:
 
 _SAAS_NEGATED_EXCLUSION_PATTERN = re.compile(
     r"\b(?:no|without|sans|zero|free\s+of)\s+"
-    r"(?:a\s+|an\s+|any\s+|the\s+|live\s+|real[- ]?time\s+|admin\s+)*"
+    r"(?:a\s+|an\s+|any\s+|the\s+|live\s+|real[- ]?time\s+|admin\s+|user\s+)*"
     r"(?:crud|back[- ]?ends?|servers?|apis?|auth|authentication|"
     r"accounts?|logins?|log[- ]?in|sign[- ]?ups?|sign[- ]?ins?|"
+    r"user\s+management|admin\s+user\s+management|permissions?|rbac|"
+    r"role[- ]?based(?:\s+access\s+control)?|"
     r"databases?|db|payments?|billing|subscriptions?|invoices?|"
+    r"subscription\s+management|invoice\s+management|"
     r"live\s+data|real[- ]?time\s+data|real[- ]?time\s+updates?)"
     r"(?:\s*(?:,|and|or|,\s*and|,\s*or)\s*"
-    r"(?:a\s+|an\s+|any\s+|the\s+|live\s+|real[- ]?time\s+|admin\s+)*"
+    r"(?:a\s+|an\s+|any\s+|the\s+|live\s+|real[- ]?time\s+|admin\s+|user\s+)*"
     r"(?:crud|back[- ]?ends?|servers?|apis?|auth|authentication|"
     r"accounts?|logins?|log[- ]?in|sign[- ]?ups?|sign[- ]?ins?|"
+    r"user\s+management|admin\s+user\s+management|permissions?|rbac|"
+    r"role[- ]?based(?:\s+access\s+control)?|"
     r"databases?|db|payments?|billing|subscriptions?|invoices?|"
+    r"subscription\s+management|invoice\s+management|"
     r"live\s+data|real[- ]?time\s+data|real[- ]?time\s+updates?))*"
 )
 
