@@ -79,7 +79,10 @@ export function CodingPlanCard({
       aria-label="HAM build approval"
       data-hww-coding-plan="card"
     >
-      <h3 className="text-[13px] font-semibold tracking-tight text-white" data-hww-coding-plan="ready-title">
+      <h3
+        className="text-[13px] font-semibold tracking-tight text-white"
+        data-hww-coding-plan="ready-title"
+      >
         {READY_TITLE}
       </h3>
       <p className="mt-1 text-[11px] leading-snug text-white/65" data-hww-coding-plan="ready-copy">
