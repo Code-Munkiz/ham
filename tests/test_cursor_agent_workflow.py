@@ -158,6 +158,19 @@ def test_launch_digest_verification_uses_original_effective_prompt_then_launch_e
     _assert_no_build_registry_v2_leakage(json.dumps(payload))
 
 
+def test_summarize_cursor_agent_payload_preserves_game_js_in_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw = {
+        "id": "bc_game_js",
+        "status": "RUNNING",
+        "summary": "Updated game.js and config.yaml for the idle loop.",
+    }
+    out = caw.summarize_cursor_agent_payload(raw)
+    assert "game.js" in (out.get("summary") or "")
+    assert "config.yaml" in (out.get("summary") or "")
+
+
 def test_launch_sanitizes_forbidden_build_registry_tokens_in_user_visible_payload(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

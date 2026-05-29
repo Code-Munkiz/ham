@@ -4,6 +4,8 @@ import hashlib
 import re
 from typing import Any
 
+from src.ham.build_registry.user_copy_sanitize import sanitize_normal_user_copy
+
 _METADATA_KEYS_CAP = 8
 _METADATA_STR_LIMIT = 200
 
@@ -12,32 +14,6 @@ _SECRET_PATTERNS = [
     re.compile(r"\bsk-[a-zA-Z0-9_\-]{8,}\b"),
     re.compile(r"\bBearer\s+[A-Za-z0-9\-\._~\+\/=]{8,}\b", re.I),
 ]
-_BUILD_REGISTRY_V2_FORBIDDEN_TOKENS = (
-    "registry_v2_app_type",
-    "pack.site",
-    "pack.game",
-    "site.landing-page-core",
-    "site.dashboard-ui-core",
-    "game.",
-    "build registry v2",
-    "registry route",
-    "route matched",
-    "fallback_reason",
-    "gate report",
-    "gate review",
-    "scaffold_quality",
-    "dashboard_",
-    "city_",
-    "tactics_",
-    "landing_",
-    "recipe id",
-    "pack id",
-    "yaml",
-    "render length",
-    "render budget",
-    "playbook context",
-    "build registry v2 playbook context:",
-)
 
 
 def provider_capability_matrix() -> dict[str, dict[str, Any]]:
@@ -118,17 +94,11 @@ def _safe_text(raw: Any, *, limit: int = 260) -> str:
     return s
 
 
-def _contains_build_registry_v2_forbidden_token(text: str) -> bool:
-    lower = text.lower()
-    return any(token in lower for token in _BUILD_REGISTRY_V2_FORBIDDEN_TOKENS)
-
-
 def _sanitize_provider_user_copy(text: str, *, fallback: str) -> str:
     if not text:
         return text
-    if _contains_build_registry_v2_forbidden_token(text):
-        return fallback
-    return text
+    sanitized = sanitize_normal_user_copy(text, fallback=fallback)
+    return sanitized if sanitized is not None else text
 
 
 def _redact_shallow_metadata(raw: dict[str, Any] | None) -> dict[str, Any]:

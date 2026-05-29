@@ -20,6 +20,7 @@ from src.integrations.cursor_cloud_client import (
 )
 from src.ham.build_registry.intent import enrich_plan_metadata_with_registry_v2
 from src.ham.build_registry.scaffold_context import resolve_scaffold_context
+from src.ham.build_registry.user_copy_sanitize import sanitize_normal_user_copy
 from src.ham.builder_kit_router import select_kit_for_prompt
 from src.persistence.control_plane_run import (
     ControlPlaneAuditRef,
@@ -42,47 +43,6 @@ CURSOR_AGENT_BASE_REVISION = "cursor-agent-v2"
 _METADATA_REPO_KEY = "cursor_cloud_repository"
 _SUMMARY_FALLBACK = "Cursor mission in progress."
 _ERROR_SUMMARY_FALLBACK = "Cursor mission failed."
-_BUILD_REGISTRY_V2_FORBIDDEN_TOKENS = (
-    "registry_v2_app_type",
-    "pack.site",
-    "pack.game",
-    "site.landing-page-core",
-    "site.dashboard-ui-core",
-    "game.",
-    "build registry v2",
-    "registry route",
-    "route matched",
-    "fallback_reason",
-    "gate report",
-    "gate review",
-    "scaffold_quality",
-    "dashboard_",
-    "city_",
-    "tactics_",
-    "landing_",
-    "recipe id",
-    "pack id",
-    "yaml",
-    "render length",
-    "render budget",
-    "playbook context",
-    "build registry v2 playbook context:",
-)
-
-
-def _contains_build_registry_v2_forbidden_token(text: str) -> bool:
-    lower = text.lower()
-    return any(token in lower for token in _BUILD_REGISTRY_V2_FORBIDDEN_TOKENS)
-
-
-def _sanitize_normal_user_copy(text: str | None, *, fallback: str | None) -> str | None:
-    if not text:
-        return text
-    if _contains_build_registry_v2_forbidden_token(text):
-        return fallback
-    return text
-
-
 def _enrich_internal_launch_prompt(user_prompt: str) -> str:
     """Append v2 playbook context to the Cursor runner prompt when available.
 
@@ -329,7 +289,7 @@ def summarize_cursor_agent_payload(raw: dict[str, Any]) -> dict[str, Any]:
     agent_id = raw.get("id") or raw.get("agentId")
     status = raw.get("status")
     summary = raw.get("summary") or raw.get("name") or ""
-    safe_summary = _sanitize_normal_user_copy(
+    safe_summary = sanitize_normal_user_copy(
         str(summary)[:8000] if summary else None,
         fallback=_SUMMARY_FALLBACK,
     )
@@ -749,7 +709,7 @@ def run_cursor_agent_launch(
         fail_id = new_ham_run_id()
         err_text = str(exc)
         safe_err_text = (
-            _sanitize_normal_user_copy(err_text, fallback=_ERROR_SUMMARY_FALLBACK)
+            sanitize_normal_user_copy(err_text, fallback=_ERROR_SUMMARY_FALLBACK)
             or _ERROR_SUMMARY_FALLBACK
         )
         frun = ControlPlaneRun(
@@ -874,7 +834,7 @@ def run_cursor_agent_status(
     except CursorCloudApiError as exc:
         excerpt = exc.body_excerpt
         safe_error = (
-            _sanitize_normal_user_copy(str(exc), fallback=_ERROR_SUMMARY_FALLBACK)
+            sanitize_normal_user_copy(str(exc), fallback=_ERROR_SUMMARY_FALLBACK)
             or _ERROR_SUMMARY_FALLBACK
         )
         append_cursor_agent_audit(
