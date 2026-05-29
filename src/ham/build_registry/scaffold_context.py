@@ -63,7 +63,7 @@ def resolve_pack_root(
             if not path.is_absolute():
                 path = (repo_root / path).resolve()
             return path.resolve()
-    if app_type_id and app_type_id.startswith("site."):
+    if app_type_id and app_type_id.startswith(("site.", "app.")):
         return (repo_root / DEFAULT_WEBSITE_PACK_REL).resolve()
     return (repo_root / DEFAULT_GAME_PACK_REL).resolve()
 

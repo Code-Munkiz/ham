@@ -8,6 +8,7 @@ from unittest.mock import patch
 from src.ham.build_registry.scaffold_context import (
     V1_HEADER,
     V2_HEADER,
+    resolve_pack_root,
     resolve_scaffold_context,
 )
 
@@ -27,6 +28,40 @@ class TestResolveScaffoldContextFlagDisabled:
         assert result.header == V1_HEADER
         assert "Builder Kit: todo" in result.context
         assert result.registry_v2_app_type is None
+
+
+class TestResolvePackRoot:
+    def test_resolves_site_prefix_to_website_pack(self):
+        path = resolve_pack_root(
+            metadata=None,
+            repo_root=REPO_ROOT,
+            app_type_id="site.dashboard-ui-core",
+        )
+        assert path.as_posix().endswith("docs/build-kit-registry-v2/website-pack")
+
+    def test_resolves_app_prefix_to_website_pack(self):
+        path = resolve_pack_root(
+            metadata=None,
+            repo_root=REPO_ROOT,
+            app_type_id="app.saas-dashboard-core",
+        )
+        assert path.as_posix().endswith("docs/build-kit-registry-v2/website-pack")
+
+    def test_resolves_game_prefix_to_game_pack(self):
+        path = resolve_pack_root(
+            metadata=None,
+            repo_root=REPO_ROOT,
+            app_type_id="game.idle-incremental",
+        )
+        assert path.as_posix().endswith("docs/build-kit-registry-v2/game-pack")
+
+    def test_unknown_prefix_falls_back_to_game_pack(self):
+        path = resolve_pack_root(
+            metadata=None,
+            repo_root=REPO_ROOT,
+            app_type_id="unknown.bad-type",
+        )
+        assert path.as_posix().endswith("docs/build-kit-registry-v2/game-pack")
 
 
 class TestResolveScaffoldContextMetadataMissing:
@@ -158,6 +193,26 @@ class TestResolveScaffoldContextV2Success:
             "section.dashboard-responsive-structure",
         ):
             assert section_id in result.context
+        assert "Builder Kit:" not in result.context
+
+    def test_returns_v2_playbook_context_for_saas_dashboard_core(self):
+        result = resolve_scaffold_context(
+            metadata={"registry_v2_app_type": "app.saas-dashboard-core"},
+            template_kind="generic",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "1"},
+            repo_root=REPO_ROOT,
+        )
+        assert result.source == "v2"
+        assert result.header == V2_HEADER
+        assert result.fallback_reason is None
+        assert result.registry_v2_app_type == "app.saas-dashboard-core"
+        assert result.registry_v2_pack_id == "pack.site"
+        assert "app.saas-dashboard-core" in result.context
+        assert "stack.dom-saas-dashboard-minimal" in result.context
+        assert "section.saas-app-shell" in result.context
+        assert "section.saas-usage-summary" in result.context
+        assert "section.saas-resource-list" in result.context
+        assert "validator.no-auth-backend-claims" in result.context
         assert "Builder Kit:" not in result.context
 
 
