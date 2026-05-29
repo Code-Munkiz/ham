@@ -193,6 +193,40 @@ def _assert_no_build_registry_v2_leakage(text: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Internal prompt enrichment seam
+# ---------------------------------------------------------------------------
+
+
+def test_internal_launch_prompt_enrichment_flag_off_no_v2_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+    prompt = "Build a landing page for a small SaaS with hero and CTA."
+    runner_prompt = build_api._enrich_internal_launch_prompt(prompt)
+    assert runner_prompt == prompt
+
+
+def test_internal_launch_prompt_enrichment_flag_on_landing_selects_site_landing_page_core(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "1")
+    prompt = "Build a landing page for a small SaaS with hero and CTA."
+    runner_prompt = build_api._enrich_internal_launch_prompt(prompt)
+    assert "Build Registry v2 playbook context:" in runner_prompt
+    assert "site.landing-page-core" in runner_prompt
+
+
+def test_internal_launch_prompt_enrichment_flag_on_dashboard_selects_site_dashboard_ui_core(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "1")
+    prompt = "Build a read-only dashboard with KPI cards, chart, and data table."
+    runner_prompt = build_api._enrich_internal_launch_prompt(prompt)
+    assert "Build Registry v2 playbook context:" in runner_prompt
+    assert "site.dashboard-ui-core" in runner_prompt
+
+
+# ---------------------------------------------------------------------------
 # Preview gates
 # ---------------------------------------------------------------------------
 
@@ -604,6 +638,99 @@ def test_launch_happy_path_with_mocked_executor(
         "droid exec",
     ):
         assert forbidden not in raw, f"launch leaks {forbidden!r}"
+    _assert_no_build_registry_v2_leakage(raw)
+
+
+def test_launch_digest_integrity_with_internal_landing_enrichment(
+    isolated_store: ProjectStore,
+    tmp_path: Path,
+    operator_actor: HamActor,
+    monkeypatch: pytest.MonkeyPatch,
+    enforce_clerk_with_operator_allowlist: None,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("HAM_DROID_EXEC_TOKEN", "test-only-not-deployed")
+    monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "1")
+    root = tmp_path / "r"
+    root.mkdir()
+    rec = _register_build_project(isolated_store, name="p_landing_enrich", root=root)
+    client = _client(operator_actor)
+    user_prompt = "Build a landing page for a SaaS with hero and FAQ."
+    pv = _make_preview(client, rec.id, user_prompt)
+
+    captured: dict[str, Any] = {}
+
+    def _fake_executor(**kwargs: Any) -> build_api.DroidBuildLaunchOutcome:
+        captured.update(kwargs)
+        return _make_outcome()
+
+    with patch(
+        "src.api.droid_build.execute_droid_build_workflow",
+        side_effect=_fake_executor,
+    ):
+        res = client.post(
+            "/api/droid/build/launch",
+            json={
+                "project_id": rec.id,
+                "user_prompt": user_prompt,
+                "proposal_digest": pv["proposal_digest"],
+                "base_revision": pv["base_revision"],
+                "confirmed": True,
+                "accept_pr": True,
+            },
+        )
+
+    assert res.status_code == 200, res.text
+    assert captured["proposal_digest"] == pv["proposal_digest"]
+    assert "Build Registry v2 playbook context:" in captured["user_prompt"]
+    assert "site.landing-page-core" in captured["user_prompt"]
+    _assert_no_build_registry_v2_leakage(res.text)
+
+
+def test_launch_digest_integrity_with_internal_dashboard_enrichment(
+    isolated_store: ProjectStore,
+    tmp_path: Path,
+    operator_actor: HamActor,
+    monkeypatch: pytest.MonkeyPatch,
+    enforce_clerk_with_operator_allowlist: None,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("HAM_DROID_EXEC_TOKEN", "test-only-not-deployed")
+    monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "1")
+    root = tmp_path / "r"
+    root.mkdir()
+    rec = _register_build_project(isolated_store, name="p_dashboard_enrich", root=root)
+    client = _client(operator_actor)
+    user_prompt = "Build a read-only dashboard with KPI cards, charts, and table."
+    pv = _make_preview(client, rec.id, user_prompt)
+
+    captured: dict[str, Any] = {}
+
+    def _fake_executor(**kwargs: Any) -> build_api.DroidBuildLaunchOutcome:
+        captured.update(kwargs)
+        return _make_outcome()
+
+    with patch(
+        "src.api.droid_build.execute_droid_build_workflow",
+        side_effect=_fake_executor,
+    ):
+        res = client.post(
+            "/api/droid/build/launch",
+            json={
+                "project_id": rec.id,
+                "user_prompt": user_prompt,
+                "proposal_digest": pv["proposal_digest"],
+                "base_revision": pv["base_revision"],
+                "confirmed": True,
+                "accept_pr": True,
+            },
+        )
+
+    assert res.status_code == 200, res.text
+    assert captured["proposal_digest"] == pv["proposal_digest"]
+    assert "Build Registry v2 playbook context:" in captured["user_prompt"]
+    assert "site.dashboard-ui-core" in captured["user_prompt"]
+    _assert_no_build_registry_v2_leakage(res.text)
 
 
 def test_launch_failure_propagates_friendly_error(
@@ -653,6 +780,87 @@ def test_launch_failure_propagates_friendly_error(
     assert body["pr_url"] is None
     assert body["control_plane_status"] == "failed"
     assert "branch protection" in (body.get("error_summary") or "")
+
+
+def test_launch_rejects_client_supplied_registry_v2_app_type_field(
+    isolated_store: ProjectStore,
+    tmp_path: Path,
+    operator_actor: HamActor,
+    monkeypatch: pytest.MonkeyPatch,
+    enforce_clerk_with_operator_allowlist: None,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("HAM_DROID_EXEC_TOKEN", "test-only-not-deployed")
+    root = tmp_path / "r"
+    root.mkdir()
+    rec = _register_build_project(isolated_store, name="p_extra_launch", root=root)
+    client = _client(operator_actor)
+    pv = _make_preview(client, rec.id, "Tidy README.")
+    res = client.post(
+        "/api/droid/build/launch",
+        json={
+            "project_id": rec.id,
+            "user_prompt": "Tidy README.",
+            "proposal_digest": pv["proposal_digest"],
+            "base_revision": pv["base_revision"],
+            "confirmed": True,
+            "accept_pr": True,
+            "registry_v2_app_type": "site.dashboard-ui-core",
+        },
+    )
+    assert res.status_code == 422
+
+
+def test_launch_sanitizes_forbidden_build_registry_tokens_in_user_visible_payload(
+    isolated_store: ProjectStore,
+    tmp_path: Path,
+    operator_actor: HamActor,
+    monkeypatch: pytest.MonkeyPatch,
+    enforce_clerk_with_operator_allowlist: None,
+    cleanup_overrides: None,
+) -> None:
+    monkeypatch.setenv("HAM_DROID_EXEC_TOKEN", "test-only-not-deployed")
+    monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "1")
+    root = tmp_path / "r"
+    root.mkdir()
+    rec = _register_build_project(isolated_store, name="p_sanitize", root=root)
+    client = _client(operator_actor)
+    pv = _make_preview(client, rec.id, "Build a read-only dashboard with KPI cards.")
+
+    leaky_summary = "Build Registry v2 playbook context: site.dashboard-ui-core"
+    leaky_error = "fallback_reason=registry_v2_error route matched dashboard_123"
+    failure = _make_outcome(
+        ok=False,
+        pr_url=None,
+        pr_branch=None,
+        pr_commit_sha=None,
+        build_outcome="push_blocked",
+        summary=leaky_summary,
+        control_plane_status="failed",
+        error_summary=leaky_error,
+    )
+
+    with patch(
+        "src.api.droid_build.execute_droid_build_workflow",
+        return_value=failure,
+    ):
+        res = client.post(
+            "/api/droid/build/launch",
+            json={
+                "project_id": rec.id,
+                "user_prompt": "Build a read-only dashboard with KPI cards.",
+                "proposal_digest": pv["proposal_digest"],
+                "base_revision": pv["base_revision"],
+                "confirmed": True,
+                "accept_pr": True,
+            },
+        )
+
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["summary"] == "Factory Droid build finished."
+    assert body["error_summary"] == "Factory Droid build failed."
+    _assert_no_build_registry_v2_leakage(res.text)
 
 
 # ---------------------------------------------------------------------------

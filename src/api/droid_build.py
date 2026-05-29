@@ -52,6 +52,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.dependencies.workspace import get_workspace_store
+from src.ham.build_registry.intent import enrich_plan_metadata_with_registry_v2
+from src.ham.build_registry.scaffold_context import resolve_scaffold_context
+from src.ham.builder_kit_router import select_kit_for_prompt
 from src.ham.clerk_auth import HamActor
 from src.ham.clerk_operator import actor_is_workspace_operator
 from src.ham.droid_workflows.preview_launch import (
@@ -77,6 +80,36 @@ _BUILD_WORKFLOW_ID = "safe_edit_low"
 # Token gate — must be configured on the API host before any launch executes.
 # This is the *name* of an env var, not a secret value (S105 false positive).
 _DROID_EXEC_TOKEN_ENV = "HAM_DROID_EXEC_TOKEN"  # noqa: S105
+_SUMMARY_FALLBACK = "Factory Droid build finished."
+_ERROR_SUMMARY_FALLBACK = "Factory Droid build failed."
+
+# Keep Build Registry v2 routing internals out of normal launch payload copy.
+_BUILD_REGISTRY_V2_FORBIDDEN_TOKENS = (
+    "registry_v2_app_type",
+    "pack.site",
+    "pack.game",
+    "site.landing-page-core",
+    "site.dashboard-ui-core",
+    "game.",
+    "build registry v2",
+    "registry route",
+    "route matched",
+    "fallback_reason",
+    "gate report",
+    "gate review",
+    "scaffold_quality",
+    "dashboard_",
+    "city_",
+    "tactics_",
+    "landing_",
+    "recipe id",
+    "pack id",
+    "yaml",
+    "render length",
+    "render budget",
+    "playbook context",
+    "build registry v2 playbook context:",
+)
 
 
 router = APIRouter(
@@ -342,6 +375,51 @@ def _require_droid_exec_token() -> None:
         )
 
 
+def _contains_build_registry_v2_forbidden_token(text: str) -> bool:
+    lower = text.lower()
+    return any(token in lower for token in _BUILD_REGISTRY_V2_FORBIDDEN_TOKENS)
+
+
+def _sanitize_normal_user_copy(text: str | None, *, fallback: str | None) -> str | None:
+    if not text:
+        return text
+    if _contains_build_registry_v2_forbidden_token(text):
+        return fallback
+    return text
+
+
+def _enrich_internal_launch_prompt(user_prompt: str) -> str:
+    """Append v2 playbook context to the Droid runner prompt when available.
+
+    This is backend-internal only and never changes the API response schema.
+    """
+    prompt = str(user_prompt or "")
+    if not prompt.strip():
+        return prompt
+    try:
+        template_kind = select_kit_for_prompt(prompt)
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {
+                "template_kind": template_kind,
+                "originated_from": "droid_build_launch",
+            },
+            prompt,
+        )
+        app_type = metadata.get("registry_v2_app_type")
+        if not isinstance(app_type, str) or not app_type.strip():
+            return prompt
+        resolved = resolve_scaffold_context(
+            metadata=metadata,
+            template_kind=template_kind,
+        )
+        if resolved.source != "v2" or not resolved.context.strip():
+            return prompt
+        return f"{prompt}\n\n{resolved.header}\n{resolved.context}"
+    except Exception:  # noqa: BLE001
+        # Never let internal enrichment failures change launch behavior.
+        return prompt
+
+
 def _created_by(actor: HamActor | None) -> dict[str, Any] | None:
     if actor is None:
         return None
@@ -584,15 +662,21 @@ async def launch_droid_build(
     # for non-operators / disabled projects (403 / 422) instead of leaking the
     # token-configured / not-configured signal to unauthorized callers.
     _require_droid_exec_token()
+    enriched_prompt = _enrich_internal_launch_prompt(body.user_prompt)
 
     out = execute_droid_build_workflow(
         project_id=rec.id,
         project_root=root,
-        user_prompt=body.user_prompt,
+        user_prompt=enriched_prompt,
         proposal_digest=body.proposal_digest,
         created_by=_created_by(ham_actor),
         output_target=project_output_target,
         workspace_id=getattr(rec, "workspace_id", None),
+    )
+    safe_summary = _sanitize_normal_user_copy(out.summary, fallback=_SUMMARY_FALLBACK)
+    safe_error_summary = _sanitize_normal_user_copy(
+        out.error_summary,
+        fallback=_ERROR_SUMMARY_FALLBACK,
     )
     return {
         "kind": "droid_build_launch",
@@ -604,8 +688,8 @@ async def launch_droid_build(
         "pr_branch": out.pr_branch,
         "pr_commit_sha": out.pr_commit_sha,
         "build_outcome": out.build_outcome,
-        "summary": out.summary,
-        "error_summary": out.error_summary if not out.ok else None,
+        "summary": safe_summary,
+        "error_summary": safe_error_summary if not out.ok else None,
         "is_readonly": False,
         "will_open_pull_request": project_output_target == "github_pr",
         "requires_approval": True,
