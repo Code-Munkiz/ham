@@ -1,4 +1,4 @@
-"""Tests for Build Registry v2 Website Pack (schema-only routing behind flag)."""
+"""Tests for Build Registry v2 Website Pack."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from src.ham.build_registry.models import DEFAULT_RENDER_CHAR_BUDGET
 from src.ham.build_registry.intent import (
     DASHBOARD_UI_CORE_APP_TYPE,
     LANDING_PAGE_CORE_APP_TYPE,
+    SAAS_DASHBOARD_CORE_APP_TYPE,
     select_registry_v2_app_type_for_prompt,
 )
 
@@ -538,21 +539,22 @@ def test_landing_page_dashboard_screenshot_prompt_does_not_route_to_dashboard():
     assert routed in {None, LANDING_PAGE_CORE_APP_TYPE}
 
 
-def test_saas_dashboard_core_not_routed_yet():
+def test_saas_dashboard_core_routes_for_strong_prompts():
     prompt = (
         "Build a static SaaS app home with sidebar, topbar, workspace context, usage cards, "
-        "plan status, activity list, resource list, and one upgrade CTA."
+        "plan status, activity list, resource list, and one upgrade CTA. "
+        "No backend, no auth, no billing, no CRUD, no live data."
     )
     routed = select_registry_v2_app_type_for_prompt(prompt)
-    assert routed != APP_TYPE_ID_SAAS
-    assert routed in {None, DASHBOARD_UI_CORE_APP_TYPE, LANDING_PAGE_CORE_APP_TYPE}
+    assert routed == APP_TYPE_ID_SAAS
+    assert routed == SAAS_DASHBOARD_CORE_APP_TYPE
 
 
-def test_no_saas_dashboard_intent_constants_or_matchers_exist_yet():
+def test_saas_dashboard_intent_constant_exists():
     intent_path = REPO_ROOT / "src/ham/build_registry/intent.py"
     text = intent_path.read_text(encoding="utf-8")
-    assert "SAAS_DASHBOARD_CORE_APP_TYPE" not in text
-    assert "app.saas-dashboard-core" not in text
+    assert "SAAS_DASHBOARD_CORE_APP_TYPE" in text
+    assert "app.saas-dashboard-core" in text
 
 
 def test_module_count(website_pack):

@@ -105,6 +105,30 @@ class TestRegistryContextV2Success:
         assert "Builder Kit context:" not in content
         assert content.count("Builder Kit:") == 0
 
+    def test_flag_enabled_with_saas_dashboard_app_type_injects_v2_playbook(self, monkeypatch):
+        monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "1")
+        plan = _make_plan(
+            template_kind="generic",
+            metadata={"registry_v2_app_type": "app.saas-dashboard-core"},
+        )
+        messages = _build_scaffold_messages(plan)
+        content = _user_content(messages)
+        assert "Build Registry v2 playbook context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" in content
+        assert "app.saas-dashboard-core" in content
+        assert "stack.dom-saas-dashboard-minimal" in content
+        assert "section.saas-app-shell" in content
+        assert "section.saas-workspace-context" in content
+        assert "section.saas-usage-summary" in content
+        assert "section.saas-plan-status" in content
+        assert "section.saas-activity-feed" in content
+        assert "section.saas-resource-list" in content
+        assert "section.saas-upgrade-cta" in content
+        assert "section.saas-empty-loading-error-states" in content
+        assert "section.saas-responsive-structure" in content
+        assert "Builder Kit context:" not in content
+        assert content.count("Builder Kit:") == 0
+
 
 class TestRegistryContextBadAppType:
     def test_unknown_app_type_falls_back_to_v1_without_exception(self, monkeypatch):

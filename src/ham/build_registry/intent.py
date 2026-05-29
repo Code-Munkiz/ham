@@ -27,6 +27,7 @@ TURN_BASED_TACTICS_LITE_APP_TYPE = "game.turn-based-tactics-lite"
 CITY_BUILDER_LITE_APP_TYPE = "game.city-builder-lite"
 LANDING_PAGE_CORE_APP_TYPE = "site.landing-page-core"
 DASHBOARD_UI_CORE_APP_TYPE = "site.dashboard-ui-core"
+SAAS_DASHBOARD_CORE_APP_TYPE = "app.saas-dashboard-core"
 
 _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES: tuple[str, ...] = (
     r"\bhangman(-style)?\b",
@@ -1112,6 +1113,10 @@ def _matches_any(text: str, patterns: tuple[str, ...]) -> bool:
     return any(re.search(pattern, text) for pattern in patterns)
 
 
+def _count_matches(text: str, patterns: tuple[str, ...]) -> int:
+    return sum(1 for pattern in patterns if re.search(pattern, text))
+
+
 def _matches_recipe(text: str, *, negatives: tuple[str, ...], positives: tuple[str, ...]) -> bool:
     if _matches_any(text, negatives):
         return False
@@ -1301,6 +1306,59 @@ _DASHBOARD_UI_CORE_STATE_LAYOUT_POSITIVE_PATTERNS: tuple[str, ...] = (
     r"\blocal[- ]only\s+filters?\b",
 )
 
+_SAAS_DASHBOARD_CORE_HOME_POSITIVE_PATTERNS: tuple[str, ...] = (
+    r"\bsaas\s+(?:app\s+)?dashboard\b",
+    r"\bproduct\s+dashboard\b",
+    r"\bworkspace\s+dashboard\b",
+    r"\bapp\s+home\b",
+    r"\bproduct\s+home\b",
+)
+
+_SAAS_DASHBOARD_CORE_CONTENT_POSITIVE_PATTERNS: tuple[str, ...] = (
+    r"\bapp\s+shell\b",
+    r"\b(sidebar|topbar)\b",
+    r"\b(workspace|account|project)\s+(selector|switcher|context)\b",
+    r"\busage\s+(cards?|summary|kpis?|metrics?)\b",
+    r"\bkpi\s+cards?\b",
+    r"\bplan\s+(status|tier|card)\b",
+    r"\brecent\s+activity\b",
+    r"\bactivity\s+(feed|list)\b",
+    r"\b(resource|project|team)\s+(list|table)\b",
+    r"\bupgrade\s+(cta|prompt|card)\b",
+    r"\bsettings?\s+(shortcut|shortcuts|link|links)\b",
+)
+
+_SAAS_DASHBOARD_CORE_BOUNDED_POSITIVE_PATTERNS: tuple[str, ...] = (
+    r"\b(local|static)\s+(sample\s+)?data\b",
+    r"\bno\s+backend\b",
+    r"\bwithout\s+(?:a\s+)?backend\b",
+    r"\bno\s+auth\b",
+    r"\bno\s+billing\b",
+    r"\bno\s+crud\b",
+    r"\bno\s+live\s+data\b",
+    r"\bno\s+real[- ]?time\b",
+)
+
+_SAAS_DASHBOARD_CORE_NEGATIVE_PATTERNS: tuple[str, ...] = (
+    r"\b(admin|backoffice|back-office|user\s+management|permissions?|role[- ]?based|rbac)\b",
+    r"\b(auth|authentication|login|log[- ]?in|sign[- ]?in|sign[- ]?up|session|tenant|multi[- ]?tenant|user\s+accounts?|account\s+management)\b",
+    r"\b(backend|api|database|postgres|mysql|mongodb|server|endpoint|websocket|sse)\b",
+    r"\b(billing|payment|payments|checkout|invoice|invoices|subscription|subscriptions)\b",
+    r"\bcrud\b",
+    r"\b(create|edit|update|delete)\b.{0,80}\b(users?|records?|items?|projects?|entries|workflows?)\b",
+    r"\b(users?|records?|items?|projects?|entries|workflows?)\b.{0,80}\b(create|edit|update|delete)\b",
+    r"\b(forms?|admin\s+panel)\b.{0,80}\b(create|edit|update|delete|crud)\b",
+    r"\b(analytics\s+workbench|ad[- ]?hoc\s+quer(y|ies)|pivot\s+tables?|drill[- ]?down)\b",
+    r"\b(crm|kanban|project\s+management|leads?|tickets?)\b",
+    r"\b(real[- ]?time|live\s+(monitoring|updates?|data)|ops\s+dashboard|operations\s+dashboard|observability)\b",
+    r"\b(fintech|trading|order\s+book|candlestick|candles?|exchange|portfolio\s+tracker)\b",
+    r"\b(ecommerce|e-commerce|store\s+admin|order\s+management|product\s+management|shop\s+admin)\b",
+    r"\b(map|maps|geospatial|geo\s*json|leaflet|mapbox)\b",
+    r"\b(clone|pixel[- ]?perfect|exact\s+copy)\b",
+    r"\blanding\s+page\b.{0,120}\b(dashboard\s+screenshot|screenshot)\b",
+    r"\b(read[- ]?only|static)\s+dashboard\s+overview\b",
+)
+
 
 _DASHBOARD_NEGATED_EXCLUSION_PATTERN = re.compile(
     r"\b(?:no|without|sans|zero|free\s+of)\s+"
@@ -1324,6 +1382,28 @@ def _strip_dashboard_negated_exclusions(text: str) -> str:
     return _DASHBOARD_NEGATED_EXCLUSION_PATTERN.sub(" ", stripped)
 
 
+_SAAS_NEGATED_EXCLUSION_PATTERN = re.compile(
+    r"\b(?:no|without|sans|zero|free\s+of)\s+"
+    r"(?:a\s+|an\s+|any\s+|the\s+|live\s+|real[- ]?time\s+|admin\s+)*"
+    r"(?:crud|back[- ]?ends?|servers?|apis?|auth|authentication|"
+    r"accounts?|logins?|log[- ]?in|sign[- ]?ups?|sign[- ]?ins?|"
+    r"databases?|db|payments?|billing|subscriptions?|invoices?|"
+    r"live\s+data|real[- ]?time\s+data|real[- ]?time\s+updates?)"
+    r"(?:\s*(?:,|and|or|,\s*and|,\s*or)\s*"
+    r"(?:a\s+|an\s+|any\s+|the\s+|live\s+|real[- ]?time\s+|admin\s+)*"
+    r"(?:crud|back[- ]?ends?|servers?|apis?|auth|authentication|"
+    r"accounts?|logins?|log[- ]?in|sign[- ]?ups?|sign[- ]?ins?|"
+    r"databases?|db|payments?|billing|subscriptions?|invoices?|"
+    r"live\s+data|real[- ]?time\s+data|real[- ]?time\s+updates?))*"
+)
+
+
+def _strip_saas_negated_exclusions(text: str) -> str:
+    """Remove explicitly-negated SaaS exclusions after strong-positive match."""
+    stripped = _SAAS_NEGATED_EXCLUSION_PATTERN.sub(" ", text)
+    return _strip_negated_exclusions(stripped)
+
+
 def _matches_dashboard_ui_core(text: str) -> bool:
     if not _matches_any(text, _DASHBOARD_UI_CORE_OVERVIEW_POSITIVE_PATTERNS):
         return False
@@ -1340,6 +1420,19 @@ def _matches_dashboard_ui_core(text: str) -> bool:
     # prompts that already satisfy strong dashboard-positive signals.
     effective = _strip_dashboard_negated_exclusions(text)
     if _matches_any(effective, _DASHBOARD_UI_CORE_NEGATIVE_PATTERNS):
+        return False
+    return True
+
+
+def _matches_saas_dashboard_core(text: str) -> bool:
+    if not _matches_any(text, _SAAS_DASHBOARD_CORE_HOME_POSITIVE_PATTERNS):
+        return False
+    if _count_matches(text, _SAAS_DASHBOARD_CORE_CONTENT_POSITIVE_PATTERNS) < 2:
+        return False
+    if not _matches_any(text, _SAAS_DASHBOARD_CORE_BOUNDED_POSITIVE_PATTERNS):
+        return False
+    effective = _strip_saas_negated_exclusions(text)
+    if _matches_any(effective, _SAAS_DASHBOARD_CORE_NEGATIVE_PATTERNS):
         return False
     return True
 
@@ -1454,7 +1547,8 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
     # Precedence: trivia → idle → branching narrative → memory match → word daily
     # → daily puzzle grid → resource management sim → hangman lite → typing speed racer
     # → word builder → card deck turn-based → reaction time challenge → rhythm tap lite
-    # → deck builder lite → turn-based tactics lite → city builder lite → landing page core → dashboard ui core.
+    # → deck builder lite → turn-based tactics lite → city builder lite → landing page core
+    # → dashboard ui core → saas dashboard core.
     if _matches_trivia(text):
         return TRIVIA_TIMER_APP_TYPE
     if _matches_idle(text):
@@ -1491,6 +1585,8 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
         return LANDING_PAGE_CORE_APP_TYPE
     if _matches_dashboard_ui_core(text):
         return DASHBOARD_UI_CORE_APP_TYPE
+    if _matches_saas_dashboard_core(text):
+        return SAAS_DASHBOARD_CORE_APP_TYPE
     return None
 
 
