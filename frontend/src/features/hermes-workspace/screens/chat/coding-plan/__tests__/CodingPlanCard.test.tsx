@@ -111,7 +111,7 @@ describe("CodingPlanCard", () => {
     expect((ul as HTMLElement).textContent ?? "").toMatch(/Choose or create a project/i);
   });
 
-  it("renders normie builder label and plan description for chosen candidate", () => {
+  it("renders minimal ready copy and hides provider dashboard details", () => {
     const chosen = candidate({
       provider: "cursor_cloud",
       label: "Cursor pull request",
@@ -130,27 +130,21 @@ describe("CodingPlanCard", () => {
 
     const { card } = renderWithDigest(p);
 
-    // Headline shows approved product label, not raw provider id or
-    // legacy internal builder name.
-    expect(card.querySelector('[data-hww-coding-plan="headline"]')!.textContent).toContain(
-      "Cursor",
+    expect(card.querySelector('[data-hww-coding-plan="ready-title"]')!.textContent).toContain(
+      "Ready to build",
     );
-    expect(card.querySelector('[data-hww-coding-plan="headline"]')!.textContent).not.toContain(
-      "Connected Repo Builder",
+    expect(card.querySelector('[data-hww-coding-plan="ready-copy"]')!.textContent).toContain(
+      "Review and approve",
     );
-    // Plan description is shown in the main view.
-    const desc = card.querySelector('[data-hww-coding-plan="plan-description"]')!.textContent ?? "";
-    expect(desc.toLowerCase()).toContain("pull request");
-    // Recommendation reason is NOT in the main view (it's behind the toggle).
+
+    expect(card.querySelector('[data-hww-coding-plan="headline"]')).toBeNull();
+    expect(card.querySelector('[data-hww-coding-plan="plan-description"]')).toBeNull();
+    expect(card.querySelector('[data-hww-coding-plan="builder-badge"]')).toBeNull();
+    expect(card.querySelector('[data-hww-coding-plan="alternatives-toggle"]')).toBeNull();
     expect(card.querySelector('[data-hww-coding-plan="recommendation-reason"]')).toBeNull();
-    // Expanding the toggle reveals the recommendation reason.
-    const toggle = card.querySelector(
-      '[data-hww-coding-plan="alternatives-toggle"]',
-    ) as HTMLButtonElement;
-    fireEvent.click(toggle);
-    const reason =
-      card.querySelector('[data-hww-coding-plan="recommendation-reason"]')!.textContent ?? "";
-    expect(reason.toLowerCase()).toContain("pull request");
+    expect(card.querySelector('[data-hww-coding-plan="candidate-row"]')).toBeNull();
+    expect(card.querySelector('[data-hww-coding-plan="launch-cta-disabled"]')).toBeNull();
+    expect(card.querySelector('[data-hww-coding-plan="no-launch-footer"]')).toBeNull();
   });
 
   it("renders blockers safely without leaking env names or workflow ids", () => {
@@ -186,51 +180,7 @@ describe("CodingPlanCard", () => {
     assertNoForbiddenTokens(card);
   });
 
-  it("collapses technical details by default and reveals them on toggle", () => {
-    const cursor = candidate({
-      provider: "cursor_cloud",
-      output_kind: "pull_request",
-      will_modify_code: true,
-      will_open_pull_request: true,
-      reason: "Repo-wide context; opens a pull request you review.",
-    });
-    const noAgent = candidate({
-      provider: "no_agent",
-      output_kind: "answer",
-      will_modify_code: false,
-      will_open_pull_request: false,
-      reason: "Conversational; no repository work needed.",
-      requires_confirmation: false,
-    });
-    const p = payload({
-      task_kind: "refactor",
-      chosen: cursor,
-      candidates: [cursor, noAgent],
-      recommendation_reason: cursor.reason,
-    });
-
-    const { card } = renderWithDigest(p);
-
-    // Details section is collapsed by default.
-    expect(card.querySelector('[data-hww-coding-plan="alternatives"]')).toBeNull();
-
-    const toggle = card.querySelector(
-      '[data-hww-coding-plan="alternatives-toggle"]',
-    ) as HTMLButtonElement;
-    expect(toggle).not.toBeNull();
-    expect(toggle.textContent).toContain("Why this plan?");
-    fireEvent.click(toggle);
-
-    const drawer = card.querySelector('[data-hww-coding-plan="alternatives"]');
-    expect(drawer).not.toBeNull();
-    // Recommendation reason appears in the details section.
-    expect(drawer!.textContent).toContain("Repo-wide context");
-    // Alternative provider label appears (no_agent → "Chat guidance").
-    expect(drawer!.textContent).toContain("Chat guidance");
-    assertNoForbiddenTokens(card);
-  });
-
-  it("renders safe fallback when chosen is null and task is unknown", () => {
+  it("renders safe fallback copy when chosen is null and task is unknown", () => {
     const noAgent = candidate({
       provider: "no_agent",
       output_kind: "answer",
@@ -250,12 +200,12 @@ describe("CodingPlanCard", () => {
     });
 
     const { card } = renderWithDigest(p);
-    const headline = card.querySelector('[data-hww-coding-plan="headline"]')!.textContent ?? "";
-    expect(headline.toLowerCase()).toContain("isn't sure");
+    const headline = card.querySelector('[data-hww-coding-plan="ready-title"]')!.textContent ?? "";
+    expect(headline.toLowerCase()).toContain("ready to build");
     assertNoForbiddenTokens(card);
   });
 
-  it("never renders an active launch button (preview-only invariant)", () => {
+  it("does not render disabled placeholder launch footer/button", () => {
     const chosen = candidate({
       provider: "factory_droid_audit",
       output_kind: "report",
@@ -265,18 +215,8 @@ describe("CodingPlanCard", () => {
 
     const { card } = renderWithDigest(p);
 
-    const cta = card.querySelector(
-      '[data-hww-coding-plan="launch-cta-disabled"]',
-    ) as HTMLButtonElement;
-    expect(cta).not.toBeNull();
-    expect(cta.disabled).toBe(true);
-    expect(cta.getAttribute("aria-disabled")).toBe("true");
-    expect(cta.getAttribute("data-launch-enabled")).toBe("0");
-
-    // Footer pins the no-launch promise.
-    const footer =
-      card.querySelector('[data-hww-coding-plan="no-launch-footer"]')!.textContent ?? "";
-    expect(footer.toLowerCase()).toContain("nothing has started");
+    expect(card.querySelector('[data-hww-coding-plan="launch-cta-disabled"]')).toBeNull();
+    expect(card.querySelector('[data-hww-coding-plan="no-launch-footer"]')).toBeNull();
   });
 
   it("does not render any element with name suggesting an active approve/launch action", () => {
@@ -284,7 +224,7 @@ describe("CodingPlanCard", () => {
     const p = payload({ chosen, candidates: [chosen] });
     render(<CodingPlanCard payload={p} />);
     // Any button whose accessible name resembles a launch action must be disabled.
-    const buttons = screen.getAllByRole("button");
+    const buttons = screen.queryAllByRole("button");
     for (const b of buttons) {
       const name = (b.textContent || "").toLowerCase();
       if (/(approve|launch|run|start)/.test(name)) {
@@ -406,18 +346,13 @@ describe("CodingPlanCard OpenCode preferred-provider affordance", () => {
     expect(cta.textContent).toContain(OPENCODE_PREFERRED_LOADING);
   });
 
-  it("preserves the never-renders-active-launch-button invariant", () => {
+  it("does not surface hidden placeholder launch controls", () => {
     const chosen = fdBuildChosen();
     const opencode = opencodeAvailable();
     const p = payload({ chosen, candidates: [chosen, opencode] });
-    render(<CodingPlanCard payload={p} onPreferProvider={vi.fn()} />);
-    const buttons = screen.getAllByRole("button");
-    for (const b of buttons) {
-      const name = (b.textContent || "").toLowerCase();
-      if (/(approve|launch|run|start)/.test(name)) {
-        expect((b as HTMLButtonElement).disabled).toBe(true);
-      }
-    }
+    const { container } = render(<CodingPlanCard payload={p} onPreferProvider={vi.fn()} />);
+    expect(container.querySelector('[data-hww-coding-plan="launch-cta-disabled"]')).toBeNull();
+    expect(container.querySelector('[data-hww-coding-plan="no-launch-footer"]')).toBeNull();
   });
 
   it("renders ManagedOpencodeBuildApprovalPanel when chosen is opencode_cli + managed_workspace", () => {
@@ -449,7 +384,7 @@ describe("CodingPlanCard OpenCode preferred-provider affordance", () => {
     expect(container.querySelector('[data-hww-coding-plan="prefer-opencode-cta"]')).toBeNull();
   });
 
-  it("falls back to disabled placeholder when chosen is opencode_cli but workspace_id missing", () => {
+  it("does not render approval panel when chosen is opencode_cli but workspace_id missing", () => {
     const chosenOc = candidate({
       provider: "opencode_cli",
       output_kind: "pull_request",
@@ -470,7 +405,7 @@ describe("CodingPlanCard OpenCode preferred-provider affordance", () => {
     });
     const { container } = render(<CodingPlanCard payload={p} userPrompt="x" />);
     expect(container.querySelector('[data-hww-coding-plan="opencode-build-approval"]')).toBeNull();
-    expect(container.querySelector('[data-hww-coding-plan="launch-cta-disabled"]')).not.toBeNull();
+    expect(container.querySelector('[data-hww-coding-plan="launch-cta-disabled"]')).toBeNull();
   });
 
   it("affordance rendered text never contains banned user-facing tokens", () => {

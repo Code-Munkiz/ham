@@ -151,7 +151,7 @@ describe("CodingPlanCard managed workspace branch", () => {
     p.project.has_workspace_id = false;
     const { container } = render(<CodingPlanCard payload={p} userPrompt="x" />);
     expect(container.querySelector('[data-hww-coding-plan="managed-build-approval"]')).toBeNull();
-    expect(container.querySelector('[data-hww-coding-plan="launch-cta-disabled"]')).not.toBeNull();
+    expect(container.querySelector('[data-hww-coding-plan="launch-cta-disabled"]')).toBeNull();
   });
 
   it("does NOT render the managed panel when chosen provider is not factory_droid_build", () => {

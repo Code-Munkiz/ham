@@ -443,7 +443,7 @@ describe("WorkspaceChatScreen conversational coding conductor", () => {
     assertNoForbiddenTokens(container);
   });
 
-  it("never launches a provider build from auto-preview (launch CTA stays disabled)", async () => {
+  it("never surfaces legacy placeholder launch CTA from auto-preview", async () => {
     previewCodingConductorMock.mockResolvedValue(samplePreviewPayload);
     chatStreamMock.mockImplementation(async () => ({ ok: true }));
     getStreamAuthMock.mockResolvedValue(undefined);
@@ -458,11 +458,8 @@ describe("WorkspaceChatScreen conversational coding conductor", () => {
       expect(container.querySelector('[data-hww-coding-plan="card"]')).not.toBeNull(),
     );
 
-    const launch = container.querySelector(
-      '[data-hww-coding-plan="launch-cta-disabled"]',
-    ) as HTMLButtonElement | null;
-    expect(launch?.disabled).toBe(true);
-    expect(launch?.getAttribute("data-launch-enabled")).toBe("0");
+    expect(container.querySelector('[data-hww-coding-plan="launch-cta-disabled"]')).toBeNull();
+    expect(container.querySelector('[data-hww-coding-plan="no-launch-footer"]')).toBeNull();
   });
 
   it("does not leak forbidden tokens after auto-preview renders", async () => {
