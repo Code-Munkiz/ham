@@ -129,6 +129,38 @@ class TestRegistryContextV2Success:
         assert "Builder Kit context:" not in content
         assert content.count("Builder Kit:") == 0
 
+    def test_flag_enabled_with_sales_ops_dashboard_app_type_injects_v2_playbook(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "1")
+        plan = _make_plan(
+            template_kind="generic",
+            metadata={"registry_v2_app_type": "app.sales-ops-dashboard-core"},
+        )
+        messages = _build_scaffold_messages(plan)
+        content = _user_content(messages)
+        assert "Build Registry v2 playbook context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" in content
+        assert "app.sales-ops-dashboard-core" in content
+        assert "stack.dom-sales-ops-dashboard-minimal" in content
+        assert "section.sales-ops-shell" in content
+        assert "section.sales-executive-summary" in content
+        assert "section.sales-agent-performance" in content
+        assert "section.sales-activity-metrics" in content
+        assert "section.sales-pipeline-stage-movement" in content
+        assert "section.commission-summary" in content
+        assert "section.commission-payout-status" in content
+        assert "section.revenue-recovery-summary" in content
+        assert "section.recovery-aging-buckets" in content
+        assert "section.recovery-exception-queue" in content
+        assert "section.process-bottleneck-panel" in content
+        assert "section.sales-activity-feed" in content
+        assert "section.sales-ops-filters" in content
+        assert "section.sales-ops-empty-loading-error-states" in content
+        assert "section.sales-ops-responsive-structure" in content
+        assert "Builder Kit context:" not in content
+        assert content.count("Builder Kit:") == 0
+
 
 class TestRegistryContextBadAppType:
     def test_unknown_app_type_falls_back_to_v1_without_exception(self, monkeypatch):

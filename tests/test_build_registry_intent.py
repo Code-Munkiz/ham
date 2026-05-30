@@ -30,6 +30,7 @@ from src.ham.build_registry.intent import (
     DASHBOARD_UI_CORE_APP_TYPE,
     SAAS_DASHBOARD_CORE_APP_TYPE,
     ADMIN_DASHBOARD_CORE_APP_TYPE,
+    SALES_OPS_DASHBOARD_CORE_APP_TYPE,
     enrich_plan_metadata_with_registry_v2,
     select_registry_v2_app_type_for_prompt,
 )
@@ -96,6 +97,22 @@ _CANONICAL_ADMIN_DASHBOARD_CORE_NEGATED_EXCLUSIONS_PROMPT = (
     "role and permission summary, moderation queue, audit log, and system status. Static demo only with "
     "local mock data and no backend, no auth, no RBAC, no permissions mutation, no CRUD, no destructive "
     "actions, no live monitoring, no live data, and no real audit logging."
+)
+
+_CANONICAL_SALES_OPS_DASHBOARD_CORE_GATE_PROMPT = (
+    "Build a static sales ops dashboard with sales executive summary, agent performance, "
+    "sales activity metrics, pipeline stage movement, commission earned and pending states, "
+    "payout status display, revenue recovery summary, aging buckets, recovery exception queue, "
+    "process bottleneck panel, and activity feed using local sample data only. "
+    "No payroll, no payments, no accounting, no backend, no CRM sync, and no legal collections automation."
+)
+
+_CANONICAL_SALES_OPS_DASHBOARD_CORE_NEGATED_EXCLUSIONS_PROMPT = (
+    "Build a sales operations dashboard for commission and revenue recovery with agent performance, "
+    "sales activity tracking, payout status display, recoverable balance, recovered dollars, aging buckets, "
+    "recovery queue, and process bottlenecks using static local sample data only. "
+    "No payroll, no payments, no accounting, no ASC 606, no CRM sync, no backend, no API, "
+    "no real PII, no legal collections automation, no live dunning, and no telephony."
 )
 
 _IDLE_POSITIVE_PROMPTS = (
@@ -1001,6 +1018,35 @@ _ADMIN_DASHBOARD_CORE_EXCLUSION_NEGATIVE_PROMPTS = (
     "Build a pixel-perfect clone of this admin dashboard app.",
 )
 
+_SALES_OPS_DASHBOARD_CORE_POSITIVE_PROMPTS = (
+    _CANONICAL_SALES_OPS_DASHBOARD_CORE_GATE_PROMPT,
+    _CANONICAL_SALES_OPS_DASHBOARD_CORE_NEGATED_EXCLUSIONS_PROMPT,
+    (
+        "Create a revenue recovery dashboard with commission dashboard sections, agent performance dashboard, "
+        "sales activity tracking, clawbacks and chargebacks status, payout status display, recovered dollars, "
+        "recoverable balance, aging buckets, recovery queue, and process bottlenecks using demo sample data."
+    ),
+)
+
+_SALES_OPS_DASHBOARD_CORE_WEAK_NEGATIVE_PROMPTS = (
+    "build a sales dashboard",
+    "build a finance dashboard",
+    "build a commission page",
+    "build a payout dashboard",
+)
+
+_SALES_OPS_DASHBOARD_CORE_EXCLUSION_NEGATIVE_PROMPTS = (
+    "Build a payroll system dashboard with salary disbursement workflows.",
+    "Build a payment processing app with payout approval and disbursement.",
+    "Build an accounting ledger and ASC 606 calculation dashboard.",
+    "Build legal collections automation with live dunning and telephony outreach.",
+    "Build a live CRM sync app connected to backend API and database.",
+    "Build a real customer PII database dashboard with account identifiers.",
+    "Build a trading fintech dashboard with order-book and market execution.",
+    "Build a generic executive revenue dashboard with no sales ops mechanics.",
+    "Build an exact clone of this sales dashboard with pixel-perfect parity.",
+)
+
 
 class TestSelectRegistryV2AppTypeForPrompt:
     @pytest.mark.parametrize("prompt", _IDLE_POSITIVE_PROMPTS)
@@ -1308,6 +1354,45 @@ class TestSelectRegistryV2AppTypeForPrompt:
     @pytest.mark.parametrize("prompt", _ADMIN_DASHBOARD_CORE_EXCLUSION_NEGATIVE_PROMPTS)
     def test_excluded_admin_prompts_do_not_route_to_admin_dashboard_core(self, prompt: str):
         assert select_registry_v2_app_type_for_prompt(prompt) != ADMIN_DASHBOARD_CORE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _SALES_OPS_DASHBOARD_CORE_POSITIVE_PROMPTS)
+    def test_matches_sales_ops_dashboard_core_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) == SALES_OPS_DASHBOARD_CORE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _SALES_OPS_DASHBOARD_CORE_WEAK_NEGATIVE_PROMPTS)
+    def test_weak_sales_ops_terms_do_not_route(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != SALES_OPS_DASHBOARD_CORE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _SALES_OPS_DASHBOARD_CORE_EXCLUSION_NEGATIVE_PROMPTS)
+    def test_excluded_sales_ops_prompts_do_not_route_to_sales_ops_dashboard_core(
+        self, prompt: str
+    ):
+        routed = select_registry_v2_app_type_for_prompt(prompt)
+        assert routed != SALES_OPS_DASHBOARD_CORE_APP_TYPE
+        if "admin" in prompt.lower():
+            assert routed == ADMIN_DASHBOARD_CORE_APP_TYPE
+        if "generic executive revenue dashboard" in prompt.lower():
+            assert routed in {None, DASHBOARD_UI_CORE_APP_TYPE}
+
+    def test_saas_product_home_prompt_does_not_route_to_sales_ops(self):
+        assert (
+            select_registry_v2_app_type_for_prompt(_CANONICAL_SAAS_DASHBOARD_CORE_GATE_PROMPT)
+            == SAAS_DASHBOARD_CORE_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt(_CANONICAL_SAAS_DASHBOARD_CORE_GATE_PROMPT)
+            != SALES_OPS_DASHBOARD_CORE_APP_TYPE
+        )
+
+    def test_admin_control_plane_prompt_does_not_route_to_sales_ops(self):
+        assert (
+            select_registry_v2_app_type_for_prompt(_CANONICAL_ADMIN_DASHBOARD_CORE_GATE_PROMPT)
+            == ADMIN_DASHBOARD_CORE_APP_TYPE
+        )
+        assert (
+            select_registry_v2_app_type_for_prompt(_CANONICAL_ADMIN_DASHBOARD_CORE_GATE_PROMPT)
+            != SALES_OPS_DASHBOARD_CORE_APP_TYPE
+        )
 
     @pytest.mark.parametrize("prompt,expected", _CROSS_EXCLUSION_PROMPTS)
     def test_recipes_do_not_steal_each_other(self, prompt: str, expected: str):
@@ -2167,6 +2252,15 @@ class TestEnrichPlanMetadataWithRegistryV2:
         assert "registry_v2_app_type" not in metadata
         assert metadata["template_kind"] == "generic"
 
+    def test_flag_disabled_sales_ops_prompt_does_not_add_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            _CANONICAL_SALES_OPS_DASHBOARD_CORE_GATE_PROMPT,
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
+
     def test_flag_disabled_exact_saas_gate_review_prompt_does_not_add_registry_metadata(
         self, monkeypatch
     ):
@@ -2438,6 +2532,14 @@ class TestEnrichPlanMetadataWithRegistryV2:
             env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
         )
         assert metadata["registry_v2_app_type"] == ADMIN_DASHBOARD_CORE_APP_TYPE
+
+    def test_flag_enabled_sales_ops_prompt_adds_registry_metadata(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            _CANONICAL_SALES_OPS_DASHBOARD_CORE_GATE_PROMPT,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        assert metadata["registry_v2_app_type"] == SALES_OPS_DASHBOARD_CORE_APP_TYPE
 
     def test_flag_enabled_landing_page_prompt_with_negated_backend_adds_registry_metadata(self):
         metadata = enrich_plan_metadata_with_registry_v2(
@@ -2923,6 +3025,12 @@ class TestChatScaffoldSyntheticPlanMetadata:
         assert metadata.get("template_kind") == "dashboard"
         assert "registry_v2_app_type" not in metadata
 
+    def test_flag_disabled_sales_ops_prompt_has_no_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = _synthetic_plan_metadata(_CANONICAL_SALES_OPS_DASHBOARD_CORE_GATE_PROMPT)
+        assert metadata.get("template_kind") == "dashboard"
+        assert "registry_v2_app_type" not in metadata
+
     def test_flag_enabled_saas_prompt_adds_registry_metadata_synthetic(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
         metadata = _synthetic_plan_metadata(_CANONICAL_SAAS_DASHBOARD_CORE_GATE_PROMPT)
@@ -2934,6 +3042,12 @@ class TestChatScaffoldSyntheticPlanMetadata:
         metadata = _synthetic_plan_metadata(_CANONICAL_ADMIN_DASHBOARD_CORE_GATE_PROMPT)
         assert metadata.get("template_kind") == "dashboard"
         assert metadata.get("registry_v2_app_type") == ADMIN_DASHBOARD_CORE_APP_TYPE
+
+    def test_flag_enabled_sales_ops_prompt_adds_registry_metadata_synthetic(self, monkeypatch):
+        monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
+        metadata = _synthetic_plan_metadata(_CANONICAL_SALES_OPS_DASHBOARD_CORE_GATE_PROMPT)
+        assert metadata.get("template_kind") == "dashboard"
+        assert metadata.get("registry_v2_app_type") == SALES_OPS_DASHBOARD_CORE_APP_TYPE
 
     def test_flag_enabled_non_idle_prompt_has_no_registry_metadata(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
@@ -3999,6 +4113,52 @@ class TestEndToEndScaffoldMessages:
         assert "Builder Kit context:" not in content
         assert content.count("Builder Kit:") == 0
 
+    def test_flag_enabled_sales_ops_prompt_produces_v2_context(self):
+        prompt = _CANONICAL_SALES_OPS_DASHBOARD_CORE_GATE_PROMPT
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            prompt,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_sales_ops_e2e",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message=prompt,
+            steps=[Step(title="Scaffold dashboard", description="Create sales ops dashboard files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(
+            plan,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )[1]["content"]
+        assert metadata["registry_v2_app_type"] == SALES_OPS_DASHBOARD_CORE_APP_TYPE
+        assert "Build Registry v2 playbook context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" in content
+        assert "app.sales-ops-dashboard-core" in content
+        assert "pack.site" in content
+        for section_id in (
+            "section.sales-ops-shell",
+            "section.sales-executive-summary",
+            "section.sales-agent-performance",
+            "section.sales-activity-metrics",
+            "section.sales-pipeline-stage-movement",
+            "section.commission-summary",
+            "section.commission-payout-status",
+            "section.revenue-recovery-summary",
+            "section.recovery-aging-buckets",
+            "section.recovery-exception-queue",
+            "section.process-bottleneck-panel",
+            "section.sales-activity-feed",
+            "section.sales-ops-filters",
+            "section.sales-ops-empty-loading-error-states",
+            "section.sales-ops-responsive-structure",
+        ):
+            assert section_id in content
+        assert "Builder Kit context:" not in content
+        assert content.count("Builder Kit:") == 0
+
     def test_flag_disabled_saas_prompt_produces_v1_context_only(self, monkeypatch):
         monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
         prompt = _CANONICAL_SAAS_DASHBOARD_CORE_GATE_PROMPT
@@ -4035,6 +4195,27 @@ class TestEndToEndScaffoldMessages:
             project_id="proj_test",
             user_message=prompt,
             steps=[Step(title="Scaffold dashboard", description="Create saas dashboard files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(plan)[1]["content"]
+        assert "registry_v2_app_type" not in metadata
+        assert "Builder Kit context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" not in content
+
+    def test_flag_disabled_sales_ops_prompt_produces_v1_context_only(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        prompt = _CANONICAL_SALES_OPS_DASHBOARD_CORE_GATE_PROMPT
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            prompt,
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_sales_ops_v1",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message=prompt,
+            steps=[Step(title="Scaffold dashboard", description="Create sales ops dashboard files")],
             planner_confidence="high",
             metadata=metadata,
         )

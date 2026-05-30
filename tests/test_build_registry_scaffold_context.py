@@ -245,6 +245,40 @@ class TestResolveScaffoldContextV2Success:
             assert section_id in result.context
         assert "Builder Kit:" not in result.context
 
+    def test_returns_v2_playbook_context_for_sales_ops_dashboard_core(self):
+        result = resolve_scaffold_context(
+            metadata={"registry_v2_app_type": "app.sales-ops-dashboard-core"},
+            template_kind="generic",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "1"},
+            repo_root=REPO_ROOT,
+        )
+        assert result.source == "v2"
+        assert result.header == V2_HEADER
+        assert result.fallback_reason is None
+        assert result.registry_v2_app_type == "app.sales-ops-dashboard-core"
+        assert result.registry_v2_pack_id == "pack.site"
+        assert "app.sales-ops-dashboard-core" in result.context
+        assert "stack.dom-sales-ops-dashboard-minimal" in result.context
+        for section_id in (
+            "section.sales-ops-shell",
+            "section.sales-executive-summary",
+            "section.sales-agent-performance",
+            "section.sales-activity-metrics",
+            "section.sales-pipeline-stage-movement",
+            "section.commission-summary",
+            "section.commission-payout-status",
+            "section.revenue-recovery-summary",
+            "section.recovery-aging-buckets",
+            "section.recovery-exception-queue",
+            "section.process-bottleneck-panel",
+            "section.sales-activity-feed",
+            "section.sales-ops-filters",
+            "section.sales-ops-empty-loading-error-states",
+            "section.sales-ops-responsive-structure",
+        ):
+            assert section_id in result.context
+        assert "Builder Kit:" not in result.context
+
 
 class TestResolveScaffoldContextUnknownAppType:
     def test_falls_back_to_v1_on_unknown_app_type(self):

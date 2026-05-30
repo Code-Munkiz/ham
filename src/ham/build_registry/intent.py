@@ -29,6 +29,7 @@ LANDING_PAGE_CORE_APP_TYPE = "site.landing-page-core"
 DASHBOARD_UI_CORE_APP_TYPE = "site.dashboard-ui-core"
 SAAS_DASHBOARD_CORE_APP_TYPE = "app.saas-dashboard-core"
 ADMIN_DASHBOARD_CORE_APP_TYPE = "app.admin-dashboard-core"
+SALES_OPS_DASHBOARD_CORE_APP_TYPE = "app.sales-ops-dashboard-core"
 
 _HANGMAN_LITE_CROSS_RECIPE_NEGATIVES: tuple[str, ...] = (
     r"\bhangman(-style)?\b",
@@ -1538,6 +1539,116 @@ def _matches_admin_dashboard_core(text: str) -> bool:
     return True
 
 
+_SALES_OPS_DASHBOARD_CORE_HOME_POSITIVE_PATTERNS: tuple[str, ...] = (
+    r"\bsales\s+ops\s+dashboard\b",
+    r"\bsales\s+operations\s+dashboard\b",
+    r"\brevops\s+dashboard\b",
+    r"\brevenue\s+operations\s+dashboard\b",
+    r"\bcommission\s+dashboard\b",
+    r"\brevenue\s+recovery\s+dashboard\b",
+)
+
+_SALES_OPS_DASHBOARD_CORE_CONTENT_POSITIVE_PATTERNS: tuple[str, ...] = (
+    r"\b(agent|team)\s+performance\b",
+    r"\bsales\s+activity\b",
+    r"\bpipeline\s+(stage\s+)?movement\b",
+    r"\bstage\s+movement\b",
+    r"\bcommission\s+(earned|pending|summary)\b",
+    r"\b(clawbacks?|chargebacks?)\b",
+    r"\bpayout\s+status\b",
+    r"\brecovered\s+dollars\b",
+    r"\brecoverable\s+balance\b",
+    r"\baging\s+buckets?\b",
+    r"\brecovery\s+(queue|summary|exception)\b",
+    r"\bexception\s+queue\b",
+    r"\bprocess\s+bottlenecks?\b",
+    r"\bcycle\s+time\b",
+    r"\bactivity\s+(feed|audit\s+feed)\b",
+    r"\b(date|team|agent|status|stage)\s+filters?\b",
+)
+
+_SALES_OPS_DASHBOARD_CORE_BOUNDED_POSITIVE_PATTERNS: tuple[str, ...] = (
+    r"\b(static|local|sample|demo|illustrative|read[- ]only)\b",
+    r"\blocal\s+(mock|sample)\s+data\b",
+    r"\b(static|local)\s+sample\s+data\b",
+    r"\bno\s+payroll\b",
+    r"\bno\s+payments?\b",
+    r"\bno\s+accounting\b",
+    r"\bno\s+asc\s*606\b",
+    r"\bno\s+crm\s+sync\b",
+    r"\bno\s+backend\b",
+    r"\bno\s+api\b",
+    r"\bno\s+real\s+pii\b",
+    r"\bno\s+legal\s+collections\s+automation\b",
+)
+
+_SALES_OPS_DASHBOARD_CORE_NEGATIVE_PATTERNS: tuple[str, ...] = (
+    r"\b(product|workspace)\s+(dashboard|home)\b",
+    r"\b(admin|backoffice|control\s+panel)\b",
+    r"\blanding\s+page\b",
+    r"\bgeneric\s+executive\s+revenue\s+dashboard\b",
+    r"\breal\s+payroll\b",
+    r"\bpayment\s+processing\b",
+    r"\baccounting\s+ledger\b",
+    r"\basc\s*606\b.{0,80}\b(calculation|engine|compliance)\b",
+    r"\blegal\s+collections\s+automation\b",
+    r"\blive\s+(crm|api|database)\b",
+    r"\bcrm\s+sync\b",
+    r"\b(backend|api|database)\s+integrations?\b",
+    r"\breal\s+(bank|account|payment)\s+identifiers?\b",
+    r"\breal\s+(customer\s+)?pii\b",
+    r"\bcustomer\s+database\b",
+    r"\b(tax|accounting)\s+(claims?|certification)\b",
+    r"\bcompliance\s+certification\b",
+    r"\blive\s+dunning\b",
+    r"\b(telephony|sms)\s+automation\b",
+    r"\bregulated\s+financial\s+advice\b",
+    r"\bpayout\s+(approval|disbursement)\b",
+    r"\b(trading|order\s+book|financial\s+market|fintech)\b",
+    r"\b(clone|pixel[- ]?perfect|exact\s+copy)\b",
+)
+
+_SALES_OPS_NEGATED_EXCLUSION_PATTERNS: tuple[str, ...] = (
+    r"\b(?:no|without|sans|zero|free\s+of)\s+(?:a\s+|an\s+|any\s+|the\s+)?payroll\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+payments?\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+payment\s+processing\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+accounting(?:\s+ledger)?\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+asc\s*606\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+crm(?:\s+sync)?\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+(?:a\s+|an\s+|any\s+|the\s+)?backend\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+(?:a\s+|an\s+|any\s+|the\s+)?api\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+(?:a\s+|an\s+|any\s+|the\s+)?database\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+real\s+pii\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+legal\s+collections\s+automation\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+live\s+dunning\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+telephony\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+sms\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+payout\s+(approval|disbursement)\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+regulated\s+financial\s+advice\b",
+)
+
+
+def _strip_sales_ops_negated_exclusions(text: str) -> str:
+    """Remove explicitly-negated sales-ops exclusions after strong-positive match."""
+    stripped = _strip_admin_negated_exclusions(text)
+    for pattern in _SALES_OPS_NEGATED_EXCLUSION_PATTERNS:
+        stripped = re.sub(pattern, " ", stripped)
+    return stripped
+
+
+def _matches_sales_ops_dashboard_core(text: str) -> bool:
+    if not _matches_any(text, _SALES_OPS_DASHBOARD_CORE_HOME_POSITIVE_PATTERNS):
+        return False
+    if _count_matches(text, _SALES_OPS_DASHBOARD_CORE_CONTENT_POSITIVE_PATTERNS) < 3:
+        return False
+    if not _matches_any(text, _SALES_OPS_DASHBOARD_CORE_BOUNDED_POSITIVE_PATTERNS):
+        return False
+    effective = _strip_sales_ops_negated_exclusions(text)
+    if _matches_any(effective, _SALES_OPS_DASHBOARD_CORE_NEGATIVE_PATTERNS):
+        return False
+    return True
+
+
 _LANDING_PAGE_CORE_NEGATIVE_PATTERNS: tuple[str, ...] = (
     r"\b(idle|incremental|clicker|tycoon)\b",
     r"\b(trivia|quiz)\b.{0,80}\b(game|timer|challenge)\b",
@@ -1643,13 +1754,16 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
     text = _normalized_prompt(prompt)
     if not text:
         return None
-    if _matches_any(text, _GLOBAL_NEGATIVE_PATTERNS):
+    # Keep global negatives conservative, but allow explicitly bounded Sales Ops
+    # prompts that may include negated "no CRM sync" language.
+    if _matches_any(text, _GLOBAL_NEGATIVE_PATTERNS) and not _matches_sales_ops_dashboard_core(text):
         return None
     # Precedence: trivia → idle → branching narrative → memory match → word daily
     # → daily puzzle grid → resource management sim → hangman lite → typing speed racer
     # → word builder → card deck turn-based → reaction time challenge → rhythm tap lite
     # → deck builder lite → turn-based tactics lite → city builder lite → landing page core
-    # → dashboard ui core → saas dashboard core → admin dashboard core.
+    # → dashboard ui core → saas dashboard core → admin dashboard core
+    # → sales ops dashboard core.
     if _matches_trivia(text):
         return TRIVIA_TIMER_APP_TYPE
     if _matches_idle(text):
@@ -1690,6 +1804,8 @@ def select_registry_v2_app_type_for_prompt(prompt: str) -> str | None:
         return SAAS_DASHBOARD_CORE_APP_TYPE
     if _matches_admin_dashboard_core(text):
         return ADMIN_DASHBOARD_CORE_APP_TYPE
+    if _matches_sales_ops_dashboard_core(text):
+        return SALES_OPS_DASHBOARD_CORE_APP_TYPE
     return None
 
 

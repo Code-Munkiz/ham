@@ -19,6 +19,7 @@ from src.ham.build_registry.intent import (
     DASHBOARD_UI_CORE_APP_TYPE,
     LANDING_PAGE_CORE_APP_TYPE,
     SAAS_DASHBOARD_CORE_APP_TYPE,
+    SALES_OPS_DASHBOARD_CORE_APP_TYPE,
     select_registry_v2_app_type_for_prompt,
 )
 
@@ -928,13 +929,17 @@ def test_admin_dashboard_core_routes_for_strong_bounded_prompts():
     assert routed == ADMIN_DASHBOARD_CORE_APP_TYPE
 
 
-def test_sales_ops_dashboard_core_is_not_routed_yet():
+def test_sales_ops_dashboard_core_routes_for_strong_bounded_prompts():
     prompt = (
-        "Build a static sales ops dashboard with commission summary, recovery aging, "
-        "agent performance, and local mock data only."
+        "Build a static sales ops dashboard with sales executive summary, agent performance, "
+        "sales activity metrics, pipeline stage movement, commission earned and pending states, "
+        "payout status display, revenue recovery summary, aging buckets, recovery exception queue, "
+        "process bottleneck panel, and activity feed using local sample data only. "
+        "No payroll, no payments, no accounting, no backend, no CRM sync, and no legal collections automation."
     )
     routed = select_registry_v2_app_type_for_prompt(prompt)
-    assert routed != APP_TYPE_ID_SALES_OPS
+    assert routed == APP_TYPE_ID_SALES_OPS
+    assert routed == SALES_OPS_DASHBOARD_CORE_APP_TYPE
 
 
 def test_saas_dashboard_intent_constant_exists():
@@ -951,11 +956,11 @@ def test_admin_dashboard_intent_constant_exists():
     assert "app.admin-dashboard-core" in text
 
 
-def test_sales_ops_intent_constant_does_not_exist_yet():
+def test_sales_ops_intent_constant_exists():
     intent_path = REPO_ROOT / "src/ham/build_registry/intent.py"
     text = intent_path.read_text(encoding="utf-8")
-    assert "SALES_OPS_DASHBOARD_CORE_APP_TYPE" not in text
-    assert "app.sales-ops-dashboard-core" not in text
+    assert "SALES_OPS_DASHBOARD_CORE_APP_TYPE" in text
+    assert "app.sales-ops-dashboard-core" in text
 
 
 def test_module_count(website_pack):

@@ -1,6 +1,6 @@
 # Website Pack — Build Registry v2
 
-**Status:** Schema pilot · **Pack id:** `pack.site` · **Recipes:** `site.landing-page-core` (routed when flagged) · `site.dashboard-ui-core` (routed when flagged) · `app.saas-dashboard-core` (routed when flagged) · `app.admin-dashboard-core` (routed when flagged) · `app.sales-ops-dashboard-core` (schema-only, **not routed**)
+**Status:** Schema pilot · **Pack id:** `pack.site` · **Recipes:** `site.landing-page-core` (routed when flagged) · `site.dashboard-ui-core` (routed when flagged) · `app.saas-dashboard-core` (routed when flagged) · `app.admin-dashboard-core` (routed when flagged) · `app.sales-ops-dashboard-core` (routed when flagged)
 
 Generative playbooks for DOM-native marketing/landing pages and read-only dashboard/app-surface overviews. This pack is **separate from** [game-pack/](../game-pack/) — no game mechanics, no templates, no starter source trees.
 
@@ -44,7 +44,7 @@ Read-only / mostly static dashboard overview playbook:
 
 ## Third recipe: `app.saas-dashboard-core`
 
-Static, app-shell-light SaaS product-home playbook (**schema-only, not routed**):
+Static, app-shell-light SaaS product-home playbook:
 
 | In scope | Out of scope |
 |----------|--------------|
@@ -56,7 +56,7 @@ Static, app-shell-light SaaS product-home playbook (**schema-only, not routed**)
 
 ## Fourth recipe: `app.admin-dashboard-core`
 
-Static, app-shell-light admin control-surface prototype (**schema-only, not routed**):
+Static, app-shell-light admin control-surface prototype:
 
 | In scope | Out of scope |
 |----------|--------------|
@@ -69,7 +69,7 @@ Static, app-shell-light admin control-surface prototype (**schema-only, not rout
 
 ## Fifth recipe: `app.sales-ops-dashboard-core`
 
-Static, app-shell-light sales/revenue operations prototype (**schema-only, not routed**):
+Static, app-shell-light sales/revenue operations prototype:
 
 | In scope | Out of scope |
 |----------|--------------|
@@ -78,7 +78,7 @@ Static, app-shell-light sales/revenue operations prototype (**schema-only, not r
 | Process bottleneck panel, activity/audit feed, filters, semantic financial table | Legal collections automation, live dunning, telephony/SMS automation |
 | Empty/loading/error states, responsive semantics, local coherent sample data only | CRM sync, backend/API/database integration, real PII or financial identifiers, regulated financial advice, trading dashboards |
 
-**Routing:** deferred by design. `app.sales-ops-dashboard-core` is intentionally **not wired in `intent.py`** yet.
+**Routing:** narrowly routed behind `HAM_BUILD_REGISTRY_V2_ENABLED` for strong bounded sales-ops / commission / revenue-recovery intent only.
 
 ## Layout
 
