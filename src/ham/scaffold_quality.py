@@ -301,6 +301,25 @@ _PROMPT_SAAS_SEMANTIC_TABLE_REQUEST = re.compile(
     re.IGNORECASE,
 )
 
+_PROMPT_ADMIN_DASHBOARD_CORE = re.compile(
+    r"\badmin\s+(?:dashboard|control\s+panel|panel|shell|console)\b|"
+    r"\binternal\s+operations\s+dashboard\b|"
+    r"\bback[- ]?office\b",
+    re.IGNORECASE,
+)
+
+_PROMPT_ADMIN_DASHBOARD_SIGNALS = re.compile(
+    r"sidebar|topbar|user/team|user\s+team|role\s*(?:and|/)?\s*permission|"
+    r"review\s+queue|resource/user\s+table|resource\s+table|"
+    r"audit(?:/activity)?\s+log|system\s+status|demo-mode|read-only",
+    re.IGNORECASE,
+)
+
+_PROMPT_ADMIN_SEMANTIC_TABLE_REQUEST = re.compile(
+    r"header/nav/main/list/table|resource/user\s+table|resource\s+table|user\s+table",
+    re.IGNORECASE,
+)
+
 _SAAS_LIVE_FETCH_IMPL = re.compile(
     r"\bfetch\s*\(|\baxios\b|\breact-query\b|\bswr\b|\bwebsocket\b|\beventsource\b|"
     r"/api\b|\bapi\s+call\b|simulate\s+api|mock\s+api|live\s+retry|retry\s+request",
@@ -313,11 +332,43 @@ _SAAS_ASYNC_LOADING_FLOW = re.compile(
     re.IGNORECASE,
 )
 
+_ADMIN_LIVE_FETCH_IMPL = re.compile(
+    r"\bfetch\s*\(|\baxios\b|\bxmlhttprequest\b|\breact-query\b|\bswr\b|"
+    r"\bwebsocket\b|\beventsource\b|/api\b|\bapi\s+call\b|simulate\s+api|"
+    r"mock\s+api|live\s+retry|retry\s+request",
+    re.IGNORECASE,
+)
+
+_ADMIN_ASYNC_LOADING_FLOW = re.compile(
+    r"useEffect\s*\(|setTimeout\s*\(|setInterval\s*\(|async\s+function|await\s+|polling|retry",
+    re.IGNORECASE,
+)
+
+_ADMIN_DESTRUCTIVE_VERBS = re.compile(
+    r"\b(delete|remove|destroy|ban|suspend|revoke|approve|reject|edit|update|create|invite|provision)\b",
+    re.IGNORECASE,
+)
+
+_ADMIN_MUTATION_IMPL = re.compile(
+    r"\bset[A-Z]\w*\s*\(.*?(?:=>|filter\s*\(|map\s*\(|concat\s*\(|splice\s*\(|push\s*\(|pop\s*\(|shift\s*\(|unshift\s*\()|"
+    r"\.(?:filter|map|concat|splice|push|pop|shift|unshift)\s*\(",
+    re.IGNORECASE | re.DOTALL,
+)
+
 _SAAS_BLOCKING_QUALITY_CODES = frozenset(
     {
         "saas_missing_loading_error_states",
         "saas_live_fetch_impl_detected",
         "saas_missing_semantic_resource_table",
+    }
+)
+
+_ADMIN_BLOCKING_QUALITY_CODES = frozenset(
+    {
+        "admin_missing_loading_error_states",
+        "admin_live_fetch_impl_detected",
+        "admin_missing_semantic_resource_table",
+        "admin_destructive_action_live_mutation",
     }
 )
 
@@ -1046,6 +1097,26 @@ def _prompt_requests_saas_semantic_table(prompt: str | None) -> bool:
     return bool(_PROMPT_SAAS_SEMANTIC_TABLE_REQUEST.search(prompt))
 
 
+def _prompt_is_admin_dashboard_core(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    if not _PROMPT_ADMIN_DASHBOARD_CORE.search(prompt):
+        return False
+    return bool(_PROMPT_ADMIN_DASHBOARD_SIGNALS.search(prompt))
+
+
+def _prompt_requests_admin_state_examples(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    return bool(_PROMPT_DASHBOARD_STATE_REQUEST.search(prompt))
+
+
+def _prompt_requests_admin_semantic_table(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    return bool(_PROMPT_ADMIN_SEMANTIC_TABLE_REQUEST.search(prompt))
+
+
 def _inspect_dashboard_missing_requested_filter(
     plan: Plan | None,
     file_changes: list[tuple[str, str]],
@@ -1358,6 +1429,361 @@ def _inspect_saas_dashboard_quality(
 
 def _has_saas_blocking_quality_issues(issues: list[ScaffoldQualityIssue]) -> bool:
     return any(issue.code in _SAAS_BLOCKING_QUALITY_CODES for issue in issues)
+
+
+def _inspect_admin_missing_loading_error_states(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if (
+        plan is None
+        or not _prompt_is_admin_dashboard_core(plan.user_message)
+        or not _prompt_requests_admin_state_examples(plan.user_message)
+    ):
+        return []
+    combined = _combined_js_source(file_changes)
+    has_empty = bool(_DASHBOARD_EMPTY_STATE.search(combined))
+    has_loading = bool(_DASHBOARD_LOADING_STATE.search(combined))
+    has_error = bool(_DASHBOARD_ERROR_STATE.search(combined))
+    has_static_local = bool(
+        re.search(r"\b(static|local|demo|illustrative|preview)\b", combined, re.IGNORECASE)
+    )
+    if has_empty and has_loading and has_error and has_static_local:
+        return []
+    missing_parts: list[str] = []
+    if not has_empty:
+        missing_parts.append("empty")
+    if not has_loading:
+        missing_parts.append("loading")
+    if not has_error:
+        missing_parts.append("error")
+    if not has_static_local:
+        missing_parts.append("static/local wording")
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"Admin|Dashboard|App|Resource|Review|Audit|Status",
+    )
+    return [
+        ScaffoldQualityIssue(
+            code="admin_missing_loading_error_states",
+            message=(
+                "Admin dashboard prompt requests visible static/local empty/loading/error examples, "
+                "but missing: " + ", ".join(missing_parts)
+            ),
+            path=path,
+        )
+    ]
+
+
+def _inspect_admin_live_fetch_impl(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_is_admin_dashboard_core(plan.user_message):
+        return []
+    combined = _combined_js_source(file_changes)
+    if not _ADMIN_LIVE_FETCH_IMPL.search(combined) and not _ADMIN_ASYNC_LOADING_FLOW.search(combined):
+        return []
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"Admin|Dashboard|App|Data|Resource|Review|main",
+    )
+    return [
+        ScaffoldQualityIssue(
+            code="admin_live_fetch_impl_detected",
+            message=(
+                "Admin dashboard must stay static/local; remove live-fetch/API-style async flow "
+                "(fetch/useEffect/setTimeout/axios/XMLHttpRequest)"
+            ),
+            path=path,
+        )
+    ]
+
+
+def _inspect_admin_missing_semantic_resource_table(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if (
+        plan is None
+        or not _prompt_is_admin_dashboard_core(plan.user_message)
+        or not _prompt_requests_admin_semantic_table(plan.user_message)
+    ):
+        return []
+    combined = _combined_js_source(file_changes)
+    has_main = bool(_DASHBOARD_MAIN.search(combined))
+    has_header = bool(_DASHBOARD_HEADER.search(combined))
+    has_nav = bool(_DASHBOARD_NAV.search(combined))
+    has_table = bool(_DASHBOARD_TABLE.search(combined))
+    has_list = bool(re.search(r"<ul\b|<ol\b", combined, re.IGNORECASE))
+    if has_main and has_header and has_nav and has_table and has_list:
+        return []
+    missing_parts: list[str] = []
+    if not has_header:
+        missing_parts.append("header")
+    if not has_nav:
+        missing_parts.append("nav")
+    if not has_main:
+        missing_parts.append("main")
+    if not has_table:
+        missing_parts.append("table")
+    if not has_list:
+        missing_parts.append("list")
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"Admin|Dashboard|App|Resource|Table|Nav|Header",
+    )
+    return [
+        ScaffoldQualityIssue(
+            code="admin_missing_semantic_resource_table",
+            message=(
+                "Admin dashboard semantic shell/resource structure is incomplete; missing: "
+                + ", ".join(missing_parts)
+            ),
+            path=path,
+        )
+    ]
+
+
+def _inspect_admin_destructive_action_live_mutation(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_is_admin_dashboard_core(plan.user_message):
+        return []
+    combined = _combined_js_source(file_changes)
+    if not _ADMIN_DESTRUCTIVE_VERBS.search(combined):
+        return []
+    if not _ADMIN_MUTATION_IMPL.search(combined):
+        return []
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"Admin|Dashboard|App|Table|Queue|Users|Resources|Actions",
+    )
+    return [
+        ScaffoldQualityIssue(
+            code="admin_destructive_action_live_mutation",
+            message=(
+                "Admin dashboard appears to implement destructive/live mutation behavior "
+                "(create/edit/delete/approve/revoke) instead of demo-bounded static controls"
+            ),
+            path=path,
+        )
+    ]
+
+
+def _inspect_admin_dashboard_quality(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    issues: list[ScaffoldQualityIssue] = []
+    issues.extend(_inspect_admin_missing_loading_error_states(plan, file_changes))
+    issues.extend(_inspect_admin_live_fetch_impl(plan, file_changes))
+    issues.extend(_inspect_admin_missing_semantic_resource_table(plan, file_changes))
+    issues.extend(_inspect_admin_destructive_action_live_mutation(plan, file_changes))
+    return issues
+
+
+def _has_admin_blocking_quality_issues(issues: list[ScaffoldQualityIssue]) -> bool:
+    return any(issue.code in _ADMIN_BLOCKING_QUALITY_CODES for issue in issues)
+
+
+def _build_admin_static_dashboard_fallback_payload(
+    file_changes: list[tuple[str, str]],
+) -> dict[str, Any]:
+    file_map = _file_map(file_changes)
+
+    file_map.setdefault(
+        "package.json",
+        """{
+  "name": "admin-dashboard-static",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.0"
+  }
+}
+""",
+    )
+    file_map.setdefault(
+        "vite.config.ts",
+        "import { defineConfig } from 'vite';\nimport react from '@vitejs/plugin-react';\n\nexport default defineConfig({ plugins: [react()] });\n",
+    )
+    file_map.setdefault(
+        "index.html",
+        """<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Dashboard</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+""",
+    )
+    file_map["src/main.tsx"] = (
+        "import React from 'react';\n"
+        "import ReactDOM from 'react-dom/client';\n"
+        "import App from './App';\n"
+        "import './index.css';\n\n"
+        "ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(\n"
+        "  <React.StrictMode>\n"
+        "    <App />\n"
+        "  </React.StrictMode>,\n"
+        ");\n"
+    )
+    file_map["src/App.tsx"] = """import React from 'react';
+
+const App = () => {
+  return (
+    <div className="app-shell">
+      <header className="topbar">
+        <h1>Admin Dashboard (Static Demo)</h1>
+      </header>
+      <div className="layout">
+        <nav className="sidebar" aria-label="Admin navigation">
+          <ul>
+            <li>Overview</li>
+            <li>Users and teams</li>
+            <li>Review queue</li>
+            <li>Audit activity</li>
+            <li>System status</li>
+          </ul>
+        </nav>
+        <main className="content">
+          <section>
+            <h2>Overview and status cards</h2>
+            <div className="cards">
+              <article className="card"><h3>Pending reviews</h3><p>14</p></article>
+              <article className="card"><h3>Active users</h3><p>128</p></article>
+              <article className="card"><h3>System health</h3><p>Operational</p></article>
+            </div>
+          </section>
+
+          <section>
+            <h2>User and team summary</h2>
+            <ul>
+              <li>Platform team: 12 members</li>
+              <li>Support team: 6 members</li>
+              <li>Moderation team: 5 members</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2>Static role and permission summary</h2>
+            <ul>
+              <li>Admin: review and status access (demo only)</li>
+              <li>Operator: queue and audit visibility (demo only)</li>
+              <li>Viewer: read-only dashboard access</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2>Review queue</h2>
+            <ul>
+              <li>Pending moderation: 5 items</li>
+              <li>Pending verification: 9 items</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2>Resource/user table</h2>
+            <table>
+              <caption>Static local demo rows</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Resource</th>
+                  <th scope="col">Owner</th>
+                  <th scope="col">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>Workspace Alpha</td><td>Team Core</td><td>Healthy</td></tr>
+                <tr><td>Workspace Beta</td><td>Team Ops</td><td>Needs review</td></tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section>
+            <h2>Audit and activity log</h2>
+            <ul>
+              <li>09:15 — Demo role summary viewed</li>
+              <li>09:12 — Demo queue snapshot refreshed</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2>System status panel</h2>
+            <p>All systems operational (static local sample)</p>
+          </section>
+
+          <section>
+            <h2>Demo-mode action controls</h2>
+            <button type="button" disabled>Preview action (demo only)</button>
+            <p>Read-only illustrative control. No data mutation occurs.</p>
+          </section>
+
+          <section aria-label="Static state examples">
+            <h2>Empty, loading, and error examples</h2>
+            <div role="status">Empty: No users match this filter (static local example)</div>
+            <div role="status">Loading: Loading admin preview example (illustrative only)</div>
+            <div role="alert">Error: Unable to load local demo data (static example)</div>
+          </section>
+        </main>
+      </div>
+    </div>
+  );
+};
+
+export default App;
+"""
+    file_map["src/index.css"] = (
+        "* { box-sizing: border-box; }\n"
+        "body { margin: 0; font-family: Inter, Arial, sans-serif; background: #f5f7fb; color: #111827; }\n"
+        ".topbar { padding: 12px 16px; background: #111827; color: #f9fafb; }\n"
+        ".layout { display: grid; grid-template-columns: 240px 1fr; min-height: calc(100vh - 56px); }\n"
+        ".sidebar { padding: 12px; background: #1f2937; color: #e5e7eb; }\n"
+        ".sidebar ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }\n"
+        ".content { padding: 16px; display: grid; gap: 16px; }\n"
+        ".cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }\n"
+        ".card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; }\n"
+        "section { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; }\n"
+        "table { width: 100%; border-collapse: collapse; }\n"
+        "th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; }\n"
+        "@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }\n"
+    )
+
+    ordered_paths = [
+        "package.json",
+        "vite.config.ts",
+        "index.html",
+        "src/main.tsx",
+        "src/App.tsx",
+        "src/index.css",
+    ]
+    ordered = [(path, file_map[path]) for path in ordered_paths if path in file_map]
+    for path in sorted(file_map):
+        if path not in {p for p, _ in ordered}:
+            ordered.append((path, file_map[path]))
+    return {"file_changes": [{"path": p, "content": c} for p, c in ordered], "assertions": []}
 
 
 def _build_saas_static_dashboard_fallback_payload(
@@ -3258,6 +3684,7 @@ def inspect_generated_scaffold_quality(
         issues.extend(_inspect_ignored_seed_payload(plan, file_changes))
         issues.extend(_inspect_dashboard_quality(plan, file_changes))
         issues.extend(_inspect_saas_dashboard_quality(plan, file_changes))
+        issues.extend(_inspect_admin_dashboard_quality(plan, file_changes))
         issues.extend(_inspect_tactics_quality(plan, file_changes))
         issues.extend(_inspect_city_builder_quality(plan, file_changes))
     issues.extend(_inspect_import_export(file_changes))
@@ -3519,6 +3946,25 @@ def build_scaffold_repair_prompt(
             "- Keep settings/help shortcuts and upgrade CTA honest placeholders only.\n"
             "- Output ONLY valid JSON matching file_changes schema.\n"
         )
+    admin_codes = issue_codes & {
+        "admin_missing_loading_error_states",
+        "admin_live_fetch_impl_detected",
+        "admin_missing_semantic_resource_table",
+        "admin_destructive_action_live_mutation",
+    }
+    if admin_codes and _prompt_is_admin_dashboard_core(plan.user_message):
+        repair_system += (
+            "\nAdmin dashboard repair focus:\n"
+            "- Preserve the static admin lane: no backend/live data/auth/RBAC/CRUD/destructive implementations.\n"
+            "- Add visible static/local Empty / Loading / Error examples rendered in UI (not comments/text-only).\n"
+            "- Include explicit examples such as: 'No users match this filter', 'Loading admin preview example', 'Unable to load local demo data'.\n"
+            "- Keep state examples static/local and never require fetch, async calls, API endpoints, backend, timers, polling, or live data.\n"
+            "- Do not use '/api', fetch(, axios, XMLHttpRequest, async backend simulation, useEffect polling, or timer-based live loading.\n"
+            "- Use semantic <header>, <nav>, and <main> landmarks around the admin shell.\n"
+            "- For resource/user rows, render semantic <table> with <thead>, <tbody>, <th>, and <td>; keep queue/audit as semantic list structures.\n"
+            "- Keep controls demo-mode/read-only only; do not implement create/edit/delete/approve/revoke mutations.\n"
+            "- Output ONLY valid JSON matching file_changes schema.\n"
+        )
     user_content = (
         f"User request: {plan.user_message}\n\n"
         f"The previous scaffold failed automated playability checks:\n{issue_lines}\n\n"
@@ -3611,6 +4057,51 @@ def maybe_repair_generated_scaffold(
                 plan.plan_id,
             )
             fallback_payload = _build_saas_static_dashboard_fallback_payload(repaired.file_changes)
+            repaired = parse_result(json.dumps(fallback_payload))
+            remaining = inspect_generated_scaffold_quality(repaired.file_changes, plan=plan)
+
+        # Escalate admin repair once more when blocking admin issues remain.
+        if remaining and _prompt_is_admin_dashboard_core(plan.user_message) and _has_admin_blocking_quality_issues(remaining):
+            _LOG.info(
+                "Scaffold quality: Admin blocking issues remain after first repair for plan=%s — running one escalated Admin repair pass",
+                plan.plan_id,
+            )
+            escalated_system = messages[0]["content"] + (
+                "\n\nAdmin enforcement (must satisfy all):\n"
+                "- Output must include visible static/local Empty, Loading, and Error example cards/panels.\n"
+                "- Output must include semantic admin shell landmarks (<header>/<nav>/<main>) and resource/user <table> with <thead>/<tbody>/<th>/<td>.\n"
+                "- Output must contain no fetch/useEffect polling/setTimeout loading simulation/axios/XMLHttpRequest/API endpoint behavior.\n"
+                "- Output must keep controls demo-bounded read-only; no create/edit/delete/approve/revoke live mutation behavior.\n"
+                "- If constraints cannot be met, replace affected regions with static semantic markup that does meet them.\n"
+            )
+            escalated_user = (
+                messages[1]["content"]
+                + "\n\nRemaining Admin blocking issues to fix now:\n"
+                + "\n".join(
+                    f"- [{issue.code}] {issue.message}"
+                    for issue in remaining
+                    if issue.code in _ADMIN_BLOCKING_QUALITY_CODES
+                )
+            )
+            raw = complete_chat(
+                [
+                    {"role": "system", "content": escalated_system},
+                    {"role": "user", "content": escalated_user},
+                ],
+                model_override=model,
+                api_key_override=api_key,
+                timeout_sec=scaffold_timeout,
+            )
+            repaired = parse_result(raw)
+            remaining = inspect_generated_scaffold_quality(repaired.file_changes, plan=plan)
+
+        # Deterministic admin fallback to guarantee gate-critical static semantics.
+        if remaining and _prompt_is_admin_dashboard_core(plan.user_message) and _has_admin_blocking_quality_issues(remaining):
+            _LOG.warning(
+                "Scaffold quality: Admin blocking issues remain after escalated repair for plan=%s — applying deterministic static Admin fallback",
+                plan.plan_id,
+            )
+            fallback_payload = _build_admin_static_dashboard_fallback_payload(repaired.file_changes)
             repaired = parse_result(json.dumps(fallback_payload))
             remaining = inspect_generated_scaffold_quality(repaired.file_changes, plan=plan)
 

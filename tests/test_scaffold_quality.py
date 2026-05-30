@@ -2499,6 +2499,203 @@ class TestSaaSDashboardScaffoldQuality:
         assert "Do not use div-soup cards pretending to be a table" in body
 
 
+_ADMIN_GATE_PROMPT = (
+    "Build a static admin dashboard for an AI developer platform. Include an admin shell with "
+    "sidebar and topbar, overview/status cards, a user/team summary, a static role and permission "
+    "summary, a review queue, a resource/user table, an audit/activity log, a system status panel, "
+    "demo-mode action controls, visible empty/loading/error state examples, responsive layout, and "
+    "accessible header/nav/main/table/list structure. Use meaningful local mock data only. No backend, "
+    "no auth, no real RBAC, no permission mutation, no CRUD, no destructive actions, no live monitoring, "
+    "no real audit logging, no billing or payments, and no production security claims."
+)
+
+_ADMIN_MISSING_STATES_APP = """
+const App = () => (
+  <div>
+    <header><h1>Admin Dashboard</h1></header>
+    <nav aria-label="Admin nav"><a href="#">Overview</a></nav>
+    <main>
+      <section><h2>Overview</h2><p>Status cards shown with local sample data.</p></section>
+      <section><h2>User and team summary</h2><ul><li>Team Core</li></ul></section>
+      <section><h2>Review queue</h2><ul><li>Pending moderation</li></ul></section>
+      <section><h2>Resource/user table</h2>
+        <table>
+          <thead><tr><th>User</th><th>Status</th></tr></thead>
+          <tbody><tr><td>Avery</td><td>Active</td></tr></tbody>
+        </table>
+      </section>
+      <section><button disabled>Demo action</button><p>Read-only preview only.</p></section>
+    </main>
+  </div>
+);
+"""
+
+_ADMIN_GOOD_STATES_TABLE_APP = """
+const App = () => (
+  <div>
+    <header><h1>Admin Dashboard</h1></header>
+    <nav aria-label="Admin nav"><a href="#">Overview</a></nav>
+    <main>
+      <section><h2>Overview and status cards</h2><p>Static local summary data.</p></section>
+      <section><h2>User and team summary</h2><ul><li>Platform team</li></ul></section>
+      <section><h2>Role and permission summary</h2><ul><li>Viewer: read-only</li></ul></section>
+      <section><h2>Review queue</h2><ul><li>Pending review item</li></ul></section>
+      <section>
+        <h2>Resource/user table</h2>
+        <table>
+          <thead><tr><th>User</th><th>Status</th></tr></thead>
+          <tbody><tr><td>Avery</td><td>Healthy</td></tr></tbody>
+        </table>
+      </section>
+      <section><h2>Audit/activity log</h2><ul><li>Demo activity event</li></ul></section>
+      <section><h2>System status panel</h2><p>Operational (static local sample)</p></section>
+      <section><button disabled>Demo action</button><p>Read-only illustrative control.</p></section>
+      <section aria-label="Static admin state examples">
+        <div role="status">Empty: No users match this filter</div>
+        <div role="status">Loading: Loading admin preview example</div>
+        <div role="alert">Error: Unable to load local demo data</div>
+      </section>
+    </main>
+  </div>
+);
+"""
+
+_ADMIN_ASYNC_FETCH_APP = """
+const Dashboard = () => {
+  const [loading, setLoading] = useState(true);
+  const [rows, setRows] = useState([]);
+  useEffect(() => {
+    const run = async () => {
+      setTimeout(() => {
+        setRows([{ name: 'Avery', status: 'Active' }]);
+        setLoading(false);
+      }, 500);
+    };
+    run();
+  }, []);
+  if (loading) return <div>Loading...</div>;
+  return (
+    <div>
+      <header><h1>Admin Dashboard</h1></header>
+      <nav aria-label="Admin nav"><a href="#">Overview</a></nav>
+      <main>
+        <table><tbody>{rows.map((row) => <tr key={row.name}><td>{row.name}</td></tr>)}</tbody></table>
+      </main>
+    </div>
+  );
+};
+"""
+
+_ADMIN_DESTRUCTIVE_MUTATION_APP = """
+const AdminTable = () => {
+  const [rows, setRows] = useState([{ id: 1, name: 'Avery' }]);
+  const removeUser = (id) => setRows((prev) => prev.filter((row) => row.id !== id));
+  return (
+    <div>
+      <header><h1>Admin Dashboard</h1></header>
+      <nav aria-label="Admin nav"><a href="#">Overview</a></nav>
+      <main>
+        <table>
+          <thead><tr><th>User</th><th>Actions</th></tr></thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id}>
+                <td>{row.name}</td>
+                <td><button onClick={() => removeUser(row.id)}>Delete user</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </main>
+    </div>
+  );
+};
+"""
+
+
+class TestAdminDashboardScaffoldQuality:
+    def _admin_plan(self, prompt: str = _ADMIN_GATE_PROMPT) -> Plan:
+        plan = _plan()
+        plan.user_message = prompt
+        return plan
+
+    def test_missing_admin_loading_error_states_is_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            [("src/App.tsx", _ADMIN_MISSING_STATES_APP)],
+            plan=self._admin_plan(),
+        )
+        assert any(i.code == "admin_missing_loading_error_states" for i in issues)
+
+    def test_admin_live_fetch_simulation_is_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            [("src/App.tsx", _ADMIN_ASYNC_FETCH_APP)],
+            plan=self._admin_plan(),
+        )
+        assert any(i.code == "admin_live_fetch_impl_detected" for i in issues)
+
+    def test_admin_destructive_live_mutation_is_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            [("src/App.tsx", _ADMIN_DESTRUCTIVE_MUTATION_APP)],
+            plan=self._admin_plan(),
+        )
+        assert any(i.code == "admin_destructive_action_live_mutation" for i in issues)
+
+    def test_admin_static_state_examples_and_semantics_are_accepted(self):
+        issues = inspect_generated_scaffold_quality(
+            [("src/App.tsx", _ADMIN_GOOD_STATES_TABLE_APP)],
+            plan=self._admin_plan(),
+        )
+        assert not any(i.code.startswith("admin_") for i in issues)
+
+    def test_admin_repair_prompt_requires_visible_static_state_examples(self):
+        issues = [
+            ScaffoldQualityIssue(
+                code="admin_missing_loading_error_states",
+                message="Missing empty/loading/error examples",
+                path="src/App.tsx",
+            )
+        ]
+        messages = build_scaffold_repair_prompt(
+            self._admin_plan(),
+            [("src/App.tsx", _ADMIN_MISSING_STATES_APP)],
+            issues,
+            base_system_prompt="BASE",
+        )
+        body = messages[0]["content"]
+        assert "Admin dashboard repair focus" in body
+        assert "visible static/local Empty / Loading / Error examples rendered in UI (not comments/text-only)" in body
+        assert "'No users match this filter'" in body
+        assert "'Loading admin preview example'" in body
+        assert "'Unable to load local demo data'" in body
+
+    def test_admin_repair_prompt_bans_live_fetch_and_api_loading_impl(self):
+        issues = [
+            ScaffoldQualityIssue(
+                code="admin_live_fetch_impl_detected",
+                message="Found fetch/useEffect/setTimeout API-style flow",
+                path="src/App.tsx",
+            )
+        ]
+        messages = build_scaffold_repair_prompt(
+            self._admin_plan(),
+            [("src/App.tsx", _ADMIN_ASYNC_FETCH_APP)],
+            issues,
+            base_system_prompt="BASE",
+        )
+        body = messages[0]["content"].lower()
+        assert "never require fetch, async calls, api endpoints, backend, timers, polling, or live data" in body
+        assert "do not use '/api', fetch(, axios, xmlhttprequest, async backend simulation, useeffect polling, or timer-based live loading" in body
+
+    def test_admin_checks_not_applied_to_non_admin_prompt(self):
+        plan = _plan()
+        plan.user_message = "Build a card battle game with draw/discard loop."
+        issues = inspect_generated_scaffold_quality(
+            [("src/App.tsx", _ADMIN_MISSING_STATES_APP)],
+            plan=plan,
+        )
+        assert not any(i.code.startswith("admin_") for i in issues)
+
+
 class TestBuildScaffoldRepairPrompt:
     def test_repair_prompt_includes_detected_issues_and_mutation_guidance(self):
         issues = [
@@ -2996,3 +3193,97 @@ class TestGenerateScaffoldQualityRepairIntegration:
         assert "useeffect(" not in app_content
         issues = inspect_generated_scaffold_quality(result.file_changes, plan=plan)
         assert not any(i.code.startswith("saas_") for i in issues)
+
+    def test_generate_scaffold_admin_triggers_escalated_second_repair_pass(self, monkeypatch):
+        from src.ham.builder_llm_scaffold import ScaffoldResult, generate_scaffold
+
+        first_pass_bad = json.dumps(
+            {
+                "file_changes": [
+                    {"path": "src/App.tsx", "content": _ADMIN_ASYNC_FETCH_APP},
+                    {"path": "package.json", "content": "{}"},
+                ],
+                "assertions": ["renders"],
+            }
+        )
+        second_pass_good = json.dumps(
+            {
+                "file_changes": [
+                    {"path": "src/App.tsx", "content": _ADMIN_GOOD_STATES_TABLE_APP},
+                    {"path": "package.json", "content": "{}"},
+                ],
+                "assertions": ["renders"],
+            }
+        )
+        calls: list[str] = []
+
+        def _complete_chat(messages, **_k):
+            calls.append(messages[0]["content"])
+            if len(calls) == 1:
+                return first_pass_bad
+            if len(calls) == 2:
+                return first_pass_bad
+            return second_pass_good
+
+        plan = _plan()
+        plan.user_message = _ADMIN_GATE_PROMPT
+
+        monkeypatch.setattr(
+            "src.ham.builder_llm_scaffold.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test",
+        )
+        monkeypatch.setattr(
+            "src.ham.builder_llm_scaffold.complete_chat_messages_openrouter",
+            _complete_chat,
+        )
+        result = generate_scaffold(plan, project_id="p", workspace_id="w")
+        assert isinstance(result, ScaffoldResult)
+        assert len(calls) == 3
+        assert "Admin enforcement (must satisfy all):" in calls[2]
+
+    def test_generate_scaffold_admin_applies_deterministic_fallback_when_repairs_still_fail(
+        self, monkeypatch
+    ):
+        from src.ham.builder_llm_scaffold import ScaffoldResult, generate_scaffold
+
+        bad_json = json.dumps(
+            {
+                "file_changes": [
+                    {"path": "src/App.tsx", "content": _ADMIN_ASYNC_FETCH_APP},
+                    {"path": "package.json", "content": "{}"},
+                ],
+                "assertions": ["renders"],
+            }
+        )
+        calls: list[str] = []
+
+        def _complete_chat(messages, **_k):
+            calls.append(messages[0]["content"])
+            return bad_json
+
+        plan = _plan()
+        plan.user_message = _ADMIN_GATE_PROMPT
+
+        monkeypatch.setattr(
+            "src.ham.builder_llm_scaffold.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test",
+        )
+        monkeypatch.setattr(
+            "src.ham.builder_llm_scaffold.complete_chat_messages_openrouter",
+            _complete_chat,
+        )
+        result = generate_scaffold(plan, project_id="p", workspace_id="w")
+        assert isinstance(result, ScaffoldResult)
+        assert len(calls) == 3
+        app_content = dict(result.file_changes).get("src/App.tsx", "").lower()
+        assert "admin dashboard (static demo)" in app_content
+        assert "no users match this filter" in app_content
+        assert "loading admin preview example" in app_content
+        assert "unable to load local demo data" in app_content
+        assert "<table" in app_content
+        assert "<nav" in app_content
+        assert "<main" in app_content
+        assert "fetch(" not in app_content
+        assert "useeffect(" not in app_content
+        issues = inspect_generated_scaffold_quality(result.file_changes, plan=plan)
+        assert not any(i.code.startswith("admin_") for i in issues)
