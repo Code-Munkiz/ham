@@ -5,6 +5,7 @@ import { sanitizeConductorUserFacingLine } from "@/lib/ham/conductorUiMessaging"
 import { cn } from "@/lib/utils";
 
 import {
+  CODING_PLAN_RIGHT_PANE_POINTER,
   OPENCODE_PREFERRED_CTA,
   OPENCODE_PREFERRED_HINT,
   OPENCODE_PREFERRED_LOADING,
@@ -12,8 +13,6 @@ import {
   shouldShowOpencodeBuildApproval,
   shouldShowOpenCodeAffordance,
 } from "./codingPlanCardCopy";
-import { ManagedBuildApprovalPanel } from "./ManagedBuildApprovalPanel";
-import { ManagedOpencodeBuildApprovalPanel } from "./ManagedOpencodeBuildApprovalPanel";
 
 export type CodingPlanCardProps = {
   payload: CodingConductorPreviewPayload;
@@ -110,16 +109,13 @@ export function CodingPlanCard({
         </div>
       ) : null}
 
-      {showManagedApproval && payload.project.project_id ? (
-        <ManagedBuildApprovalPanel
-          projectId={payload.project.project_id}
-          userPrompt={userPrompt ?? ""}
-        />
-      ) : showOpencodeApproval && payload.project.project_id ? (
-        <ManagedOpencodeBuildApprovalPanel
-          projectId={payload.project.project_id}
-          userPrompt={userPrompt ?? ""}
-        />
+      {hasApprovalPanel ? (
+        <p
+          className="mt-3 text-[11px] leading-snug text-cyan-100/85"
+          data-hww-coding-plan="right-pane-pointer"
+        >
+          {CODING_PLAN_RIGHT_PANE_POINTER}
+        </p>
       ) : null}
     </section>
   );

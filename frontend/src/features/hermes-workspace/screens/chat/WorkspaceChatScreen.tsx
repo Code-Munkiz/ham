@@ -3974,6 +3974,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           projectId={projectId}
           workspaceId={activeWorkspaceId}
           workbenchRefreshSignal={workbenchBounce}
+          managedApprovalPayload={codingPlanPreview}
+          managedApprovalPrompt={codingPlanPrompt}
           onStaleBuilderProject={() => {
             setProjectId(null);
             setHamProjectId(null);

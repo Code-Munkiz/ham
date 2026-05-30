@@ -19,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   type BuilderActivityItem,
+  type CodingConductorPreviewPayload,
   type CloudRuntimeJob,
   type CloudRuntimeLifecycleStatus,
   type BuilderCloudRuntimeStatus,
@@ -74,6 +75,7 @@ import {
   WorkbenchBuildStatusPanel,
   buildStatusFromPreviewPhase,
 } from "./WorkbenchBuildStatusPanel";
+import { WorkbenchManagedApprovalMount } from "./WorkbenchManagedApprovalMount";
 import { ProjectSourceIntakeDialog } from "./ProjectSourceIntakeDialog";
 import { WorkbenchSavedVersionsDialog } from "./WorkbenchSavedVersionsDialog";
 import { WorkbenchProjectSettingsPanel } from "./WorkbenchProjectSettingsPanel";
@@ -105,6 +107,14 @@ export type WorkspaceWorkbenchProps = {
   workbenchRefreshSignal?: number;
   /** Called once when APIs confirm `{ code: PROJECT_NOT_FOUND }` for this routing (stale deletes). */
   onStaleBuilderProject?: () => void;
+  /**
+   * Conductor preview payload (the single intent source owned by chat). When a
+   * managed/OpenCode build approval is gated by it, the approval panel is
+   * relocated here into the right pane instead of the chat card.
+   */
+  managedApprovalPayload?: CodingConductorPreviewPayload | null;
+  /** Prompt threaded into the relocated approval wrapper unchanged. */
+  managedApprovalPrompt?: string;
 };
 
 export type WorkspaceWorkbenchTabId = "preview" | "code" | "database" | "storage" | "settings";
@@ -122,6 +132,8 @@ export function WorkspaceWorkbench({
   workspaceId = null,
   workbenchRefreshSignal = 0,
   onStaleBuilderProject,
+  managedApprovalPayload = null,
+  managedApprovalPrompt = "",
 }: WorkspaceWorkbenchProps) {
   const [activeTab, setActiveTab] = React.useState<WorkspaceWorkbenchTabId>("preview");
   const [projectSourceOpen, setProjectSourceOpen] = React.useState(false);
@@ -379,6 +391,11 @@ export function WorkspaceWorkbench({
           </DropdownMenu.Root>
         </div>
       </div>
+
+      <WorkbenchManagedApprovalMount
+        payload={managedApprovalPayload}
+        userPrompt={managedApprovalPrompt}
+      />
 
       <div
         data-testid={`hww-workbench-panel-${activeTab}`}

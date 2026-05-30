@@ -25,6 +25,14 @@ export const CODING_PLAN_LAUNCH_DISABLED_TITLE =
 
 export const CODING_PLAN_SECTION_LABEL = "Next step";
 
+/**
+ * Minimal chat pointer shown once the managed build approval experience has
+ * been relocated to the workbench right pane. Chat no longer hosts the
+ * approval controls or launch state — it only directs the user to the panel.
+ */
+export const CODING_PLAN_RIGHT_PANE_POINTER =
+  "Preview is ready on the right — review and approve the build in the workbench.";
+
 export const MANAGED_BUILD_APPROVAL_HEADLINE = "Approve build";
 
 export const MANAGED_BUILD_APPROVAL_BODY =

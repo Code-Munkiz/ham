@@ -162,12 +162,14 @@ describe("CodingPlanCard managed workspace branch", () => {
     expect(container.querySelector('[data-hww-coding-plan="managed-build-approval"]')).toBeNull();
   });
 
-  it("renders the managed panel for managed_workspace factory_droid_build", () => {
+  it("relocates the managed panel out of chat to a right-pane pointer (managed_workspace factory_droid_build)", () => {
     const p = managedConductorPayload();
     const { container } = render(<CodingPlanCard payload={p} userPrompt="Tidy docs" />);
-    expect(
-      container.querySelector('[data-hww-coding-plan="managed-build-approval"]'),
-    ).not.toBeNull();
+    // The approval engine is now mounted in the right pane, not in chat.
+    expect(container.querySelector('[data-hww-coding-plan="managed-build-approval"]')).toBeNull();
+    const pointer = container.querySelector('[data-hww-coding-plan="right-pane-pointer"]');
+    expect(pointer).not.toBeNull();
+    expect(pointer!.textContent).toContain("Preview is ready on the right");
     expect(container.querySelector('[data-hww-coding-plan="launch-cta-disabled"]')).toBeNull();
     assertNoForbiddenTokens(container as unknown as HTMLElement);
   });

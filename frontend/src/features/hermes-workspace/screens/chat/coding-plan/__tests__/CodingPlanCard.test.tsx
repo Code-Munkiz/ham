@@ -355,7 +355,7 @@ describe("CodingPlanCard OpenCode preferred-provider affordance", () => {
     expect(container.querySelector('[data-hww-coding-plan="no-launch-footer"]')).toBeNull();
   });
 
-  it("renders ManagedOpencodeBuildApprovalPanel when chosen is opencode_cli + managed_workspace", () => {
+  it("relocates the OpenCode approval out of chat to a right-pane pointer (managed_workspace)", () => {
     const chosenOc = candidate({
       provider: "opencode_cli",
       output_kind: "pull_request",
@@ -376,12 +376,14 @@ describe("CodingPlanCard OpenCode preferred-provider affordance", () => {
       },
     });
     const { container } = render(<CodingPlanCard payload={p} userPrompt="Tidy docs" />);
-    expect(
-      container.querySelector('[data-hww-coding-plan="opencode-build-approval"]'),
-    ).not.toBeNull();
+    // VAL-CHAT1-002: the full approval engine is NOT mounted in chat anymore.
+    expect(container.querySelector('[data-hww-coding-plan="opencode-build-approval"]')).toBeNull();
     expect(container.querySelector('[data-hww-coding-plan="managed-build-approval"]')).toBeNull();
+    // VAL-CHAT1-001: a minimal right-pane pointer is shown instead.
+    const pointer = container.querySelector('[data-hww-coding-plan="right-pane-pointer"]');
+    expect(pointer).not.toBeNull();
+    expect(pointer!.textContent).toContain("Preview is ready on the right");
     expect(container.querySelector('[data-hww-coding-plan="launch-cta-disabled"]')).toBeNull();
-    expect(container.querySelector('[data-hww-coding-plan="prefer-opencode-cta"]')).toBeNull();
   });
 
   it("does not render approval panel when chosen is opencode_cli but workspace_id missing", () => {
@@ -433,5 +435,61 @@ describe("CodingPlanCard OpenCode preferred-provider affordance", () => {
     for (const token of extra) {
       expect(lower).not.toContain(token);
     }
+  });
+});
+
+describe("CodingPlanCard chat pointer (relocated approval)", () => {
+  function managedDroidPayload(): CodingConductorPreviewPayload {
+    const chosen = candidate({
+      provider: "factory_droid_build",
+      output_kind: "pull_request",
+      will_modify_code: true,
+      will_open_pull_request: false,
+      reason: "Managed workspace build with a minimal diff and a preview snapshot.",
+    });
+    return payload({
+      chosen,
+      candidates: [chosen],
+      project: {
+        found: true,
+        project_id: "project.app-f53b52",
+        build_lane_enabled: true,
+        has_github_repo: false,
+        output_target: "managed_workspace",
+        has_workspace_id: true,
+      },
+    });
+  }
+
+  it("VAL-CHAT1-001: renders a minimal right-pane pointer for a gated managed payload", () => {
+    const { card } = renderWithDigest(managedDroidPayload());
+    const pointer = card.querySelector('[data-hww-coding-plan="right-pane-pointer"]');
+    expect(pointer).not.toBeNull();
+    expect(pointer!.textContent).toContain("Preview is ready on the right");
+  });
+
+  it("VAL-CHAT1-002: does NOT mount the managed/opencode approval panel in chat", () => {
+    const { card } = renderWithDigest(managedDroidPayload());
+    expect(card.querySelector('[data-hww-coding-plan="managed-build-approval"]')).toBeNull();
+    expect(card.querySelector('[data-hww-coding-plan="opencode-build-approval"]')).toBeNull();
+  });
+
+  it("VAL-CHAT1-003: renders no duplicate approve/launch control or approve checkbox in chat", () => {
+    const { card } = renderWithDigest(managedDroidPayload());
+    expect(card.querySelector('input[type="checkbox"]')).toBeNull();
+    expect(card.querySelector('[data-hww-coding-plan$="-approve-checkbox"]')).toBeNull();
+    const buttons = Array.from(card.querySelectorAll("button"));
+    for (const b of buttons) {
+      const name = (b.textContent || "").toLowerCase();
+      expect(/approve build|prepare build|launch/.test(name)).toBe(false);
+    }
+  });
+
+  it("VAL-CHAT1-005 / VAL-CHAT1-006: pointer copy leaks no forbidden internals or dashboard framing", () => {
+    const { card } = renderWithDigest(managedDroidPayload());
+    assertNoForbiddenTokens(card);
+    expect(card.querySelector('[data-hww-coding-plan="candidate-row"]')).toBeNull();
+    expect(card.querySelector('[data-hww-coding-plan="recommendation-reason"]')).toBeNull();
+    expect(card.querySelector('[data-hww-coding-plan="alternatives-toggle"]')).toBeNull();
   });
 });
