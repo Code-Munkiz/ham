@@ -115,6 +115,20 @@ _CANONICAL_SALES_OPS_DASHBOARD_CORE_NEGATED_EXCLUSIONS_PROMPT = (
     "no real PII, no legal collections automation, no live dunning, and no telephony."
 )
 
+_EXACT_SALES_OPS_DASHBOARD_CORE_GATE_REVIEW_PROMPT = (
+    "Build a static sales ops dashboard for a commission-based AI services team. Include a sales ops shell, "
+    "executive summary row, agent/team performance, sales activity metrics, pipeline stage movement, "
+    "commission summary, commission earned and pending, clawbacks and chargebacks, payout status display, "
+    "revenue recovery summary, recoverable balance, recovered dollars, aging buckets, recovery exception queue, "
+    "process bottleneck panel, activity/audit feed, filters by date/team/agent/status/stage, visible "
+    "empty/loading/error state examples, responsive layout, and accessible header/nav/main/table/list/chart "
+    "structure. Use meaningful local sample data only with internally coherent illustrative calculations. "
+    "No payroll, no payment processing, no accounting ledger, no ASC 606 engine, no legal collections "
+    "automation, no CRM sync, no backend, no API, no real PII, no real bank or payment identifiers, "
+    "no live dunning, no telephony or SMS automation, no regulated financial advice, no real payout approval, "
+    "no trading dashboard, and no compliance certification claims."
+)
+
 _IDLE_POSITIVE_PROMPTS = (
     "build me an idle clicker game",
     "make a cookie clicker style game",
@@ -1021,6 +1035,7 @@ _ADMIN_DASHBOARD_CORE_EXCLUSION_NEGATIVE_PROMPTS = (
 _SALES_OPS_DASHBOARD_CORE_POSITIVE_PROMPTS = (
     _CANONICAL_SALES_OPS_DASHBOARD_CORE_GATE_PROMPT,
     _CANONICAL_SALES_OPS_DASHBOARD_CORE_NEGATED_EXCLUSIONS_PROMPT,
+    _EXACT_SALES_OPS_DASHBOARD_CORE_GATE_REVIEW_PROMPT,
     (
         "Create a revenue recovery dashboard with commission dashboard sections, agent performance dashboard, "
         "sales activity tracking, clawbacks and chargebacks status, payout status display, recovered dollars, "
@@ -1035,14 +1050,22 @@ _SALES_OPS_DASHBOARD_CORE_WEAK_NEGATIVE_PROMPTS = (
     "build a payout dashboard",
 )
 
+_SALES_OPS_DASHBOARD_CORE_WEAK_NEGATED_EXCLUSION_PROMPTS = (
+    "Build a dashboard with no payroll, no backend, and no API.",
+    "Build a finance page with no accounting ledger, no CRM sync, and no real PII.",
+)
+
 _SALES_OPS_DASHBOARD_CORE_EXCLUSION_NEGATIVE_PROMPTS = (
     "Build a payroll system dashboard with salary disbursement workflows.",
     "Build a payment processing app with payout approval and disbursement.",
     "Build an accounting ledger and ASC 606 calculation dashboard.",
+    "Build an ASC 606 engine for revenue recognition and accounting compliance.",
     "Build legal collections automation with live dunning and telephony outreach.",
     "Build a live CRM sync app connected to backend API and database.",
     "Build a real customer PII database dashboard with account identifiers.",
+    "Build a backend API integration dashboard with CRM sync and customer database.",
     "Build a trading fintech dashboard with order-book and market execution.",
+    "Build a compliance certification claims engine for SOC 2 and accounting controls.",
     "Build a generic executive revenue dashboard with no sales ops mechanics.",
     "Build an exact clone of this sales dashboard with pixel-perfect parity.",
 )
@@ -1361,6 +1384,10 @@ class TestSelectRegistryV2AppTypeForPrompt:
 
     @pytest.mark.parametrize("prompt", _SALES_OPS_DASHBOARD_CORE_WEAK_NEGATIVE_PROMPTS)
     def test_weak_sales_ops_terms_do_not_route(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != SALES_OPS_DASHBOARD_CORE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _SALES_OPS_DASHBOARD_CORE_WEAK_NEGATED_EXCLUSION_PROMPTS)
+    def test_weak_sales_ops_prompt_with_negated_exclusions_does_not_route(self, prompt: str):
         assert select_registry_v2_app_type_for_prompt(prompt) != SALES_OPS_DASHBOARD_CORE_APP_TYPE
 
     @pytest.mark.parametrize("prompt", _SALES_OPS_DASHBOARD_CORE_EXCLUSION_NEGATIVE_PROMPTS)
@@ -2537,6 +2564,14 @@ class TestEnrichPlanMetadataWithRegistryV2:
         metadata = enrich_plan_metadata_with_registry_v2(
             {"template_kind": "generic"},
             _CANONICAL_SALES_OPS_DASHBOARD_CORE_GATE_PROMPT,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        assert metadata["registry_v2_app_type"] == SALES_OPS_DASHBOARD_CORE_APP_TYPE
+
+    def test_flag_enabled_exact_sales_ops_gate_prompt_adds_registry_metadata(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            _EXACT_SALES_OPS_DASHBOARD_CORE_GATE_REVIEW_PROMPT,
             env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
         )
         assert metadata["registry_v2_app_type"] == SALES_OPS_DASHBOARD_CORE_APP_TYPE
@@ -4212,6 +4247,75 @@ class TestEndToEndScaffoldMessages:
         )
         plan = Plan(
             plan_id="pln_registry_intent_sales_ops_v1",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message=prompt,
+            steps=[Step(title="Scaffold dashboard", description="Create sales ops dashboard files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(plan)[1]["content"]
+        assert "registry_v2_app_type" not in metadata
+        assert "Builder Kit context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" not in content
+
+    def test_flag_enabled_exact_sales_ops_gate_prompt_produces_v2_context(self):
+        prompt = _EXACT_SALES_OPS_DASHBOARD_CORE_GATE_REVIEW_PROMPT
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            prompt,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_sales_ops_gate_exact_e2e",
+            workspace_id="ws_test",
+            project_id="proj_test",
+            user_message=prompt,
+            steps=[Step(title="Scaffold dashboard", description="Create sales ops dashboard files")],
+            planner_confidence="high",
+            metadata=metadata,
+        )
+        content = _build_scaffold_messages(
+            plan,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )[1]["content"]
+        assert metadata["registry_v2_app_type"] == SALES_OPS_DASHBOARD_CORE_APP_TYPE
+        assert "Build Registry v2 playbook context:" in content
+        assert "Build Kit Registry v2 — BuildRecipe" in content
+        assert "app.sales-ops-dashboard-core" in content
+        assert "pack.site" in content
+        for section_id in (
+            "section.sales-ops-shell",
+            "section.sales-executive-summary",
+            "section.sales-agent-performance",
+            "section.sales-activity-metrics",
+            "section.sales-pipeline-stage-movement",
+            "section.commission-summary",
+            "section.commission-payout-status",
+            "section.revenue-recovery-summary",
+            "section.recovery-aging-buckets",
+            "section.recovery-exception-queue",
+            "section.process-bottleneck-panel",
+            "section.sales-activity-feed",
+            "section.sales-ops-filters",
+            "section.sales-ops-empty-loading-error-states",
+            "section.sales-ops-responsive-structure",
+        ):
+            assert section_id in content
+        assert "Builder Kit context:" not in content
+        assert content.count("Builder Kit:") == 0
+
+    def test_flag_disabled_exact_sales_ops_gate_prompt_produces_v1_context_only(
+        self, monkeypatch
+    ):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        prompt = _EXACT_SALES_OPS_DASHBOARD_CORE_GATE_REVIEW_PROMPT
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            prompt,
+        )
+        plan = Plan(
+            plan_id="pln_registry_intent_sales_ops_gate_exact_v1",
             workspace_id="ws_test",
             project_id="proj_test",
             user_message=prompt,
