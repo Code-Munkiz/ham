@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.commission-payout-status
+kind: section
+name: Commission payout status section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Display-only payout status table for pending/reviewed/cleared sample commission entries.
+
+non_template_statement: Section playbook only — not a checked-in payout workflow.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on:
+  - section.commission-summary
+
+binds_components:
+  - component.payout-status-table
+
+guidance:
+  - "Use status display only; never imply real payout approval or disbursement."

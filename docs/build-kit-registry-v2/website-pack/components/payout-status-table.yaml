@@ -1,0 +1,26 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.payout-status-table
+kind: component_contract
+name: Payout status table contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Display-only payout status table contract for static sample commission records.
+
+non_template_statement: Layout contract only — not a checked-in payout workflow table.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.commission-payout-status
+
+expected_props:
+  - columns: "array of bounded payout status columns"
+  - rows: "array of static payout status rows"
+
+content_notes:
+  - "No approval/disbursement actions; status display only"

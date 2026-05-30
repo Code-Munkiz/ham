@@ -1,0 +1,32 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.no-accounting-compliance-engine
+kind: validator
+name: No accounting/compliance engine claims
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Prevents accounting/compliance engine claims.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+validates_modules:
+  - section.commission-summary
+  - section.revenue-recovery-summary
+  - component.semantic-financial-table
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Financial summaries are illustrative"
+
+fail_conditions:
+  - "Copy claims accounting/compliance authority or certification"
+
+recovery_playbooks:
+  - recovery.accounting-compliance-drift

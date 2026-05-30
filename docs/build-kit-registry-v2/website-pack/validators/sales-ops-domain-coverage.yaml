@@ -1,0 +1,36 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.sales-ops-domain-coverage
+kind: validator
+name: Sales ops domain coverage
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Requires core sales ops regions.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+validates_modules:
+  - section.sales-executive-summary
+  - section.sales-agent-performance
+  - section.sales-pipeline-stage-movement
+  - section.commission-summary
+  - section.revenue-recovery-summary
+  - section.recovery-exception-queue
+  - section.process-bottleneck-panel
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Sales ops shell includes summary, pipeline, commission, recovery, and process regions"
+
+fail_conditions:
+  - "Surface falls back to generic dashboard with missing domain regions"
+
+recovery_playbooks:
+  - recovery.meaningless-sales-metrics

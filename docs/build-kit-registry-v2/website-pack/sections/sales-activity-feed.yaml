@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.sales-activity-feed
+kind: section
+name: Sales activity feed section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Recent sales/recovery activity timeline showing bounded static event samples.
+
+non_template_statement: Section playbook only — not a checked-in live feed widget.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on:
+  - section.sales-agent-performance
+
+binds_components:
+  - component.activity-feed
+
+guidance:
+  - "Activity feed is illustrative and local; do not imply real audit or streaming events."

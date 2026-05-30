@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.sales-executive-summary
+kind: section
+name: Sales executive summary section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Top KPI summary row with gross/net sales, close rate, commission, and recovery highlights.
+
+non_template_statement: Section playbook only — not a checked-in KPI template.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on:
+  - section.sales-ops-shell
+
+binds_components:
+  - component.kpi-summary-card
+
+guidance:
+  - "Show a bounded top summary row with internally coherent sample metrics."

@@ -1,0 +1,30 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.pii-drift
+kind: recovery_playbook
+name: Fix PII drift
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs PII/financial identifier drift in sample data.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+repairs_validators:
+  - validator.no-sensitive-pii
+
+steps:
+  - id: step.redact_sensitive_fields
+    action: redact_sensitive_fields
+    detail: "Replace real identifiers with fictional placeholders"
+  - id: step.normalize_samples
+    action: normalize_samples
+    detail: "Keep bounded synthetic IDs and sample entities"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run PII validator"

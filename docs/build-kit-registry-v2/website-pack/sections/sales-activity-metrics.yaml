@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.sales-activity-metrics
+kind: section
+name: Sales activity metrics section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Activity summary region for calls, contacts, appointments, and cadence indicators.
+
+non_template_statement: Section playbook only — not a checked-in activity template.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on:
+  - section.sales-executive-summary
+
+binds_components:
+  - component.kpi-summary-card
+
+guidance:
+  - "Use bounded activity metrics tied to sample funnel and conversion context."

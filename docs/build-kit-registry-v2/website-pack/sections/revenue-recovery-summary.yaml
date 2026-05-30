@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.revenue-recovery-summary
+kind: section
+name: Revenue recovery summary section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Recovery summary region with recoverable balance, recovered dollars, and recovery-rate samples.
+
+non_template_statement: Section playbook only — not a checked-in collections system.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on:
+  - section.sales-executive-summary
+
+binds_components:
+  - component.kpi-summary-card
+
+guidance:
+  - "Frame recovery metrics as illustrative sample analytics, not legal/collections automation."

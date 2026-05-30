@@ -1,0 +1,30 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.crm-api-drift
+kind: recovery_playbook
+name: Fix CRM/API drift
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs CRM/API/backend integration drift.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+repairs_validators:
+  - validator.no-crm-api-backend-claims
+
+steps:
+  - id: step.strip_integration_claims
+    action: strip_integration_claims
+    detail: "Remove CRM/API/database sync claims and cues"
+  - id: step.restate_local_data
+    action: restate_local_data
+    detail: "Reassert local/static sample data"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run CRM/API/backend validator"

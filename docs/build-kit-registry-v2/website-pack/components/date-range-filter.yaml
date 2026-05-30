@@ -1,0 +1,29 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.date-range-filter
+kind: component_contract
+name: Date range filter contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Date/team/agent/status/stage filter control contract for bounded dashboard slicing.
+
+non_template_statement: Layout contract only — not a checked-in query/filter engine.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.sales-ops-filters
+
+expected_props:
+  - dateRange: "7d | 30d | 90d | custom"
+  - team: string | null
+  - agent: string | null
+  - status: string | null
+  - stage: string | null
+
+content_notes:
+  - "Filter controls map to visible regions and avoid dead-control deception"

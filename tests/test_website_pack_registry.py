@@ -29,6 +29,7 @@ APP_TYPE_ID = "site.landing-page-core"
 APP_TYPE_ID_DASHBOARD = "site.dashboard-ui-core"
 APP_TYPE_ID_SAAS = "app.saas-dashboard-core"
 APP_TYPE_ID_ADMIN = "app.admin-dashboard-core"
+APP_TYPE_ID_SALES_OPS = "app.sales-ops-dashboard-core"
 
 EXPECTED_SECTION_ORDER = (
     "section.landing-hero",
@@ -237,6 +238,70 @@ EXPECTED_ADMIN_RECOVERY_IDS = frozenset(
     }
 )
 
+# app.sales-ops-dashboard-core expected module IDs
+EXPECTED_SALES_OPS_SECTION_IDS = frozenset(
+    {
+        "section.sales-ops-shell",
+        "section.sales-executive-summary",
+        "section.sales-agent-performance",
+        "section.sales-activity-metrics",
+        "section.sales-pipeline-stage-movement",
+        "section.commission-summary",
+        "section.commission-payout-status",
+        "section.revenue-recovery-summary",
+        "section.recovery-aging-buckets",
+        "section.recovery-exception-queue",
+        "section.process-bottleneck-panel",
+        "section.sales-activity-feed",
+        "section.sales-ops-filters",
+        "section.sales-ops-empty-loading-error-states",
+        "section.sales-ops-responsive-structure",
+    }
+)
+
+EXPECTED_SALES_OPS_COMPONENT_IDS = frozenset(
+    {
+        "component.sales-ops-shell",
+        "component.kpi-summary-card",
+        "component.agent-leaderboard",
+        "component.pipeline-stage-chart",
+        "component.recovery-aging-table",
+        "component.commission-summary-card",
+        "component.payout-status-table",
+        "component.case-recovery-queue",
+        "component.activity-feed",
+        "component.process-bottleneck-card",
+        "component.date-range-filter",
+        "component.semantic-financial-table",
+    }
+)
+
+EXPECTED_SALES_OPS_VALIDATOR_IDS = frozenset(
+    {
+        "validator.sales-ops-domain-coverage",
+        "validator.no-payroll-payment-claims",
+        "validator.no-accounting-compliance-engine",
+        "validator.no-legal-collections-automation",
+        "validator.no-crm-api-backend-claims",
+        "validator.no-sensitive-pii",
+        "validator.financial-table-semantics",
+        "validator.coherent-sample-financial-data",
+        "validator.no-gamified-surveillance",
+        "validator.responsive-a11y-basics",
+    }
+)
+
+EXPECTED_SALES_OPS_RECOVERY_IDS = frozenset(
+    {
+        "recovery.payroll-payment-drift",
+        "recovery.accounting-compliance-drift",
+        "recovery.collections-automation-drift",
+        "recovery.crm-api-drift",
+        "recovery.pii-drift",
+        "recovery.meaningless-sales-metrics",
+    }
+)
+
 # Representative strong dashboard prompts that should route to site.dashboard-ui-core.
 DASHBOARD_PROMPTS = (
     "Build a read-only dashboard overview for a developer tool team. Include 4 KPI cards, a line chart for build quality over time, a bar chart for issue categories, a simple recent builds table, a local filter bar, empty/loading/error state examples, meaningful sample data, responsive layout, and accessible headings/table structure. No backend, no auth, no CRUD, no live data.",
@@ -297,6 +362,11 @@ def saas_recipe(website_pack):
 @pytest.fixture(scope="module")
 def admin_recipe(website_pack):
     return compose_build_recipe(website_pack, APP_TYPE_ID_ADMIN)
+
+
+@pytest.fixture(scope="module")
+def sales_ops_recipe(website_pack):
+    return compose_build_recipe(website_pack, APP_TYPE_ID_SALES_OPS)
 
 
 def test_registry_yaml_parses():
@@ -459,6 +529,23 @@ def test_module_index_covers_admin_ids(website_pack):
     assert "learning.app-admin-dashboard-core" in index["learning_hooks"]
 
 
+def test_sales_ops_dashboard_core_loads(website_pack):
+    assert APP_TYPE_ID_SALES_OPS in website_pack.modules
+    assert website_pack.modules[APP_TYPE_ID_SALES_OPS].kind == "app_type"
+
+
+def test_module_index_covers_sales_ops_ids(website_pack):
+    index = dict(website_pack.manifest)["module_index"]
+    assert APP_TYPE_ID_SALES_OPS in index["app_types"]
+    assert "stack.dom-sales-ops-dashboard-minimal" in index["stack_kits"]
+    assert EXPECTED_SALES_OPS_SECTION_IDS <= set(index["mechanics"])
+    assert EXPECTED_SALES_OPS_COMPONENT_IDS <= set(index["component_contracts"])
+    assert EXPECTED_SALES_OPS_VALIDATOR_IDS <= set(index["validators"])
+    assert EXPECTED_SALES_OPS_RECOVERY_IDS <= set(index["recovery_playbooks"])
+    assert "progress.app-sales-ops-dashboard-core" in index["progress_labels"]
+    assert "learning.app-sales-ops-dashboard-core" in index["learning_hooks"]
+
+
 def test_dashboard_ui_core_composes(dashboard_recipe):
     assert dashboard_recipe.app_type_id == APP_TYPE_ID_DASHBOARD
     assert dashboard_recipe.stack_kit_id == "stack.dom-dashboard-minimal"
@@ -490,6 +577,23 @@ def test_admin_dashboard_core_composes(admin_recipe):
     assert set(admin_recipe.recovery_ids) == EXPECTED_ADMIN_RECOVERY_IDS
     assert admin_recipe.progress_label_id == "progress.app-admin-dashboard-core"
     assert admin_recipe.learning_hook_id == "learning.app-admin-dashboard-core"
+
+
+def test_sales_ops_dashboard_core_composes(sales_ops_recipe):
+    assert sales_ops_recipe.app_type_id == APP_TYPE_ID_SALES_OPS
+    assert sales_ops_recipe.stack_kit_id == "stack.dom-sales-ops-dashboard-minimal"
+    assert set(sales_ops_recipe.mechanic_ids) == EXPECTED_SALES_OPS_SECTION_IDS
+    assert set(sales_ops_recipe.component_ids) == EXPECTED_SALES_OPS_COMPONENT_IDS
+    assert set(sales_ops_recipe.validator_ids) == EXPECTED_SALES_OPS_VALIDATOR_IDS
+    assert set(sales_ops_recipe.recovery_ids) == EXPECTED_SALES_OPS_RECOVERY_IDS
+    assert (
+        sales_ops_recipe.progress_label_id
+        == "progress.app-sales-ops-dashboard-core"
+    )
+    assert (
+        sales_ops_recipe.learning_hook_id
+        == "learning.app-sales-ops-dashboard-core"
+    )
 
 
 def test_dashboard_render_under_budget(dashboard_recipe):
@@ -684,6 +788,65 @@ def test_admin_render_includes_states_and_accessibility_controls(admin_recipe):
     assert "semantic table" in rendered or "<table>" in rendered
 
 
+def test_sales_ops_render_under_budget(sales_ops_recipe):
+    rendered = render_playbook_context(sales_ops_recipe)
+    assert len(rendered) <= DEFAULT_RENDER_CHAR_BUDGET
+
+
+def test_sales_ops_render_contains_key_sections_and_components(
+    sales_ops_recipe,
+):
+    rendered = render_playbook_context(sales_ops_recipe)
+    lowered = rendered.lower()
+    assert APP_TYPE_ID_SALES_OPS in rendered
+    assert "section.sales-ops-shell" in rendered
+    assert "section.sales-executive-summary" in rendered
+    assert "section.sales-agent-performance" in rendered
+    assert "section.sales-activity-metrics" in rendered
+    assert "section.sales-pipeline-stage-movement" in rendered
+    assert "section.commission-summary" in rendered
+    assert "section.commission-payout-status" in rendered
+    assert "section.revenue-recovery-summary" in rendered
+    assert "section.recovery-aging-buckets" in rendered
+    assert "section.recovery-exception-queue" in rendered
+    assert "section.process-bottleneck-panel" in rendered
+    assert "section.sales-activity-feed" in rendered
+    assert "section.sales-ops-filters" in rendered
+    assert "section.sales-ops-empty-loading-error-states" in rendered
+    assert "section.sales-ops-responsive-structure" in rendered
+    assert "component.semantic-financial-table" in rendered
+    assert "component.date-range-filter" in rendered
+    assert "component.agent-leaderboard" in rendered
+    assert "semantic header/nav/main" in lowered or (
+        "header" in lowered and "nav" in lowered and "main" in lowered
+    )
+    assert "local/static" in lowered or "static local sample data" in lowered
+
+
+def test_sales_ops_render_contains_hard_exclusions(sales_ops_recipe):
+    rendered = render_playbook_context(sales_ops_recipe).lower()
+    assert "no payroll/disbursement/payment execution semantics appear" in rendered
+    assert "no-payment-processing-for-mvp" in rendered
+    assert "no-accounting-ledger-for-mvp" in rendered
+    assert "no-legal-collections-automation-for-mvp" in rendered
+    assert "no crm/api/database sync claims appear" in rendered
+    assert "no-sensitive-pii-for-mvp" in rendered
+    assert "no coercive/gamified surveillance language appears" in rendered
+    assert "no payroll/payment/accounting/crm/backend/legal automation" in rendered
+
+
+def test_sales_ops_render_includes_states_and_coherent_data_language(
+    sales_ops_recipe,
+):
+    rendered = render_playbook_context(sales_ops_recipe).lower()
+    assert "empty" in rendered
+    assert "loading" in rendered
+    assert "error" in rendered
+    assert "coherent" in rendered
+    assert "illustrative" in rendered
+    assert "semantic table" in rendered or "<table>" in rendered
+
+
 def test_dashboard_adaptive_policy_prompt_examples_exist():
     app_path = WEBSITE_PACK_ROOT / "app-types/site.dashboard-ui-core.yaml"
     app = yaml.safe_load(app_path.read_text(encoding="utf-8"))
@@ -706,6 +869,16 @@ def test_saas_adaptive_policy_prompt_examples_exist():
 
 def test_admin_adaptive_policy_prompt_examples_exist():
     app_path = WEBSITE_PACK_ROOT / "app-types/app.admin-dashboard-core.yaml"
+    app = yaml.safe_load(app_path.read_text(encoding="utf-8"))
+    examples = app["user_prompt_examples"]
+    assert len(examples["positive"]) >= 4
+    assert len(examples["negative"]) >= 8
+    assert app["conflict_policy"]["user_explicit_overrides_soft_defaults"] is True
+    assert app["hard_constraints"]
+
+
+def test_sales_ops_adaptive_policy_prompt_examples_exist():
+    app_path = WEBSITE_PACK_ROOT / "app-types/app.sales-ops-dashboard-core.yaml"
     app = yaml.safe_load(app_path.read_text(encoding="utf-8"))
     examples = app["user_prompt_examples"]
     assert len(examples["positive"]) >= 4
@@ -755,6 +928,15 @@ def test_admin_dashboard_core_routes_for_strong_bounded_prompts():
     assert routed == ADMIN_DASHBOARD_CORE_APP_TYPE
 
 
+def test_sales_ops_dashboard_core_is_not_routed_yet():
+    prompt = (
+        "Build a static sales ops dashboard with commission summary, recovery aging, "
+        "agent performance, and local mock data only."
+    )
+    routed = select_registry_v2_app_type_for_prompt(prompt)
+    assert routed != APP_TYPE_ID_SALES_OPS
+
+
 def test_saas_dashboard_intent_constant_exists():
     intent_path = REPO_ROOT / "src/ham/build_registry/intent.py"
     text = intent_path.read_text(encoding="utf-8")
@@ -769,6 +951,13 @@ def test_admin_dashboard_intent_constant_exists():
     assert "app.admin-dashboard-core" in text
 
 
+def test_sales_ops_intent_constant_does_not_exist_yet():
+    intent_path = REPO_ROOT / "src/ham/build_registry/intent.py"
+    text = intent_path.read_text(encoding="utf-8")
+    assert "SALES_OPS_DASHBOARD_CORE_APP_TYPE" not in text
+    assert "app.sales-ops-dashboard-core" not in text
+
+
 def test_module_count(website_pack):
     # Landing: 1 app + 1 stack + 7 sections + 5 components + 7 validators
     #   + 6 recovery + 1 progress + 1 learning = 29
@@ -778,8 +967,10 @@ def test_module_count(website_pack):
     #   + 6 new recovery (+ shared recovery.admin-drift) + 1 progress + 1 learning = 38 new
     # Admin: 1 app + 1 stack + 11 sections + 12 components + 8 new validators (+ 2 reused)
     #   + 7 new recovery (+ shared recovery.crud-sprawl) + 1 progress + 1 learning = 42 new
-    # Total = 139
-    assert len(website_pack.modules) == 139
+    # Sales Ops: 1 app + 1 stack + 15 sections + 13 components + 10 new validators
+    #   + 8 recovery + 1 progress + 1 learning = 49 new
+    # Total = 188
+    assert len(website_pack.modules) == 188
 
 
 def test_validate_registry_pack_passes(website_pack):
@@ -851,6 +1042,30 @@ def test_reference_checker_passes_for_admin_app_type():
     result = module.run_reference_checks(
         WEBSITE_PACK_MANIFEST,
         app_type=APP_TYPE_ID_ADMIN,
+        check_orphans=True,
+        check_render_budget=True,
+    )
+    assert result.errors == []
+    assert result.summary_counts["error"] == 0
+
+
+def test_reference_checker_passes_for_sales_ops_app_type():
+    import importlib.util
+    import sys
+
+    script_path = REPO_ROOT / "scripts/check_build_registry_references.py"
+    spec = importlib.util.spec_from_file_location(
+        "check_build_registry_references_website_sales_ops",
+        script_path,
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    result = module.run_reference_checks(
+        WEBSITE_PACK_MANIFEST,
+        app_type=APP_TYPE_ID_SALES_OPS,
         check_orphans=True,
         check_render_budget=True,
     )

@@ -1,0 +1,28 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.commission-summary-card
+kind: component_contract
+name: Commission summary card contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Summary card contract for earned, pending, clawback, and chargeback sample values.
+
+non_template_statement: Layout contract only — not a checked-in commission calculator.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.commission-summary
+
+expected_props:
+  - earned: string | number
+  - pending: string | number
+  - clawbacks: string | number
+  - chargebacks: string | number
+
+content_notes:
+  - "Values are illustrative and must not imply payroll or accounting authority"

@@ -1,0 +1,26 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.activity-feed
+kind: component_contract
+name: Sales activity feed contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Static activity timeline contract for recent sales/recovery events.
+
+non_template_statement: Layout contract only — not a checked-in live stream component.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.sales-activity-feed
+
+expected_props:
+  - items: "array of bounded event summaries with timestamps"
+  - maxItems: integer
+
+content_notes:
+  - "Events are local/static samples; do not imply real audit or streaming sources"

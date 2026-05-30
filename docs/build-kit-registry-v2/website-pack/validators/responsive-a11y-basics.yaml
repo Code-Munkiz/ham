@@ -13,6 +13,7 @@ non_template_statement: Conceptual validator only.
 applies_to:
   - app.saas-dashboard-core
   - app.admin-dashboard-core
+  - app.sales-ops-dashboard-core
 
 validates_modules:
   - section.saas-responsive-structure
@@ -22,6 +23,9 @@ validates_modules:
   - component.admin-shell
   - component.resource-index-table
   - component.audit-log-list
+  - section.sales-ops-responsive-structure
+  - component.sales-ops-shell
+  - component.semantic-financial-table
 
 severity: blocking
 runner: conceptual

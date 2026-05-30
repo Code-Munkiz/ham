@@ -1,0 +1,34 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.no-payroll-payment-claims
+kind: validator
+name: No payroll/payment claims
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Prevents payroll/payment execution claims.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+validates_modules:
+  - section.commission-summary
+  - section.commission-payout-status
+  - component.commission-summary-card
+  - component.payout-status-table
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Commission and payout regions are display-only"
+  - "No payroll/disbursement/payment execution semantics appear"
+
+fail_conditions:
+  - "Copy implies payroll or payment execution"
+
+recovery_playbooks:
+  - recovery.payroll-payment-drift

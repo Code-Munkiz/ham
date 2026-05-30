@@ -1,0 +1,163 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: app.sales-ops-dashboard-core
+kind: app_type
+name: Sales ops dashboard core
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Static sales ops dashboard with commission/recovery views and local sample data.
+
+non_template_statement: >
+  Generative playbook only. No checked-in template, clone baseline, or starter tree.
+
+legacy_v1_fallback: generic
+
+safety_constraints:
+  - no-network-egress-for-mvp
+  - no-backend-api-for-mvp
+  - no-payroll-processing-for-mvp
+  - no-payment-processing-for-mvp
+  - no-accounting-ledger-for-mvp
+  - no-legal-collections-automation-for-mvp
+  - no-crm-sync-for-mvp
+  - no-sensitive-pii-for-mvp
+  - dom-native-ui-only-for-mvp
+  - static-sample-data-only-for-mvp
+
+guidance:
+  - "Build one bounded static sales ops shell with local sample data."
+  - "Include summary, activity, pipeline, commission, and recovery regions."
+  - "Render visible empty/loading/error examples with semantic structure."
+  - "Keep metrics coherent and illustrative; no payroll/payment/accounting/CRM/backend/legal automation."
+
+default_assumptions:
+  - "Single-page static RevOps overview; no deep routing"
+
+hard_constraints:
+  - no-template-cloning
+  - no-payroll-disbursement
+  - no-payment-processing
+  - no-accounting-asc606-engine
+  - no-legal-collections-automation
+  - no-crm-api-backend-integrations
+  - no-real-financial-identifiers
+  - no-real-customer-pii
+  - no-tax-compliance-claims
+  - no-live-dunning-telephony-sms
+  - no-regulated-financial-advice
+  - no-trading-dashboard
+  - no-fake-compliance-claims
+  - no-gamified-surveillance
+  - no-harsh-collections-language
+  - no-exact-clone
+
+conflict_policy:
+  user_explicit_overrides_soft_defaults: true
+  safety_constraints_override_user_request: true
+  core_loop_conflicts_require_clarification: true
+  out_of_scope_items_require_explicit_request: true
+  fallback_to_v1_or_generic_when_recipe_no_longer_fits: true
+
+user_prompt_examples:
+  positive:
+    - "Sales ops dashboard with commission and recovery summaries."
+    - "Revenue ops dashboard with agent performance and pipeline stages."
+    - "Commission/recovery dashboard with aging buckets and exception queue."
+    - "Responsive sales ops dashboard with semantic tables and state examples."
+  negative:
+    - "Sync this dashboard to Salesforce."
+    - "Implement payroll disbursement."
+    - "Build payment processing logic."
+    - "Automate legal collections dunning."
+    - "Use real customer payment identifiers."
+    - "Provide ASC 606-compliant outputs."
+    - "Add regulated financial advice."
+    - "Build a live trading dashboard."
+
+stack_kit_id: stack.dom-sales-ops-dashboard-minimal
+
+composed_modules:
+  stack_kit_id: stack.dom-sales-ops-dashboard-minimal
+  mechanics:
+    - section.sales-ops-shell
+    - section.sales-executive-summary
+    - section.sales-agent-performance
+    - section.sales-activity-metrics
+    - section.sales-pipeline-stage-movement
+    - section.commission-summary
+    - section.commission-payout-status
+    - section.revenue-recovery-summary
+    - section.recovery-aging-buckets
+    - section.recovery-exception-queue
+    - section.process-bottleneck-panel
+    - section.sales-activity-feed
+    - section.sales-ops-filters
+    - section.sales-ops-empty-loading-error-states
+    - section.sales-ops-responsive-structure
+  component_contracts:
+    - component.sales-ops-shell
+    - component.kpi-summary-card
+    - component.agent-leaderboard
+    - component.pipeline-stage-chart
+    - component.recovery-aging-table
+    - component.commission-summary-card
+    - component.payout-status-table
+    - component.case-recovery-queue
+    - component.activity-feed
+    - component.process-bottleneck-card
+    - component.date-range-filter
+    - component.semantic-financial-table
+  validators:
+    - validator.sales-ops-domain-coverage
+    - validator.no-payroll-payment-claims
+    - validator.no-accounting-compliance-engine
+    - validator.no-legal-collections-automation
+    - validator.no-crm-api-backend-claims
+    - validator.no-sensitive-pii
+    - validator.financial-table-semantics
+    - validator.coherent-sample-financial-data
+    - validator.no-gamified-surveillance
+    - validator.responsive-a11y-basics
+  recovery_playbooks:
+    - recovery.payroll-payment-drift
+    - recovery.accounting-compliance-drift
+    - recovery.collections-automation-drift
+    - recovery.crm-api-drift
+    - recovery.pii-drift
+    - recovery.meaningless-sales-metrics
+  progress_labels: progress.app-sales-ops-dashboard-core
+  learning_hooks: learning.app-sales-ops-dashboard-core
+
+build_phases:
+  - id: phase.understand
+    title: Understand ask
+    order: 1
+    modules_used: [app_type]
+  - id: phase.compose
+    title: Compose regions
+    order: 2
+    modules_used: [mechanics, component_contracts]
+  - id: phase.generate
+    title: Generate code
+    order: 3
+    modules_used: [stack_kit_id, guidance]
+  - id: phase.validate
+    title: Validate bounds
+    order: 4
+    modules_used: [validators]
+  - id: phase.preview
+    title: Prepare Workbench preview
+    order: 5
+    modules_used: []
+  - id: phase.recover
+    title: Repair drift
+    order: 6
+    optional: true
+    modules_used: [recovery_playbooks]
+
+acceptance_criteria:
+  - "Bounded sales ops shell renders"
+  - "Visible empty/loading/error examples"
+  - "Accessible semantic responsive structure"
+  - "No excluded financial/backend claims"

@@ -1,0 +1,24 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.recovery-exception-queue
+kind: section
+name: Recovery exception queue section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Exception/review queue region for recovery cases that need human review.
+
+non_template_statement: Section playbook only — not a checked-in workflow engine.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on:
+  - section.recovery-aging-buckets
+
+binds_components:
+  - component.case-recovery-queue
+  - component.exception-queue
+
+guidance:
+  - "Queue actions are illustrative/read-only; no live dunning or legal workflow automation."

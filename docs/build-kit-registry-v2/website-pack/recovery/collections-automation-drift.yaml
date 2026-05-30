@@ -1,0 +1,30 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.collections-automation-drift
+kind: recovery_playbook
+name: Fix collections automation drift
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs legal collections automation drift.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+repairs_validators:
+  - validator.no-legal-collections-automation
+
+steps:
+  - id: step.strip_automation_actions
+    action: strip_automation_actions
+    detail: "Remove dunning/legal/telephony/SMS execution semantics"
+  - id: step.reframe_review_queue
+    action: reframe_review_queue
+    detail: "Keep queue as display-only review surface"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run legal-collections validator"

@@ -1,0 +1,36 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: progress.app-sales-ops-dashboard-core
+kind: progress_label
+name: Sales ops dashboard core build progress
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Phase labels for sales ops builds.
+
+non_template_statement: Progress copy module only.
+
+source_phase_owner: app.sales-ops-dashboard-core
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+phase_message_map:
+  phase.understand:
+    title: "Understanding goal"
+    message: "Preparing bounded preview."
+  phase.compose:
+    title: "Composing structure"
+    message: "Assembling core regions."
+  phase.generate:
+    title: "Generating UI"
+    message: "Generating static preview."
+  phase.validate:
+    title: "Validating bounds"
+    message: "Checking drift boundaries."
+  phase.preview:
+    title: "Preparing preview"
+    message: "Preview is almost ready."
+  phase.recover:
+    title: "Applying repair"
+    message: "Correcting drift issues."

@@ -1,0 +1,28 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.semantic-financial-table
+kind: component_contract
+name: Semantic financial table contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Dense financial/resource table contract with semantic table structure and bounded fields.
+
+non_template_statement: Layout contract only — not a checked-in ledger table component.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.sales-ops-empty-loading-error-states
+  - section.sales-ops-responsive-structure
+
+expected_props:
+  - columns: "array of column labels with bounded financial semantics"
+  - rows: "array of static records with illustrative values"
+
+accessibility_notes:
+  - "Use table/thead/th/tbody semantics with captions/labels"
+  - "Avoid div-soup pseudo-tables for dense financial data"

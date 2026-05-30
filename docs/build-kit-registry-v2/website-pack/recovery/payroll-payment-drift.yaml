@@ -1,0 +1,30 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.payroll-payment-drift
+kind: recovery_playbook
+name: Fix payroll/payment drift
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs payroll/payment execution drift.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+repairs_validators:
+  - validator.no-payroll-payment-claims
+
+steps:
+  - id: step.strip_transactional_claims
+    action: strip_transactional_claims
+    detail: "Remove payout/payment execution claims and controls"
+  - id: step.reframe_display_only
+    action: reframe_display_only
+    detail: "Reframe payout as display-only status"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run payroll/payment validator"

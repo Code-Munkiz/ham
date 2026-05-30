@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.sales-pipeline-stage-movement
+kind: section
+name: Sales pipeline stage movement section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Pipeline/funnel progression region showing stage movement and conversion transitions.
+
+non_template_statement: Section playbook only — not a checked-in funnel widget.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on:
+  - section.sales-activity-metrics
+
+binds_components:
+  - component.pipeline-stage-chart
+
+guidance:
+  - "Visualize stage movement with static sample values and clear stage labels."

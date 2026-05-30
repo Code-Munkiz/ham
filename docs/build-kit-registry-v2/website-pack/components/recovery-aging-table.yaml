@@ -1,0 +1,26 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.recovery-aging-table
+kind: component_contract
+name: Recovery aging table contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Aging-bucket table contract for recoverable balances and case counts.
+
+non_template_statement: Layout contract only — not a checked-in ledger table.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.recovery-aging-buckets
+
+expected_props:
+  - columns: "array of bucket labels and metric columns"
+  - rows: "array of static aging bucket records"
+
+accessibility_notes:
+  - "Use table/thead/th/tbody semantics with clear headers and captions"

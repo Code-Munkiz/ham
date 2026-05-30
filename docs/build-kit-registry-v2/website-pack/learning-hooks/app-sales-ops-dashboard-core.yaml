@@ -1,0 +1,34 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: learning.app-sales-ops-dashboard-core
+kind: learning_hook
+name: Sales ops dashboard core learning hooks
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Learning signals for sales ops outcomes.
+
+non_template_statement: Learning hook schema only.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+source_phase_owner: app.sales-ops-dashboard-core
+
+signal_categories:
+  - domain_coverage
+  - payroll_payment_drift
+  - accounting_compliance_drift
+  - crm_api_drift
+  - pii_drift
+  - coherence
+
+outcome_fact_fields:
+  - preview_boot_success: boolean
+  - summary_card_count: integer
+  - payroll_claim_detected: boolean
+  - accounting_claim_detected: boolean
+  - pii_detected: boolean
+
+guidance:
+  - "Capture bounded preview evidence."

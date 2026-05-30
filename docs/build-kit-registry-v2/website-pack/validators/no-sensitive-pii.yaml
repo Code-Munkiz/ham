@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.no-sensitive-pii
+kind: validator
+name: No sensitive PII
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Prevents sensitive PII/financial identifiers in sample data.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+validates_modules:
+  - section.sales-agent-performance
+  - section.recovery-exception-queue
+  - component.agent-leaderboard
+  - component.semantic-financial-table
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Sample data uses fictional/non-sensitive identifiers"
+
+fail_conditions:
+  - "Rows include real PII or realistic financial identifiers"
+
+recovery_playbooks:
+  - recovery.pii-drift

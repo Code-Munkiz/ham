@@ -1,0 +1,30 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.dead-filter-drift
+kind: recovery_playbook
+name: Fix dead filter drift
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs dead/deceptive filter controls.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+repairs_validators:
+  - validator.sales-ops-domain-coverage
+
+steps:
+  - id: step.map_filters_to_regions
+    action: map_filters_to_regions
+    detail: "Map date/team/agent/status/stage filters to visible regions"
+  - id: step.mark_illustrative
+    action: mark_illustrative
+    detail: "Label illustrative controls clearly; avoid fake interactivity"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run domain and filter-deception checks"

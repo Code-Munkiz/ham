@@ -1,0 +1,30 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.accounting-compliance-drift
+kind: recovery_playbook
+name: Fix accounting/compliance drift
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs accounting/compliance authority drift.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+repairs_validators:
+  - validator.no-accounting-compliance-engine
+
+steps:
+  - id: step.strip_authoritative_claims
+    action: strip_authoritative_claims
+    detail: "Remove accounting/certification authority language"
+  - id: step.reframe_illustrative
+    action: reframe_illustrative
+    detail: "Reframe financial outputs as illustrative"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run accounting/compliance validator"

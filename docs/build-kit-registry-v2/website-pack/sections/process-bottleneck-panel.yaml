@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.process-bottleneck-panel
+kind: section
+name: Process bottleneck panel section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Process analytics region for cycle-time and stage bottleneck indicators.
+
+non_template_statement: Section playbook only — not a checked-in process engine.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on:
+  - section.sales-pipeline-stage-movement
+
+binds_components:
+  - component.process-bottleneck-card
+
+guidance:
+  - "Surface bottlenecks with bounded sample data and avoid surveillance framing."

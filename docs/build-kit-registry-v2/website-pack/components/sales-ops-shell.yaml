@@ -1,0 +1,32 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.sales-ops-shell
+kind: component_contract
+name: Sales ops shell contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Structural shell contract for sales operations layout with sidebar/topbar/main.
+
+non_template_statement: Layout contract only — not a copy-paste shell component.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.sales-ops-shell
+
+expected_props:
+  - shellMode: "sidebar + topbar + main"
+  - collapsibleSidebar: boolean
+  - pageTitle: string
+  - subtitle: string | null
+
+accessibility_notes:
+  - "Use semantic header/nav/main landmarks and clear heading hierarchy"
+  - "Main region has readable focus order and skip-link compatibility"
+
+responsive_notes:
+  - "Sidebar can collapse and content remains readable at narrow widths"

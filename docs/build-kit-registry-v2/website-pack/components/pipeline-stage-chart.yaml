@@ -1,0 +1,27 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.pipeline-stage-chart
+kind: component_contract
+name: Pipeline stage chart contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Funnel/stage movement chart contract for pipeline progression and conversion context.
+
+non_template_statement: Layout contract only — not a checked-in chart implementation.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.sales-pipeline-stage-movement
+
+expected_props:
+  - stages: "array of stage labels and bounded sample values"
+  - chartMode: "funnel | staged-bar | staged-line"
+  - annotation: string | null
+
+accessibility_notes:
+  - "Chart includes text labels and fallback summaries for key values"

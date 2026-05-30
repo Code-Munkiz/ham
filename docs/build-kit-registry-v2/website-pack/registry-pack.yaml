@@ -9,8 +9,9 @@ description: >
   Root manifest for Build Registry v2 Website Pack. Indexes marketing/landing-page and
   dashboard/app-surface playbooks: site.landing-page-core and site.dashboard-ui-core
   (routed when flagged), plus app.saas-dashboard-core (routed when flagged) and
-  schema-only app.admin-dashboard-core (not routed). Separate from game-pack; generative
-  guidance only — no templates or starter source.
+  app.admin-dashboard-core (routed when flagged), plus schema-only
+  app.sales-ops-dashboard-core (not routed). Separate from game-pack; generative guidance
+  only — no templates or starter source.
 
 non_template_statement: >
   Registry index and compose defaults only. Does not ship landing page or dashboard
@@ -23,11 +24,13 @@ module_index:
     - site.dashboard-ui-core
     - app.saas-dashboard-core
     - app.admin-dashboard-core
+    - app.sales-ops-dashboard-core
   stack_kits:
     - stack.dom-marketing-minimal
     - stack.dom-dashboard-minimal
     - stack.dom-saas-dashboard-minimal
     - stack.dom-admin-dashboard-minimal
+    - stack.dom-sales-ops-dashboard-minimal
   mechanics:
     - section.landing-hero
     - section.value-proposition
@@ -63,6 +66,21 @@ module_index:
     - section.admin-demo-action-boundaries
     - section.admin-empty-loading-error-states
     - section.admin-responsive-structure
+    - section.sales-ops-shell
+    - section.sales-executive-summary
+    - section.sales-agent-performance
+    - section.sales-activity-metrics
+    - section.sales-pipeline-stage-movement
+    - section.commission-summary
+    - section.commission-payout-status
+    - section.revenue-recovery-summary
+    - section.recovery-aging-buckets
+    - section.recovery-exception-queue
+    - section.process-bottleneck-panel
+    - section.sales-activity-feed
+    - section.sales-ops-filters
+    - section.sales-ops-empty-loading-error-states
+    - section.sales-ops-responsive-structure
   component_contracts:
     - component.hero-block
     - component.feature-card-grid
@@ -96,6 +114,19 @@ module_index:
     - component.resource-index-table
     - component.demo-action-control
     - component.danger-modal-mockup
+    - component.sales-ops-shell
+    - component.kpi-summary-card
+    - component.agent-leaderboard
+    - component.pipeline-stage-chart
+    - component.recovery-aging-table
+    - component.commission-summary-card
+    - component.payout-status-table
+    - component.case-recovery-queue
+    - component.activity-feed
+    - component.process-bottleneck-card
+    - component.date-range-filter
+    - component.exception-queue
+    - component.semantic-financial-table
   validators:
     - validator.landing-section-presence
     - validator.cta-clarity
@@ -129,6 +160,15 @@ module_index:
     - validator.admin-table-semantics
     - validator.disabled-action-accessibility
     - validator.no-security-theater
+    - validator.sales-ops-domain-coverage
+    - validator.no-payroll-payment-claims
+    - validator.no-accounting-compliance-engine
+    - validator.no-legal-collections-automation
+    - validator.no-crm-api-backend-claims
+    - validator.no-sensitive-pii
+    - validator.financial-table-semantics
+    - validator.coherent-sample-financial-data
+    - validator.no-gamified-surveillance
   recovery_playbooks:
     - recovery.generic-hero
     - recovery.weak-cta
@@ -155,16 +195,26 @@ module_index:
     - recovery.security-theater
     - recovery.dense-table-soup
     - recovery.inaccessible-disabled-controls
+    - recovery.payroll-payment-drift
+    - recovery.accounting-compliance-drift
+    - recovery.collections-automation-drift
+    - recovery.crm-api-drift
+    - recovery.pii-drift
+    - recovery.meaningless-sales-metrics
+    - recovery.inaccessible-financial-table
+    - recovery.dead-filter-drift
   progress_labels:
     - progress.landing-page-core
     - progress.dashboard-ui-core
     - progress.app-saas-dashboard-core
     - progress.app-admin-dashboard-core
+    - progress.app-sales-ops-dashboard-core
   learning_hooks:
     - learning.landing-page-core
     - learning.dashboard-ui-core
     - learning.app-saas-dashboard-core
     - learning.app-admin-dashboard-core
+    - learning.app-sales-ops-dashboard-core
 
 compose_defaults:
   compose_order:

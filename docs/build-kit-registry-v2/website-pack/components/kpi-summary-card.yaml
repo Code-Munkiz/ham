@@ -1,0 +1,32 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.kpi-summary-card
+kind: component_contract
+name: KPI summary card contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Generic KPI summary card contract for sales/recovery/commission headline metrics.
+
+non_template_statement: Layout contract only — not a copy-paste card component.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.sales-executive-summary
+  - section.sales-activity-metrics
+  - section.revenue-recovery-summary
+
+expected_props:
+  - label: string
+  - value: string | number
+  - unit: string | null
+  - delta: string | null
+  - status: "neutral | positive | warning | negative | null"
+
+accessibility_notes:
+  - "Metric label and value are readable text, not color-only indicators"
+  - "Delta/status semantics are conveyed by text plus visual styling"

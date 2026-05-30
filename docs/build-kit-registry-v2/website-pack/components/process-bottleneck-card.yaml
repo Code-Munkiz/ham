@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.process-bottleneck-card
+kind: component_contract
+name: Process bottleneck card contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Bottleneck summary card contract for cycle-time and queue-delay indicators.
+
+non_template_statement: Layout contract only — not a checked-in process analytics engine.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.process-bottleneck-panel
+
+expected_props:
+  - label: string
+  - value: string | number
+  - bottleneckStage: string
+  - note: string | null

@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.recovery-aging-buckets
+kind: section
+name: Recovery aging buckets section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Aging-bucket region for recoverables (for example 0–30, 31–60, 61–90, 90+ days).
+
+non_template_statement: Section playbook only — not a checked-in collections ledger.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on:
+  - section.revenue-recovery-summary
+
+binds_components:
+  - component.recovery-aging-table
+
+guidance:
+  - "Use semantic table structure and bounded sample aging values."

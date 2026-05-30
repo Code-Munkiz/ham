@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.commission-summary
+kind: section
+name: Commission summary section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Commission overview for earned, pending, chargeback, and clawback sample values.
+
+non_template_statement: Section playbook only — not a checked-in commission engine.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on:
+  - section.sales-executive-summary
+
+binds_components:
+  - component.commission-summary-card
+
+guidance:
+  - "Keep commission math illustrative and coherent; do not imply payroll calculations."

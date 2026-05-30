@@ -1,0 +1,27 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.agent-leaderboard
+kind: component_contract
+name: Agent leaderboard contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Ranked agent/team performance contract using outcome-oriented sample metrics.
+
+non_template_statement: Layout contract only — not a copy-paste leaderboard widget.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.sales-agent-performance
+
+expected_props:
+  - rows: "array of agent/team summaries with bounded fields"
+  - primaryMetric: string
+  - secondaryMetric: string | null
+
+content_notes:
+  - "Use outcome-based metrics and avoid invasive employee surveillance framing"

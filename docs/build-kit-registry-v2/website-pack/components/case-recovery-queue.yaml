@@ -1,0 +1,27 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.case-recovery-queue
+kind: component_contract
+name: Case recovery queue contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Static recovery case queue contract with bounded status/reason fields.
+
+non_template_statement: Layout contract only — not a checked-in collections workflow.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.recovery-exception-queue
+
+expected_props:
+  - items: "array of static queue cases"
+  - statusField: string
+  - reasonField: string
+
+content_notes:
+  - "Queue is display-only and avoids legal collections automation claims"

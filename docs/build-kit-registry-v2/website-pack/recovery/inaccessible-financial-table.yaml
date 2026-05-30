@@ -1,0 +1,31 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.inaccessible-financial-table
+kind: recovery_playbook
+name: Fix inaccessible financial table
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs financial table accessibility/semantics drift.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+repairs_validators:
+  - validator.financial-table-semantics
+  - validator.responsive-a11y-basics
+
+steps:
+  - id: step.restore_semantic_table
+    action: restore_semantic_table
+    detail: "Restore semantic table structure with clear headers/captions"
+  - id: step.mobile_readability
+    action: mobile_readability
+    detail: "Preserve readability at narrow widths"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run table/responsive validators"

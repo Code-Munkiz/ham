@@ -1,0 +1,27 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.exception-queue
+kind: component_contract
+name: Exception queue contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Exception queue contract for items requiring human review and follow-up.
+
+non_template_statement: Layout contract only — not a checked-in workflow queue.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.recovery-exception-queue
+
+expected_props:
+  - items: "array of static exception rows"
+  - severityField: string
+  - ownerField: string | null
+
+accessibility_notes:
+  - "Exception severity labels are textual and not color-only"

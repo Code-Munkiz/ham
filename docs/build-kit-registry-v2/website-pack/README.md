@@ -1,6 +1,6 @@
 # Website Pack — Build Registry v2
 
-**Status:** Schema pilot · **Pack id:** `pack.site` · **Recipes:** `site.landing-page-core` (routed when flagged) · `site.dashboard-ui-core` (routed when flagged) · `app.saas-dashboard-core` (routed when flagged) · `app.admin-dashboard-core` (schema-only, **not routed**)
+**Status:** Schema pilot · **Pack id:** `pack.site` · **Recipes:** `site.landing-page-core` (routed when flagged) · `site.dashboard-ui-core` (routed when flagged) · `app.saas-dashboard-core` (routed when flagged) · `app.admin-dashboard-core` (routed when flagged) · `app.sales-ops-dashboard-core` (schema-only, **not routed**)
 
 Generative playbooks for DOM-native marketing/landing pages and read-only dashboard/app-surface overviews. This pack is **separate from** [game-pack/](../game-pack/) — no game mechanics, no templates, no starter source trees.
 
@@ -65,7 +65,20 @@ Static, app-shell-light admin control-surface prototype (**schema-only, not rout
 | Demo-mode/read-only action controls, optional non-mutating danger modal mockup | Destructive mutation workflows, real moderation workflows |
 | Empty/loading/error states, responsive semantics, local sample data only | Live monitoring/log streaming, billing/payments, security/compliance implementation, exact clone |
 
-**Routing:** deferred by design. `app.admin-dashboard-core` is intentionally **not wired in `intent.py`** yet.
+**Routing:** narrowly routed behind `HAM_BUILD_REGISTRY_V2_ENABLED` for bounded static admin control-surface intent.
+
+## Fifth recipe: `app.sales-ops-dashboard-core`
+
+Static, app-shell-light sales/revenue operations prototype (**schema-only, not routed**):
+
+| In scope | Out of scope |
+|----------|--------------|
+| Static sales ops shell, executive summary, agent/team performance, sales activity, pipeline/stage movement | Real payroll, payout disbursement, payment processing |
+| Commission summary + payout status display, recovery summary, aging buckets, exception/review queue | Accounting ledger, ASC 606 engine, tax/compliance certification claims |
+| Process bottleneck panel, activity/audit feed, filters, semantic financial table | Legal collections automation, live dunning, telephony/SMS automation |
+| Empty/loading/error states, responsive semantics, local coherent sample data only | CRM sync, backend/API/database integration, real PII or financial identifiers, regulated financial advice, trading dashboards |
+
+**Routing:** deferred by design. `app.sales-ops-dashboard-core` is intentionally **not wired in `intent.py`** yet.
 
 ## Layout
 
@@ -76,10 +89,12 @@ website-pack/
 ├── app-types/site.dashboard-ui-core.yaml
 ├── app-types/app.saas-dashboard-core.yaml
 ├── app-types/app.admin-dashboard-core.yaml
+├── app-types/app.sales-ops-dashboard-core.yaml
 ├── stack-kits/dom-marketing-minimal.yaml
 ├── stack-kits/dom-dashboard-minimal.yaml
 ├── stack-kits/dom-saas-dashboard-minimal.yaml
 ├── stack-kits/dom-admin-dashboard-minimal.yaml
+├── stack-kits/dom-sales-ops-dashboard-minimal.yaml
 ├── sections/          # indexed as mechanics for loader compatibility
 ├── components/
 ├── validators/
@@ -109,6 +124,10 @@ python3 scripts/validate_game_pack_registry.py \
 python3 scripts/validate_game_pack_registry.py \
   --pack-root docs/build-kit-registry-v2/website-pack \
   --app-type app.admin-dashboard-core \
+  --check
+python3 scripts/validate_game_pack_registry.py \
+  --pack-root docs/build-kit-registry-v2/website-pack \
+  --app-type app.sales-ops-dashboard-core \
   --check
 python3 scripts/check_build_registry_references.py \
   --pack docs/build-kit-registry-v2/website-pack/registry-pack.yaml \

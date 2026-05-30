@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.sales-ops-empty-loading-error-states
+kind: section
+name: Sales ops empty loading error states section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Visible static empty/loading/error examples for sales ops regions that appear async.
+
+non_template_statement: Section playbook only — not a checked-in state machine component.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on:
+  - section.sales-ops-filters
+
+binds_components:
+  - component.semantic-financial-table
+  - component.case-recovery-queue
+  - component.activity-feed
+
+guidance:
+  - "Render visible static state examples and never imply live fetch/API retries."

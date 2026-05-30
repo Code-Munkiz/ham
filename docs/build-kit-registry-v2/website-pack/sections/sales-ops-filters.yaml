@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.sales-ops-filters
+kind: section
+name: Sales ops filters section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Filter controls for date/team/agent/status/stage slices across dashboard regions.
+
+non_template_statement: Section playbook only — not a checked-in query engine.
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+depends_on:
+  - section.sales-ops-shell
+
+binds_components:
+  - component.date-range-filter
+
+guidance:
+  - "Filters are clearly mapped to visible regions and avoid dead/deceptive controls."

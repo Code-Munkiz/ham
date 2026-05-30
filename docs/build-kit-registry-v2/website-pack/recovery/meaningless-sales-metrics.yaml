@@ -1,0 +1,35 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.meaningless-sales-metrics
+kind: recovery_playbook
+name: Fix meaningless sales metrics
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs filler sales/commission/recovery metrics.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - app.sales-ops-dashboard-core
+
+repairs_validators:
+  - validator.sales-ops-domain-coverage
+  - validator.coherent-sample-financial-data
+  - validator.no-gamified-surveillance
+
+steps:
+  - id: step.rewrite_metric_labels
+    action: rewrite_metric_labels
+    detail: "Replace vague KPIs with domain-coherent labels"
+  - id: step.reconcile_values
+    action: reconcile_values
+    detail: "Align summary and breakdown values"
+  - id: step.reframe_performance
+    action: reframe_performance
+    detail: "Keep performance outcome-oriented and non-surveillance"
+  - id: step.re_validate
+    action: re_validate
+    detail: "Re-run sales-domain/coherence validators"
