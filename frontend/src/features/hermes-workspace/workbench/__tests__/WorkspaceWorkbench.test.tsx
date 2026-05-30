@@ -2805,4 +2805,64 @@ describe("WorkspaceWorkbench", () => {
       screen.getByTestId("hww-preview-canvas").textContent || document.body.textContent || "";
     expectNoBuildRegistryLeakage(visibleCopy);
   });
+
+  it("renders a single build-status shell in the right pane", async () => {
+    mockProjectWithActiveSnapshot();
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-status-pills")).toBeInTheDocument();
+    });
+    expect(screen.getAllByTestId("hww-build-status-shell")).toHaveLength(1);
+  });
+
+  it("renders the build-status shell above the preview status pills in DOM order", async () => {
+    mockProjectWithActiveSnapshot();
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-status-pills")).toBeInTheDocument();
+    });
+    const shell = screen.getByTestId("hww-build-status-shell");
+    const pills = screen.getByTestId("hww-preview-status-pills");
+    expect(shell.compareDocumentPosition(pills) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("keeps the preview status pills with their phase label alongside the shell", async () => {
+    mockProjectWithActiveSnapshot();
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-status-pills")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("hww-preview-status-pills")).toHaveTextContent("Almost ready");
+    expect(screen.getByTestId("hww-build-status-shell")).toBeInTheDocument();
+  });
+
+  it("renders the shell as presentational with no approval controls or panel roots", async () => {
+    mockProjectWithActiveSnapshot();
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-build-status-shell")).toBeInTheDocument();
+    });
+    const shell = screen.getByTestId("hww-build-status-shell");
+    expect(within(shell).queryByRole("button")).toBeNull();
+    expect(within(shell).queryByRole("checkbox")).toBeNull();
+    expect(shell.querySelector('[data-hww-coding-plan="managed-build-approval"]')).toBeNull();
+    expect(shell.querySelector('[data-hww-coding-plan="opencode-build-approval"]')).toBeNull();
+    expectNoBuildRegistryLeakage(shell.textContent || "");
+  });
 });

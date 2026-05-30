@@ -70,6 +70,10 @@ import {
 import { workspaceProjectScope } from "@/lib/ham/workspaceProjectScope";
 import { detectPreviewIframeProxySignals } from "@/features/hermes-workspace/workbench/previewProxyIframeSignals";
 import { cn } from "@/lib/utils";
+import {
+  WorkbenchBuildStatusPanel,
+  buildStatusFromPreviewPhase,
+} from "./WorkbenchBuildStatusPanel";
 import { ProjectSourceIntakeDialog } from "./ProjectSourceIntakeDialog";
 import { WorkbenchSavedVersionsDialog } from "./WorkbenchSavedVersionsDialog";
 import { WorkbenchProjectSettingsPanel } from "./WorkbenchProjectSettingsPanel";
@@ -1300,6 +1304,7 @@ function WorkbenchPreviewPanel({
           {visualEditModeActive ? "Exit edit mode" : "Edit"}
         </Button>
       </div>
+      <WorkbenchBuildStatusPanel status={buildStatusFromPreviewPhase(previewPhase)} />
       {previewPhase !== "ready" ? (
         <div className="flex flex-wrap items-center gap-1.5" data-testid="hww-preview-status-pills">
           <span className="rounded-full border border-white/[0.12] bg-black/35 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/60">

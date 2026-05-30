@@ -30,7 +30,7 @@ export type PreviewPrimaryStateContext = {
   rawError?: string | null;
 };
 
-const FORBIDDEN_USER_COPY_PATTERN =
+export const FORBIDDEN_USER_COPY_PATTERN =
   /safe_edit_low|ham_droid_exec_token|droid exec|\bargv\b|runner url|preview_proxy|builder-artifact|gcs|kubernetes|\bpod\b|controlplanerun|stack trace|authorization:|bearer /i;
 
 /** Normie-friendly status pill label (never raw phase ids). */
