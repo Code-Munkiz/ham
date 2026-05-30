@@ -320,6 +320,30 @@ _PROMPT_ADMIN_SEMANTIC_TABLE_REQUEST = re.compile(
     re.IGNORECASE,
 )
 
+_PROMPT_SALES_OPS_DASHBOARD_CORE = re.compile(
+    r"\bsales\s+ops\s+dashboard\b|"
+    r"\bsales\s+operations\s+dashboard\b|"
+    r"\brevops\s+dashboard\b|"
+    r"\brevenue\s+operations\s+dashboard\b|"
+    r"\bcommission\s+dashboard\b|"
+    r"\brevenue\s+recovery\s+dashboard\b",
+    re.IGNORECASE,
+)
+
+_PROMPT_SALES_OPS_DASHBOARD_SIGNALS = re.compile(
+    r"executive\s+summary|agent(?:/team)?\s+performance|team\s+performance|sales\s+activity|"
+    r"pipeline(?:\s+stage)?\s+movement|commission\s+summary|commission\s+earned|commission\s+pending|"
+    r"clawbacks?|chargebacks?|payout\s+status|revenue\s+recovery|recoverable\s+balance|"
+    r"recovered\s+dollars|aging\s+buckets?|exception\s+queue|process\s+bottleneck|"
+    r"activity(?:/audit)?\s+feed|filters?",
+    re.IGNORECASE,
+)
+
+_PROMPT_SALES_OPS_SEMANTIC_REQUEST = re.compile(
+    r"header/nav/main/table/list/chart|semantic|financial\s+table|table/list/chart",
+    re.IGNORECASE,
+)
+
 _SAAS_LIVE_FETCH_IMPL = re.compile(
     r"\bfetch\s*\(|\baxios\b|\breact-query\b|\bswr\b|\bwebsocket\b|\beventsource\b|"
     r"/api\b|\bapi\s+call\b|simulate\s+api|mock\s+api|live\s+retry|retry\s+request",
@@ -355,6 +379,53 @@ _ADMIN_MUTATION_IMPL = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
+_SALES_OPS_FORBIDDEN_IMPL = re.compile(
+    r"\bpayroll\s+system\b|"
+    r"\bpayment\s+processing\b|"
+    r"\baccounting\s+ledger\b|"
+    r"\basc\s*606\s+engine\b|"
+    r"\blegal\s+collections\s+automation\b|"
+    r"\bcrm\s+sync\b|"
+    r"\b(?:backend|api|database)\s+integrations?\b|"
+    r"\blive\s+(?:crm|api|database)\b|"
+    r"\breal\s+(?:customer\s+)?pii\b|"
+    r"\bcustomer\s+database\b|"
+    r"\breal\s+(?:bank|payment)\s+identifiers?\b|"
+    r"\blive\s+dunning\b|"
+    r"\b(?:telephony|sms)\s+automation\b|"
+    r"\bregulated\s+financial\s+advice\b|"
+    r"\bpayout\s+disbursement\b|"
+    r"\b(?:trading|order\s+book|fintech)\b|"
+    r"\bcompliance\s+certification\s+claims?\b",
+    re.IGNORECASE,
+)
+
+_SALES_OPS_NEGATED_FORBIDDEN_IMPL_PATTERNS: tuple[str, ...] = (
+    r"\b(?:no|without|sans|zero|free\s+of)\s+(?:a\s+|an\s+|any\s+|the\s+)?payroll(?:\s+system)?\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+payments?\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+payment\s+processing\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+accounting(?:\s+ledger)?\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+asc\s*606(?:\s+engine)?\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+legal\s+collections\s+automation\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+crm(?:\s+sync)?\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+(?:a\s+|an\s+|any\s+|the\s+)?backend\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+(?:a\s+|an\s+|any\s+|the\s+)?api\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+(?:a\s+|an\s+|any\s+|the\s+)?database\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+real\s+pii\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+real\s+bank\s+or\s+payment\s+identifiers?\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+real\s+(?:bank|payment)\s+identifiers?\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+bank\s+identifiers?\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+payment\s+identifiers?\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+live\s+dunning\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+telephony(?:\s+or\s+sms\s+automation)?\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+sms(?:\s+automation)?\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+regulated\s+financial\s+advice\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+real\s+payout\s+approval\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+payout\s+(?:approval|disbursement)\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+trading\s+dashboard\b",
+    r"\b(?:no|without|sans|zero|free\s+of)\s+compliance\s+certification\s+claims?\b",
+)
+
 _SAAS_BLOCKING_QUALITY_CODES = frozenset(
     {
         "saas_missing_loading_error_states",
@@ -369,6 +440,15 @@ _ADMIN_BLOCKING_QUALITY_CODES = frozenset(
         "admin_live_fetch_impl_detected",
         "admin_missing_semantic_resource_table",
         "admin_destructive_action_live_mutation",
+    }
+)
+
+_SALES_OPS_BLOCKING_QUALITY_CODES = frozenset(
+    {
+        "sales_ops_missing_domain_regions",
+        "sales_ops_missing_loading_error_states",
+        "sales_ops_missing_semantic_financial_structure",
+        "sales_ops_forbidden_financial_impl_detected",
     }
 )
 
@@ -1117,6 +1197,70 @@ def _prompt_requests_admin_semantic_table(prompt: str | None) -> bool:
     return bool(_PROMPT_ADMIN_SEMANTIC_TABLE_REQUEST.search(prompt))
 
 
+def _prompt_is_sales_ops_dashboard_core(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    if not _PROMPT_SALES_OPS_DASHBOARD_CORE.search(prompt):
+        return False
+    return bool(_PROMPT_SALES_OPS_DASHBOARD_SIGNALS.search(prompt))
+
+
+def _prompt_requests_sales_ops_state_examples(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    return bool(_PROMPT_DASHBOARD_STATE_REQUEST.search(prompt))
+
+
+def _prompt_requests_sales_ops_semantic_structure(prompt: str | None) -> bool:
+    if not prompt:
+        return False
+    if _PROMPT_SALES_OPS_SEMANTIC_REQUEST.search(prompt):
+        return True
+    return bool(_PROMPT_DASHBOARD_TABLE.search(prompt))
+
+
+def _strip_sales_ops_negated_forbidden_markers(text: str) -> str:
+    stripped = text
+    for pattern in _SALES_OPS_NEGATED_FORBIDDEN_IMPL_PATTERNS:
+        stripped = re.sub(pattern, " ", stripped, flags=re.IGNORECASE)
+    return stripped
+
+
+_SALES_OPS_REQUIRED_REGION_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("executive summary", (r"\bexecutive\s+summary\b",)),
+    ("agent/team performance", (r"\bagent(?:/team)?\s+performance\b", r"\bteam\s+performance\b")),
+    ("sales activity metrics", (r"\bsales\s+activity\s+metrics?\b", r"\bsales\s+activity\b")),
+    (
+        "pipeline/stage movement",
+        (r"\bpipeline(?:\s+stage)?\s+movement\b", r"\bstage\s+movement\b"),
+    ),
+    ("commission summary", (r"\bcommission\s+summary\b",)),
+    (
+        "commission earned/pending",
+        (
+            r"\bcommission\s+earned\b",
+            r"\bcommission\s+pending\b",
+            r"\bearned\s+and\s+pending\b",
+        ),
+    ),
+    ("clawbacks/chargebacks", (r"\bclawbacks?\b", r"\bchargebacks?\b")),
+    ("payout status display", (r"\bpayout\s+status\b",)),
+    ("revenue recovery summary", (r"\brevenue\s+recovery\s+summary\b", r"\brecovery\s+summary\b")),
+    (
+        "recoverable balance/recovered dollars",
+        (r"\brecoverable\s+balance\b", r"\brecovered\s+dollars\b"),
+    ),
+    ("aging buckets", (r"\baging\s+buckets?\b",)),
+    ("recovery exception queue", (r"\brecovery\s+exception\s+queue\b", r"\bexception\s+queue\b")),
+    ("process bottleneck panel", (r"\bprocess\s+bottleneck(?:\s+panel)?\b",)),
+    ("activity/audit feed", (r"\bactivity(?:/audit)?\s+feed\b", r"\baudit\s+feed\b")),
+    (
+        "filters by date/team/agent/status/stage",
+        (r"\bdate/team/agent/status/stage\b", r"\b(?:date|team|agent|status|stage)\s+filters?\b"),
+    ),
+)
+
+
 def _inspect_dashboard_missing_requested_filter(
     plan: Plan | None,
     file_changes: list[tuple[str, str]],
@@ -1586,6 +1730,484 @@ def _inspect_admin_dashboard_quality(
 
 def _has_admin_blocking_quality_issues(issues: list[ScaffoldQualityIssue]) -> bool:
     return any(issue.code in _ADMIN_BLOCKING_QUALITY_CODES for issue in issues)
+
+
+def _inspect_sales_ops_missing_domain_regions(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_is_sales_ops_dashboard_core(plan.user_message):
+        return []
+    combined = _combined_js_source(file_changes)
+    missing: list[str] = []
+    for label, patterns in _SALES_OPS_REQUIRED_REGION_PATTERNS:
+        if not any(re.search(pattern, combined, re.IGNORECASE) for pattern in patterns):
+            missing.append(label)
+    if not missing:
+        return []
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"Sales|Ops|Dashboard|Commission|Recovery|Pipeline|Activity|Filter|App",
+    )
+    return [
+        ScaffoldQualityIssue(
+            code="sales_ops_missing_domain_regions",
+            message=(
+                "Sales Ops dashboard is missing required visible domain regions: "
+                + ", ".join(missing)
+            ),
+            path=path,
+        )
+    ]
+
+
+def _inspect_sales_ops_missing_loading_error_states(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if (
+        plan is None
+        or not _prompt_is_sales_ops_dashboard_core(plan.user_message)
+        or not _prompt_requests_sales_ops_state_examples(plan.user_message)
+    ):
+        return []
+    combined = _combined_js_source(file_changes)
+    has_empty = bool(_DASHBOARD_EMPTY_STATE.search(combined))
+    has_loading = bool(_DASHBOARD_LOADING_STATE.search(combined))
+    has_error = bool(_DASHBOARD_ERROR_STATE.search(combined))
+    has_static_local = bool(
+        re.search(r"\b(static|local|sample|demo|illustrative|preview)\b", combined, re.IGNORECASE)
+    )
+    if has_empty and has_loading and has_error and has_static_local:
+        return []
+    missing_parts: list[str] = []
+    if not has_empty:
+        missing_parts.append("empty")
+    if not has_loading:
+        missing_parts.append("loading")
+    if not has_error:
+        missing_parts.append("error")
+    if not has_static_local:
+        missing_parts.append("static/local wording")
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"Sales|Ops|Dashboard|State|Status|Loading|Error|App",
+    )
+    return [
+        ScaffoldQualityIssue(
+            code="sales_ops_missing_loading_error_states",
+            message=(
+                "Sales Ops dashboard prompt requests visible static/local empty/loading/error examples, "
+                "but missing: " + ", ".join(missing_parts)
+            ),
+            path=path,
+        )
+    ]
+
+
+def _inspect_sales_ops_missing_semantic_financial_structure(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if (
+        plan is None
+        or not _prompt_is_sales_ops_dashboard_core(plan.user_message)
+        or not _prompt_requests_sales_ops_semantic_structure(plan.user_message)
+    ):
+        return []
+    combined = _combined_js_source(file_changes)
+    has_main = bool(_DASHBOARD_MAIN.search(combined))
+    has_header = bool(_DASHBOARD_HEADER.search(combined))
+    has_nav = bool(_DASHBOARD_NAV.search(combined))
+    has_table = bool(_DASHBOARD_TABLE.search(combined))
+    has_list = bool(re.search(r"<ul\b|<ol\b", combined, re.IGNORECASE))
+    has_chart = bool(
+        re.search(
+            r"\bchart\b|line\s+chart|bar\s+chart|<svg\b|<canvas\b|aria-label=[\"'][^\"']*chart",
+            combined,
+            re.IGNORECASE,
+        )
+    )
+    if has_header and has_nav and has_main and has_table and has_list and has_chart:
+        return []
+    missing_parts: list[str] = []
+    if not has_header:
+        missing_parts.append("header")
+    if not has_nav:
+        missing_parts.append("nav")
+    if not has_main:
+        missing_parts.append("main")
+    if not has_table:
+        missing_parts.append("table")
+    if not has_list:
+        missing_parts.append("list")
+    if not has_chart:
+        missing_parts.append("chart")
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"Sales|Ops|Dashboard|Commission|Recovery|Table|Chart|Nav|Header|App",
+    )
+    return [
+        ScaffoldQualityIssue(
+            code="sales_ops_missing_semantic_financial_structure",
+            message=(
+                "Sales Ops semantic shell/financial structure is incomplete; missing: "
+                + ", ".join(missing_parts)
+            ),
+            path=path,
+        )
+    ]
+
+
+def _inspect_sales_ops_forbidden_financial_impl(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    if plan is None or not _prompt_is_sales_ops_dashboard_core(plan.user_message):
+        return []
+    combined = _combined_js_source(file_changes)
+    effective = _strip_sales_ops_negated_forbidden_markers(combined)
+    matched = _SALES_OPS_FORBIDDEN_IMPL.search(effective)
+    if not matched:
+        return []
+    offending = matched.group(0).strip()
+    path = _first_path_matching(
+        _js_sources(file_changes),
+        r"Sales|Ops|Dashboard|Commission|Recovery|Finance|Payment|Backend|Api|App",
+    )
+    return [
+        ScaffoldQualityIssue(
+            code="sales_ops_forbidden_financial_impl_detected",
+            message=(
+                "Sales Ops output includes forbidden financial/backend/compliance implementation cues: "
+                f"{offending}"
+            ),
+            path=path,
+        )
+    ]
+
+
+def _inspect_sales_ops_dashboard_quality(
+    plan: Plan | None,
+    file_changes: list[tuple[str, str]],
+) -> list[ScaffoldQualityIssue]:
+    issues: list[ScaffoldQualityIssue] = []
+    issues.extend(_inspect_sales_ops_missing_domain_regions(plan, file_changes))
+    issues.extend(_inspect_sales_ops_missing_loading_error_states(plan, file_changes))
+    issues.extend(_inspect_sales_ops_missing_semantic_financial_structure(plan, file_changes))
+    issues.extend(_inspect_sales_ops_forbidden_financial_impl(plan, file_changes))
+    return issues
+
+
+def _has_sales_ops_blocking_quality_issues(issues: list[ScaffoldQualityIssue]) -> bool:
+    return any(issue.code in _SALES_OPS_BLOCKING_QUALITY_CODES for issue in issues)
+
+
+def _build_sales_ops_static_dashboard_fallback_payload(
+    file_changes: list[tuple[str, str]],
+) -> dict[str, Any]:
+    file_map = _file_map(file_changes)
+
+    file_map.setdefault(
+        "package.json",
+        """{
+  "name": "sales-ops-dashboard-static",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.0"
+  }
+}
+""",
+    )
+    file_map.setdefault(
+        "vite.config.ts",
+        "import { defineConfig } from 'vite';\nimport react from '@vitejs/plugin-react';\n\nexport default defineConfig({ plugins: [react()] });\n",
+    )
+    file_map.setdefault(
+        "index.html",
+        """<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sales Ops Dashboard</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+""",
+    )
+    file_map["src/main.tsx"] = (
+        "import React from 'react';\n"
+        "import ReactDOM from 'react-dom/client';\n"
+        "import App from './App';\n"
+        "import './index.css';\n\n"
+        "ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(\n"
+        "  <React.StrictMode>\n"
+        "    <App />\n"
+        "  </React.StrictMode>,\n"
+        ");\n"
+    )
+    # Always overwrite fallback CSS so responsive/semantic guarantees are deterministic
+    # even when earlier repair passes returned non-responsive styling.
+    file_map["src/index.css"] = (
+        "body { margin: 0; font-family: Inter, Arial, sans-serif; background: #f5f7fb; color: #111827; }\n"
+        ".shell { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }\n"
+        ".sidebar { background: #111827; color: #e5e7eb; padding: 16px; }\n"
+        ".sidebar ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }\n"
+        ".content { display: grid; grid-template-rows: auto 1fr; }\n"
+        ".topbar { background: #ffffff; border-bottom: 1px solid #d1d5db; padding: 14px 18px; }\n"
+        "main { padding: 18px; display: grid; gap: 14px; }\n"
+        ".cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }\n"
+        ".panel { background: #fff; border: 1px solid #d1d5db; border-radius: 10px; padding: 12px; }\n"
+        "table { width: 100%; border-collapse: collapse; }\n"
+        "th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; }\n"
+        ".states { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }\n"
+        "@media (max-width: 920px) { .shell { grid-template-columns: 1fr; } }\n"
+    )
+    file_map["src/App.tsx"] = """import React from 'react';
+
+const executiveSummary = [
+  { label: 'Pipeline value', value: '$182,400' },
+  { label: 'Commission earned', value: '$26,880' },
+  { label: 'Commission pending', value: '$9,240' },
+  { label: 'Recovered dollars', value: '$14,120' },
+];
+
+const agentPerformance = [
+  { agent: 'Avery', meetings: 18, winRate: '41%', earned: '$7,920' },
+  { agent: 'Jordan', meetings: 15, winRate: '38%', earned: '$6,540' },
+  { agent: 'Kai', meetings: 12, winRate: '35%', earned: '$5,980' },
+];
+
+const pipelineRows = [
+  { stage: 'Discovery', movedIn: 22, movedOut: 17 },
+  { stage: 'Proposal', movedIn: 14, movedOut: 10 },
+  { stage: 'Negotiation', movedIn: 9, movedOut: 6 },
+];
+
+const payoutRows = [
+  { agent: 'Avery', earned: '$7,920', pending: '$1,840', clawbacks: '$320', chargebacks: '$95', payoutStatus: 'Review' },
+  { agent: 'Jordan', earned: '$6,540', pending: '$1,760', clawbacks: '$210', chargebacks: '$70', payoutStatus: 'Queued' },
+  { agent: 'Kai', earned: '$5,980', pending: '$1,320', clawbacks: '$180', chargebacks: '$60', payoutStatus: 'Hold' },
+];
+
+const agingBuckets = [
+  { bucket: '0-15 days', recoverable: '$6,200', recovered: '$4,100' },
+  { bucket: '16-30 days', recoverable: '$5,400', recovered: '$3,280' },
+  { bucket: '31-60 days', recoverable: '$4,700', recovered: '$2,640' },
+];
+
+const exceptionQueue = [
+  'Invoice INV-1082 missing disposition code',
+  'Chargeback case CB-22 awaiting note update',
+];
+
+const bottlenecks = [
+  'Proposal to negotiation cycle time increased by 1.4 days',
+  'Recovery queue handoff delayed for Team East',
+];
+
+const activityFeed = [
+  'Audit feed: payout status updated for Avery (static sample)',
+  'Activity feed: exception queue item CB-22 reassigned',
+];
+
+export default function App() {
+  return (
+    <div className="shell">
+      <nav className="sidebar" aria-label="Sales ops navigation">
+        <h1>Sales Ops Shell</h1>
+        <ul>
+          <li>Executive summary</li>
+          <li>Performance</li>
+          <li>Pipeline</li>
+          <li>Commission and payouts</li>
+          <li>Recovery and aging</li>
+        </ul>
+      </nav>
+      <div className="content">
+        <header className="topbar">
+          Filters by date/team/agent/status/stage (static local sample controls)
+        </header>
+        <main>
+          <section className="panel" aria-label="Executive summary row">
+            <h2>Executive summary</h2>
+            <div className="cards">
+              {executiveSummary.map((item) => (
+                <article className="panel" key={item.label}>
+                  <h3>{item.label}</h3>
+                  <p>{item.value}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel" aria-label="Agent and team performance">
+            <h2>Agent/team performance and sales activity metrics</h2>
+            <ul>
+              {agentPerformance.map((row) => (
+                <li key={row.agent}>
+                  {row.agent}: {row.meetings} activities, {row.winRate} win rate, {row.earned} commission earned
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <section className="panel" aria-label="Pipeline stage movement and process bottleneck panel">
+            <h2>Pipeline/stage movement and process bottleneck panel</h2>
+            <table aria-label="Pipeline stage movement table">
+              <caption>Local static movement counts</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Stage</th>
+                  <th scope="col">Moved in</th>
+                  <th scope="col">Moved out</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pipelineRows.map((row) => (
+                  <tr key={row.stage}>
+                    <td>{row.stage}</td>
+                    <td>{row.movedIn}</td>
+                    <td>{row.movedOut}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <ul>
+              {bottlenecks.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+            <div role="img" aria-label="Pipeline stage movement chart">
+              Chart placeholder: stage movement trend (static local sample)
+            </div>
+          </section>
+
+          <section className="panel" aria-label="Commission summary and payout status display">
+            <h2>Commission summary, earned/pending, clawbacks/chargebacks, payout status display</h2>
+            <table aria-label="Commission and payout status table">
+              <caption>Illustrative local sample payout rows</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Agent</th>
+                  <th scope="col">Earned</th>
+                  <th scope="col">Pending</th>
+                  <th scope="col">Clawbacks</th>
+                  <th scope="col">Chargebacks</th>
+                  <th scope="col">Payout status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payoutRows.map((row) => (
+                  <tr key={row.agent}>
+                    <td>{row.agent}</td>
+                    <td>{row.earned}</td>
+                    <td>{row.pending}</td>
+                    <td>{row.clawbacks}</td>
+                    <td>{row.chargebacks}</td>
+                    <td>{row.payoutStatus}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+
+          <section className="panel" aria-label="Revenue recovery summary">
+            <h2>Revenue recovery summary, recoverable balance, recovered dollars, aging buckets</h2>
+            <table aria-label="Recovery aging buckets table">
+              <caption>Local static recovery sample data</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Aging bucket</th>
+                  <th scope="col">Recoverable balance</th>
+                  <th scope="col">Recovered dollars</th>
+                </tr>
+              </thead>
+              <tbody>
+                {agingBuckets.map((row) => (
+                  <tr key={row.bucket}>
+                    <td>{row.bucket}</td>
+                    <td>{row.recoverable}</td>
+                    <td>{row.recovered}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+
+          <section className="panel" aria-label="Recovery exception queue and activity/audit feed">
+            <h2>Recovery exception queue and activity/audit feed</h2>
+            <ul>
+              {exceptionQueue.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+            <ul>
+              {activityFeed.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </section>
+
+          <section className="panel states" aria-label="Visible static state examples">
+            <article className="panel">
+              <strong>Empty example</strong>
+              <p>No recovery exceptions match this static local filter.</p>
+            </article>
+            <article className="panel">
+              <strong>Loading preview example</strong>
+              <p>Loading local static sample preview.</p>
+            </article>
+            <article className="panel">
+              <strong>Error preview example</strong>
+              <p>Unable to load local static sample segment.</p>
+            </article>
+          </section>
+        </main>
+      </div>
+    </div>
+  );
+}
+"""
+
+    preferred_order = [
+        "package.json",
+        "vite.config.ts",
+        "index.html",
+        "src/main.tsx",
+        "src/App.tsx",
+        "src/index.css",
+    ]
+    ordered_paths = [path for path in preferred_order if path in file_map]
+    ordered_paths.extend(sorted(path for path in file_map if path not in set(ordered_paths)))
+    payload_changes = [{"path": path, "content": file_map[path]} for path in ordered_paths]
+    return {
+        "file_changes": payload_changes,
+        "assertions": [
+            "Sales ops shell includes required executive/performance/activity/pipeline/commission/recovery regions",
+            "Visible static empty/loading/error examples are rendered",
+            "Semantic header/nav/main/table/list/chart structure is present with local sample data only",
+        ],
+    }
 
 
 def _build_admin_static_dashboard_fallback_payload(
@@ -3685,6 +4307,7 @@ def inspect_generated_scaffold_quality(
         issues.extend(_inspect_dashboard_quality(plan, file_changes))
         issues.extend(_inspect_saas_dashboard_quality(plan, file_changes))
         issues.extend(_inspect_admin_dashboard_quality(plan, file_changes))
+        issues.extend(_inspect_sales_ops_dashboard_quality(plan, file_changes))
         issues.extend(_inspect_tactics_quality(plan, file_changes))
         issues.extend(_inspect_city_builder_quality(plan, file_changes))
     issues.extend(_inspect_import_export(file_changes))
@@ -3965,6 +4588,27 @@ def build_scaffold_repair_prompt(
             "- Keep controls demo-mode/read-only only; do not implement create/edit/delete/approve/revoke mutations.\n"
             "- Output ONLY valid JSON matching file_changes schema.\n"
         )
+    sales_ops_codes = issue_codes & {
+        "sales_ops_missing_domain_regions",
+        "sales_ops_missing_loading_error_states",
+        "sales_ops_missing_semantic_financial_structure",
+        "sales_ops_forbidden_financial_impl_detected",
+    }
+    if sales_ops_codes and _prompt_is_sales_ops_dashboard_core(plan.user_message):
+        repair_system += (
+            "\nSales Ops dashboard repair focus:\n"
+            "- Add missing Sales Ops regions visibly in UI: executive summary, agent/team performance, sales activity metrics, pipeline/stage movement, commission summary, commission earned/pending, clawbacks/chargebacks, payout status display, revenue recovery summary, recoverable balance/recovered dollars, aging buckets, recovery exception queue, process bottleneck panel, activity/audit feed, and filters by date/team/agent/status/stage.\n"
+            "- Use local/static sample data only; keep calculations illustrative but internally coherent.\n"
+            "- Add visible static Empty / Loading / Error examples rendered in UI (not comments/text-only).\n"
+            "- Use semantic <header>, <nav>, and <main> landmarks plus meaningful <table>, list, and chart structure.\n"
+            "- Use semantic tables for commission, payout, recovery, and aging data (<table>/<thead>/<tbody>/<th>/<td>).\n"
+            "- Remove backend/API/CRM/payment/payroll/accounting/ASC606/legal-collections/live-integration code or claims.\n"
+            "- Remove real PII and real account/bank/payment identifiers.\n"
+            "- Remove live dunning, telephony, SMS automation, payout disbursement, trading/order-book, regulated financial advice, and compliance certification claims.\n"
+            "- Avoid aggressive collections language and gamified surveillance patterns.\n"
+            "- Do not expose build-kit internals, registry internals, or prompt policy text in generated output.\n"
+            "- Output ONLY valid JSON matching file_changes schema.\n"
+        )
     user_content = (
         f"User request: {plan.user_message}\n\n"
         f"The previous scaffold failed automated playability checks:\n{issue_lines}\n\n"
@@ -4102,6 +4746,52 @@ def maybe_repair_generated_scaffold(
                 plan.plan_id,
             )
             fallback_payload = _build_admin_static_dashboard_fallback_payload(repaired.file_changes)
+            repaired = parse_result(json.dumps(fallback_payload))
+            remaining = inspect_generated_scaffold_quality(repaired.file_changes, plan=plan)
+
+        # Escalate Sales Ops repair once more when blocking Sales Ops issues remain.
+        if remaining and _prompt_is_sales_ops_dashboard_core(plan.user_message) and _has_sales_ops_blocking_quality_issues(remaining):
+            _LOG.info(
+                "Scaffold quality: Sales Ops blocking issues remain after first repair for plan=%s — running one escalated Sales Ops repair pass",
+                plan.plan_id,
+            )
+            escalated_system = messages[0]["content"] + (
+                "\n\nSales Ops enforcement (must satisfy all):\n"
+                "- Output must include all required Sales Ops regions and filter coverage explicitly.\n"
+                "- Output must include visible static/local Empty, Loading, and Error example panels/cards.\n"
+                "- Output must include semantic <header>/<nav>/<main>, plus financial <table> structures and meaningful list/chart regions.\n"
+                "- Output must contain no payroll/payment/accounting/ASC606/legal-collections/backend/API/CRM/live-integration code or claims.\n"
+                "- Output must contain no real PII/bank/payment identifiers, live dunning/telephony/SMS, payout disbursement, trading/order-book, or compliance certification claims.\n"
+                "- If constraints cannot be met, replace affected regions with static semantic markup that does meet them.\n"
+            )
+            escalated_user = (
+                messages[1]["content"]
+                + "\n\nRemaining Sales Ops blocking issues to fix now:\n"
+                + "\n".join(
+                    f"- [{issue.code}] {issue.message}"
+                    for issue in remaining
+                    if issue.code in _SALES_OPS_BLOCKING_QUALITY_CODES
+                )
+            )
+            raw = complete_chat(
+                [
+                    {"role": "system", "content": escalated_system},
+                    {"role": "user", "content": escalated_user},
+                ],
+                model_override=model,
+                api_key_override=api_key,
+                timeout_sec=scaffold_timeout,
+            )
+            repaired = parse_result(raw)
+            remaining = inspect_generated_scaffold_quality(repaired.file_changes, plan=plan)
+
+        # Deterministic Sales Ops fallback to guarantee gate-critical static semantics.
+        if remaining and _prompt_is_sales_ops_dashboard_core(plan.user_message) and _has_sales_ops_blocking_quality_issues(remaining):
+            _LOG.warning(
+                "Scaffold quality: Sales Ops blocking issues remain after escalated repair for plan=%s — applying deterministic static Sales Ops fallback",
+                plan.plan_id,
+            )
+            fallback_payload = _build_sales_ops_static_dashboard_fallback_payload(repaired.file_changes)
             repaired = parse_result(json.dumps(fallback_payload))
             remaining = inspect_generated_scaffold_quality(repaired.file_changes, plan=plan)
 

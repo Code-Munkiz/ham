@@ -2613,6 +2613,165 @@ const AdminTable = () => {
 """
 
 
+_SALES_OPS_GATE_PROMPT = (
+    "Build a static sales ops dashboard for a commission-based AI services team. Include a sales ops shell, "
+    "executive summary row, agent/team performance, sales activity metrics, pipeline stage movement, "
+    "commission summary, commission earned and pending, clawbacks and chargebacks, payout status display, "
+    "revenue recovery summary, recoverable balance, recovered dollars, aging buckets, recovery exception queue, "
+    "process bottleneck panel, activity/audit feed, filters by date/team/agent/status/stage, visible "
+    "empty/loading/error state examples, responsive layout, and accessible header/nav/main/table/list/chart "
+    "structure. Use meaningful local sample data only with internally coherent illustrative calculations. "
+    "No payroll, no payment processing, no accounting ledger, no ASC 606 engine, no legal collections "
+    "automation, no CRM sync, no backend, no API, no real PII, no real bank or payment identifiers, "
+    "no live dunning, no telephony or SMS automation, no regulated financial advice, no real payout approval, "
+    "no trading dashboard, and no compliance certification claims."
+)
+
+_SALES_OPS_MISSING_REGIONS_APP = """
+const App = () => (
+  <div>
+    <header><h1>Sales Ops Dashboard</h1></header>
+    <nav aria-label="Sales ops nav"><a href="#">Overview</a></nav>
+    <main>
+      <section><h2>Executive summary</h2><p>Static local sample values.</p></section>
+      <section><h2>Commission summary</h2><p>Earned and pending values.</p></section>
+    </main>
+  </div>
+);
+"""
+
+_SALES_OPS_MISSING_STATES_APP = """
+const App = () => (
+  <div>
+    <header><h1>Sales Ops Dashboard</h1></header>
+    <nav aria-label="Sales ops nav"><a href="#">Summary</a></nav>
+    <main>
+      <section><h2>Executive summary</h2></section>
+      <section><h2>Agent/team performance</h2></section>
+      <section><h2>Sales activity metrics</h2></section>
+      <section><h2>Pipeline stage movement</h2></section>
+      <section><h2>Commission summary</h2></section>
+      <section><h2>Commission earned and pending</h2></section>
+      <section><h2>Clawbacks and chargebacks</h2></section>
+      <section><h2>Payout status display</h2></section>
+      <section><h2>Revenue recovery summary</h2></section>
+      <section><h2>Recoverable balance and recovered dollars</h2></section>
+      <section><h2>Aging buckets</h2></section>
+      <section><h2>Recovery exception queue</h2></section>
+      <section><h2>Process bottleneck panel</h2></section>
+      <section><h2>Activity/audit feed</h2></section>
+      <section><h2>Filters by date/team/agent/status/stage</h2></section>
+      <section>
+        <table><tbody><tr><td>Static local sample</td></tr></tbody></table>
+      </section>
+      <section><ul><li>Pipeline note</li></ul></section>
+      <section><div>Chart placeholder</div></section>
+    </main>
+  </div>
+);
+"""
+
+_SALES_OPS_MISSING_SEMANTICS_APP = """
+const App = () => (
+  <div>
+    <section><h2>Executive summary</h2></section>
+    <section><h2>Agent/team performance</h2></section>
+    <section><h2>Sales activity metrics</h2></section>
+    <section><h2>Pipeline stage movement</h2></section>
+    <section><h2>Commission summary</h2></section>
+    <section><h2>Commission earned and pending</h2></section>
+    <section><h2>Clawbacks and chargebacks</h2></section>
+    <section><h2>Payout status display</h2></section>
+    <section><h2>Revenue recovery summary</h2></section>
+    <section><h2>Recoverable balance and recovered dollars</h2></section>
+    <section><h2>Aging buckets</h2></section>
+    <section><h2>Recovery exception queue</h2></section>
+    <section><h2>Process bottleneck panel</h2></section>
+    <section><h2>Activity/audit feed</h2></section>
+    <section><h2>Filters by date/team/agent/status/stage</h2></section>
+    <div role="status">Empty: static local sample empty panel</div>
+    <div role="status">Loading: static local sample loading panel</div>
+    <div role="alert">Error: static local sample error panel</div>
+  </div>
+);
+"""
+
+_SALES_OPS_FORBIDDEN_IMPL_APP = """
+const App = () => (
+  <div>
+    <header><h1>Sales Ops Dashboard</h1></header>
+    <nav aria-label="Sales ops nav"><a href="#">Overview</a></nav>
+    <main>
+      <section><h2>Executive summary</h2></section>
+      <section><h2>Agent/team performance</h2></section>
+      <section><h2>Sales activity metrics</h2></section>
+      <section><h2>Pipeline stage movement</h2></section>
+      <section><h2>Commission summary</h2></section>
+      <section><h2>Commission earned and pending</h2></section>
+      <section><h2>Clawbacks and chargebacks</h2></section>
+      <section><h2>Payout status display</h2></section>
+      <section><h2>Revenue recovery summary</h2></section>
+      <section><h2>Recoverable balance and recovered dollars</h2></section>
+      <section><h2>Aging buckets</h2></section>
+      <section><h2>Recovery exception queue</h2></section>
+      <section><h2>Process bottleneck panel</h2></section>
+      <section><h2>Activity/audit feed</h2></section>
+      <section><h2>Filters by date/team/agent/status/stage</h2></section>
+      <section><table><tbody><tr><td>Static local sample data</td></tr></tbody></table></section>
+      <section><ul><li>Pipeline notes</li></ul></section>
+      <section><div>Chart placeholder</div></section>
+      <section><p>Payment processing API integration enabled for payout disbursement.</p></section>
+      <section><p>Compliance certification claims are now surfaced in this dashboard.</p></section>
+      <section>
+        <div role="status">Empty: static local sample empty panel</div>
+        <div role="status">Loading: static local sample loading panel</div>
+        <div role="alert">Error: static local sample error panel</div>
+      </section>
+    </main>
+  </div>
+);
+"""
+
+_SALES_OPS_GOOD_APP = """
+const App = () => (
+  <div>
+    <header><h1>Sales Ops Dashboard</h1></header>
+    <nav aria-label="Sales ops nav"><a href="#">Executive summary</a></nav>
+    <main>
+      <section><h2>Executive summary</h2></section>
+      <section><h2>Agent/team performance</h2></section>
+      <section><h2>Sales activity metrics</h2></section>
+      <section><h2>Pipeline stage movement</h2><div>Bar chart for pipeline stage movement</div></section>
+      <section><h2>Commission summary</h2></section>
+      <section><h2>Commission earned and pending</h2></section>
+      <section><h2>Clawbacks and chargebacks</h2></section>
+      <section><h2>Payout status display</h2></section>
+      <section><h2>Revenue recovery summary</h2></section>
+      <section><h2>Recoverable balance and recovered dollars</h2></section>
+      <section><h2>Aging buckets</h2></section>
+      <section><h2>Recovery exception queue</h2></section>
+      <section><h2>Process bottleneck panel</h2></section>
+      <section><h2>Activity/audit feed</h2></section>
+      <section><h2>Filters by date/team/agent/status/stage</h2></section>
+      <section>
+        <table>
+          <caption>Commission and recovery local static sample data</caption>
+          <thead><tr><th>Agent</th><th>Earned</th><th>Pending</th></tr></thead>
+          <tbody><tr><td>Avery</td><td>$1200</td><td>$300</td></tr></tbody>
+        </table>
+      </section>
+      <section><ul><li>Recovery exception queue item A</li></ul></section>
+      <section aria-label="State examples">
+        <div role="status">Empty: static local sample empty panel</div>
+        <div role="status">Loading: static local sample loading panel</div>
+        <div role="alert">Error: static local sample error panel</div>
+      </section>
+    </main>
+  </div>
+);
+"""
+
+
 class TestAdminDashboardScaffoldQuality:
     def _admin_plan(self, prompt: str = _ADMIN_GATE_PROMPT) -> Plan:
         plan = _plan()
@@ -2694,6 +2853,92 @@ class TestAdminDashboardScaffoldQuality:
             plan=plan,
         )
         assert not any(i.code.startswith("admin_") for i in issues)
+
+
+class TestSalesOpsDashboardScaffoldQuality:
+    def _sales_ops_plan(self, prompt: str = _SALES_OPS_GATE_PROMPT) -> Plan:
+        plan = _plan()
+        plan.user_message = prompt
+        return plan
+
+    def test_missing_sales_ops_domain_regions_is_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            [("src/App.tsx", _SALES_OPS_MISSING_REGIONS_APP)],
+            plan=self._sales_ops_plan(),
+        )
+        assert any(i.code == "sales_ops_missing_domain_regions" for i in issues)
+
+    def test_missing_sales_ops_loading_error_states_is_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            [("src/App.tsx", _SALES_OPS_MISSING_STATES_APP)],
+            plan=self._sales_ops_plan(),
+        )
+        assert any(i.code == "sales_ops_missing_loading_error_states" for i in issues)
+
+    def test_missing_sales_ops_semantic_structure_is_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            [("src/App.tsx", _SALES_OPS_MISSING_SEMANTICS_APP)],
+            plan=self._sales_ops_plan(),
+        )
+        assert any(i.code == "sales_ops_missing_semantic_financial_structure" for i in issues)
+
+    def test_sales_ops_forbidden_financial_backend_compliance_impl_is_flagged(self):
+        issues = inspect_generated_scaffold_quality(
+            [("src/App.tsx", _SALES_OPS_FORBIDDEN_IMPL_APP)],
+            plan=self._sales_ops_plan(),
+        )
+        assert any(i.code == "sales_ops_forbidden_financial_impl_detected" for i in issues)
+
+    def test_sales_ops_repair_prompt_includes_required_guardrails(self):
+        issues = [
+            ScaffoldQualityIssue(
+                code="sales_ops_missing_domain_regions",
+                message="Missing required Sales Ops regions",
+                path="src/App.tsx",
+            ),
+            ScaffoldQualityIssue(
+                code="sales_ops_missing_loading_error_states",
+                message="Missing visible static empty/loading/error examples",
+                path="src/App.tsx",
+            ),
+            ScaffoldQualityIssue(
+                code="sales_ops_missing_semantic_financial_structure",
+                message="Missing semantic shell/table/list/chart structure",
+                path="src/App.tsx",
+            ),
+            ScaffoldQualityIssue(
+                code="sales_ops_forbidden_financial_impl_detected",
+                message="Contains backend/payment/compliance implementation",
+                path="src/App.tsx",
+            ),
+        ]
+        messages = build_scaffold_repair_prompt(
+            self._sales_ops_plan(),
+            [("src/App.tsx", _SALES_OPS_MISSING_REGIONS_APP)],
+            issues,
+            base_system_prompt="BASE",
+        )
+        body = messages[0]["content"].lower()
+        assert "sales ops dashboard repair focus" in body
+        assert "executive summary" in body and "activity/audit feed" in body
+        assert "empty / loading / error examples rendered in ui" in body
+        assert "semantic <header>, <nav>, and <main>" in body
+        assert "<table>/<thead>/<tbody>/<th>/<td>" in body
+        assert "local/static sample data only" in body
+        assert "remove backend/api/crm/payment/payroll/accounting/asc606" in body
+        assert "remove real pii" in body
+        assert "live dunning" in body and "trading/order-book" in body
+        assert "compliance certification claims" in body
+        assert "valid json" in body
+
+    def test_sales_ops_checks_not_applied_to_non_sales_ops_prompt(self):
+        plan = _plan()
+        plan.user_message = "Build a card battle game with draw/discard loop."
+        issues = inspect_generated_scaffold_quality(
+            [("src/App.tsx", _SALES_OPS_FORBIDDEN_IMPL_APP)],
+            plan=plan,
+        )
+        assert not any(i.code.startswith("sales_ops_") for i in issues)
 
 
 class TestBuildScaffoldRepairPrompt:
@@ -3287,3 +3532,116 @@ class TestGenerateScaffoldQualityRepairIntegration:
         assert "useeffect(" not in app_content
         issues = inspect_generated_scaffold_quality(result.file_changes, plan=plan)
         assert not any(i.code.startswith("admin_") for i in issues)
+
+    def test_generate_scaffold_sales_ops_triggers_escalated_second_repair_pass(self, monkeypatch):
+        from src.ham.builder_llm_scaffold import ScaffoldResult, generate_scaffold
+
+        first_pass_bad = json.dumps(
+            {
+                "file_changes": [
+                    {"path": "src/App.tsx", "content": _SALES_OPS_MISSING_REGIONS_APP},
+                    {"path": "package.json", "content": "{}"},
+                ],
+                "assertions": ["renders"],
+            }
+        )
+        second_pass_good = json.dumps(
+            {
+                "file_changes": [
+                    {"path": "src/App.tsx", "content": _SALES_OPS_GOOD_APP},
+                    {"path": "package.json", "content": "{}"},
+                ],
+                "assertions": ["renders"],
+            }
+        )
+        calls: list[str] = []
+
+        def _complete_chat(messages, **_k):
+            calls.append(messages[0]["content"])
+            if len(calls) == 1:
+                return first_pass_bad
+            if len(calls) == 2:
+                return first_pass_bad
+            return second_pass_good
+
+        plan = _plan()
+        plan.user_message = _SALES_OPS_GATE_PROMPT
+
+        monkeypatch.setattr(
+            "src.ham.builder_llm_scaffold.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test",
+        )
+        monkeypatch.setattr(
+            "src.ham.builder_llm_scaffold.complete_chat_messages_openrouter",
+            _complete_chat,
+        )
+        result = generate_scaffold(plan, project_id="p", workspace_id="w")
+        assert isinstance(result, ScaffoldResult)
+        assert len(calls) == 3
+        assert "Sales Ops enforcement (must satisfy all):" in calls[2]
+
+    def test_generate_scaffold_sales_ops_applies_deterministic_fallback_when_repairs_still_fail(
+        self, monkeypatch
+    ):
+        from src.ham.builder_llm_scaffold import ScaffoldResult, generate_scaffold
+
+        bad_json = json.dumps(
+            {
+                "file_changes": [
+                    {"path": "src/App.tsx", "content": _SALES_OPS_FORBIDDEN_IMPL_APP},
+                    {"path": "package.json", "content": "{}"},
+                ],
+                "assertions": ["renders"],
+            }
+        )
+        calls: list[str] = []
+
+        def _complete_chat(messages, **_k):
+            calls.append(messages[0]["content"])
+            return bad_json
+
+        plan = _plan()
+        plan.user_message = _SALES_OPS_GATE_PROMPT
+
+        monkeypatch.setattr(
+            "src.ham.builder_llm_scaffold.resolve_openrouter_api_key_for_actor",
+            lambda ham_actor=None: "sk-or-test",
+        )
+        monkeypatch.setattr(
+            "src.ham.builder_llm_scaffold.complete_chat_messages_openrouter",
+            _complete_chat,
+        )
+        result = generate_scaffold(plan, project_id="p", workspace_id="w")
+        assert isinstance(result, ScaffoldResult)
+        assert len(calls) == 3
+        app_content = dict(result.file_changes).get("src/App.tsx", "").lower()
+        assert "sales ops shell" in app_content
+        assert "executive summary" in app_content
+        assert "agent/team performance" in app_content
+        assert "sales activity metrics" in app_content
+        assert "pipeline/stage movement" in app_content
+        assert "commission summary" in app_content
+        assert "earned" in app_content and "pending" in app_content
+        assert "clawbacks" in app_content and "chargebacks" in app_content
+        assert "payout status display" in app_content
+        assert "revenue recovery summary" in app_content
+        assert "recoverable balance" in app_content
+        assert "recovered dollars" in app_content
+        assert "aging buckets" in app_content
+        assert "recovery exception queue" in app_content
+        assert "process bottleneck panel" in app_content
+        assert "activity/audit feed" in app_content
+        assert "filters by date/team/agent/status/stage" in app_content
+        assert "<header" in app_content
+        assert "<nav" in app_content
+        assert "<main" in app_content
+        assert "<table" in app_content
+        assert "<ul" in app_content
+        assert "chart placeholder" in app_content
+        assert "loading preview example" in app_content
+        assert "error preview example" in app_content
+        assert "payment processing" not in app_content
+        assert "api integration" not in app_content
+        assert "compliance certification claims" not in app_content
+        issues = inspect_generated_scaffold_quality(result.file_changes, plan=plan)
+        assert not any(i.code.startswith("sales_ops_") for i in issues)
