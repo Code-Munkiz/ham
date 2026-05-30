@@ -2795,6 +2795,9 @@ def post_chat_stream(
                     assistant_visible_err = format_gateway_error_user_message(exc)
                     try:
                         store.upsert_assistant_turn(sid, assistant_turn_id, assistant_visible_err)
+                        # This branch returns before the success-path ``stream_completed`` flag; skip
+                        # ``finally`` interrupted checkpoint so we do not overwrite the error text.
+                        stream_completed = True
                         gateway_err: dict[str, Any] = {"code": exc.code}
                         http_st = getattr(exc, "http_status", None)
                         if isinstance(http_st, int):
