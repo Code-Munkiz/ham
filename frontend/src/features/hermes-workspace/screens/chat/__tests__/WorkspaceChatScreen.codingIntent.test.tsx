@@ -13,7 +13,7 @@
  * Backend chat route is unchanged.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import { FORBIDDEN_CARD_TOKENS } from "../coding-plan/codingPlanCardCopy";
@@ -252,10 +252,22 @@ function assertNoForbiddenTokens(root: HTMLElement) {
 async function typeAndSend(container: HTMLElement, text: string) {
   const ta = container.querySelector("#hww-chat-composer") as HTMLTextAreaElement;
   expect(ta).toBeTruthy();
-  fireEvent.change(ta, { target: { value: text } });
+  await act(async () => {
+    fireEvent.change(ta, { target: { value: text } });
+  });
   const command = screen.getByTestId("hww-command-panel");
   const send = within(command).getByRole("button", { name: "Send" });
-  fireEvent.click(send);
+  await act(async () => {
+    fireEvent.click(send);
+  });
+}
+
+// Let pending async state updates (preview/stream side-effects) settle inside
+// act() so negative-path assertions don't trip React's act(...) warning.
+async function settle(ms = 50) {
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, ms));
+  });
 }
 
 describe("WorkspaceChatScreen conversational coding conductor", () => {
@@ -330,7 +342,7 @@ describe("WorkspaceChatScreen conversational coding conductor", () => {
     await waitFor(() => expect(screen.getByTestId("hww-command-panel")).toBeInTheDocument());
 
     await typeAndSend(container, "Build me a game like Tetris");
-    await new Promise((r) => setTimeout(r, 50));
+    await settle();
     expect(previewCodingConductorMock).not.toHaveBeenCalled();
     expect(container.querySelector('[data-hww-coding-plan="card"]')).toBeNull();
   });
@@ -345,7 +357,7 @@ describe("WorkspaceChatScreen conversational coding conductor", () => {
 
     await typeAndSend(container, "Explain what validators are");
     // Give the side-effect a chance to run, then assert it did NOT.
-    await new Promise((r) => setTimeout(r, 50));
+    await settle();
     expect(previewCodingConductorMock).not.toHaveBeenCalled();
     expect(container.querySelector('[data-hww-coding-plan="card"]')).toBeNull();
   });
@@ -403,7 +415,7 @@ describe("WorkspaceChatScreen conversational coding conductor", () => {
     await waitFor(() => expect(screen.getByTestId("hww-command-panel")).toBeInTheDocument());
 
     await typeAndSend(container, "Hi!");
-    await new Promise((r) => setTimeout(r, 50));
+    await settle();
     expect(previewCodingConductorMock).not.toHaveBeenCalled();
   });
 
@@ -492,7 +504,7 @@ describe("WorkspaceChatScreen conversational coding conductor", () => {
 
     // Second identical send should be debounced by lastAutoCodingPromptRef.
     await typeAndSend(container, "Fix the failing test in the runner");
-    await new Promise((r) => setTimeout(r, 50));
+    await settle();
     expect(previewCodingConductorMock).toHaveBeenCalledTimes(1);
   });
 });
