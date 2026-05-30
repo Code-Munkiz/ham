@@ -215,6 +215,36 @@ class TestResolveScaffoldContextV2Success:
         assert "validator.no-auth-backend-claims" in result.context
         assert "Builder Kit:" not in result.context
 
+    def test_returns_v2_playbook_context_for_admin_dashboard_core(self):
+        result = resolve_scaffold_context(
+            metadata={"registry_v2_app_type": "app.admin-dashboard-core"},
+            template_kind="generic",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "1"},
+            repo_root=REPO_ROOT,
+        )
+        assert result.source == "v2"
+        assert result.header == V2_HEADER
+        assert result.fallback_reason is None
+        assert result.registry_v2_app_type == "app.admin-dashboard-core"
+        assert result.registry_v2_pack_id == "pack.site"
+        assert "app.admin-dashboard-core" in result.context
+        assert "stack.dom-admin-dashboard-minimal" in result.context
+        for section_id in (
+            "section.admin-app-shell",
+            "section.admin-overview-status",
+            "section.admin-user-team-summary",
+            "section.admin-role-permission-summary",
+            "section.admin-review-queue",
+            "section.admin-resource-table",
+            "section.admin-audit-log",
+            "section.admin-system-status",
+            "section.admin-demo-action-boundaries",
+            "section.admin-empty-loading-error-states",
+            "section.admin-responsive-structure",
+        ):
+            assert section_id in result.context
+        assert "Builder Kit:" not in result.context
+
 
 class TestResolveScaffoldContextUnknownAppType:
     def test_falls_back_to_v1_on_unknown_app_type(self):

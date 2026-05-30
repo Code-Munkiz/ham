@@ -15,6 +15,7 @@ from src.ham.build_registry import (
 )
 from src.ham.build_registry.models import DEFAULT_RENDER_CHAR_BUDGET
 from src.ham.build_registry.intent import (
+    ADMIN_DASHBOARD_CORE_APP_TYPE,
     DASHBOARD_UI_CORE_APP_TYPE,
     LANDING_PAGE_CORE_APP_TYPE,
     SAAS_DASHBOARD_CORE_APP_TYPE,
@@ -743,13 +744,15 @@ def test_saas_dashboard_core_routes_for_strong_prompts():
     assert routed == SAAS_DASHBOARD_CORE_APP_TYPE
 
 
-def test_admin_dashboard_core_not_routed_yet():
+def test_admin_dashboard_core_routes_for_strong_bounded_prompts():
     prompt = (
         "Build a static admin dashboard with sidebar, role summary, review queue, "
-        "audit log, and system status using local mock data only."
+        "audit log, and system status using local mock data only and no backend, "
+        "no auth, no RBAC, no CRUD, no destructive actions, and no live data."
     )
     routed = select_registry_v2_app_type_for_prompt(prompt)
-    assert routed is None
+    assert routed == APP_TYPE_ID_ADMIN
+    assert routed == ADMIN_DASHBOARD_CORE_APP_TYPE
 
 
 def test_saas_dashboard_intent_constant_exists():
@@ -759,11 +762,11 @@ def test_saas_dashboard_intent_constant_exists():
     assert "app.saas-dashboard-core" in text
 
 
-def test_admin_dashboard_intent_constant_absent():
+def test_admin_dashboard_intent_constant_exists():
     intent_path = REPO_ROOT / "src/ham/build_registry/intent.py"
     text = intent_path.read_text(encoding="utf-8")
-    assert "ADMIN_DASHBOARD_CORE_APP_TYPE" not in text
-    assert "app.admin-dashboard-core" not in text
+    assert "ADMIN_DASHBOARD_CORE_APP_TYPE" in text
+    assert "app.admin-dashboard-core" in text
 
 
 def test_module_count(website_pack):

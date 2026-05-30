@@ -29,6 +29,7 @@ from src.ham.build_registry.intent import (
     LANDING_PAGE_CORE_APP_TYPE,
     DASHBOARD_UI_CORE_APP_TYPE,
     SAAS_DASHBOARD_CORE_APP_TYPE,
+    ADMIN_DASHBOARD_CORE_APP_TYPE,
     enrich_plan_metadata_with_registry_v2,
     select_registry_v2_app_type_for_prompt,
 )
@@ -81,6 +82,20 @@ _EXACT_SAAS_DASHBOARD_CORE_GATE_REVIEW_PROMPT = (
     "empty/loading/error state examples, responsive layout, and accessible header/nav/main/list/table "
     "structure. Use meaningful local sample data only. No backend, no auth, no billing or payments, "
     "no CRUD, no admin user management, no permissions, and no live data."
+)
+
+_CANONICAL_ADMIN_DASHBOARD_CORE_GATE_PROMPT = (
+    "Build a static admin dashboard with admin shell, sidebar and topbar, user/team summary, "
+    "role/permission summary, review queue, audit log, system status, and a resource table "
+    "using local mock data only. No backend, no auth, no RBAC, no CRUD, no destructive actions, "
+    "and no live data."
+)
+
+_CANONICAL_ADMIN_DASHBOARD_CORE_NEGATED_EXCLUSIONS_PROMPT = (
+    "Create an admin control panel dashboard for internal operations with staff management overview, "
+    "role and permission summary, moderation queue, audit log, and system status. Static demo only with "
+    "local mock data and no backend, no auth, no RBAC, no permissions mutation, no CRUD, no destructive "
+    "actions, no live monitoring, no live data, and no real audit logging."
 )
 
 _IDLE_POSITIVE_PROMPTS = (
@@ -954,6 +969,38 @@ _SAAS_DASHBOARD_CORE_EXCLUSION_NEGATIVE_PROMPTS = (
     "Build a read-only dashboard overview with KPI cards, charts, and table",
 )
 
+_ADMIN_DASHBOARD_CORE_POSITIVE_PROMPTS = (
+    _CANONICAL_ADMIN_DASHBOARD_CORE_GATE_PROMPT,
+    (
+        "Build an internal operations dashboard admin control panel with static demo-mode controls, "
+        "review queue, audit log, role summary, system status, and user table using local sample data only."
+    ),
+)
+
+_ADMIN_DASHBOARD_CORE_NEGATED_CONSTRAINT_POSITIVE_PROMPTS = (
+    _CANONICAL_ADMIN_DASHBOARD_CORE_NEGATED_EXCLUSIONS_PROMPT,
+)
+
+_ADMIN_DASHBOARD_CORE_WEAK_NEGATIVE_PROMPTS = (
+    "build an admin page",
+    "build a dashboard",
+    "build a control panel",
+    "build a users table",
+)
+
+_ADMIN_DASHBOARD_CORE_EXCLUSION_NEGATIVE_PROMPTS = (
+    "Build a real user management app with create edit delete users.",
+    "Build an RBAC permissions editor dashboard for role assignment and revocation.",
+    "Build a CRUD admin panel with create edit delete forms.",
+    "Build an admin app with backend API, database, and auth login.",
+    "Build a billing admin dashboard with invoices and payments.",
+    "Build an analytics workbench dashboard with ad hoc queries and pivots.",
+    "Build a live monitoring operations dashboard with realtime log streaming.",
+    "Build a security and compliance console with cryptographic tooling.",
+    "Build an ecommerce admin dashboard for orders and products.",
+    "Build a pixel-perfect clone of this admin dashboard app.",
+)
+
 
 class TestSelectRegistryV2AppTypeForPrompt:
     @pytest.mark.parametrize("prompt", _IDLE_POSITIVE_PROMPTS)
@@ -1243,6 +1290,24 @@ class TestSelectRegistryV2AppTypeForPrompt:
             assert routed in {None, LANDING_PAGE_CORE_APP_TYPE}
         if "read-only dashboard overview" in prompt.lower():
             assert routed == DASHBOARD_UI_CORE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _ADMIN_DASHBOARD_CORE_POSITIVE_PROMPTS)
+    def test_matches_admin_dashboard_core_prompts(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) == ADMIN_DASHBOARD_CORE_APP_TYPE
+
+    @pytest.mark.parametrize(
+        "prompt", _ADMIN_DASHBOARD_CORE_NEGATED_CONSTRAINT_POSITIVE_PROMPTS
+    )
+    def test_negated_constraints_still_route_to_admin_dashboard_core(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) == ADMIN_DASHBOARD_CORE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _ADMIN_DASHBOARD_CORE_WEAK_NEGATIVE_PROMPTS)
+    def test_weak_admin_terms_do_not_route(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != ADMIN_DASHBOARD_CORE_APP_TYPE
+
+    @pytest.mark.parametrize("prompt", _ADMIN_DASHBOARD_CORE_EXCLUSION_NEGATIVE_PROMPTS)
+    def test_excluded_admin_prompts_do_not_route_to_admin_dashboard_core(self, prompt: str):
+        assert select_registry_v2_app_type_for_prompt(prompt) != ADMIN_DASHBOARD_CORE_APP_TYPE
 
     @pytest.mark.parametrize("prompt,expected", _CROSS_EXCLUSION_PROMPTS)
     def test_recipes_do_not_steal_each_other(self, prompt: str, expected: str):
@@ -2093,6 +2158,15 @@ class TestEnrichPlanMetadataWithRegistryV2:
         assert "registry_v2_app_type" not in metadata
         assert metadata["template_kind"] == "generic"
 
+    def test_flag_disabled_admin_prompt_does_not_add_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            _CANONICAL_ADMIN_DASHBOARD_CORE_GATE_PROMPT,
+        )
+        assert "registry_v2_app_type" not in metadata
+        assert metadata["template_kind"] == "generic"
+
     def test_flag_disabled_exact_saas_gate_review_prompt_does_not_add_registry_metadata(
         self, monkeypatch
     ):
@@ -2346,6 +2420,24 @@ class TestEnrichPlanMetadataWithRegistryV2:
         assert metadata["registry_v2_app_type"] == SAAS_DASHBOARD_CORE_APP_TYPE
         assert metadata["template_kind"] == "generic"
         assert metadata["originated_from"] == "builder_chat_scaffold"
+
+    def test_flag_enabled_admin_prompt_adds_registry_metadata(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic", "originated_from": "builder_chat_scaffold"},
+            _CANONICAL_ADMIN_DASHBOARD_CORE_GATE_PROMPT,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        assert metadata["registry_v2_app_type"] == ADMIN_DASHBOARD_CORE_APP_TYPE
+        assert metadata["template_kind"] == "generic"
+        assert metadata["originated_from"] == "builder_chat_scaffold"
+
+    def test_flag_enabled_negated_admin_exclusions_prompt_adds_registry_metadata(self):
+        metadata = enrich_plan_metadata_with_registry_v2(
+            {"template_kind": "generic"},
+            _CANONICAL_ADMIN_DASHBOARD_CORE_NEGATED_EXCLUSIONS_PROMPT,
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "true"},
+        )
+        assert metadata["registry_v2_app_type"] == ADMIN_DASHBOARD_CORE_APP_TYPE
 
     def test_flag_enabled_landing_page_prompt_with_negated_backend_adds_registry_metadata(self):
         metadata = enrich_plan_metadata_with_registry_v2(
@@ -2825,11 +2917,23 @@ class TestChatScaffoldSyntheticPlanMetadata:
         assert metadata.get("template_kind") == "dashboard"
         assert "registry_v2_app_type" not in metadata
 
+    def test_flag_disabled_admin_prompt_has_no_registry_metadata(self, monkeypatch):
+        monkeypatch.delenv("HAM_BUILD_REGISTRY_V2_ENABLED", raising=False)
+        metadata = _synthetic_plan_metadata(_CANONICAL_ADMIN_DASHBOARD_CORE_GATE_PROMPT)
+        assert metadata.get("template_kind") == "dashboard"
+        assert "registry_v2_app_type" not in metadata
+
     def test_flag_enabled_saas_prompt_adds_registry_metadata_synthetic(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
         metadata = _synthetic_plan_metadata(_CANONICAL_SAAS_DASHBOARD_CORE_GATE_PROMPT)
         assert metadata.get("template_kind") == "dashboard"
         assert metadata.get("registry_v2_app_type") == SAAS_DASHBOARD_CORE_APP_TYPE
+
+    def test_flag_enabled_admin_prompt_adds_registry_metadata_synthetic(self, monkeypatch):
+        monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
+        metadata = _synthetic_plan_metadata(_CANONICAL_ADMIN_DASHBOARD_CORE_GATE_PROMPT)
+        assert metadata.get("template_kind") == "dashboard"
+        assert metadata.get("registry_v2_app_type") == ADMIN_DASHBOARD_CORE_APP_TYPE
 
     def test_flag_enabled_non_idle_prompt_has_no_registry_metadata(self, monkeypatch):
         monkeypatch.setenv("HAM_BUILD_REGISTRY_V2_ENABLED", "true")
