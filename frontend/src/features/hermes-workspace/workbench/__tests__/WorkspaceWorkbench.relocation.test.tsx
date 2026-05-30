@@ -259,7 +259,11 @@ async function driveToRunning() {
 beforeEach(() => {
   fetchWorkspaceToolsMock.mockResolvedValue(
     new Response(
-      JSON.stringify({ tools: [{ id: "github", connection: "off" }], scan_available: true, scan_hint: null }),
+      JSON.stringify({
+        tools: [{ id: "github", connection: "off" }],
+        scan_available: true,
+        scan_hint: null,
+      }),
       { status: 200, headers: { "Content-Type": "application/json" } },
     ),
   );
@@ -294,7 +298,11 @@ beforeEach(() => {
     preview_endpoint_id: null,
     logs_hint: null,
   });
-  getBuilderActivityMock.mockResolvedValue({ workspace_id: "ws_abc", project_id: "proj_abc", items: [] });
+  getBuilderActivityMock.mockResolvedValue({
+    workspace_id: "ws_abc",
+    project_id: "proj_abc",
+    items: [],
+  });
   getBuilderCloudRuntimeMock.mockResolvedValue({
     workspace_id: "ws_abc",
     project_id: "proj_abc",
@@ -312,7 +320,11 @@ beforeEach(() => {
     status: "ready",
     expires_at: "2026-01-01T00:10:00Z",
   });
-  listBuilderCloudRuntimeJobsMock.mockResolvedValue({ workspace_id: "ws_abc", project_id: "proj_abc", jobs: [] });
+  listBuilderCloudRuntimeJobsMock.mockResolvedValue({
+    workspace_id: "ws_abc",
+    project_id: "proj_abc",
+    jobs: [],
+  });
   getBuilderCloudRuntimeJobStatusMock.mockResolvedValue({
     workspace_id: "ws_abc",
     project_id: "proj_abc",
@@ -321,8 +333,17 @@ beforeEach(() => {
     preview_status: null,
     lifecycle: null,
   });
-  requestBuilderCloudRuntimeMock.mockResolvedValue({ runtime: null, cloud_runtime: null, preview_status: null, activity_item: null });
-  getBuilderWorkerCapabilitiesMock.mockResolvedValue({ workspace_id: "ws_abc", project_id: "proj_abc", workers: [] });
+  requestBuilderCloudRuntimeMock.mockResolvedValue({
+    runtime: null,
+    cloud_runtime: null,
+    preview_status: null,
+    activity_item: null,
+  });
+  getBuilderWorkerCapabilitiesMock.mockResolvedValue({
+    workspace_id: "ws_abc",
+    project_id: "proj_abc",
+    workers: [],
+  });
   getBuilderLocalRunProfileMock.mockResolvedValue({
     workspace_id: "ws_abc",
     project_id: "proj_abc",
@@ -435,7 +456,9 @@ describe("WorkspaceWorkbench relocated approval mount", () => {
       </MemoryRouter>,
     );
 
-    const afterCollapse = document.querySelector('[data-hww-coding-plan="opencode-build-approval"]');
+    const afterCollapse = document.querySelector(
+      '[data-hww-coding-plan="opencode-build-approval"]',
+    );
     expect(afterCollapse).not.toBeNull();
     expect(afterCollapse).toBe(runningPanel);
     expect(afterCollapse!.getAttribute("data-phase")).toBe("running");

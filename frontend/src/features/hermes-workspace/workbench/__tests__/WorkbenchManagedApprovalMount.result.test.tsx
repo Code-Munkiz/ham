@@ -314,7 +314,9 @@ function assertNoForbiddenTokens(node: HTMLElement) {
 async function driveDroidToLaunch(launch: DroidBuildLaunchPayload, prompt = "Tidy README.") {
   previewDroidMock.mockResolvedValueOnce(makeDroidPreview());
   launchDroidMock.mockResolvedValueOnce(launch);
-  const view = render(<WorkbenchManagedApprovalMount payload={droidPayload()} userPrompt={prompt} />);
+  const view = render(
+    <WorkbenchManagedApprovalMount payload={droidPayload()} userPrompt={prompt} />,
+  );
 
   fireEvent.click(screen.getByRole("button", { name: /prepare build/i }));
   await waitFor(() => expect(previewDroidMock).toHaveBeenCalledTimes(1));
@@ -358,7 +360,9 @@ describe("Result consolidation — succeeded state (VAL-RESULT-001/002/003/008)"
     // The success surface is the reused SuccessSummary, inside the right pane.
     const root = rightPaneRoot();
     expect(root).not.toBeNull();
-    expect(root.querySelector('[data-hww-coding-plan="managed-build-success-actions"]')).not.toBeNull();
+    expect(
+      root.querySelector('[data-hww-coding-plan="managed-build-success-actions"]'),
+    ).not.toBeNull();
     expect(root.contains(panel)).toBe(true);
   });
 
@@ -462,7 +466,10 @@ describe("Result consolidation — recoverable failure (VAL-RESULT-004/005/006/0
     );
 
     render(
-      <WorkbenchManagedApprovalMount payload={opencodePayload()} userPrompt="Add a docstring to main." />,
+      <WorkbenchManagedApprovalMount
+        payload={opencodePayload()}
+        userPrompt="Add a docstring to main."
+      />,
     );
     fireEvent.click(screen.getByRole("button", { name: /prepare build/i }));
     await waitFor(() => expect(previewOpencodeMock).toHaveBeenCalledTimes(1));
@@ -556,7 +563,9 @@ describe("Cross-area lifecycle flows (VAL-CROSS-001..004)", () => {
     fireEvent.click(screen.getByRole("button", { name: /approve build/i }));
 
     await waitFor(() => expect(oc().getAttribute("data-phase")).toBe("running"));
-    await waitFor(() => expect(oc().getAttribute("data-phase")).toBe("succeeded"), { timeout: 7000 });
+    await waitFor(() => expect(oc().getAttribute("data-phase")).toBe("succeeded"), {
+      timeout: 7000,
+    });
     expect(screen.queryByText("Saved version created")).not.toBeNull();
 
     // Every phase node lived in the right pane; chat only ever had the pointer.
@@ -627,7 +636,9 @@ describe("Cross-area lifecycle flows (VAL-CROSS-001..004)", () => {
     expect(countLaunch()).toBe(1);
     expect(card.querySelector('[data-hww-coding-plan$="-approve-checkbox"]')).toBeNull();
     expect(card.querySelector('[data-hww-coding-plan$="-launch-cta"]')).toBeNull();
-    expect(rightPaneRoot().querySelector('[data-hww-coding-plan="managed-build-approve-checkbox"]')).not.toBeNull();
+    expect(
+      rightPaneRoot().querySelector('[data-hww-coding-plan="managed-build-approve-checkbox"]'),
+    ).not.toBeNull();
     // Exactly one approval panel root document-wide.
     expect(document.querySelectorAll('[data-hww-coding-plan$="-approval"]').length).toBe(1);
   });

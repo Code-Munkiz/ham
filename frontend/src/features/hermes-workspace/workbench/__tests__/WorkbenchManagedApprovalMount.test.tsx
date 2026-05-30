@@ -184,9 +184,7 @@ function nonManagedPayload(): CodingConductorPreviewPayload {
   };
 }
 
-function makeDroidPreview(
-  over: Partial<DroidBuildPreviewPayload> = {},
-): DroidBuildPreviewPayload {
+function makeDroidPreview(over: Partial<DroidBuildPreviewPayload> = {}): DroidBuildPreviewPayload {
   return {
     kind: "droid_build_preview",
     project_id: "project.app-f53b52",
@@ -436,7 +434,10 @@ describe("WorkbenchManagedApprovalMount — preserved launch mechanics", () => {
     previewOpencodeMock.mockResolvedValueOnce(makeOpencodePreview());
     launchOpencodeMock.mockResolvedValueOnce(makeOpencodeSyncLaunch());
     const { container } = render(
-      <WorkbenchManagedApprovalMount payload={opencodePayload()} userPrompt="Add a docstring to main." />,
+      <WorkbenchManagedApprovalMount
+        payload={opencodePayload()}
+        userPrompt="Add a docstring to main."
+      />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: /prepare build/i }));
@@ -462,7 +463,10 @@ describe("WorkbenchManagedApprovalMount — preserved launch mechanics", () => {
     previewOpencodeMock.mockResolvedValueOnce(makeOpencodePreview());
     launchOpencodeMock.mockResolvedValueOnce(makeOpencodeSyncLaunch());
     const { container } = render(
-      <WorkbenchManagedApprovalMount payload={opencodePayload()} userPrompt="Add a docstring to main." />,
+      <WorkbenchManagedApprovalMount
+        payload={opencodePayload()}
+        userPrompt="Add a docstring to main."
+      />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: /prepare build/i }));
@@ -493,7 +497,10 @@ describe("WorkbenchManagedApprovalMount — running-phase polling", () => {
     );
 
     const { container } = render(
-      <WorkbenchManagedApprovalMount payload={opencodePayload()} userPrompt="Add a docstring to main." />,
+      <WorkbenchManagedApprovalMount
+        payload={opencodePayload()}
+        userPrompt="Add a docstring to main."
+      />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: /prepare build/i }));
@@ -504,11 +511,11 @@ describe("WorkbenchManagedApprovalMount — running-phase polling", () => {
     fireEvent.click(checkbox);
     fireEvent.click(screen.getByRole("button", { name: /approve build/i }));
 
-    const panel = (await waitFor(() => {
+    const panel = await waitFor(() => {
       const el = container.querySelector('[data-hww-coding-plan="opencode-build-approval"]');
       expect(el!.getAttribute("data-phase")).toBe("running");
       return el as HTMLElement;
-    }));
+    });
     expect(panel.getAttribute("data-phase")).toBe("running");
 
     await waitFor(() => expect(screen.queryByText("Saved version created")).not.toBeNull(), {
@@ -527,7 +534,10 @@ describe("WorkbenchManagedApprovalMount — running-phase polling", () => {
     );
 
     const { container } = render(
-      <WorkbenchManagedApprovalMount payload={opencodePayload()} userPrompt="Add a docstring to main." />,
+      <WorkbenchManagedApprovalMount
+        payload={opencodePayload()}
+        userPrompt="Add a docstring to main."
+      />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: /prepare build/i }));
@@ -581,15 +591,13 @@ describe("WorkbenchManagedApprovalMount — leakage + single source of truth", (
       </>,
     );
 
-    expect(
-      container.querySelectorAll('[data-hww-coding-plan$="-approval"]').length,
-    ).toBe(1);
+    expect(container.querySelectorAll('[data-hww-coding-plan$="-approval"]').length).toBe(1);
 
     // Drive the (single) right-pane panel to the approve step.
     fireEvent.click(screen.getByRole("button", { name: /prepare build/i }));
     await waitFor(() => expect(previewDroidMock).toHaveBeenCalledTimes(1));
-    expect(
-      container.querySelectorAll('[data-hww-coding-plan$="-approve-checkbox"]').length,
-    ).toBe(1);
+    expect(container.querySelectorAll('[data-hww-coding-plan$="-approve-checkbox"]').length).toBe(
+      1,
+    );
   });
 });
