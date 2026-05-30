@@ -1,0 +1,32 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.resource-index-table
+kind: component_contract
+name: Resource index table contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Readable resource/user index table contract for static admin row-level inspection.
+
+non_template_statement: Layout contract only — not a copy-paste datagrid component.
+
+applies_to:
+  - app.admin-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.admin-resource-table
+
+expected_props:
+  - caption: string
+  - columns: "array of bounded header labels"
+  - rows: "array of sample data rows"
+  - statusField: string | null
+
+accessibility_notes:
+  - "Use semantic table markup with caption and header scope"
+  - "Keep density readable and avoid div-only pseudo-table patterns"
+
+responsive_notes:
+  - "Contain horizontal overflow in-region or stack rows on mobile"

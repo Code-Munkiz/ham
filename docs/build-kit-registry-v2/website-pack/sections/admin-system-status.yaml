@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.admin-system-status
+kind: section
+name: Admin system status section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Static system-health/status panel for illustrative operational visibility.
+
+non_template_statement: Section playbook only — not a checked-in monitoring dashboard.
+
+applies_to:
+  - app.admin-dashboard-core
+
+depends_on:
+  - section.admin-audit-log
+
+binds_components:
+  - component.system-status-panel
+
+guidance:
+  - "Render static status indicators with bounded text detail."

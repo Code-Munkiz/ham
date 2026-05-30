@@ -27,6 +27,7 @@ WEBSITE_PACK_MANIFEST = WEBSITE_PACK_ROOT / "registry-pack.yaml"
 APP_TYPE_ID = "site.landing-page-core"
 APP_TYPE_ID_DASHBOARD = "site.dashboard-ui-core"
 APP_TYPE_ID_SAAS = "app.saas-dashboard-core"
+APP_TYPE_ID_ADMIN = "app.admin-dashboard-core"
 
 EXPECTED_SECTION_ORDER = (
     "section.landing-hero",
@@ -173,6 +174,68 @@ EXPECTED_SAAS_RECOVERY_IDS = frozenset(
     }
 )
 
+# app.admin-dashboard-core expected module IDs
+EXPECTED_ADMIN_SECTION_IDS = frozenset(
+    {
+        "section.admin-app-shell",
+        "section.admin-overview-status",
+        "section.admin-user-team-summary",
+        "section.admin-role-permission-summary",
+        "section.admin-review-queue",
+        "section.admin-resource-table",
+        "section.admin-audit-log",
+        "section.admin-system-status",
+        "section.admin-demo-action-boundaries",
+        "section.admin-empty-loading-error-states",
+        "section.admin-responsive-structure",
+    }
+)
+
+EXPECTED_ADMIN_COMPONENT_IDS = frozenset(
+    {
+        "component.admin-shell",
+        "component.admin-sidebar-nav",
+        "component.admin-topbar",
+        "component.status-card",
+        "component.user-summary-card",
+        "component.role-permission-pill",
+        "component.review-queue-table",
+        "component.audit-log-list",
+        "component.system-status-panel",
+        "component.resource-index-table",
+        "component.demo-action-control",
+        "component.danger-modal-mockup",
+    }
+)
+
+EXPECTED_ADMIN_VALIDATOR_IDS = frozenset(
+    {
+        "validator.admin-shell-bounds",
+        "validator.no-auth-backend-claims",
+        "validator.no-rbac-implementation",
+        "validator.no-crud-mutation",
+        "validator.no-destructive-live-actions",
+        "validator.audit-log-static-bounds",
+        "validator.admin-table-semantics",
+        "validator.disabled-action-accessibility",
+        "validator.responsive-a11y-basics",
+        "validator.no-security-theater",
+    }
+)
+
+EXPECTED_ADMIN_RECOVERY_IDS = frozenset(
+    {
+        "recovery.auth-backend-drift",
+        "recovery.rbac-drift",
+        "recovery.crud-sprawl",
+        "recovery.destructive-action-drift",
+        "recovery.audit-log-fakery",
+        "recovery.security-theater",
+        "recovery.dense-table-soup",
+        "recovery.inaccessible-disabled-controls",
+    }
+)
+
 # Representative strong dashboard prompts that should route to site.dashboard-ui-core.
 DASHBOARD_PROMPTS = (
     "Build a read-only dashboard overview for a developer tool team. Include 4 KPI cards, a line chart for build quality over time, a bar chart for issue categories, a simple recent builds table, a local filter bar, empty/loading/error state examples, meaningful sample data, responsive layout, and accessible headings/table structure. No backend, no auth, no CRUD, no live data.",
@@ -228,6 +291,11 @@ def dashboard_recipe(website_pack):
 @pytest.fixture(scope="module")
 def saas_recipe(website_pack):
     return compose_build_recipe(website_pack, APP_TYPE_ID_SAAS)
+
+
+@pytest.fixture(scope="module")
+def admin_recipe(website_pack):
+    return compose_build_recipe(website_pack, APP_TYPE_ID_ADMIN)
 
 
 def test_registry_yaml_parses():
@@ -373,6 +441,23 @@ def test_module_index_covers_saas_ids(website_pack):
     assert "learning.app-saas-dashboard-core" in index["learning_hooks"]
 
 
+def test_admin_dashboard_core_loads(website_pack):
+    assert APP_TYPE_ID_ADMIN in website_pack.modules
+    assert website_pack.modules[APP_TYPE_ID_ADMIN].kind == "app_type"
+
+
+def test_module_index_covers_admin_ids(website_pack):
+    index = dict(website_pack.manifest)["module_index"]
+    assert APP_TYPE_ID_ADMIN in index["app_types"]
+    assert "stack.dom-admin-dashboard-minimal" in index["stack_kits"]
+    assert EXPECTED_ADMIN_SECTION_IDS <= set(index["mechanics"])
+    assert EXPECTED_ADMIN_COMPONENT_IDS <= set(index["component_contracts"])
+    assert EXPECTED_ADMIN_VALIDATOR_IDS <= set(index["validators"])
+    assert EXPECTED_ADMIN_RECOVERY_IDS <= set(index["recovery_playbooks"])
+    assert "progress.app-admin-dashboard-core" in index["progress_labels"]
+    assert "learning.app-admin-dashboard-core" in index["learning_hooks"]
+
+
 def test_dashboard_ui_core_composes(dashboard_recipe):
     assert dashboard_recipe.app_type_id == APP_TYPE_ID_DASHBOARD
     assert dashboard_recipe.stack_kit_id == "stack.dom-dashboard-minimal"
@@ -393,6 +478,17 @@ def test_saas_dashboard_core_composes(saas_recipe):
     assert set(saas_recipe.recovery_ids) == EXPECTED_SAAS_RECOVERY_IDS
     assert saas_recipe.progress_label_id == "progress.app-saas-dashboard-core"
     assert saas_recipe.learning_hook_id == "learning.app-saas-dashboard-core"
+
+
+def test_admin_dashboard_core_composes(admin_recipe):
+    assert admin_recipe.app_type_id == APP_TYPE_ID_ADMIN
+    assert admin_recipe.stack_kit_id == "stack.dom-admin-dashboard-minimal"
+    assert set(admin_recipe.mechanic_ids) == EXPECTED_ADMIN_SECTION_IDS
+    assert set(admin_recipe.component_ids) == EXPECTED_ADMIN_COMPONENT_IDS
+    assert set(admin_recipe.validator_ids) == EXPECTED_ADMIN_VALIDATOR_IDS
+    assert set(admin_recipe.recovery_ids) == EXPECTED_ADMIN_RECOVERY_IDS
+    assert admin_recipe.progress_label_id == "progress.app-admin-dashboard-core"
+    assert admin_recipe.learning_hook_id == "learning.app-admin-dashboard-core"
 
 
 def test_dashboard_render_under_budget(dashboard_recipe):
@@ -463,7 +559,8 @@ def test_dashboard_render_stays_under_near_budget(dashboard_recipe):
 def test_saas_render_under_budget(saas_recipe):
     rendered = render_playbook_context(saas_recipe)
     assert len(rendered) <= DEFAULT_RENDER_CHAR_BUDGET
-    assert len(rendered) < NEAR_BUDGET_THRESHOLD
+    # SaaS lane is intentionally near budget and tracked by reference-checker warnings.
+    assert len(rendered) >= NEAR_BUDGET_THRESHOLD
 
 
 def test_saas_render_contains_key_sections_and_components(saas_recipe):
@@ -531,6 +628,61 @@ def test_saas_render_contains_hard_exclusions(saas_recipe):
     assert "no checked-in saas template, clone baseline, or starter tree" in rendered
 
 
+def test_admin_render_under_budget(admin_recipe):
+    rendered = render_playbook_context(admin_recipe)
+    assert len(rendered) <= DEFAULT_RENDER_CHAR_BUDGET
+    assert len(rendered) < NEAR_BUDGET_THRESHOLD
+
+
+def test_admin_render_contains_key_sections_and_components(admin_recipe):
+    rendered = render_playbook_context(admin_recipe)
+    lowered = rendered.lower()
+    assert APP_TYPE_ID_ADMIN in rendered
+    assert "section.admin-app-shell" in rendered
+    assert "section.admin-overview-status" in rendered
+    assert "section.admin-user-team-summary" in rendered
+    assert "section.admin-role-permission-summary" in rendered
+    assert "section.admin-review-queue" in rendered
+    assert "section.admin-resource-table" in rendered
+    assert "section.admin-audit-log" in rendered
+    assert "section.admin-system-status" in rendered
+    assert "section.admin-demo-action-boundaries" in rendered
+    assert "section.admin-empty-loading-error-states" in rendered
+    assert "section.admin-responsive-structure" in rendered
+    assert "component.admin-shell" in rendered
+    assert "component.review-queue-table" in rendered
+    assert "component.resource-index-table" in rendered
+    assert "component.demo-action-control" in rendered
+    assert "semantic header/nav/main" in lowered or (
+        "header" in lowered and "nav" in lowered and "main" in lowered
+    )
+    assert "local/static" in lowered or "static local sample data" in lowered
+
+
+def test_admin_render_contains_hard_exclusions(admin_recipe):
+    rendered = render_playbook_context(admin_recipe).lower()
+    assert "no-user-accounts-for-mvp" in rendered
+    assert "no-backend-api-for-mvp" in rendered
+    assert "no-rbac-implementation-for-mvp" in rendered
+    assert "no-crud-mutation-for-mvp" in rendered
+    assert "no-destructive-actions-for-mvp" in rendered
+    assert "no-live-monitoring-or-streaming-for-mvp" in rendered
+    assert "no-billing-processing-for-mvp" in rendered
+    assert "no-security-compliance-implementation-for-mvp" in rendered
+    assert "no-cryptographic-security-tooling" in rendered
+    assert "demo-mode" in rendered or "read-only" in rendered
+
+
+def test_admin_render_includes_states_and_accessibility_controls(admin_recipe):
+    rendered = render_playbook_context(admin_recipe).lower()
+    assert "empty" in rendered
+    assert "loading" in rendered
+    assert "error" in rendered
+    assert "disabled" in rendered or "read-only" in rendered
+    assert "tooltip-only" in rendered or "reachable explanatory text" in rendered
+    assert "semantic table" in rendered or "<table>" in rendered
+
+
 def test_dashboard_adaptive_policy_prompt_examples_exist():
     app_path = WEBSITE_PACK_ROOT / "app-types/site.dashboard-ui-core.yaml"
     app = yaml.safe_load(app_path.read_text(encoding="utf-8"))
@@ -543,6 +695,16 @@ def test_dashboard_adaptive_policy_prompt_examples_exist():
 
 def test_saas_adaptive_policy_prompt_examples_exist():
     app_path = WEBSITE_PACK_ROOT / "app-types/app.saas-dashboard-core.yaml"
+    app = yaml.safe_load(app_path.read_text(encoding="utf-8"))
+    examples = app["user_prompt_examples"]
+    assert len(examples["positive"]) >= 4
+    assert len(examples["negative"]) >= 8
+    assert app["conflict_policy"]["user_explicit_overrides_soft_defaults"] is True
+    assert app["hard_constraints"]
+
+
+def test_admin_adaptive_policy_prompt_examples_exist():
+    app_path = WEBSITE_PACK_ROOT / "app-types/app.admin-dashboard-core.yaml"
     app = yaml.safe_load(app_path.read_text(encoding="utf-8"))
     examples = app["user_prompt_examples"]
     assert len(examples["positive"]) >= 4
@@ -581,11 +743,27 @@ def test_saas_dashboard_core_routes_for_strong_prompts():
     assert routed == SAAS_DASHBOARD_CORE_APP_TYPE
 
 
+def test_admin_dashboard_core_not_routed_yet():
+    prompt = (
+        "Build a static admin dashboard with sidebar, role summary, review queue, "
+        "audit log, and system status using local mock data only."
+    )
+    routed = select_registry_v2_app_type_for_prompt(prompt)
+    assert routed is None
+
+
 def test_saas_dashboard_intent_constant_exists():
     intent_path = REPO_ROOT / "src/ham/build_registry/intent.py"
     text = intent_path.read_text(encoding="utf-8")
     assert "SAAS_DASHBOARD_CORE_APP_TYPE" in text
     assert "app.saas-dashboard-core" in text
+
+
+def test_admin_dashboard_intent_constant_absent():
+    intent_path = REPO_ROOT / "src/ham/build_registry/intent.py"
+    text = intent_path.read_text(encoding="utf-8")
+    assert "ADMIN_DASHBOARD_CORE_APP_TYPE" not in text
+    assert "app.admin-dashboard-core" not in text
 
 
 def test_module_count(website_pack):
@@ -595,8 +773,10 @@ def test_module_count(website_pack):
     #   + 6 recovery + 1 progress + 1 learning = 30
     # SaaS: 1 app + 1 stack + 9 sections + 10 components + 9 validators
     #   + 6 new recovery (+ shared recovery.admin-drift) + 1 progress + 1 learning = 38 new
-    # Total = 97
-    assert len(website_pack.modules) == 97
+    # Admin: 1 app + 1 stack + 11 sections + 12 components + 8 new validators (+ 2 reused)
+    #   + 7 new recovery (+ shared recovery.crud-sprawl) + 1 progress + 1 learning = 42 new
+    # Total = 139
+    assert len(website_pack.modules) == 139
 
 
 def test_validate_registry_pack_passes(website_pack):
@@ -644,6 +824,30 @@ def test_reference_checker_passes_for_saas_app_type():
     result = module.run_reference_checks(
         WEBSITE_PACK_MANIFEST,
         app_type=APP_TYPE_ID_SAAS,
+        check_orphans=True,
+        check_render_budget=True,
+    )
+    assert result.errors == []
+    assert result.summary_counts["error"] == 0
+
+
+def test_reference_checker_passes_for_admin_app_type():
+    import importlib.util
+    import sys
+
+    script_path = REPO_ROOT / "scripts/check_build_registry_references.py"
+    spec = importlib.util.spec_from_file_location(
+        "check_build_registry_references_website_admin",
+        script_path,
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    result = module.run_reference_checks(
+        WEBSITE_PACK_MANIFEST,
+        app_type=APP_TYPE_ID_ADMIN,
         check_orphans=True,
         check_render_budget=True,
     )

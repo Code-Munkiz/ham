@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.disabled-action-accessibility
+kind: validator
+name: Disabled action accessibility
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Prevents inaccessible disabled-control patterns and tooltip-only explanations.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - app.admin-dashboard-core
+
+validates_modules:
+  - section.admin-demo-action-boundaries
+  - component.demo-action-control
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Disabled or read-only controls include reachable explanatory text"
+  - "Interaction boundaries are understandable without hover-only tooltips"
+
+fail_conditions:
+  - "Disabled controls have no explanation"
+  - "Tooltip-only explanation creates keyboard/screen-reader trap"
+
+recovery_playbooks:
+  - recovery.inaccessible-disabled-controls

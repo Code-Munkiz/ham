@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.no-rbac-implementation
+kind: validator
+name: No RBAC implementation
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Prevents real role/permission enforcement or editable RBAC workflows in admin core.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - app.admin-dashboard-core
+
+validates_modules:
+  - section.admin-role-permission-summary
+  - component.role-permission-pill
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Roles/permissions are static display summaries only"
+  - "No permission mutation or enforcement logic claims appear"
+
+fail_conditions:
+  - "Editable role/permission controls or RBAC policy workflows appear"
+  - "Copy implies real permission enforcement"
+
+recovery_playbooks:
+  - recovery.rbac-drift

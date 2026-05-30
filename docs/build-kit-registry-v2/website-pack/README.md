@@ -1,6 +1,6 @@
 # Website Pack — Build Registry v2
 
-**Status:** Schema pilot · **Pack id:** `pack.site` · **Recipes:** `site.landing-page-core` (routed when flagged) · `site.dashboard-ui-core` (routed when flagged) · `app.saas-dashboard-core` (schema-only, **not routed**)
+**Status:** Schema pilot · **Pack id:** `pack.site` · **Recipes:** `site.landing-page-core` (routed when flagged) · `site.dashboard-ui-core` (routed when flagged) · `app.saas-dashboard-core` (routed when flagged) · `app.admin-dashboard-core` (schema-only, **not routed**)
 
 Generative playbooks for DOM-native marketing/landing pages and read-only dashboard/app-surface overviews. This pack is **separate from** [game-pack/](../game-pack/) — no game mechanics, no templates, no starter source trees.
 
@@ -52,7 +52,20 @@ Static, app-shell-light SaaS product-home playbook (**schema-only, not routed**)
 | Recent activity feed, simple resource list/table, one upgrade CTA, settings/help shortcuts | Billing/payment processing, invoices/subscriptions implementation |
 | Empty/loading/error states, responsive and semantic structure, local sample data only | Admin user management, RBAC, CRUD-heavy workflows, analytics workbench, realtime, fintech/trading, ecommerce admin, maps |
 
-**Routing:** deferred by design. `app.saas-dashboard-core` is intentionally **not wired in `intent.py`** yet.
+**Routing:** narrowly routed behind `HAM_BUILD_REGISTRY_V2_ENABLED` for bounded SaaS app-home intent.
+
+## Fourth recipe: `app.admin-dashboard-core`
+
+Static, app-shell-light admin control-surface prototype (**schema-only, not routed**):
+
+| In scope | Out of scope |
+|----------|--------------|
+| Static admin shell (sidebar/topbar), overview/status cards, user/team summary, role/permission summary | Real auth/login/session/JWT/OAuth, backend/API/database |
+| Static review queue, resource table, audit/activity list, system status panel | Real user CRUD, permission mutation, RBAC implementation |
+| Demo-mode/read-only action controls, optional non-mutating danger modal mockup | Destructive mutation workflows, real moderation workflows |
+| Empty/loading/error states, responsive semantics, local sample data only | Live monitoring/log streaming, billing/payments, security/compliance implementation, exact clone |
+
+**Routing:** deferred by design. `app.admin-dashboard-core` is intentionally **not wired in `intent.py`** yet.
 
 ## Layout
 
@@ -62,9 +75,11 @@ website-pack/
 ├── app-types/site.landing-page-core.yaml
 ├── app-types/site.dashboard-ui-core.yaml
 ├── app-types/app.saas-dashboard-core.yaml
+├── app-types/app.admin-dashboard-core.yaml
 ├── stack-kits/dom-marketing-minimal.yaml
 ├── stack-kits/dom-dashboard-minimal.yaml
 ├── stack-kits/dom-saas-dashboard-minimal.yaml
+├── stack-kits/dom-admin-dashboard-minimal.yaml
 ├── sections/          # indexed as mechanics for loader compatibility
 ├── components/
 ├── validators/
@@ -90,6 +105,10 @@ python3 scripts/validate_game_pack_registry.py \
 python3 scripts/validate_game_pack_registry.py \
   --pack-root docs/build-kit-registry-v2/website-pack \
   --app-type app.saas-dashboard-core \
+  --check
+python3 scripts/validate_game_pack_registry.py \
+  --pack-root docs/build-kit-registry-v2/website-pack \
+  --app-type app.admin-dashboard-core \
   --check
 python3 scripts/check_build_registry_references.py \
   --pack docs/build-kit-registry-v2/website-pack/registry-pack.yaml \

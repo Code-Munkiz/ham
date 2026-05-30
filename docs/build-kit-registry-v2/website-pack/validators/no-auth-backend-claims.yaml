@@ -12,17 +12,22 @@ non_template_statement: Conceptual validator only.
 
 applies_to:
   - app.saas-dashboard-core
+  - app.admin-dashboard-core
 
 validates_modules:
   - section.saas-workspace-context
   - component.workspace-switcher
+  - section.admin-app-shell
+  - section.admin-user-team-summary
+  - component.admin-shell
+  - component.user-summary-card
 
 severity: blocking
 runner: conceptual
 check_type: conceptual
 
 pass_conditions:
-  - "Workspace/account/project selector is clearly placeholder/local context"
+  - "Workspace/account/project/user context is clearly placeholder/local context"
   - "No login/signup/session/backend/API/database implementation claims"
 
 fail_conditions:
@@ -31,3 +36,4 @@ fail_conditions:
 
 recovery_playbooks:
   - recovery.auth-drift
+  - recovery.auth-backend-drift

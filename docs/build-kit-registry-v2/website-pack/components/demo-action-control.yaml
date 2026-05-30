@@ -1,0 +1,32 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.demo-action-control
+kind: component_contract
+name: Demo action control contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Demo/read-only action affordance contract for illustrative admin controls.
+
+non_template_statement: Interaction contract only — not a copy-paste action workflow.
+
+applies_to:
+  - app.admin-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.admin-demo-action-boundaries
+
+expected_props:
+  - label: string
+  - mode: "demo | read-only | illustrative"
+  - helperText: string
+  - disabled: boolean
+
+accessibility_notes:
+  - "Disabled or read-only controls include reachable explanatory text"
+  - "Avoid inaccessible tooltip-only explanations"
+
+content_notes:
+  - "Controls never mutate data and must not imply hidden backend actions"

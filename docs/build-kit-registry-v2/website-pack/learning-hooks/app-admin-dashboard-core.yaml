@@ -1,0 +1,40 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: learning.app-admin-dashboard-core
+kind: learning_hook
+name: Admin dashboard core learning hooks
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Future learning signals for bounded static admin dashboard outcomes.
+
+non_template_statement: Learning hook schema only.
+
+applies_to:
+  - app.admin-dashboard-core
+
+source_phase_owner: app.admin-dashboard-core
+
+signal_categories:
+  - shell_bounds
+  - auth_backend_drift
+  - rbac_drift
+  - crud_drift
+  - destructive_action_drift
+  - audit_log_theater
+  - table_semantics
+  - disabled_control_accessibility
+  - security_theater
+
+outcome_fact_fields:
+  - preview_boot_success: boolean
+  - status_card_count: integer
+  - queue_row_count: integer
+  - auth_backend_claim_detected: boolean
+  - rbac_mutation_detected: boolean
+  - crud_ui_detected: boolean
+  - destructive_action_claim_detected: boolean
+  - validator_failures: array of validator id
+
+guidance:
+  - "Capture bounded evidence from preview and conceptual validator outcomes"

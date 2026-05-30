@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.admin-audit-log
+kind: section
+name: Admin audit log section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Static audit/activity log list for illustrative operator history and event scanning.
+
+non_template_statement: Section playbook only — not a checked-in compliance log system.
+
+applies_to:
+  - app.admin-dashboard-core
+
+depends_on:
+  - section.admin-resource-table
+
+binds_components:
+  - component.audit-log-list
+
+guidance:
+  - "Audit/event entries are static samples, not authoritative records."

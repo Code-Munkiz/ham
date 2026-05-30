@@ -1,0 +1,28 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.role-permission-pill
+kind: component_contract
+name: Role permission pill contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Display-only role/permission label contract for static admin summaries.
+
+non_template_statement: Layout contract only — not a copy-paste RBAC editor component.
+
+applies_to:
+  - app.admin-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.admin-role-permission-summary
+
+expected_props:
+  - roleLabel: string
+  - permissionScopeLabel: string
+  - tone: "neutral | informative | warning | null"
+
+content_notes:
+  - "Pills summarize role scopes and do not support mutation"
+  - "Do not imply permission enforcement logic"

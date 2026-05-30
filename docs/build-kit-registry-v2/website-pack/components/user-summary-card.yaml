@@ -1,0 +1,28 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.user-summary-card
+kind: component_contract
+name: User summary card contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  User/team summary contract for bounded static counts and high-level segments.
+
+non_template_statement: Layout contract only — not a copy-paste account widget.
+
+applies_to:
+  - app.admin-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.admin-user-team-summary
+
+expected_props:
+  - totalUsers: number
+  - totalTeams: number
+  - segmentBreakdown: "array of labeled counts"
+
+content_notes:
+  - "Summary is display-only and local/static"
+  - "Never imply real account provisioning or sync behavior"

@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.inaccessible-disabled-controls
+kind: recovery_playbook
+name: Fix inaccessible disabled controls
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs disabled-control accessibility by adding reachable explanations and removing tooltip-only traps.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - app.admin-dashboard-core
+
+repairs_validators:
+  - validator.disabled-action-accessibility
+
+steps:
+  - id: s1
+    action: add_reachable_explanations
+    detail: "Provide inline/helper text for disabled demo/read-only controls"
+  - id: s2
+    action: remove_tooltip_only_dependency
+    detail: "Avoid hover-only explanation patterns"
+  - id: s3
+    action: re_validate
+    detail: "Re-run validator.disabled-action-accessibility"
+
+user_facing_summary: >
+  I made disabled controls understandable and accessible without tooltip-only behavior.

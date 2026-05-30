@@ -1,0 +1,164 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: app.admin-dashboard-core
+kind: app_type
+name: Admin dashboard core
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Static admin shell preview with status, queue, table, audit, and demo controls.
+
+non_template_statement: >
+  Generative playbook only. No checked-in template, clone baseline, or starter tree.
+
+legacy_v1_fallback: generic
+
+safety_constraints:
+  - no-network-egress-for-mvp
+  - no-eval
+  - no-user-accounts-for-mvp
+  - no-backend-api-for-mvp
+  - no-crud-mutation-for-mvp
+  - no-rbac-implementation-for-mvp
+  - no-destructive-actions-for-mvp
+  - no-live-monitoring-or-streaming-for-mvp
+  - no-billing-processing-for-mvp
+  - no-security-compliance-implementation-for-mvp
+  - no-cryptographic-security-tooling-for-mvp
+  - dom-native-ui-only-for-mvp
+  - static-sample-data-only-for-mvp
+
+guidance:
+  - "Build one bounded static admin shell with sidebar/topbar and a single overview page"
+  - "Include status, role summary, queue/table, audit log, and system status"
+  - "Use local/static mock data and semantic header/nav/main/table/list structure"
+  - "Controls are demo-mode/read-only only; danger modal examples must be non-mutating"
+
+default_assumptions:
+  - "Single-page static admin overview; no deep routing"
+  - "Local static sample data only; no backend/API/database"
+
+hard_constraints:
+  - no-template-cloning
+  - no-auth-session-or-login
+  - no-backend-api-database
+  - no-user-crud-or-permission-mutation
+  - no-rbac-implementation-or-editors
+  - no-destructive-or-moderation-mutations
+  - no-live-monitoring-or-streaming
+  - no-real-audit-or-compliance-claims
+  - no-billing-payments-invoices
+  - no-cryptographic-security-tooling
+  - no-exact-clone
+  - no-inaccessible-disabled-button-patterns
+
+conflict_policy:
+  user_explicit_overrides_soft_defaults: true
+  safety_constraints_override_user_request: true
+  core_loop_conflicts_require_clarification: true
+  out_of_scope_items_require_explicit_request: true
+  fallback_to_v1_or_generic_when_recipe_no_longer_fits: true
+
+user_prompt_examples:
+  positive:
+    - "Static admin dashboard with shell, queue, table, and audit log."
+    - "Internal admin panel mockup with local data and no backend."
+    - "Read-only admin overview with resource table and demo controls."
+    - "Accessible static admin shell with semantic table/list."
+  negative:
+    - "Add login and sessions."
+    - "Wire this dashboard to API and database."
+    - "Implement user CRUD forms."
+    - "Build RBAC with permission mutation."
+    - "Add real moderation actions."
+    - "Add live monitoring and streaming logs."
+    - "Implement billing and payments."
+    - "Build a compliance and encryption console."
+
+stack_kit_id: stack.dom-admin-dashboard-minimal
+
+composed_modules:
+  stack_kit_id: stack.dom-admin-dashboard-minimal
+  mechanics:
+    - section.admin-app-shell
+    - section.admin-overview-status
+    - section.admin-user-team-summary
+    - section.admin-role-permission-summary
+    - section.admin-review-queue
+    - section.admin-resource-table
+    - section.admin-audit-log
+    - section.admin-system-status
+    - section.admin-demo-action-boundaries
+    - section.admin-empty-loading-error-states
+    - section.admin-responsive-structure
+  component_contracts:
+    - component.admin-shell
+    - component.admin-sidebar-nav
+    - component.admin-topbar
+    - component.status-card
+    - component.user-summary-card
+    - component.role-permission-pill
+    - component.review-queue-table
+    - component.audit-log-list
+    - component.system-status-panel
+    - component.resource-index-table
+    - component.demo-action-control
+    - component.danger-modal-mockup
+  validators:
+    - validator.admin-shell-bounds
+    - validator.no-auth-backend-claims
+    - validator.no-rbac-implementation
+    - validator.no-crud-mutation
+    - validator.no-destructive-live-actions
+    - validator.audit-log-static-bounds
+    - validator.admin-table-semantics
+    - validator.disabled-action-accessibility
+    - validator.responsive-a11y-basics
+    - validator.no-security-theater
+  recovery_playbooks:
+    - recovery.auth-backend-drift
+    - recovery.rbac-drift
+    - recovery.crud-sprawl
+    - recovery.destructive-action-drift
+    - recovery.audit-log-fakery
+    - recovery.security-theater
+    - recovery.dense-table-soup
+    - recovery.inaccessible-disabled-controls
+  progress_labels: progress.app-admin-dashboard-core
+  learning_hooks: learning.app-admin-dashboard-core
+
+build_phases:
+  - id: phase.understand
+    title: Understand the admin dashboard ask
+    order: 1
+    modules_used: [app_type]
+  - id: phase.compose
+    title: Compose admin shell and regions
+    order: 2
+    modules_used: [mechanics, component_contracts]
+  - id: phase.generate
+    title: Generate static admin preview code
+    order: 3
+    modules_used: [stack_kit_id, guidance]
+  - id: phase.validate
+    title: Validate admin boundaries and exclusions
+    order: 4
+    modules_used: [validators]
+  - id: phase.preview
+    title: Prepare Workbench preview
+    order: 5
+    modules_used: []
+  - id: phase.recover
+    title: Repair common admin drift
+    order: 6
+    optional: true
+    modules_used: [recovery_playbooks]
+
+acceptance_criteria:
+  - "Bounded static admin shell with sidebar/topbar/main renders"
+  - "Overview/status, user/team, role/permission, review, resource, audit, and system regions are present"
+  - "Action controls are clearly demo-mode/read-only/illustrative"
+  - "Danger examples, if present, include visible friction and do not mutate data"
+  - "Empty/loading/error examples are visible and static/local"
+  - "Semantic landmarks plus semantic table/list structure are present and responsive"
+  - "No auth/backend/RBAC/CRUD/destructive/live-monitoring/billing/security implementation claims appear"

@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.admin-user-team-summary
+kind: section
+name: Admin user and team summary section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Static summary region for user and team counts, segments, and simple status distribution.
+
+non_template_statement: Section playbook only — not a checked-in admin widget.
+
+applies_to:
+  - app.admin-dashboard-core
+
+depends_on:
+  - section.admin-overview-status
+
+binds_components:
+  - component.user-summary-card
+
+guidance:
+  - "Keep this display-only with local mock data."

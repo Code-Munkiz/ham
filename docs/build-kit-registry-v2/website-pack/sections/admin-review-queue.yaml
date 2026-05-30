@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.admin-review-queue
+kind: section
+name: Admin review queue section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Static review/moderation queue table showing pending items and illustrative queue metadata.
+
+non_template_statement: Section playbook only — not a checked-in workflow engine UI.
+
+applies_to:
+  - app.admin-dashboard-core
+
+depends_on:
+  - section.admin-role-permission-summary
+
+binds_components:
+  - component.review-queue-table
+
+guidance:
+  - "Queue entries are static rows with semantic table structure."

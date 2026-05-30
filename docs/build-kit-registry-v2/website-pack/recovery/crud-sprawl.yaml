@@ -14,10 +14,12 @@ max_attempts: 2
 
 applies_to:
   - app.saas-dashboard-core
+  - app.admin-dashboard-core
 
 repairs_validators:
   - validator.no-admin-crud-drift
   - validator.resource-list-readable
+  - validator.no-crud-mutation
 
 steps:
   - id: step.remove_mutation_controls

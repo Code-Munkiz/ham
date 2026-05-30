@@ -1,0 +1,34 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.audit-log-fakery
+kind: recovery_playbook
+name: Fix audit log fakery
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Removes authoritative audit/security claims and restores static illustrative event history.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - app.admin-dashboard-core
+
+repairs_validators:
+  - validator.audit-log-static-bounds
+  - validator.no-security-theater
+
+steps:
+  - id: s1
+    action: remove_authoritative_claims
+    detail: "Strip immutable/compliance backend logging claims"
+  - id: s2
+    action: restate_static_history
+    detail: "Label audit list as illustrative static sample data"
+  - id: s3
+    action: re_validate
+    detail: "Re-run audit/security validators"
+
+user_facing_summary: >
+  I kept the audit timeline illustrative and removed authoritative claims.

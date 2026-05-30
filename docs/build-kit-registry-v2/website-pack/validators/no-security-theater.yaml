@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.no-security-theater
+kind: validator
+name: No security theater
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Prevents false security/compliance implementation claims in static admin mockups.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - app.admin-dashboard-core
+
+validates_modules:
+  - section.admin-audit-log
+  - section.admin-system-status
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Security/compliance language is illustrative and bounded"
+  - "No cryptographic enforcement or production compliance claims are implied"
+
+fail_conditions:
+  - "Copy claims production security/compliance guarantees"
+  - "UI implies real cryptographic tooling or enforcement controls"
+
+recovery_playbooks:
+  - recovery.security-theater

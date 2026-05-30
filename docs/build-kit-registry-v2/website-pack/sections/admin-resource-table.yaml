@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.admin-resource-table
+kind: section
+name: Admin resource table section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Bounded resource/user index table for static admin overview and row-level scanning.
+
+non_template_statement: Section playbook only — not a checked-in datagrid template.
+
+applies_to:
+  - app.admin-dashboard-core
+
+depends_on:
+  - section.admin-review-queue
+
+binds_components:
+  - component.resource-index-table
+
+guidance:
+  - "Use one semantic bounded table with meaningful local sample rows."

@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.no-destructive-live-actions
+kind: validator
+name: No destructive live actions
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Ensures dangerous-looking admin actions are clearly demo-mode and never mutate data.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - app.admin-dashboard-core
+
+validates_modules:
+  - section.admin-demo-action-boundaries
+  - component.danger-modal-mockup
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Action controls are labeled demo/read-only/illustrative"
+  - "Danger examples include visible friction and non-mutating copy"
+
+fail_conditions:
+  - "Delete/suspend/ban actions imply real mutation"
+  - "Danger UI suggests live backend execution"
+
+recovery_playbooks:
+  - recovery.destructive-action-drift

@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.rbac-drift
+kind: recovery_playbook
+name: Fix RBAC drift
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Removes RBAC/editor drift and restores static role summaries.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - app.admin-dashboard-core
+
+repairs_validators:
+  - validator.no-rbac-implementation
+
+steps:
+  - id: s1
+    action: remove_permission_editors
+    detail: "Remove role/permission mutation controls"
+  - id: s2
+    action: restore_static_summary
+    detail: "Render role/permission as display-only summary"
+  - id: s3
+    action: re_validate
+    detail: "Re-run validator.no-rbac-implementation"
+
+user_facing_summary: >
+  I converted RBAC editor behavior into static role/permission summaries.

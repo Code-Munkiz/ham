@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.admin-responsive-structure
+kind: section
+name: Admin responsive structure section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Responsive and accessibility structure guidance for static admin shell, tables, and lists.
+
+non_template_statement: Section playbook only — not a checked-in responsive CSS baseline.
+
+applies_to:
+  - app.admin-dashboard-core
+
+depends_on:
+  - section.admin-empty-loading-error-states
+
+binds_components:
+  - component.admin-shell
+  - component.resource-index-table
+  - component.audit-log-list
+
+guidance:
+  - "Preserve semantic landmarks and readable responsive structure."

@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.danger-modal-mockup
+kind: component_contract
+name: Danger modal mockup contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Optional danger-confirmation modal mockup for non-mutating, illustrative admin friction.
+
+non_template_statement: Interaction contract only — not a copy-paste destructive workflow.
+
+applies_to:
+  - app.admin-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.admin-demo-action-boundaries
+
+expected_props:
+  - title: string
+  - warningText: string
+  - confirmLabel: string
+  - cancelLabel: string
+  - demoNotice: string
+
+accessibility_notes:
+  - "Modal copy clearly states this is demo/non-mutating behavior"
+  - "Focus order and dismissal semantics are explicit"
+
+content_notes:
+  - "If present, modal must never imply real destructive mutation or backend calls"

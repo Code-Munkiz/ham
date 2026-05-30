@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.security-theater
+kind: recovery_playbook
+name: Fix security theater
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Removes security/compliance overclaims and restores bounded illustrative wording.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - app.admin-dashboard-core
+
+repairs_validators:
+  - validator.no-security-theater
+
+steps:
+  - id: s1
+    action: remove_security_overclaims
+    detail: "Strip compliance guarantees and crypto-enforcement claims"
+  - id: s2
+    action: add_bounded_copy
+    detail: "Use explicit demo/read-only wording for security-shaped UI regions"
+  - id: s3
+    action: re_validate
+    detail: "Re-run validator.no-security-theater"
+
+user_facing_summary: >
+  I replaced security/compliance overclaims with bounded static preview language.

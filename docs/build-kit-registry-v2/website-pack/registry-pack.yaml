@@ -8,8 +8,9 @@ schema_version: "0.1"
 description: >
   Root manifest for Build Registry v2 Website Pack. Indexes marketing/landing-page and
   dashboard/app-surface playbooks: site.landing-page-core and site.dashboard-ui-core
-  (routed when flagged), plus schema-only app.saas-dashboard-core (not routed). Separate
-  from game-pack; generative guidance only — no templates or starter source.
+  (routed when flagged), plus app.saas-dashboard-core (routed when flagged) and
+  schema-only app.admin-dashboard-core (not routed). Separate from game-pack; generative
+  guidance only — no templates or starter source.
 
 non_template_statement: >
   Registry index and compose defaults only. Does not ship landing page or dashboard
@@ -21,10 +22,12 @@ module_index:
     - site.landing-page-core
     - site.dashboard-ui-core
     - app.saas-dashboard-core
+    - app.admin-dashboard-core
   stack_kits:
     - stack.dom-marketing-minimal
     - stack.dom-dashboard-minimal
     - stack.dom-saas-dashboard-minimal
+    - stack.dom-admin-dashboard-minimal
   mechanics:
     - section.landing-hero
     - section.value-proposition
@@ -49,6 +52,17 @@ module_index:
     - section.saas-upgrade-cta
     - section.saas-empty-loading-error-states
     - section.saas-responsive-structure
+    - section.admin-app-shell
+    - section.admin-overview-status
+    - section.admin-user-team-summary
+    - section.admin-role-permission-summary
+    - section.admin-review-queue
+    - section.admin-resource-table
+    - section.admin-audit-log
+    - section.admin-system-status
+    - section.admin-demo-action-boundaries
+    - section.admin-empty-loading-error-states
+    - section.admin-responsive-structure
   component_contracts:
     - component.hero-block
     - component.feature-card-grid
@@ -70,6 +84,18 @@ module_index:
     - component.resource-list
     - component.upgrade-card
     - component.settings-shortcut
+    - component.admin-shell
+    - component.admin-sidebar-nav
+    - component.admin-topbar
+    - component.status-card
+    - component.user-summary-card
+    - component.role-permission-pill
+    - component.review-queue-table
+    - component.audit-log-list
+    - component.system-status-panel
+    - component.resource-index-table
+    - component.demo-action-control
+    - component.danger-modal-mockup
   validators:
     - validator.landing-section-presence
     - validator.cta-clarity
@@ -95,6 +121,14 @@ module_index:
     - validator.no-admin-crud-drift
     - validator.responsive-a11y-basics
     - validator.no-dead-nav-deception
+    - validator.admin-shell-bounds
+    - validator.no-rbac-implementation
+    - validator.no-crud-mutation
+    - validator.no-destructive-live-actions
+    - validator.audit-log-static-bounds
+    - validator.admin-table-semantics
+    - validator.disabled-action-accessibility
+    - validator.no-security-theater
   recovery_playbooks:
     - recovery.generic-hero
     - recovery.weak-cta
@@ -114,14 +148,23 @@ module_index:
     - recovery.dead-nav-shell
     - recovery.meaningless-saas-metrics
     - recovery.upgrade-cta-spam
+    - recovery.auth-backend-drift
+    - recovery.rbac-drift
+    - recovery.destructive-action-drift
+    - recovery.audit-log-fakery
+    - recovery.security-theater
+    - recovery.dense-table-soup
+    - recovery.inaccessible-disabled-controls
   progress_labels:
     - progress.landing-page-core
     - progress.dashboard-ui-core
     - progress.app-saas-dashboard-core
+    - progress.app-admin-dashboard-core
   learning_hooks:
     - learning.landing-page-core
     - learning.dashboard-ui-core
     - learning.app-saas-dashboard-core
+    - learning.app-admin-dashboard-core
 
 compose_defaults:
   compose_order:

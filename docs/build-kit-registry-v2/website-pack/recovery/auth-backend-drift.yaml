@@ -1,0 +1,34 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.auth-backend-drift
+kind: recovery_playbook
+name: Fix auth/backend drift
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Removes auth/backend claims and restores static admin-preview boundaries.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - app.admin-dashboard-core
+
+repairs_validators:
+  - validator.no-auth-backend-claims
+  - validator.admin-shell-bounds
+
+steps:
+  - id: s1
+    action: remove_auth_backend_claims
+    detail: "Strip auth/backend implementation language"
+  - id: s2
+    action: restate_static_boundaries
+    detail: "Restate local/static demo-mode boundaries"
+  - id: s3
+    action: re_validate
+    detail: "Re-run boundary validators"
+
+user_facing_summary: >
+  I removed auth/backend implications and kept a static local preview.

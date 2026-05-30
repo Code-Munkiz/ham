@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.no-crud-mutation
+kind: validator
+name: No CRUD mutation
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Prevents create/edit/delete forms and mutation workflows in static admin core output.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - app.admin-dashboard-core
+
+validates_modules:
+  - section.admin-resource-table
+  - section.admin-review-queue
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Surface remains display-only with no mutation flows"
+  - "No create/edit/delete forms or submit workflows are present"
+
+fail_conditions:
+  - "Create/edit/delete UI flows appear"
+  - "Copy implies persisted mutation behavior"
+
+recovery_playbooks:
+  - recovery.crud-sprawl

@@ -1,0 +1,23 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.admin-overview-status
+kind: section
+name: Admin overview status section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Top overview region with bounded status cards for users, queue depth, and system summary.
+
+non_template_statement: Section playbook only — not a checked-in card template.
+
+applies_to:
+  - app.admin-dashboard-core
+
+depends_on:
+  - section.admin-app-shell
+
+binds_components:
+  - component.status-card
+
+guidance:
+  - "Use bounded static status cards with local sample values."

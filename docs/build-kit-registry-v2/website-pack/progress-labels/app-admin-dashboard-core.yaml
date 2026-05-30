@@ -1,0 +1,36 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: progress.app-admin-dashboard-core
+kind: progress_label
+name: Admin dashboard core build progress
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Phase labels for static admin dashboard core builds.
+
+non_template_statement: Progress copy module only.
+
+source_phase_owner: app.admin-dashboard-core
+
+applies_to:
+  - app.admin-dashboard-core
+
+phase_message_map:
+  phase.understand:
+    title: "Reading your admin dashboard goal"
+    message: "I'm translating your request into a bounded static admin preview."
+  phase.compose:
+    title: "Planning the admin structure"
+    message: "I'm assembling shell and key admin regions."
+  phase.generate:
+    title: "Building your admin dashboard UI"
+    message: "I'm generating a static, demo-bounded admin preview."
+  phase.validate:
+    title: "Checking boundaries and exclusions"
+    message: "I'm verifying no auth/backend/RBAC/CRUD/destructive/security drift."
+  phase.preview:
+    title: "Preparing preview"
+    message: "Your admin dashboard preview is almost ready."
+  phase.recover:
+    title: "Polishing a drifted region"
+    message: "I'm correcting boundary, table, or accessibility issues."

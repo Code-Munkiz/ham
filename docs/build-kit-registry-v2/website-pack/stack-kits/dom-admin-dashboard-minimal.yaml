@@ -1,0 +1,38 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: stack.dom-admin-dashboard-minimal
+kind: stack_kit
+name: DOM-native minimal admin dashboard stack
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Static admin dashboard shell stack: semantic DOM layout, responsive structure,
+  local sample data, and accessibility-first patterns.
+
+non_template_statement: >
+  Stack playbook only. No checked-in starter app or framework template.
+
+applies_to:
+  - app.admin-dashboard-core
+  - tag:dom-admin-dashboard
+
+capabilities:
+  - local-state
+  - dom-rendering
+  - semantic-landmarks
+  - responsive-grid
+  - static-sample-data
+  - no-network
+
+guidance:
+  - "Use one bounded admin shell with semantic structure and local/static data only."
+  - "Do not include auth, RBAC, backend, billing, or CRUD libraries."
+
+accessibility_baseline:
+  - "One h1 for page title and descriptive h2/h3 region headings"
+  - "Nav, tables, lists, cards, and controls have readable labels and focus states"
+  - "Status and risk states are communicated by text plus visual styling"
+
+mobile_baseline:
+  - "Usable at 360px without page-level horizontal scrolling"
+  - "Sidebar can collapse; cards, tables, and lists stack cleanly"

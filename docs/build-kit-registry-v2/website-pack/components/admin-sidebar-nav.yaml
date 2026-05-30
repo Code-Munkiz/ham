@@ -1,0 +1,31 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.admin-sidebar-nav
+kind: component_contract
+name: Admin sidebar nav contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Lightweight admin sidebar navigation contract for static operator sections.
+
+non_template_statement: Layout contract only — not a copy-paste nav component.
+
+applies_to:
+  - app.admin-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.admin-app-shell
+
+expected_props:
+  - navItems: "array of labeled nav links or static nav entries"
+  - activeItem: string
+  - secondaryLinks: "array | null"
+
+accessibility_notes:
+  - "Navigation items are keyboard reachable with clear focus treatment"
+  - "Active item indicated by text/icon plus style, not color alone"
+
+content_notes:
+  - "Avoid deceptive dead links; use honest placeholders when non-functional"

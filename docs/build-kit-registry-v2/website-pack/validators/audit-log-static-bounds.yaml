@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.audit-log-static-bounds
+kind: validator
+name: Audit log static bounds
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Constrains audit/activity region to static illustrative samples without compliance theater.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - app.admin-dashboard-core
+
+validates_modules:
+  - section.admin-audit-log
+  - component.audit-log-list
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Audit/event list is clearly static local sample data"
+  - "No authoritative compliance/security logging claims appear"
+
+fail_conditions:
+  - "Copy implies immutable, legally authoritative, or real backend audit logging"
+  - "Audit region claims live ingestion or retention guarantees"
+
+recovery_playbooks:
+  - recovery.audit-log-fakery

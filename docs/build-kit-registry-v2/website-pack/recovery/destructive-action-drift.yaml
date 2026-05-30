@@ -1,0 +1,33 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.destructive-action-drift
+kind: recovery_playbook
+name: Fix destructive action drift
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Removes live destructive behavior and restores demo-only non-mutating controls.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - app.admin-dashboard-core
+
+repairs_validators:
+  - validator.no-destructive-live-actions
+
+steps:
+  - id: s1
+    action: remove_live_mutation_imagery
+    detail: "Remove copy implying real destructive execution"
+  - id: s2
+    action: restate_demo_friction
+    detail: "Mark controls demo/read-only with visible non-mutating text"
+  - id: s3
+    action: re_validate
+    detail: "Re-run validator.no-destructive-live-actions"
+
+user_facing_summary: >
+  I kept destructive controls as non-mutating demos with clear boundaries.

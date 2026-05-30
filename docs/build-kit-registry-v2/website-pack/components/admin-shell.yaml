@@ -1,0 +1,31 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.admin-shell
+kind: component_contract
+name: Admin shell contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Structural admin shell contract for sidebar/topbar plus one main content layout.
+
+non_template_statement: Layout contract only — not a copy-paste shell component.
+
+applies_to:
+  - app.admin-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.admin-app-shell
+
+expected_props:
+  - shellMode: "sidebar + topbar + main"
+  - collapsibleSidebar: boolean
+  - pageTitle: string
+
+accessibility_notes:
+  - "Use semantic header/nav/main landmarks"
+  - "Main region has clear heading and readable tab order"
+
+responsive_notes:
+  - "Sidebar can collapse at narrow widths"

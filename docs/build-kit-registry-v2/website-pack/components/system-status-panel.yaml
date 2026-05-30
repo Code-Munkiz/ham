@@ -1,0 +1,28 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.system-status-panel
+kind: component_contract
+name: System status panel contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Static system status panel contract with bounded service indicators and summary text.
+
+non_template_statement: Layout contract only — not a copy-paste monitoring panel.
+
+applies_to:
+  - app.admin-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.admin-system-status
+
+expected_props:
+  - serviceRows: "array of labeled system/service statuses"
+  - summaryNote: string
+  - statusTone: "neutral | positive | warning | negative"
+
+content_notes:
+  - "Panel is illustrative static status only"
+  - "No live telemetry, streaming logs, or alerting claims"

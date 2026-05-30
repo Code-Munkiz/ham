@@ -6,17 +6,22 @@ status: proposed
 schema_version: "0.1"
 
 description: >
-  Checks responsive stacking and semantic accessibility fundamentals for SaaS dashboard UI.
+  Checks responsive stacking and semantic accessibility fundamentals for static app-shell dashboard UIs.
 
 non_template_statement: Conceptual validator only.
 
 applies_to:
   - app.saas-dashboard-core
+  - app.admin-dashboard-core
 
 validates_modules:
   - section.saas-responsive-structure
   - component.app-shell
   - component.resource-list
+  - section.admin-responsive-structure
+  - component.admin-shell
+  - component.resource-index-table
+  - component.audit-log-list
 
 severity: blocking
 runner: conceptual

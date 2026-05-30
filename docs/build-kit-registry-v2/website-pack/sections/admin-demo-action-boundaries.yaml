@@ -1,0 +1,24 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.admin-demo-action-boundaries
+kind: section
+name: Admin demo action boundaries section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Demo/read-only action boundary guidance for illustrative admin controls and danger affordances.
+
+non_template_statement: Section playbook only — not a checked-in action workflow implementation.
+
+applies_to:
+  - app.admin-dashboard-core
+
+depends_on:
+  - section.admin-system-status
+
+binds_components:
+  - component.demo-action-control
+  - component.danger-modal-mockup
+
+guidance:
+  - "Action controls must be clearly demo/read-only and non-mutating."

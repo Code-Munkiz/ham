@@ -1,0 +1,31 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.review-queue-table
+kind: component_contract
+name: Review queue table contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Static review queue table contract with bounded rows and readable status metadata.
+
+non_template_statement: Layout contract only — not a copy-paste moderation table.
+
+applies_to:
+  - app.admin-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.admin-review-queue
+
+expected_props:
+  - columns: "array of bounded header labels"
+  - rows: "array of sample queue rows"
+  - statusColumn: string | null
+
+accessibility_notes:
+  - "Use table/thead/th/tbody semantics with clear column labels"
+  - "Status meaning uses text/icon plus color, never color alone"
+
+content_notes:
+  - "Rows are static examples only; no live moderation workflow semantics"

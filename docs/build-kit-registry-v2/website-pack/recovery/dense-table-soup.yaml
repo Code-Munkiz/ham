@@ -1,0 +1,36 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: recovery.dense-table-soup
+kind: recovery_playbook
+name: Fix dense table soup
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Repairs overloaded admin tables with semantic structure and bounded readable columns.
+
+non_template_statement: Conceptual recovery only.
+
+max_attempts: 2
+
+applies_to:
+  - app.admin-dashboard-core
+
+repairs_validators:
+  - validator.admin-table-semantics
+
+steps:
+  - id: s1
+    action: bound_columns
+    detail: "Reduce to bounded high-value columns"
+  - id: s2
+    action: restore_semantics
+    detail: "Use semantic table markup; remove div-soup patterns"
+  - id: s3
+    action: fix_mobile_overflow
+    detail: "Contain overflow in-region or stack rows on mobile"
+  - id: s4
+    action: re_validate
+    detail: "Re-run validator.admin-table-semantics"
+
+user_facing_summary: >
+  I simplified table density, restored semantic structure, and fixed mobile readability.

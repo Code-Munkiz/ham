@@ -1,0 +1,35 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: validator.admin-table-semantics
+kind: validator
+name: Admin table semantics
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Ensures admin queue/resource tables use semantic structure and readable bounded density.
+
+non_template_statement: Conceptual validator only.
+
+applies_to:
+  - app.admin-dashboard-core
+
+validates_modules:
+  - section.admin-review-queue
+  - section.admin-resource-table
+  - component.review-queue-table
+  - component.resource-index-table
+
+severity: blocking
+runner: conceptual
+check_type: conceptual
+
+pass_conditions:
+  - "Tables use semantic caption/thead/th/tbody structure"
+  - "Column density remains readable and mobile behavior is bounded"
+
+fail_conditions:
+  - "Div-soup pseudo-tables or missing header semantics"
+  - "Dense unreadable table walls or page-level horizontal overflow"
+
+recovery_playbooks:
+  - recovery.dense-table-soup

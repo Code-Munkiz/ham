@@ -1,0 +1,25 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: section.admin-empty-loading-error-states
+kind: section
+name: Admin empty loading error states section
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Visible empty/loading/error examples for async-looking admin regions.
+
+non_template_statement: Section playbook only — not a checked-in state machine component.
+
+applies_to:
+  - app.admin-dashboard-core
+
+depends_on:
+  - section.admin-demo-action-boundaries
+
+binds_components:
+  - component.review-queue-table
+  - component.resource-index-table
+  - component.audit-log-list
+
+guidance:
+  - "Render visible static empty/loading/error cards or panels."

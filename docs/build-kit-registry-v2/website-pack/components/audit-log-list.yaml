@@ -1,0 +1,28 @@
+# CONCEPTUAL SCHEMA PILOT — not loaded at runtime
+id: component.audit-log-list
+kind: component_contract
+name: Audit log list contract
+status: proposed
+schema_version: "0.1"
+
+description: >
+  Static audit/activity list contract for bounded event history display.
+
+non_template_statement: Layout contract only — not a copy-paste compliance timeline.
+
+applies_to:
+  - app.admin-dashboard-core
+
+depends_on: []
+
+binds_mechanics:
+  - section.admin-audit-log
+
+expected_props:
+  - events: "array of event label/source/time rows"
+  - maxItems: number
+  - severityLabel: string | null
+
+content_notes:
+  - "Entries are illustrative static samples, not authoritative audit records"
+  - "Avoid compliance/security guarantees or backend persistence claims"
