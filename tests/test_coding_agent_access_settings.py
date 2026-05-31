@@ -19,6 +19,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -91,10 +92,17 @@ def test_firestore_store_uses_workspace_database_fallback(
     monkeypatch.delenv("HAM_CODING_AGENT_SETTINGS_FIRESTORE_DATABASE", raising=False)
     monkeypatch.setenv("HAM_FIRESTORE_DATABASE", "ham-workspaces")
 
+    mock_client = MagicMock()
+    mock_client_cls = MagicMock(return_value=mock_client)
+    monkeypatch.setattr(
+        "src.persistence.coding_agent_access_settings_store.firestore.Client",
+        mock_client_cls,
+    )
+
     store = build_coding_agent_access_settings_store()
 
     assert isinstance(store, FirestoreCodingAgentAccessSettingsStore)
-    assert store._db._database == "ham-workspaces"  # noqa: SLF001
+    mock_client_cls.assert_called_once_with(database="ham-workspaces")
 
 
 def test_firestore_store_specific_database_overrides_workspace_fallback(
@@ -104,10 +112,17 @@ def test_firestore_store_specific_database_overrides_workspace_fallback(
     monkeypatch.setenv("HAM_CODING_AGENT_SETTINGS_FIRESTORE_DATABASE", "agent-settings")
     monkeypatch.setenv("HAM_FIRESTORE_DATABASE", "ham-workspaces")
 
+    mock_client = MagicMock()
+    mock_client_cls = MagicMock(return_value=mock_client)
+    monkeypatch.setattr(
+        "src.persistence.coding_agent_access_settings_store.firestore.Client",
+        mock_client_cls,
+    )
+
     store = build_coding_agent_access_settings_store()
 
     assert isinstance(store, FirestoreCodingAgentAccessSettingsStore)
-    assert store._db._database == "agent-settings"  # noqa: SLF001
+    mock_client_cls.assert_called_once_with(database="agent-settings")
 
 
 # ---------------------------------------------------------------------------
