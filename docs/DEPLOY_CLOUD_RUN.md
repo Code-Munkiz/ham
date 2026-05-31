@@ -231,6 +231,13 @@ If the key is missing or placeholder-like (`PLACEHOLDER`, `changeme`, `dummy`, `
 
 ## Deploy to Cloud Run
 
+**Important:** setting or updating environment variables does **not** update the
+backend image. If backend code changed, rebuild and redeploy the Cloud Run
+image. When only the image changes and existing env vars/secrets should be
+preserved, prefer an image-only service update such as
+`gcloud run services update "$SERVICE" --image "$IMAGE" ...` rather than a
+partial env-file deploy.
+
 ```bash
 export PROJECT_ID=clarity-staging-488201
 export REGION=us-central1
