@@ -425,6 +425,12 @@ export type PreferenceMode =
 /** Model source preference for OpenCode / Claude Agent. */
 export type ModelSourcePreference = "ham_default" | "connected_tools_byok" | "workspace_default";
 
+/**
+ * User/product-facing builder ids the user can select for normal builds.
+ * Matches the backend `selected_builder` enum. ``null`` means no selection.
+ */
+export type SelectedBuilder = "cursor" | "claude" | "opencode" | "factory_droid" | "hermes_agent";
+
 /** Shape returned by GET/PATCH /api/workspaces/{id}/coding-agent-access-settings. */
 export interface CodingAgentAccessSettings {
   kind: "ham_coding_agent_access_settings";
@@ -435,6 +441,7 @@ export interface CodingAgentAccessSettings {
   allow_cursor: boolean;
   preference_mode: PreferenceMode;
   model_source_preference: ModelSourcePreference;
+  selected_builder: SelectedBuilder | null;
   updated_at: string | null;
   updated_by: string | null;
 }
@@ -447,6 +454,7 @@ export interface CodingAgentAccessSettingsPatch {
   allow_cursor?: boolean;
   preference_mode?: PreferenceMode;
   model_source_preference?: ModelSourcePreference;
+  selected_builder?: SelectedBuilder;
 }
 
 /** Default settings returned when no workspace_id is provided or fetch fails. */
@@ -459,9 +467,24 @@ export const DEFAULT_CODING_AGENT_SETTINGS: CodingAgentAccessSettings = {
   allow_cursor: true,
   preference_mode: "recommended",
   model_source_preference: "ham_default",
+  selected_builder: null,
   updated_at: null,
   updated_by: null,
 };
+
+/** Valid selectable builder ids (guards against unknown/internal values in UI). */
+export const SELECTABLE_BUILDERS: readonly SelectedBuilder[] = [
+  "opencode",
+  "factory_droid",
+  "cursor",
+  "claude",
+  "hermes_agent",
+] as const;
+
+/** Normalize an arbitrary stored value to a valid SelectedBuilder or null. */
+export function normalizeSelectedBuilder(raw: unknown): SelectedBuilder | null {
+  return SELECTABLE_BUILDERS.includes(raw as SelectedBuilder) ? (raw as SelectedBuilder) : null;
+}
 
 export async function fetchCodingAgentAccessSettings(
   workspaceId: string,
