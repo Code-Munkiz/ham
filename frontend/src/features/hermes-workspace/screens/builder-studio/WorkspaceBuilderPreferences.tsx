@@ -3,7 +3,7 @@
  * Task launches and routing happen from workspace chat, not from this surface.
  */
 import * as React from "react";
-import { Bot, Brain, ChevronRight, Cpu, ScanLine, Sparkles } from "lucide-react";
+import { Bot, Brain, ChevronRight, ScanLine, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ProjectRecord } from "@/lib/ham/types";
 import { ensureBuilderDefaultProject, listHamProjects } from "@/lib/ham/api";
@@ -226,10 +226,11 @@ function inChatBuilderRowStatus(opts: {
 }
 
 function selectedBuilderHelp(selected: SelectedBuilder | null) {
-  if (!selected) return "No builder selected yet. HAM will ask you to choose before building.";
+  if (!selected || selected === "hermes_agent") {
+    return "No external builder selected — HAM will build natively.";
+  }
   if (selected === "cursor") return "Cursor runs through its own build flow for now.";
   if (selected === "claude") return "Claude runs through its own build flow for now.";
-  if (selected === "hermes_agent") return "Hermes Agent new-build support is coming soon.";
   return "Selected for normal builds. Work still starts in chat.";
 }
 
@@ -259,19 +260,6 @@ function saveFailureCopy(workspaceId: string, raw?: string | null) {
   }
   if (!workspaceId.trim()) return saveErrorCopy(workspaceId);
   return "Couldn't save your builder choice. Try again.";
-}
-
-function hermesRowModel(): BuilderRowModel {
-  return {
-    key: "hermes_agent",
-    lane: "hermes",
-    icon: Cpu,
-    title: "Hermes Agent",
-    subtitle: "HAM-native builder",
-    statusLabel: "Coming soon",
-    statusTone: "neutral",
-    helper: "Hermes Agent new-build support is coming soon.",
-  };
 }
 
 function managedBuilderDetail(opts: {
@@ -446,19 +434,6 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
   const panelModel: BuilderConnectionPanelModel | null = React.useMemo(() => {
     if (!openLane) return null;
 
-    if (openLane === "hermes") {
-      const hermes = hermesRowModel();
-      return {
-        lane: "hermes",
-        icon: hermes.icon,
-        title: hermes.title,
-        description: "Hermes Agent is the HAM-native builder option.",
-        statusLabel: hermes.statusLabel,
-        statusTone: hermes.statusTone,
-        statusDetail: "Hermes Agent new-build support is coming soon.",
-      };
-    }
-
     if (openLane === "claude") {
       return {
         lane: "claude",
@@ -590,7 +565,6 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
       statusTone: claudeTone,
       helper: "Claude runs through its own build flow for now.",
     },
-    hermesRowModel(),
   ];
 
   return (
@@ -616,11 +590,7 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
               setupActionLabel={row.setupActionLabel}
               selected={selectedBuilder === row.key}
               disabled={
-                loading ||
-                savingBuilder !== null ||
-                setupBuilder !== null ||
-                !workspaceId.trim() ||
-                row.key === "hermes_agent"
+                loading || savingBuilder !== null || setupBuilder !== null || !workspaceId.trim()
               }
               saving={savingBuilder === row.key}
               setupBusy={setupBuilder === row.key}

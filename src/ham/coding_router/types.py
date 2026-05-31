@@ -28,11 +28,11 @@ ModelSourcePreference = Literal[
     "workspace_default",
 ]
 
-# User/product-facing builder selection ids (the "user-selected builder" model;
-# see docs/build-kit-registry-v2/HARNESS_FIRST_ARCHITECTURE_PLAN.md). These are
-# deliberately distinct from the internal ``ProviderKind`` routing strings so
-# they can appear in settings without leaking provider internals. ``hermes_agent``
-# is a selectable HAM-native builder; its new-build entry point is not wired yet.
+# User/product-facing external builder selection ids. These are deliberately
+# distinct from internal ``ProviderKind`` routing strings so they can appear in
+# settings without leaking provider internals. ``hermes_agent`` remains accepted
+# for backward-compatible stored values, but Settings no longer offers it as an
+# external builder because HAM/Hermes is the always-on orchestrator.
 SelectedBuilder = Literal[
     "cursor",
     "claude",

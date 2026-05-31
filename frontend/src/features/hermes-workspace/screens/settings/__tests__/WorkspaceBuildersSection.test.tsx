@@ -110,9 +110,7 @@ describe("WorkspaceBuildersSection", () => {
       expect(screen.getByRole("heading", { name: "Builders", level: 2 })).toBeInTheDocument();
     });
     expect(
-      screen.getAllByText(
-        "Choose the builder HAM uses when you ask it to build. Work starts in chat.",
-      ).length,
+      screen.getAllByText("Choose an external builder for HAM to use. Work starts in chat.").length,
     ).toBeGreaterThanOrEqual(1);
   });
 

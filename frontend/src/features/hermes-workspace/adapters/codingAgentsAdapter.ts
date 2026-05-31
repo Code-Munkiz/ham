@@ -472,7 +472,7 @@ export const DEFAULT_CODING_AGENT_SETTINGS: CodingAgentAccessSettings = {
   updated_by: null,
 };
 
-/** Valid selectable builder ids (guards against unknown/internal values in UI). */
+/** Valid stored builder ids (UI shows only external builders; hermes_agent is legacy-safe). */
 export const SELECTABLE_BUILDERS: readonly SelectedBuilder[] = [
   "opencode",
   "factory_droid",

@@ -149,18 +149,17 @@ afterEach(() => {
 });
 
 describe("Workspace Builders selected-builder rows", () => {
-  it("renders one coherent Builders section with the five product-facing options", async () => {
+  it("renders one coherent Builders section with the four external builder options", async () => {
     renderBuildersSection();
     await waitFor(() => expect(fetchSettingsMock).toHaveBeenCalled());
     expect(screen.getByRole("heading", { name: "Builders" })).toBeInTheDocument();
     expect(
-      screen.getAllByText(
-        "Choose the builder HAM uses when you ask it to build. Work starts in chat.",
-      ).length,
+      screen.getAllByText("Choose an external builder for HAM to use. Work starts in chat.").length,
     ).toBeGreaterThanOrEqual(1);
-    for (const name of ["OpenCode", "Factory Droid", "Cursor", "Claude", "Hermes Agent"]) {
+    for (const name of ["OpenCode", "Factory Droid", "Cursor", "Claude"]) {
       expect(screen.getByRole("switch", { name })).toBeInTheDocument();
     }
+    expect(screen.queryByRole("switch", { name: "Hermes Agent" })).toBeNull();
     expect(screen.queryByText("Builder connections")).toBeNull();
   });
 
@@ -301,21 +300,30 @@ describe("Workspace Builders selected-builder rows", () => {
     );
   });
 
-  it("shows honest helper copy for Hermes Agent (coming soon)", async () => {
+  it("treats stored hermes_agent as native HAM mode without showing a selector row", async () => {
     fetchSettingsMock.mockResolvedValue({
       ok: true,
       settings: settings({ selected_builder: "hermes_agent" }),
     });
     renderBuildersSection();
     await waitFor(() =>
-      expect(
-        screen.getByText("Hermes Agent new-build support is coming soon."),
-      ).toBeInTheDocument(),
+      expect(screen.getByTestId("hww-selected-builder-helper")).toHaveTextContent(
+        "No external builder selected — HAM will build natively.",
+      ),
     );
-    expect(screen.getByRole("switch", { name: "Hermes Agent" })).toBeDisabled();
+    expect(screen.queryByRole("switch", { name: "Hermes Agent" })).toBeNull();
+    expect(screen.queryByText(/Hermes Agent new-build support is coming soon/i)).toBeNull();
+  });
+
+  it("shows native HAM mode copy when no external builder is selected", async () => {
+    fetchSettingsMock.mockResolvedValue({
+      ok: true,
+      settings: settings({ selected_builder: null }),
+    });
+    renderBuildersSection();
     await waitFor(() =>
       expect(screen.getByTestId("hww-selected-builder-helper")).toHaveTextContent(
-        "Hermes Agent new-build support is coming soon.",
+        "No external builder selected — HAM will build natively.",
       ),
     );
   });
@@ -425,16 +433,12 @@ describe("Workspace Builders selected-builder rows", () => {
     await waitFor(() => expect(ensureBuilderDefaultProject).toHaveBeenCalledWith("ws_1"));
   });
 
-  it("shows coming-soon Hermes details without setup or build controls", async () => {
+  it("does not show Hermes as a coming-soon builder", async () => {
     renderBuildersSection();
-    fireEvent.click(await screen.findByRole("button", { name: "Open details for Hermes Agent" }));
-    const dialog = await screen.findByRole("dialog", { name: "Hermes Agent" });
-    expect(dialog).toHaveTextContent("Coming soon");
-    expect(dialog).toHaveTextContent("Hermes Agent new-build support is coming soon.");
-    expect(dialog).not.toHaveTextContent("Finish setup");
-    expect(dialog).not.toHaveTextContent("Prepare build");
-    expect(dialog).not.toHaveTextContent("Approve");
-    expect(dialog).not.toHaveTextContent("Launch");
+    await waitFor(() => expect(fetchSettingsMock).toHaveBeenCalled());
+    expect(screen.queryByText("Hermes Agent")).toBeNull();
+    expect(screen.queryByText(/coming soon/i)).toBeNull();
+    expect(screen.queryByText(/Hermes Agent new-build support/i)).toBeNull();
   });
 
   it("does not render any build launch / approve / preview controls", async () => {

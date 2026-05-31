@@ -7,17 +7,18 @@ summary.
 
 ## Builder selection model (product law)
 
-**HAM uses the builder/harness selected by the user. There is no hidden fallback
-chain for normal builds.**
+**HAM/Hermes is always the agent the user talks to. External builder selection
+chooses only the execution harness HAM routes work through.**
 
-- **Normal builds use the user-selected builder.** Valid selectable builders:
-  **Cursor, Claude, OpenCode, Factory Droid, Hermes Agent**.
-- **OpenCode may be the default selected builder _only if_ the product
-  explicitly configures it as the default.** When that default is not
-  configured and the user has not selected a builder, **HAM asks the user to
-  choose** — it does not silently pick one.
-- **Hermes Agent is a selectable HAM-native builder** (a peer of the external
-  harnesses, not a fallback).
+- **Settings → Builders shows external execution harnesses only:** **Cursor,
+  Claude, OpenCode, Factory Droid**.
+- **No external builder selected means native HAM/Hermes mode.** The UI should
+  say: "No external builder selected — HAM will build natively." Do not present
+  Hermes as optional, disabled, or "coming soon" in the builder selector.
+- **OpenCode is an optional free external builder, not the conceptual default.**
+  It may be auto-selected only in deployments that explicitly configure
+  `HAM_DEFAULT_BUILDER=opencode`; otherwise no external selection means native
+  HAM/Hermes.
 - **The internal scaffold is not a builder.** It is an **explicit Quick Preview
   tool only** — never a silent default and never an automatic fallback.
 
@@ -27,15 +28,20 @@ chain for normal builds.**
   premium harness is **available** (an availability-based transitional guard;
   commit `1a085c50`). When no harness is available it still falls back to the
   internal scaffold.
+- **Shipped:** selected-builder persistence exists in workspace coding-agent
+  settings (`selected_builder`), and OpenCode / Factory Droid can hand off to
+  the managed approval surface when ready.
+- **Deployment caveat:** staging currently uses `HAM_DEFAULT_BUILDER=opencode`,
+  so a workspace with no selected external builder can still route to OpenCode.
+  That conflicts with the corrected native-default product model unless this is
+  an intentional deployment override for OpenCode-first testing. Production
+  should remove that env default when native HAM/Hermes mode is intended.
 - **Not yet implemented (tracked in `HARNESS_FIRST_ARCHITECTURE_PLAN.md`):**
-  - a persisted **selected builder** preference and selection-based routing on
-    the normal build prompt;
-  - the **OpenCode-as-default** product switch (today OpenCode is an *available
-    provider*, gated by env + workspace policy where `allow_opencode` defaults
-    **off** — it is **not** configured as a default selected builder);
-  - **Hermes Agent as a selectable new-build builder** (today it exists only as
-    an *edit worker* over the Hermes gateway, not a new-build builder);
+  - a true **native HAM/Hermes new-build path** for "no external builder
+    selected";
   - confining the internal scaffold to an explicit Quick Preview request.
+  Today the HAM-native new-build path is not a properly wired Hermes builder;
+  native mode needs implementation before it can honestly become the default.
 
 Selectable-builder preference is expected to live in the workspace coding-agent
 settings (`WorkspaceAgentPolicy` + `/api/workspaces/{id}/coding-agent-access-settings`).

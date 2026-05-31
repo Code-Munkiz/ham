@@ -3,8 +3,7 @@ import { useHamWorkspace } from "@/lib/ham/HamWorkspaceContext";
 import { WorkspaceBuilderPreferences } from "../builder-studio/WorkspaceBuilderPreferences";
 
 const BUILDERS_HEADING = "Builders";
-const BUILDERS_SUBTITLE =
-  "Choose the builder HAM uses when you ask it to build. Work starts in chat.";
+const BUILDERS_SUBTITLE = "Choose an external builder for HAM to use. Work starts in chat.";
 
 export default function WorkspaceBuildersSection() {
   const ctx = useHamWorkspace();
