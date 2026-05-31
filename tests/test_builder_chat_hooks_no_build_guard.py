@@ -68,19 +68,27 @@ def test_explicit_no_build_phrase_does_not_invoke_scaffold(
     scaffold_mock.assert_not_called()
 
 
-def test_positive_control_build_phrase_invokes_scaffold(
+def test_positive_control_build_phrase_routes_to_selection_not_scaffold(
     _empty_store: BuilderSourceStore,
 ) -> None:
-    sentinel_summary = {
-        "builder_intent": "build_or_create",
-        "builder_operation": "build_or_create",
-        "scaffolded": False,
-        "deduplicated": False,
-    }
-    with patch(
-        "src.ham.builder_chat_scaffold.maybe_chat_scaffold_for_turn",
-        return_value=sentinel_summary,
-    ) as scaffold_mock:
+    """A normal build phrase is recognized as a build and routed to the
+    user-selected builder model. With no selection/default it asks the user to
+    choose — it does NOT silently run the internal scaffold (user-selected
+    builder model; see HARNESS_FIRST_ARCHITECTURE_PLAN.md)."""
+    with (
+        patch(
+            "src.ham.builder_chat_hooks._selected_builder_for_workspace",
+            return_value=None,
+        ),
+        patch(
+            "src.ham.builder_chat_hooks.configured_default_builder",
+            return_value=None,
+        ),
+        patch(
+            "src.ham.builder_chat_scaffold.maybe_chat_scaffold_for_turn",
+            side_effect=_raise_if_called,
+        ) as scaffold_mock,
+    ):
         prefix, meta = run_builder_happy_path_hook(
             workspace_id="ws_positive",
             project_id="proj_positive",
@@ -88,6 +96,6 @@ def test_positive_control_build_phrase_invokes_scaffold(
             last_user_plain="build me a landing page",
             ham_actor=_byo_actor(),
         )
-    scaffold_mock.assert_called_once()
-    assert meta.get("builder_intent") == "build_or_create"
-    assert prefix is None or isinstance(prefix, str)
+    scaffold_mock.assert_not_called()
+    assert meta.get("selected_builder_state") == "choose"
+    assert isinstance(prefix, str) and prefix.strip()

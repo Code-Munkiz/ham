@@ -331,7 +331,17 @@ def test_should_defer_builder_scaffold_hook_for_empty_project_net_new_build(
     store = BuilderSourceStore(store_path=tmp_path / "sources.json")
     set_builder_source_store_for_tests(store)
     try:
+        # User-selected builder model: only an explicit Quick Preview build runs
+        # the internal scaffold synchronously and benefits from deferral.
         assert _should_defer_builder_scaffold_hook(
+            last_user_plain="build me a game like asteroids as a quick preview",
+            workspace_id="ws_defer",
+            project_id="proj_defer",
+            ham_actor=None,
+        )
+        # A normal build prompt resolves to a builder handoff / choose reply
+        # (no scaffold), so it is NOT deferred.
+        assert not _should_defer_builder_scaffold_hook(
             last_user_plain="build me a game like asteroids",
             workspace_id="ws_defer",
             project_id="proj_defer",
@@ -379,7 +389,9 @@ def test_chat_stream_deferred_net_new_build_surfaces_scaffold_failure(
         res = client.post(
             "/api/chat/stream",
             json={
-                "messages": [{"role": "user", "content": "build me a game like asteroids"}],
+                "messages": [
+                    {"role": "user", "content": "build me a game like asteroids, quick preview"}
+                ],
                 "workspace_id": "ws_defer_stream",
                 "project_id": "proj_defer_stream",
             },
@@ -389,7 +401,7 @@ def test_chat_stream_deferred_net_new_build_surfaces_scaffold_failure(
         events = _parse_ndjson(res.text)
         assert events[0]["type"] == "session"
         assert events[1]["type"] == "delta"
-        assert "Building your app" in events[1]["text"]
+        assert "quick preview" in events[1]["text"].lower()
         done = [e for e in events if e.get("type") == "done"][0]
         assert done.get("builder", {}).get("llm_scaffold_failed") is True
         assert "openrouter/test" in done["messages"][-1]["content"]

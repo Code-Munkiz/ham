@@ -1326,7 +1326,10 @@ def _builder_skip_planner_for_net_new_build(
     )
 
 
-_BUILDER_STREAM_NET_NEW_ACK = "Building your app from this prompt…\n\n"
+# Streamed only on the deferred path, which now runs solely for explicit Quick
+# Preview builds (see _should_defer_builder_scaffold_hook). Labeled as a preview,
+# not a product build.
+_BUILDER_STREAM_NET_NEW_ACK = "Generating a quick preview from this prompt…\n\n"
 
 
 def _should_defer_builder_scaffold_hook(
@@ -1349,12 +1352,13 @@ def _should_defer_builder_scaffold_hook(
         return False
     if not resolve_openrouter_api_key_for_actor(ham_actor):
         return False
-    # Harness-first: when a premium harness is eligible the hook returns a
-    # transitional pointer instead of scaffolding, so take the synchronous path
-    # (no deferred "Building your app…" ack that would contradict that reply).
-    from src.ham.builder_chat_hooks import premium_harness_available_for_build
+    # User-selected builder model: only an explicit Quick Preview build runs the
+    # internal scaffold synchronously. Normal builds resolve to a builder
+    # handoff / "choose a builder" reply (no scaffold), so they take the
+    # synchronous path — no deferred preview ack that would contradict the reply.
+    from src.ham.builder_chat_hooks import _looks_like_quick_preview_request
 
-    if premium_harness_available_for_build(workspace_id=ws, project_id=pid, ham_actor=ham_actor):
+    if not _looks_like_quick_preview_request(plain):
         return False
     from src.persistence.builder_source_store import get_builder_source_store
 

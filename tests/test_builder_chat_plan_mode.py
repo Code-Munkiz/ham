@@ -70,15 +70,20 @@ def empty_source_store(tmp_path):
         set_builder_source_store_for_tests(None)
 
 
-def test_plan_mode_false_build_intent_scaffolds_directly(
+def test_plan_mode_false_build_intent_routes_to_selected_builder(
     empty_source_store: BuilderSourceStore,
     plan_store: BuilderPlanStore,
 ) -> None:
-    sentinel = {"scaffolded": True, "source_snapshot_id": "snap_x", "builder_operation": "build_or_create"}
-    with patch(
-        "src.ham.builder_chat_scaffold.maybe_chat_scaffold_for_turn",
-        return_value=sentinel,
-    ) as scaffold_mock:
+    """Plan mode off: a normal build routes to the user-selected builder model
+    (no plan proposal, no silent internal scaffold)."""
+    with (
+        patch("src.ham.builder_chat_hooks._selected_builder_for_workspace", return_value=None),
+        patch("src.ham.builder_chat_hooks.configured_default_builder", return_value=None),
+        patch(
+            "src.ham.builder_chat_scaffold.maybe_chat_scaffold_for_turn",
+            side_effect=_raise_if_scaffold,
+        ) as scaffold_mock,
+    ):
         prefix, meta = run_builder_happy_path_hook(
             workspace_id="ws_plan_off",
             project_id="proj_plan_off",
@@ -87,9 +92,9 @@ def test_plan_mode_false_build_intent_scaffolds_directly(
             ham_actor=_actor(),
             plan_mode=False,
         )
-    scaffold_mock.assert_called_once()
-    assert meta.get("builder_intent") == "build_or_create"
+    scaffold_mock.assert_not_called()
     assert meta.get("builder_plan_pending") is not True
+    assert meta.get("selected_builder_state") == "choose"
     assert prefix is not None
 
 
@@ -163,7 +168,7 @@ def test_plan_mode_true_edit_intent_returns_plan_not_scaffold(
     assert pending.user_message == "change the header color to blue"
 
 
-def test_plan_mode_true_affirmation_continues_into_scaffold(
+def test_plan_mode_true_affirmation_continues_into_selected_builder(
     empty_source_store: BuilderSourceStore,
     plan_store: BuilderPlanStore,
 ) -> None:
@@ -179,11 +184,14 @@ def test_plan_mode_true_affirmation_continues_into_scaffold(
     )
     plan_store.upsert_plan(plan)
     plan_store.upsert_approval_record(PlanApprovalRecord(plan_id=plan.plan_id, state="proposed"))
-    sentinel = {"scaffolded": True, "source_snapshot_id": "snap_y", "builder_operation": "build_or_create"}
-    with patch(
-        "src.ham.builder_chat_scaffold.maybe_chat_scaffold_for_turn",
-        return_value=sentinel,
-    ) as scaffold_mock:
+    with (
+        patch("src.ham.builder_chat_hooks._selected_builder_for_workspace", return_value=None),
+        patch("src.ham.builder_chat_hooks.configured_default_builder", return_value=None),
+        patch(
+            "src.ham.builder_chat_scaffold.maybe_chat_scaffold_for_turn",
+            side_effect=_raise_if_scaffold,
+        ) as scaffold_mock,
+    ):
         prefix, meta = run_builder_happy_path_hook(
             workspace_id=ws,
             project_id=pid,
@@ -192,10 +200,12 @@ def test_plan_mode_true_affirmation_continues_into_scaffold(
             ham_actor=_actor(),
             plan_mode=True,
         )
-    scaffold_mock.assert_called_once()
+    # Affirmation still continues the pending plan, but a normal build then
+    # routes to the user-selected builder model (no silent internal scaffold).
+    scaffold_mock.assert_not_called()
     assert meta.get("builder_plan_continuation") is True
     assert meta.get("builder_plan_id") == plan.plan_id
-    assert meta.get("builder_intent") == "build_or_create"
+    assert meta.get("selected_builder_state") == "choose"
     assert prefix is not None
 
 

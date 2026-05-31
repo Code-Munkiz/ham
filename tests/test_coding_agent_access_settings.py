@@ -437,6 +437,51 @@ def test_patch_settings_updates_preference_mode(
     assert res.json()["preference_mode"] == "prefer_open_custom"
 
 
+def test_get_settings_selected_builder_defaults_none(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    ws_store: tuple[InMemoryWorkspaceStore, str],
+) -> None:
+    monkeypatch.setenv("HAM_WORKSPACE_STORE_BACKEND", "local")
+    _, wid = ws_store
+    body = _client().get(f"/api/workspaces/{wid}/coding-agent-access-settings").json()
+    assert body["selected_builder"] is None
+
+
+def test_patch_settings_sets_and_reads_selected_builder(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    ws_store: tuple[InMemoryWorkspaceStore, str],
+) -> None:
+    monkeypatch.setenv("HAM_WORKSPACE_STORE_BACKEND", "local")
+    _, wid = ws_store
+    client = _client()
+    res = client.patch(
+        f"/api/workspaces/{wid}/coding-agent-access-settings",
+        json={"selected_builder": "opencode"},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["selected_builder"] == "opencode"
+    # Persisted + preserved alongside other fields.
+    body = client.get(f"/api/workspaces/{wid}/coding-agent-access-settings").json()
+    assert body["selected_builder"] == "opencode"
+    assert body["allow_cursor"] is True
+
+
+def test_patch_settings_rejects_unknown_selected_builder(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    ws_store: tuple[InMemoryWorkspaceStore, str],
+) -> None:
+    monkeypatch.setenv("HAM_WORKSPACE_STORE_BACKEND", "local")
+    _, wid = ws_store
+    res = _client().patch(
+        f"/api/workspaces/{wid}/coding-agent-access-settings",
+        json={"selected_builder": "not_a_builder"},
+    )
+    assert res.status_code == 422
+
+
 def test_patch_settings_is_idempotent(
     monkeypatch: pytest.MonkeyPatch,
     isolated_store: ProjectStore,

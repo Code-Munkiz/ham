@@ -30,6 +30,7 @@ from src.api.dependencies.workspace import get_workspace_store, require_perm
 from src.ham.coding_router.types import (
     ModelSourcePreference,
     PreferenceMode,
+    SelectedBuilder,
     WorkspaceAgentPolicy,
 )
 from src.ham.workspace_models import WorkspaceContext
@@ -58,6 +59,9 @@ _DEFAULTS: dict[str, Any] = {
     "allow_cursor": True,
     "preference_mode": "recommended",
     "model_source_preference": "ham_default",
+    # No builder is selected by default; HAM applies a configured default (if
+    # any) or asks the user to choose. See the user-selected builder model.
+    "selected_builder": None,
 }
 
 _VALID_PREFERENCE_MODES: frozenset[str] = frozenset(
@@ -65,6 +69,9 @@ _VALID_PREFERENCE_MODES: frozenset[str] = frozenset(
 )
 _VALID_MODEL_SOURCE_PREFS: frozenset[str] = frozenset(
     ["ham_default", "connected_tools_byok", "workspace_default"]
+)
+_VALID_SELECTED_BUILDERS: frozenset[str] = frozenset(
+    ["cursor", "claude", "opencode", "factory_droid", "hermes_agent"]
 )
 
 
@@ -82,6 +89,8 @@ class CodingAgentAccessSettingsPatch(BaseModel):
     allow_cursor: bool | None = None
     preference_mode: PreferenceMode | None = None
     model_source_preference: ModelSourcePreference | None = None
+    # Pydantic rejects unknown values with 422 (mirrors preference_mode).
+    selected_builder: SelectedBuilder | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -113,6 +122,9 @@ def _raw_to_policy(raw: dict[str, Any]) -> WorkspaceAgentPolicy:
     ms = raw.get("model_source_preference", "ham_default")
     if ms not in _VALID_MODEL_SOURCE_PREFS:
         ms = "ham_default"
+    # Unknown / malformed stored selections coerce to "no selection" (safe).
+    sb_raw = raw.get("selected_builder")
+    sb = sb_raw if sb_raw in _VALID_SELECTED_BUILDERS else None
     return WorkspaceAgentPolicy(
         allow_factory_droid=bool(raw.get("allow_factory_droid", True)),
         allow_claude_agent=bool(raw.get("allow_claude_agent", True)),
@@ -120,6 +132,7 @@ def _raw_to_policy(raw: dict[str, Any]) -> WorkspaceAgentPolicy:
         allow_cursor=bool(raw.get("allow_cursor", True)),
         preference_mode=pm,  # type: ignore[arg-type]
         model_source_preference=ms,  # type: ignore[arg-type]
+        selected_builder=sb,  # type: ignore[arg-type]
         updated_at=raw.get("updated_at"),
         updated_by=raw.get("updated_by"),
     )
@@ -135,6 +148,7 @@ def _policy_to_response(workspace_id: str, policy: WorkspaceAgentPolicy) -> dict
         "allow_cursor": policy.allow_cursor,
         "preference_mode": policy.preference_mode,
         "model_source_preference": policy.model_source_preference,
+        "selected_builder": policy.selected_builder,
         "updated_at": policy.updated_at,
         "updated_by": policy.updated_by,
     }

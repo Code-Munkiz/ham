@@ -28,6 +28,19 @@ ModelSourcePreference = Literal[
     "workspace_default",
 ]
 
+# User/product-facing builder selection ids (the "user-selected builder" model;
+# see docs/build-kit-registry-v2/HARNESS_FIRST_ARCHITECTURE_PLAN.md). These are
+# deliberately distinct from the internal ``ProviderKind`` routing strings so
+# they can appear in settings without leaking provider internals. ``hermes_agent``
+# is a selectable HAM-native builder; its new-build entry point is not wired yet.
+SelectedBuilder = Literal[
+    "cursor",
+    "claude",
+    "opencode",
+    "factory_droid",
+    "hermes_agent",
+]
+
 ProviderKind = Literal[
     "no_agent",
     "factory_droid_audit",
@@ -159,6 +172,11 @@ class WorkspaceAgentPolicy:
     allow_cursor: bool = True
     preference_mode: PreferenceMode = "recommended"
     model_source_preference: ModelSourcePreference = "ham_default"
+    # The builder the user selected for normal builds in this workspace. ``None``
+    # means "no selection" — HAM applies a configured default (if any) or asks
+    # the user to choose. This does NOT widen/narrow the ``allow_*`` flags or
+    # ``preference_mode`` (which remain conductor-surface hints).
+    selected_builder: SelectedBuilder | None = None
     updated_at: str | None = None
     updated_by: str | None = None
 
@@ -196,6 +214,7 @@ __all__ = [
     "ProjectFlags",
     "ProviderKind",
     "ProviderReadiness",
+    "SelectedBuilder",
     "TaskKind",
     "WorkspaceAgentPolicy",
     "WorkspaceReadiness",

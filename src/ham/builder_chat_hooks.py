@@ -20,6 +20,7 @@ Conductor ownership boundary (see AGENTS.md → "HAM bet"):
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Any
 
@@ -298,16 +299,11 @@ _PREMIUM_BUILD_HARNESS_PROVIDERS: frozenset[str] = frozenset(
     {"cursor_cloud", "claude_agent", "opencode_cli", "factory_droid_build"}
 )
 
-# Transitional harness-first reply. Contains no build-kit internals, no
-# provider ids, and no env names. It points the user at the existing harness
-# build flow (right-pane panel) and keeps the explicit Quick Preview escape
-# hatch. It does NOT launch a harness — provider launch stays on the gated
-# harness routes.
-_HARNESS_FIRST_BUILD_MESSAGE = (
-    "This workspace has a coding harness ready, so I'll route this build through it "
-    "instead of generating a throwaway preview. Open the build panel on the right to "
-    'review and start the build. If you just want a fast mockup, say "quick preview".'
-    "\n\n"
+# Quick Preview acknowledgement — the internal scaffold runs here as a preview
+# tool, explicitly NOT the product builder.
+_QUICK_PREVIEW_ACK = (
+    "Generating a quick preview (a lightweight mockup, not a full build). "
+    "It'll appear in the workbench on the right.\n\n"
 )
 
 
@@ -365,6 +361,175 @@ def premium_harness_available_for_build(
         p.provider in _PREMIUM_BUILD_HARNESS_PROVIDERS and p.available and not p.blockers
         for p in readiness.providers
     )
+
+
+# ---------------------------------------------------------------------------
+# User-selected builder model (Phase 3 of HARNESS_FIRST_ARCHITECTURE_PLAN.md)
+#
+# A normal new-build prompt routes to the builder the user selected — no hidden
+# fallback chain. With no selection, HAM applies a product-configured default
+# (if any) or asks the user to choose. The internal scaffold is NOT a builder;
+# it runs only for an explicit Quick Preview request.
+# ---------------------------------------------------------------------------
+
+# Product-facing builder display labels (used in user copy + safe metadata).
+# These are intentionally NOT the snake_case provider ids, so they never collide
+# with provider-internal tokens.
+_BUILDER_DISPLAY_LABEL: dict[str, str] = {
+    "cursor": "Cursor",
+    "claude": "Claude",
+    "opencode": "OpenCode",
+    "factory_droid": "Factory Droid",
+    "hermes_agent": "Hermes Agent",
+}
+
+# Selectable builder id -> coding_router ProviderKind used only for readiness.
+# ``hermes_agent`` is intentionally absent: its new-build entry point is not
+# wired yet, so it can never be "ready" for a new build (honest, never faked).
+# TODO(harness-first §9): add a hermes_agent readiness probe + new-build entry
+# point, then map it here.
+_BUILDER_READINESS_PROVIDER: dict[str, str] = {
+    "cursor": "cursor_cloud",
+    "claude": "claude_agent",
+    "opencode": "opencode_cli",
+    "factory_droid": "factory_droid_build",
+}
+
+_DEFAULT_BUILDER_ENV = "HAM_DEFAULT_BUILDER"
+
+_BUILDER_CHOOSE_MESSAGE = (
+    "Which builder should I use for this build? Choose Cursor, Claude, OpenCode, "
+    "Factory Droid, or Hermes Agent in Settings (coding agents). If you just want "
+    'a fast mockup, say "quick preview".'
+    "\n\n"
+)
+
+_HERMES_AGENT_NEW_BUILD_UNAVAILABLE_MESSAGE = (
+    "Hermes Agent is not available for new builds yet. Pick another builder "
+    "(Cursor, Claude, OpenCode, or Factory Droid) in Settings, or say "
+    '"quick preview" for a fast mockup.'
+    "\n\n"
+)
+
+
+def configured_default_builder() -> str | None:
+    """Return the product-configured default builder id, or ``None``.
+
+    Read from ``HAM_DEFAULT_BUILDER`` (e.g. ``opencode``). Only an explicit,
+    valid configuration takes effect; otherwise there is no default and HAM asks
+    the user to choose. Per product law, OpenCode is the default *only if* the
+    product configures it here.
+    """
+    raw = (os.environ.get(_DEFAULT_BUILDER_ENV) or "").strip().lower()
+    return raw if raw in _BUILDER_DISPLAY_LABEL else None
+
+
+def _selected_builder_for_workspace(workspace_id: str) -> str | None:
+    """Return the workspace's persisted selected builder id, or ``None``."""
+    try:
+        from src.api.coding_agent_access_settings import load_workspace_agent_policy
+
+        policy = load_workspace_agent_policy(workspace_id)
+    except Exception:  # noqa: BLE001
+        return None
+    if policy is None:
+        return None
+    sel = getattr(policy, "selected_builder", None)
+    return sel if sel in _BUILDER_DISPLAY_LABEL else None
+
+
+def _selected_builder_ready(
+    builder_id: str,
+    *,
+    workspace_id: str,
+    project_id: str,
+    ham_actor: HamActor | None,
+) -> bool:
+    """True when the selected builder's underlying provider is ready.
+
+    Uses `collate_readiness` + `WorkspaceAgentPolicy` (no secret values). Returns
+    ``False`` for builders with no wired new-build provider (e.g. Hermes Agent).
+    """
+    provider = _BUILDER_READINESS_PROVIDER.get(builder_id)
+    if provider is None:
+        return False
+    try:
+        from src.api.coding_agent_access_settings import load_workspace_agent_policy
+        from src.ham.coding_router import collate_readiness
+
+        policy = load_workspace_agent_policy(workspace_id)
+        readiness = collate_readiness(
+            actor=ham_actor,
+            project_id=project_id,
+            include_operator_details=False,
+            workspace_policy=policy,
+        )
+    except Exception:  # noqa: BLE001
+        return False
+    return any(
+        p.provider == provider and p.available and not p.blockers for p in readiness.providers
+    )
+
+
+def _builder_ready_handoff_message(label: str) -> str:
+    return (
+        f"{label} is your selected builder, so I'll route this build to it. "
+        "Open the build panel on the right to review and start the build.\n\n"
+    )
+
+
+def _builder_setup_required_message(label: str) -> str:
+    return (
+        f"{label} is your selected builder, but it isn't set up on this workspace "
+        "yet. Enable it in Settings (coding agents), then try again. If you just "
+        'want a fast mockup, say "quick preview".\n\n'
+    )
+
+
+def _resolve_selected_builder_turn(
+    *,
+    workspace_id: str,
+    project_id: str,
+    ham_actor: HamActor | None,
+    meta: dict[str, Any],
+    directive_prefix: str,
+) -> tuple[str, dict[str, Any]]:
+    """Terminal (prefix, meta) for a normal build prompt under the user-selected
+    builder model. Never runs the internal scaffold; never fakes a builder."""
+    selected = _selected_builder_for_workspace(workspace_id)
+    source = "selected"
+    if selected is None:
+        selected = configured_default_builder()
+        source = "default" if selected else "none"
+
+    base: dict[str, Any] = {
+        **meta,
+        "builder_intent": "answer_question",
+        "builder_harness_first": True,
+        "scaffolded": False,
+    }
+
+    if selected is None:
+        base["selected_builder_state"] = "choose"
+        return f"{directive_prefix}{_BUILDER_CHOOSE_MESSAGE}", base
+
+    label = _BUILDER_DISPLAY_LABEL[selected]
+    base["selected_builder_label"] = label
+    base["selected_builder_source"] = source
+
+    if selected == "hermes_agent":
+        # Selectable HAM-native builder, but new-build path not wired yet.
+        base["selected_builder_state"] = "unavailable"
+        return f"{directive_prefix}{_HERMES_AGENT_NEW_BUILD_UNAVAILABLE_MESSAGE}", base
+
+    if _selected_builder_ready(
+        selected, workspace_id=workspace_id, project_id=project_id, ham_actor=ham_actor
+    ):
+        base["selected_builder_state"] = "ready"
+        return f"{directive_prefix}{_builder_ready_handoff_message(label)}", base
+
+    base["selected_builder_state"] = "setup_required"
+    return f"{directive_prefix}{_builder_setup_required_message(label)}", base
 
 
 def compose_builder_grounded_status_reply(*, workspace_id: str, project_id: str) -> str:
@@ -703,25 +868,25 @@ def run_builder_happy_path_hook(
                             meta,
                         )
 
-    # Harness-first guard: for normal new-build prompts, do not silently run
-    # the internal scaffold when a premium harness (Cursor / Claude / OpenCode /
-    # Factory Droid) is eligible. Quick Preview / mockup requests and the
-    # update_existing_project edit path are unaffected. See
-    # docs/build-kit-registry-v2/HARNESS_FIRST_ARCHITECTURE_PLAN.md (Phase 2).
-    if (
-        operation == "build_or_create"
-        and not _looks_like_quick_preview_request(effective_plain)
-        and premium_harness_available_for_build(
+    # User-selected builder model: a normal new-build prompt routes to the
+    # builder the user selected (or asks them to choose / use a configured
+    # default). The internal scaffold is NOT a builder and is reached only on an
+    # explicit Quick Preview request. The update_existing_project edit path is
+    # unaffected. See docs/build-kit-registry-v2/HARNESS_FIRST_ARCHITECTURE_PLAN.md
+    # (Phase 3).
+    quick_preview = _looks_like_quick_preview_request(effective_plain)
+    if operation == "build_or_create" and not quick_preview:
+        return _resolve_selected_builder_turn(
             workspace_id=ws,
             project_id=pid,
             ham_actor=ham_actor,
+            meta=meta,
+            directive_prefix=directive_prefix,
         )
-    ):
-        meta["builder_intent"] = "answer_question"
-        meta["builder_harness_first"] = True
-        meta["harness_build_available"] = True
-        meta["scaffolded"] = False
-        return f"{directive_prefix}{_HARNESS_FIRST_BUILD_MESSAGE}", meta
+    if operation == "build_or_create" and quick_preview:
+        # Explicit Quick Preview: the internal scaffold runs, but as a preview
+        # tool — not the product builder.
+        meta["builder_quick_preview"] = True
 
     summary = maybe_chat_scaffold_for_turn(
         workspace_id=ws,
@@ -770,6 +935,11 @@ def run_builder_happy_path_hook(
             )
             if enqueue_meta:
                 meta.update(enqueue_meta)
+        if meta.get("builder_quick_preview"):
+            return (
+                f"{directive_prefix}{_QUICK_PREVIEW_ACK}",
+                meta,
+            )
         return (
             f"{directive_prefix}{_builder_ack_prefix(effective_plain, operation=operation)}",
             meta,

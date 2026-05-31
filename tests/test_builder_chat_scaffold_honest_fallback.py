@@ -161,7 +161,9 @@ def test_llm_scaffold_failure_surfaces_model_slug_in_meta_and_message(
                 workspace_id="ws_model_fail",
                 project_id="proj_model_fail",
                 session_id="sess_model_fail",
-                last_user_plain="build me a game like asteroids",
+                # Quick Preview reaches the internal scaffold (the only path that
+                # runs it under the user-selected builder model).
+                last_user_plain="build me a game like asteroids as a quick preview",
                 ham_actor=actor,
             )
         assert meta.get("llm_scaffold_failed") is True
