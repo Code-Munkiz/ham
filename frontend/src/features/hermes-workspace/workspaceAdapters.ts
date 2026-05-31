@@ -39,6 +39,7 @@ export async function runWorkspaceChatStream(
   body: HamChatRequest,
   callbacks: WorkspaceStreamCallbacks = {},
   authorization?: HamChatStreamAuth,
+  options?: { idleTimeoutMs?: number },
 ): Promise<HamChatResponse> {
   return postChatStream(
     body,
@@ -48,6 +49,7 @@ export async function runWorkspaceChatStream(
       onPlanProposed: callbacks.onPlanProposed,
     },
     authorization,
+    options,
   );
 }
 

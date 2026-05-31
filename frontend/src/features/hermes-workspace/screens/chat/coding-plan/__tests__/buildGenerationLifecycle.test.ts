@@ -4,6 +4,7 @@ import { isLikelyCodingIntent, looksLikeBuilderAppPrompt } from "../codingIntent
 import {
   BUILD_GENERATION_GENERATING_POINTER,
   BUILD_GENERATION_INTERRUPTED_POINTER,
+  BUILD_GENERATION_INTERRUPTED_TOAST,
   BUILD_GENERATION_PREPARING_POINTER,
   BUILD_GENERATION_READY_POINTER,
   buildGenerationChatPointer,
@@ -67,9 +68,10 @@ describe("buildGenerationChatPointer", () => {
 
   it("interrupted copy is recoverable, not a dead-end failure", () => {
     const copy = buildGenerationChatPointer("interrupted") ?? "";
-    expect(copy.toLowerCase()).toContain("checking the latest status");
+    expect(copy.toLowerCase()).toContain("checking the latest build status");
     expect(copy.toLowerCase()).not.toContain("failed");
     expect(copy.toLowerCase()).not.toContain("error");
+    expect(copy.toLowerCase()).not.toContain("crashed");
   });
 
   it("never leaks build-kit internals in any phase", () => {
@@ -87,5 +89,25 @@ describe("buildGenerationChatPointer", () => {
       }
       expect(copy).not.toMatch(/https?:\/\//);
     }
+  });
+});
+
+describe("BUILD_GENERATION_INTERRUPTED_TOAST", () => {
+  it("is calm and recoverable — no crash/failed/connection-interrupted framing", () => {
+    const t = BUILD_GENERATION_INTERRUPTED_TOAST.toLowerCase();
+    expect(t).toContain("still building");
+    expect(t).toContain("checking the latest status");
+    expect(t).not.toContain("connection interrupted");
+    expect(t).not.toContain("failed");
+    expect(t).not.toContain("crashed");
+    expect(t).not.toContain("error");
+  });
+
+  it("never leaks build-kit internals", () => {
+    const t = BUILD_GENERATION_INTERRUPTED_TOAST.toLowerCase();
+    for (const token of FORBIDDEN_TOKENS) {
+      expect(t).not.toContain(token);
+    }
+    expect(t).not.toMatch(/https?:\/\//);
   });
 });

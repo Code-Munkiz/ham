@@ -94,8 +94,16 @@ export const BUILD_GENERATION_PREPARING_POINTER = "I'm preparing your preview…
 export const BUILD_GENERATION_GENERATING_POINTER =
   "I'm generating the first version — it'll appear on the right.";
 export const BUILD_GENERATION_READY_POINTER = "Preview is ready on the right.";
-export const BUILD_GENERATION_INTERRUPTED_POINTER =
-  "Something interrupted. I'm checking the latest status…";
+export const BUILD_GENERATION_INTERRUPTED_POINTER = "I'm still checking the latest build status…";
+
+/**
+ * Calm toast shown when the chat stream drops while a builder generation is
+ * still active. The scaffold keeps running server-side and the preview appears
+ * on the right, so this avoids the alarming "connection interrupted / reply
+ * failed" framing used for ordinary chat turns.
+ */
+export const BUILD_GENERATION_INTERRUPTED_TOAST =
+  "HAM is still building your app — I'm checking the latest status on the right.";
 
 /** Concise persistent chat pointer mirroring the build generation lifecycle. */
 export function buildGenerationChatPointer(phase: BuildGenerationPhase): string | null {

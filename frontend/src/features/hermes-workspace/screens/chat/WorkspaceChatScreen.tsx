@@ -86,10 +86,21 @@ import {
 } from "../../chat/WorkspaceBuilderPlanCards";
 import { isLikelyCodingIntent, looksLikeBuilderAppPrompt } from "./coding-plan/codingIntent";
 import {
+  BUILD_GENERATION_INTERRUPTED_TOAST,
   buildGenerationChatPointer,
   shouldSurfaceCodingConductorCard,
   type BuildGenerationPhase,
 } from "./coding-plan/codingPlanCardCopy";
+
+/**
+ * Idle-timeout window for the chat stream when a Builder Happy Path scaffold is
+ * in flight. The default (60s) assumes token streaming, but a builder scaffold
+ * runs several silent server-side passes (generate → quality inspect → repair →
+ * escalated repair) with no NDJSON bytes. A longer window prevents false
+ * "connection interrupted" recoveries while staying under the Cloud Run request
+ * timeout (300s).
+ */
+const BUILDER_SCAFFOLD_IDLE_TIMEOUT_MS = 180_000;
 import type { ManagedProviderBuildPhase } from "./coding-plan/ManagedProviderBuildApprovalPanel";
 import type {
   ComposerExportPdfState,
@@ -2672,6 +2683,9 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             },
           },
           streamAuth,
+          // Builder scaffolds run long silent server-side passes; widen the idle
+          // window so the stream is not falsely treated as interrupted.
+          builderPromptInFlight ? { idleTimeoutMs: BUILDER_SCAFFOLD_IDLE_TIMEOUT_MS } : undefined,
         );
         if (!requestStillCurrent()) return;
         setSessionId(res.session_id);
@@ -2836,10 +2850,15 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
               meta: sidForRecovery ? { session_id: sidForRecovery } : undefined,
             }),
           );
-          toast.message(
-            "Connection interrupted. Chat was restored from the server. Ask me to continue if the last reply cuts off.",
-            { duration: 10_000 },
-          );
+          if (builderPromptInFlight) {
+            // Scaffold keeps running server-side; the preview lands on the right.
+            toast.message(BUILD_GENERATION_INTERRUPTED_TOAST, { duration: 10_000 });
+          } else {
+            toast.message(
+              "Connection interrupted. Chat was restored from the server. Ask me to continue if the last reply cuts off.",
+              { duration: 10_000 },
+            );
+          }
         } else {
           setInspectorEvents((prev) =>
             appendInspectorEvent(prev, {
@@ -2864,10 +2883,16 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             err instanceof HamChatStreamIncompleteError ||
             (err instanceof Error && err.message === "Chat stream ended without a done event")
           ) {
-            toast.error(
-              "Connection interrupted. Partial reply is kept below — ask me to continue if it cuts off.",
-              { duration: 10_000 },
-            );
+            if (builderPromptInFlight) {
+              // Long silent scaffold pass tripped the idle timer; the build
+              // continues server-side. Keep the framing calm and recoverable.
+              toast.message(BUILD_GENERATION_INTERRUPTED_TOAST, { duration: 10_000 });
+            } else {
+              toast.error(
+                "Connection interrupted. Partial reply is kept below — ask me to continue if it cuts off.",
+                { duration: 10_000 },
+              );
+            }
           } else {
             const msg = err instanceof Error ? err.message : "Request failed";
             toast.error(msg, { duration: 8_000 });

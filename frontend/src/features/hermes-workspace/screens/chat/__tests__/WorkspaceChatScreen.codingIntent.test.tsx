@@ -16,7 +16,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
-import { FORBIDDEN_CARD_TOKENS } from "../coding-plan/codingPlanCardCopy";
+import {
+  BUILD_GENERATION_INTERRUPTED_TOAST,
+  FORBIDDEN_CARD_TOKENS,
+} from "../coding-plan/codingPlanCardCopy";
 import { WorkspaceChatScreen } from "../WorkspaceChatScreen";
 import { WorkspaceHamProjectProvider } from "../../../WorkspaceHamProjectContext";
 import type { HamWorkspaceContextValue } from "@/lib/ham/HamWorkspaceContext";
@@ -29,6 +32,8 @@ const {
   chatStreamMock,
   getStreamAuthMock,
   listHamProjectsMock,
+  toastMessageMock,
+  toastErrorMock,
 } = vi.hoisted(() => ({
   mockUseHamWorkspace: vi.fn(),
   fetchChatSessionMock: vi.fn(),
@@ -36,7 +41,25 @@ const {
   chatStreamMock: vi.fn(),
   getStreamAuthMock: vi.fn(),
   listHamProjectsMock: vi.fn(),
+  toastMessageMock: vi.fn(),
+  toastErrorMock: vi.fn(),
 }));
+
+vi.mock("sonner", () => {
+  const make = () => vi.fn();
+  const toast = Object.assign(vi.fn(), {
+    message: toastMessageMock,
+    error: toastErrorMock,
+    success: make(),
+    warning: make(),
+    info: make(),
+    loading: make(),
+    dismiss: make(),
+    custom: make(),
+    promise: make(),
+  });
+  return { toast, Toaster: () => null };
+});
 
 vi.mock("@/lib/ham/HamWorkspaceContext", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/ham/HamWorkspaceContext")>();
@@ -291,6 +314,8 @@ describe("WorkspaceChatScreen conversational coding conductor", () => {
     chatStreamMock.mockReset();
     getStreamAuthMock.mockReset();
     listHamProjectsMock.mockReset();
+    toastMessageMock.mockReset();
+    toastErrorMock.mockReset();
     listHamProjectsMock.mockImplementation(async () => ({
       projects: [
         {
@@ -392,8 +417,21 @@ describe("WorkspaceChatScreen conversational coding conductor", () => {
       const pointer = container.querySelector("[data-hww-build-gen-pointer]");
       expect(pointer).not.toBeNull();
       expect(pointer!.getAttribute("data-build-gen-phase")).toBe("interrupted");
-      expect(pointer!.textContent).toContain("checking the latest status");
+      expect(pointer!.textContent).toContain("checking the latest build status");
     });
+    // Calm, recoverable toast — not the alarming "Connection interrupted" framing.
+    await waitFor(() => {
+      expect(toastMessageMock).toHaveBeenCalledWith(
+        BUILD_GENERATION_INTERRUPTED_TOAST,
+        expect.anything(),
+      );
+    });
+    const allToastArgs = [...toastMessageMock.mock.calls, ...toastErrorMock.mock.calls].flat();
+    for (const arg of allToastArgs) {
+      if (typeof arg === "string") {
+        expect(arg.toLowerCase()).not.toContain("connection interrupted");
+      }
+    }
     assertNoForbiddenTokens(container);
   });
 
