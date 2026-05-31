@@ -47,6 +47,7 @@ vi.mock("@/features/hermes-workspace/adapters/codingAgentsAdapter", async (impor
 
 import WorkspaceBuildersSection from "../WorkspaceBuildersSection";
 import { DEFAULT_CODING_AGENT_SETTINGS } from "@/features/hermes-workspace/adapters/codingAgentsAdapter";
+import { listHamProjects } from "@/lib/ham/api";
 
 function settings(over: Partial<typeof DEFAULT_CODING_AGENT_SETTINGS> = {}) {
   return { ...DEFAULT_CODING_AGENT_SETTINGS, workspace_id: "ws_1", ...over };
@@ -314,6 +315,46 @@ describe("Workspace Builders selected-builder rows", () => {
         "Cursor runs through its own build flow for now.",
       ),
     );
+  });
+
+  it("shows 'Selected, needs setup' for OpenCode when no managed workspace project exists", async () => {
+    // listHamProjects (mocked) returns a project with no workspace_id, so the
+    // managed-build gate is not satisfied even though the provider is platform-ready.
+    fetchSettingsMock.mockResolvedValue({
+      ok: true,
+      settings: settings({ selected_builder: "opencode" }),
+    });
+    renderBuildersSection();
+    await waitFor(() => expect(screen.getByText("Selected, needs setup")).toBeInTheDocument());
+    // The selected, blocked builder must not be advertised as build-ready.
+    expect(screen.queryByText("Ready")).toBeNull();
+    expect(screen.queryByText("Available")).toBeNull();
+  });
+
+  it("points the OpenCode setup action at the workspace projects surface", async () => {
+    fetchSettingsMock.mockResolvedValue({
+      ok: true,
+      settings: settings({ selected_builder: "opencode" }),
+    });
+    renderBuildersSection();
+    const action = await screen.findByRole("link", {
+      name: "Create or attach a workspace project",
+    });
+    expect(action).toHaveAttribute("href", "/workspace/projects");
+  });
+
+  it("shows 'Ready' for OpenCode once a managed workspace project exists", async () => {
+    vi.mocked(listHamProjects).mockResolvedValueOnce({
+      projects: [{ id: "project_1", workspace_id: "ws_1" }],
+    } as Awaited<ReturnType<typeof listHamProjects>>);
+    fetchSettingsMock.mockResolvedValue({
+      ok: true,
+      settings: settings({ selected_builder: "opencode" }),
+    });
+    renderBuildersSection();
+    await waitFor(() => expect(screen.getAllByText("Ready").length).toBeGreaterThanOrEqual(1));
+    expect(screen.queryByText("Selected, needs setup")).toBeNull();
+    expect(screen.queryByRole("link", { name: "Create or attach a workspace project" })).toBeNull();
   });
 
   it("does not render any build launch / approve / preview controls", async () => {

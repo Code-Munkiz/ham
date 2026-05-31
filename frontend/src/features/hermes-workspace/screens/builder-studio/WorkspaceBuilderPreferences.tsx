@@ -3,6 +3,7 @@
  * Task launches and routing happen from workspace chat, not from this surface.
  */
 import * as React from "react";
+import { Link } from "react-router-dom";
 import { Bot, Brain, ChevronRight, Cpu, ScanLine, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ProjectRecord } from "@/lib/ham/types";
@@ -27,6 +28,8 @@ import {
 
 type StatusTone = BuilderConnectionStatusTone;
 
+type BuilderSetupAction = { label: string; to: string };
+
 type BuilderRowModel = {
   key: SelectedBuilder;
   lane: BuilderConnectionLane;
@@ -36,6 +39,7 @@ type BuilderRowModel = {
   statusLabel: string;
   statusTone: StatusTone;
   helper: string;
+  setupAction?: BuilderSetupAction;
 };
 
 function ConnectionStatusBadge({ label, tone }: { label: string; tone: StatusTone }) {
@@ -107,6 +111,7 @@ function BuilderConnectionRow({
   statusLabel,
   statusTone,
   helper,
+  setupAction,
   selected,
   disabled,
   saving,
@@ -121,6 +126,7 @@ function BuilderConnectionRow({
   statusLabel: string;
   statusTone: StatusTone;
   helper: string;
+  setupAction?: BuilderSetupAction;
   selected: boolean;
   disabled: boolean;
   saving: boolean;
@@ -160,6 +166,14 @@ function BuilderConnectionRow({
             <span className="mt-2 block text-[11px] leading-relaxed text-[var(--theme-muted)]">
               {helper}
             </span>
+            {setupAction ? (
+              <Link
+                to={setupAction.to}
+                className="mt-2 inline-flex w-fit items-center text-[11px] font-medium text-[var(--theme-accent)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)]"
+              >
+                {setupAction.label}
+              </Link>
+            ) : null}
           </span>
         </div>
         <button
@@ -194,6 +208,48 @@ function rowStatusFromReadiness(
     return { statusLabel: readyLabel, statusTone: "ready" };
   }
   return { statusLabel: needsSetupLabel, statusTone: "attention" };
+}
+
+// In-chat managed builders (OpenCode / Factory Droid) can only run a build when
+// their provider is platform-ready AND the workspace has a managed-workspace
+// project to build into. This mirrors the chat-side readiness gate
+// (`_selected_builder_ready`) so Builders never claims "Ready" when chat would
+// still block the build. Platform-only availability is not enough.
+function inChatBuilderRowStatus(opts: {
+  loading: boolean;
+  platformReady: boolean;
+  managedProjectReady: boolean;
+  isSelected: boolean;
+}): { statusLabel: string; statusTone: StatusTone } {
+  if (opts.loading) {
+    return { statusLabel: CODING_AGENT_LABELS.connectionStatusChecking, statusTone: "neutral" };
+  }
+  if (opts.platformReady && opts.managedProjectReady) {
+    return { statusLabel: "Ready", statusTone: "ready" };
+  }
+  if (opts.isSelected) {
+    return { statusLabel: "Selected, needs setup", statusTone: "attention" };
+  }
+  if (!opts.platformReady) {
+    return { statusLabel: "Needs setup", statusTone: "attention" };
+  }
+  return { statusLabel: "Needs workspace setup", statusTone: "attention" };
+}
+
+function inChatBuilderSetupAction(opts: {
+  builder: "opencode" | "factory_droid";
+  platformReady: boolean;
+  managedProjectReady: boolean;
+  settingsHermes: string;
+  settingsTools: string;
+  projectsPath: string;
+}): BuilderSetupAction {
+  if (!opts.platformReady) {
+    return opts.builder === "opencode"
+      ? { label: "Open setup", to: opts.settingsHermes }
+      : { label: "Go to Connected Tools", to: opts.settingsTools };
+  }
+  return { label: "Create or attach a workspace project", to: opts.projectsPath };
 }
 
 function selectedBuilderHelp(selected: SelectedBuilder | null) {
@@ -256,6 +312,7 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
   const [opencodeReadiness, setOpencodeReadiness] =
     React.useState<CodingAgentReadiness>("needs_setup");
   const [factoryReady, setFactoryReady] = React.useState(false);
+  const [managedProjectReady, setManagedProjectReady] = React.useState(false);
   const [openLane, setOpenLane] = React.useState<BuilderConnectionLane | null>(null);
 
   const refresh = React.useCallback(async () => {
@@ -276,6 +333,11 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
     setClaudeReadiness(codingSnap.claudeAgent);
     setOpencodeReadiness(codingSnap.opencode);
     setFactoryReady(projectsRes.projects.length > 0);
+    // A managed in-chat build needs a project attached to a workspace, mirroring
+    // the chat-side managed-workspace gate. "Any project exists" is not enough.
+    setManagedProjectReady(
+      projectsRes.projects.some((p) => Boolean((p.workspace_id ?? "").trim())),
+    );
     setLoading(false);
   }, [workspaceId]);
 
@@ -501,6 +563,22 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
     settingsTools,
   ]);
 
+  const opencodePlatformReady = opencodeReadiness === "ready";
+  const opencodeBuildReady = opencodePlatformReady && managedProjectReady;
+  const opencodeRowStatus = inChatBuilderRowStatus({
+    loading,
+    platformReady: opencodePlatformReady,
+    managedProjectReady,
+    isSelected: selectedBuilder === "opencode",
+  });
+  const factoryBuildReady = factoryReady && managedProjectReady;
+  const factoryRowStatus = inChatBuilderRowStatus({
+    loading,
+    platformReady: factoryReady,
+    managedProjectReady,
+    isSelected: selectedBuilder === "factory_droid",
+  });
+
   const rows: BuilderRowModel[] = [
     {
       key: "opencode",
@@ -508,12 +586,22 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
       icon: Sparkles,
       title: CODING_AGENT_LABELS.opencodeProviderName,
       subtitle: CODING_AGENT_LABELS.builderConnectionOpencodeSubtitle,
-      statusLabel: opencodeStatusLabel,
-      statusTone: opencodeTone,
-      helper:
-        opencodeReadiness === "ready"
-          ? "Available to select. A managed build still needs a workspace-ready project."
-          : "Needs model access before HAM can use it for normal builds.",
+      statusLabel: opencodeRowStatus.statusLabel,
+      statusTone: opencodeRowStatus.statusTone,
+      helper: opencodeBuildReady
+        ? "Runs as a managed build you review before it runs."
+        : "Runs as a managed build you review first. Needs model access and a workspace-ready project.",
+      setupAction:
+        selectedBuilder === "opencode" && !opencodeBuildReady
+          ? inChatBuilderSetupAction({
+              builder: "opencode",
+              platformReady: opencodePlatformReady,
+              managedProjectReady,
+              settingsHermes,
+              settingsTools,
+              projectsPath,
+            })
+          : undefined,
     },
     {
       key: "factory_droid",
@@ -521,11 +609,22 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
       icon: ScanLine,
       title: CODING_AGENT_LABELS.builderConnectionFactoryTitle,
       subtitle: CODING_AGENT_LABELS.builderConnectionFactorySubtitle,
-      statusLabel: factoryStatusLabel,
-      statusTone: factoryTone,
-      helper: factoryReady
-        ? "Available to select for managed workspace builds."
-        : "Needs a workspace project before HAM can use it for normal builds.",
+      statusLabel: factoryRowStatus.statusLabel,
+      statusTone: factoryRowStatus.statusTone,
+      helper: factoryBuildReady
+        ? "Runs as a managed build you review before it runs."
+        : "Runs as a managed build you review first. Needs a workspace-ready project.",
+      setupAction:
+        selectedBuilder === "factory_droid" && !factoryBuildReady
+          ? inChatBuilderSetupAction({
+              builder: "factory_droid",
+              platformReady: factoryReady,
+              managedProjectReady,
+              settingsHermes,
+              settingsTools,
+              projectsPath,
+            })
+          : undefined,
     },
     {
       key: "cursor",
@@ -576,6 +675,7 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
               statusLabel={row.statusLabel}
               statusTone={row.statusTone}
               helper={row.helper}
+              setupAction={row.setupAction}
               selected={selectedBuilder === row.key}
               disabled={
                 loading ||
