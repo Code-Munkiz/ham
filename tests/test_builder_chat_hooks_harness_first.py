@@ -91,7 +91,7 @@ def _run(prompt: str):
 # ---------------------------------------------------------------------------
 
 
-def test_selected_builder_ready_hands_off_and_blocks_scaffold(_empty_store) -> None:
+def test_selected_opencode_ready_hands_off_and_blocks_scaffold(_empty_store) -> None:
     with (
         patch(f"{_HOOKS}._selected_builder_for_workspace", return_value="opencode"),
         patch(f"{_HOOKS}._selected_builder_ready", return_value=True),
@@ -104,14 +104,34 @@ def test_selected_builder_ready_hands_off_and_blocks_scaffold(_empty_store) -> N
     scaffold_mock.assert_not_called()
     assert meta.get("selected_builder_state") == "ready"
     assert meta.get("selected_builder_label") == "OpenCode"
+    assert meta.get("builder_handoff_required") is True
+    assert meta.get("selected_builder_key") == "opencode"
     assert meta.get("builder_harness_first") is True
     assert meta.get("scaffolded") is False
-    assert "OpenCode" in prefix and "build panel" in prefix
+    assert "OpenCode" in prefix and "on the right" in prefix
+
+
+def test_selected_factory_droid_ready_hands_off_and_blocks_scaffold(_empty_store) -> None:
+    with (
+        patch(f"{_HOOKS}._selected_builder_for_workspace", return_value="factory_droid"),
+        patch(f"{_HOOKS}._selected_builder_ready", return_value=True),
+        patch(
+            "src.ham.builder_chat_scaffold.maybe_chat_scaffold_for_turn",
+            side_effect=_raise_if_called,
+        ) as scaffold_mock,
+    ):
+        prefix, meta = _run("build me a tetris game")
+    scaffold_mock.assert_not_called()
+    assert meta.get("selected_builder_state") == "ready"
+    assert meta.get("selected_builder_label") == "Factory Droid"
+    assert meta.get("builder_handoff_required") is True
+    assert meta.get("selected_builder_key") == "factory_droid"
+    assert "Factory Droid" in prefix and "on the right" in prefix
 
 
 def test_selected_builder_not_ready_returns_setup_copy_and_blocks_scaffold(_empty_store) -> None:
     with (
-        patch(f"{_HOOKS}._selected_builder_for_workspace", return_value="cursor"),
+        patch(f"{_HOOKS}._selected_builder_for_workspace", return_value="factory_droid"),
         patch(f"{_HOOKS}._selected_builder_ready", return_value=False),
         patch(
             "src.ham.builder_chat_scaffold.maybe_chat_scaffold_for_turn",
@@ -121,8 +141,27 @@ def test_selected_builder_not_ready_returns_setup_copy_and_blocks_scaffold(_empt
         prefix, meta = _run("build me a tetris game")
     scaffold_mock.assert_not_called()
     assert meta.get("selected_builder_state") == "setup_required"
-    assert meta.get("selected_builder_label") == "Cursor"
+    assert meta.get("selected_builder_label") == "Factory Droid"
+    assert meta.get("builder_handoff_required") is None
     assert "isn't set up" in prefix
+
+
+def test_selected_cursor_uses_separate_flow_copy_and_no_handoff(_empty_store) -> None:
+    # cursor / claude are selectable but have no in-chat managed approval lane
+    # in this phase — honest separate-flow copy, never a handoff or a scaffold.
+    with (
+        patch(f"{_HOOKS}._selected_builder_for_workspace", return_value="cursor"),
+        patch(
+            "src.ham.builder_chat_scaffold.maybe_chat_scaffold_for_turn",
+            side_effect=_raise_if_called,
+        ) as scaffold_mock,
+    ):
+        prefix, meta = _run("build me a tetris game")
+    scaffold_mock.assert_not_called()
+    assert meta.get("selected_builder_state") == "separate_flow"
+    assert meta.get("selected_builder_label") == "Cursor"
+    assert meta.get("builder_handoff_required") is None
+    assert "own build flow" in prefix
 
 
 def test_no_selection_no_default_asks_user_to_choose_and_blocks_scaffold(_empty_store) -> None:
@@ -156,6 +195,8 @@ def test_no_selection_with_configured_opencode_default_hands_off(_empty_store) -
     assert meta.get("selected_builder_state") == "ready"
     assert meta.get("selected_builder_label") == "OpenCode"
     assert meta.get("selected_builder_source") == "default"
+    assert meta.get("builder_handoff_required") is True
+    assert meta.get("selected_builder_key") == "opencode"
 
 
 def test_selected_hermes_agent_is_honestly_unavailable_for_new_builds(_empty_store) -> None:
@@ -195,7 +236,9 @@ def test_explicit_quick_preview_allows_internal_scaffold_as_preview(_empty_store
 def test_selected_builder_responses_expose_no_internals(_empty_store) -> None:
     scenarios = [
         ("opencode", True, None),
+        ("factory_droid", True, None),
         ("cursor", False, None),
+        ("claude", False, None),
         ("hermes_agent", False, None),
         (None, False, None),
     ]

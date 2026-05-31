@@ -88,6 +88,8 @@ import { isLikelyCodingIntent, looksLikeBuilderAppPrompt } from "./coding-plan/c
 import {
   BUILD_GENERATION_INTERRUPTED_TOAST,
   buildGenerationChatPointer,
+  managedHandoffPreviewPayload,
+  readManagedBuilderHandoff,
   shouldSurfaceCodingConductorCard,
   type BuildGenerationPhase,
 } from "./coding-plan/codingPlanCardCopy";
@@ -2692,7 +2694,22 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         writeWorkspaceLastChatSessionId(requestWorkspaceId, res.session_id);
         setExecutionMode(res.execution_mode ?? null);
         const b = res.builder;
-        if (b && (b.scaffolded === true || b.deduplicated === true)) {
+        const managedHandoff = readManagedBuilderHandoff(b);
+        if (managedHandoff && effectiveProjectId) {
+          // Selected-builder handoff: populate the existing managed-approval
+          // payload so the right pane renders the matching managed build flow
+          // (OpenCode / Factory Droid). No launch here — the managed panel owns
+          // preview/digest/launch/polling. Chat stays a short pointer only.
+          setCodingPlanPreview(
+            managedHandoffPreviewPayload(managedHandoff.key, effectiveProjectId),
+          );
+          setCodingPlanPrompt(plainOutbound || displayContent || "");
+          setCodingPlanInlineError(null);
+          setCodingPlanLoading(false);
+          setCodingPlanPreferring(null);
+          setBuildGenPhase("idle");
+          setWorkbenchBounce((x) => x + 1);
+        } else if (b && (b.scaffolded === true || b.deduplicated === true)) {
           setWorkbenchBounce((x) => x + 1);
           setBuildGenPhase("ready");
         } else if (builderPromptInFlight) {

@@ -397,6 +397,14 @@ _BUILDER_READINESS_PROVIDER: dict[str, str] = {
 
 _DEFAULT_BUILDER_ENV = "HAM_DEFAULT_BUILDER"
 
+# Builders that already have a compatible in-chat managed approval lifecycle
+# (the right-pane managed build panels). A ready selection here produces a real
+# handoff (builder_handoff_required) so the frontend opens the matching managed
+# approval surface. cursor / claude have separate launch flows (not the managed
+# in-chat lane) and are NOT forced into this phase; hermes_agent's new-build
+# entry point is not wired. See HARNESS_FIRST_ARCHITECTURE_PLAN.md §8/§9.
+_HANDOFF_SUPPORTED_BUILDERS: frozenset[str] = frozenset({"opencode", "factory_droid"})
+
 _BUILDER_CHOOSE_MESSAGE = (
     "Which builder should I use for this build? Choose Cursor, Claude, OpenCode, "
     "Factory Droid, or Hermes Agent in Settings (coding agents). If you just want "
@@ -466,16 +474,27 @@ def _selected_builder_ready(
         )
     except Exception:  # noqa: BLE001
         return False
-    return any(
+    provider_ready = any(
         p.provider == provider and p.available and not p.blockers for p in readiness.providers
     )
+    if not provider_ready:
+        return False
+    # The in-chat managed approval lanes (OpenCode / Factory Droid) require a
+    # managed-workspace project with an assigned workspace so the managed
+    # approval panel can actually preview/launch. Without it, "ready" would
+    # hand off to a panel that fails server-side.
+    if builder_id in _HANDOFF_SUPPORTED_BUILDERS:
+        proj = readiness.project
+        target = (getattr(proj, "output_target", None) or "").strip()
+        if target != "managed_workspace" or not getattr(proj, "has_workspace_id", False):
+            return False
+    return True
 
 
 def _builder_ready_handoff_message(label: str) -> str:
-    return (
-        f"{label} is your selected builder, so I'll route this build to it. "
-        "Open the build panel on the right to review and start the build.\n\n"
-    )
+    # Short pointer only — chat stays conversation-first; the managed approval
+    # surface lives in the right pane. No "built" claim before the harness runs.
+    return f"{label} is your selected builder. I've prepared the build on the right.\n\n"
 
 
 def _builder_setup_required_message(label: str) -> str:
@@ -483,6 +502,17 @@ def _builder_setup_required_message(label: str) -> str:
         f"{label} is your selected builder, but it isn't set up on this workspace "
         "yet. Enable it in Settings (coding agents), then try again. If you just "
         'want a fast mockup, say "quick preview".\n\n'
+    )
+
+
+def _builder_separate_flow_message(label: str) -> str:
+    # cursor / claude are selectable but run through their own launch flows, not
+    # the in-chat managed approval lane. Honest copy; no handoff, no scaffold.
+    return (
+        f"{label} is your selected builder. {label} runs through its own build flow "
+        "for now — in-chat managed approval for it is coming in a later phase. Pick "
+        'OpenCode or Factory Droid for the in-chat build, or say "quick preview" for '
+        "a fast mockup.\n\n"
     )
 
 
@@ -522,10 +552,21 @@ def _resolve_selected_builder_turn(
         base["selected_builder_state"] = "unavailable"
         return f"{directive_prefix}{_HERMES_AGENT_NEW_BUILD_UNAVAILABLE_MESSAGE}", base
 
+    if selected not in _HANDOFF_SUPPORTED_BUILDERS:
+        # cursor / claude: no compatible in-chat managed approval lane yet.
+        base["selected_builder_state"] = "separate_flow"
+        return f"{directive_prefix}{_builder_separate_flow_message(label)}", base
+
     if _selected_builder_ready(
         selected, workspace_id=workspace_id, project_id=project_id, ham_actor=ham_actor
     ):
+        # Real handoff: the frontend opens the matching managed approval surface
+        # in the right pane. ``selected_builder_key`` is a safe, normalized
+        # routing key (no provider internals). Launch/digest/polling stay on the
+        # existing managed panel + gated routes (unchanged here).
         base["selected_builder_state"] = "ready"
+        base["builder_handoff_required"] = True
+        base["selected_builder_key"] = selected
         return f"{directive_prefix}{_builder_ready_handoff_message(label)}", base
 
     base["selected_builder_state"] = "setup_required"

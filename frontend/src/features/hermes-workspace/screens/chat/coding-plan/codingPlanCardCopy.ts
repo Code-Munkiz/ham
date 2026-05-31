@@ -427,6 +427,89 @@ export function shouldSurfaceCodingConductorCard(payload: CodingConductorPreview
 }
 
 /**
+ * Safe, normalized builder keys (backend `selected_builder_key`) that have a
+ * compatible in-chat managed approval lane. cursor / claude / hermes_agent are
+ * intentionally absent — they have no managed in-chat lane in this phase.
+ */
+export type ManagedHandoffBuilderKey = "opencode" | "factory_droid";
+
+const MANAGED_HANDOFF_PROVIDER: Record<ManagedHandoffBuilderKey, CodingConductorProviderKind> = {
+  opencode: "opencode_cli",
+  factory_droid: "factory_droid_build",
+};
+
+/**
+ * Read a ready selected-builder managed handoff from chat `builder` metadata.
+ * Returns null unless the backend marked a ready handoff for a supported
+ * managed builder. Reads only safe, product-facing fields — never provider
+ * internals, env names, or digest/launch fields.
+ */
+export function readManagedBuilderHandoff(
+  builder: Record<string, unknown> | null | undefined,
+): { key: ManagedHandoffBuilderKey; label: string } | null {
+  if (!builder) return null;
+  if (builder.builder_handoff_required !== true) return null;
+  if (builder.selected_builder_state !== "ready") return null;
+  const key = builder.selected_builder_key;
+  if (key !== "opencode" && key !== "factory_droid") return null;
+  const label =
+    typeof builder.selected_builder_label === "string" ? builder.selected_builder_label : "";
+  return { key, label };
+}
+
+/**
+ * Synthesize the managed-approval payload the right-pane mount expects from a
+ * selected-builder handoff. Reuses the existing CodingConductorPreviewPayload
+ * shape + predicates so no duplicate approval component is introduced. The
+ * managed panel re-validates server-side and owns all launch / proposal_digest
+ * / base_revision / confirmed / polling mechanics (unchanged).
+ */
+export function managedHandoffPreviewPayload(
+  key: ManagedHandoffBuilderKey,
+  projectId: string,
+): CodingConductorPreviewPayload {
+  const provider = MANAGED_HANDOFF_PROVIDER[key];
+  const isOpencode = provider === "opencode_cli";
+  const chosen: CodingConductorCandidate = {
+    provider,
+    label: isOpencode ? "OpenCode" : FACTORY_DROID_BUILD_MANAGED_LABEL,
+    available: true,
+    reason: "",
+    blockers: [],
+    confidence: 1,
+    output_kind: isOpencode ? "mission" : "pull_request",
+    requires_operator: false,
+    requires_confirmation: true,
+    will_modify_code: true,
+    // Managed-workspace snapshot, not a GitHub PR.
+    will_open_pull_request: false,
+    builder_id: null,
+    builder_name: null,
+  };
+  return {
+    kind: "coding_conductor_preview",
+    preview_id: `handoff:${key}:${projectId}`,
+    task_kind: "feature",
+    task_confidence: 1,
+    chosen,
+    candidates: [chosen],
+    blockers: [],
+    recommendation_reason: "",
+    requires_approval: true,
+    approval_kind: "confirm",
+    project: {
+      found: true,
+      project_id: projectId,
+      build_lane_enabled: true,
+      has_github_repo: false,
+      output_target: "managed_workspace",
+      has_workspace_id: true,
+    },
+    is_operator: false,
+  };
+}
+
+/**
  * Word-list of strings the card MUST NEVER render in user-facing copy.
  * The card itself doesn't include any of these in its source; this list
  * is consumed by the component's snapshot test to assert no rendered DOM
