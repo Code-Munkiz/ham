@@ -1,11 +1,31 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fetchSettingsMock, patchSettingsMock, readinessMock } = vi.hoisted(() => ({
-  fetchSettingsMock: vi.fn(),
-  patchSettingsMock: vi.fn(),
-  readinessMock: vi.fn(),
-}));
+const { mockUseHamWorkspace, fetchSettingsMock, patchSettingsMock, readinessMock } = vi.hoisted(
+  () => ({
+    mockUseHamWorkspace: vi.fn(),
+    fetchSettingsMock: vi.fn(),
+    patchSettingsMock: vi.fn(),
+    readinessMock: vi.fn(),
+  }),
+);
+
+vi.mock("@/lib/ham/HamWorkspaceContext", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/ham/HamWorkspaceContext")>();
+  return {
+    ...actual,
+    useHamWorkspace: mockUseHamWorkspace,
+  };
+});
+
+vi.mock("@/lib/ham/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/ham/api")>();
+  return {
+    ...actual,
+    listHamProjects: vi.fn(async () => ({ projects: [{ id: "project_1" }] })),
+  };
+});
 
 vi.mock("@/features/hermes-workspace/adapters/codingAgentsAdapter", async (importOriginal) => {
   const actual =
@@ -17,10 +37,15 @@ vi.mock("@/features/hermes-workspace/adapters/codingAgentsAdapter", async (impor
     fetchCodingAgentAccessSettings: fetchSettingsMock,
     patchCodingAgentAccessSettings: patchSettingsMock,
     fetchCodingReadinessSnapshot: readinessMock,
+    fetchCursorReadiness: vi.fn(async () => ({
+      readiness: "needs_setup" as const,
+      status: null,
+      error: null,
+    })),
   };
 });
 
-import { WorkspaceSelectedBuilderControl } from "../WorkspaceSelectedBuilderControl";
+import WorkspaceBuildersSection from "../WorkspaceBuildersSection";
 import { DEFAULT_CODING_AGENT_SETTINGS } from "@/features/hermes-workspace/adapters/codingAgentsAdapter";
 
 function settings(over: Partial<typeof DEFAULT_CODING_AGENT_SETTINGS> = {}) {
@@ -47,7 +72,48 @@ const FORBIDDEN = [
   "playbook",
 ];
 
+function readyWs() {
+  return {
+    state: {
+      status: "ready",
+      me: {
+        user: {
+          user_id: "u1",
+          email: "a@example.com",
+          display_name: null,
+          photo_url: null,
+          primary_org_id: null,
+        },
+        orgs: [],
+        workspaces: [],
+        default_workspace_id: "ws_1",
+        auth_mode: "clerk",
+      },
+      activeWorkspaceId: "ws_1",
+    },
+    workspaces: [],
+    active: null,
+    authMode: "clerk",
+    hostedAuth: null,
+    refresh: vi.fn(),
+    selectWorkspace: vi.fn(),
+    createWorkspace: vi.fn(),
+    patchActiveWorkspace: vi.fn(),
+    archiveWorkspaceById: vi.fn(),
+    hasPerm: vi.fn(() => true),
+  };
+}
+
+function renderBuildersSection() {
+  return render(
+    <MemoryRouter>
+      <WorkspaceBuildersSection />
+    </MemoryRouter>,
+  );
+}
+
 beforeEach(() => {
+  mockUseHamWorkspace.mockReturnValue(readyWs());
   readinessMock.mockResolvedValue({ opencode: "ready", claudeAgent: "needs_setup" });
   fetchSettingsMock.mockResolvedValue({ ok: true, settings: settings() });
   patchSettingsMock.mockImplementation(async (_ws: string, patch: Record<string, unknown>) => ({
@@ -58,22 +124,27 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  mockUseHamWorkspace.mockReset();
   fetchSettingsMock.mockReset();
   patchSettingsMock.mockReset();
   readinessMock.mockReset();
 });
 
-describe("WorkspaceSelectedBuilderControl", () => {
-  it("renders the Builder selector with the five product-facing options", async () => {
-    render(<WorkspaceSelectedBuilderControl workspaceId="ws_1" />);
+describe("Workspace Builders selected-builder rows", () => {
+  it("renders one coherent Builders section with the five product-facing options", async () => {
+    renderBuildersSection();
     await waitFor(() => expect(fetchSettingsMock).toHaveBeenCalled());
+    expect(screen.getByRole("heading", { name: "Builders" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Builder" })).toBeInTheDocument();
     expect(
-      screen.getByText("Choose which builder HAM uses for normal builds."),
-    ).toBeInTheDocument();
+      screen.getAllByText(
+        "Choose which builder HAM uses for normal builds. Work still starts in chat.",
+      ).length,
+    ).toBeGreaterThanOrEqual(1);
     for (const name of ["OpenCode", "Factory Droid", "Cursor", "Claude", "Hermes Agent"]) {
       expect(screen.getByRole("radio", { name })).toBeInTheDocument();
     }
+    expect(screen.queryByText("Builder connections")).toBeNull();
   });
 
   it("loads the current selected_builder from the API", async () => {
@@ -81,17 +152,12 @@ describe("WorkspaceSelectedBuilderControl", () => {
       ok: true,
       settings: settings({ selected_builder: "factory_droid" }),
     });
-    render(<WorkspaceSelectedBuilderControl workspaceId="ws_1" />);
-    await waitFor(() =>
-      expect(screen.getByRole("radio", { name: "Factory Droid" })).toHaveAttribute(
-        "aria-checked",
-        "true",
-      ),
-    );
+    renderBuildersSection();
+    await waitFor(() => expect(screen.getByRole("radio", { name: "Factory Droid" })).toBeChecked());
   });
 
   it("PATCHes selected_builder=opencode when OpenCode is chosen", async () => {
-    render(<WorkspaceSelectedBuilderControl workspaceId="ws_1" />);
+    renderBuildersSection();
     await waitFor(() => expect(fetchSettingsMock).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("radio", { name: "OpenCode" }));
     await waitFor(() => expect(patchSettingsMock).toHaveBeenCalledTimes(1));
@@ -99,11 +165,29 @@ describe("WorkspaceSelectedBuilderControl", () => {
   });
 
   it("PATCHes selected_builder=factory_droid when Factory Droid is chosen", async () => {
-    render(<WorkspaceSelectedBuilderControl workspaceId="ws_1" />);
+    renderBuildersSection();
     await waitFor(() => expect(fetchSettingsMock).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("radio", { name: "Factory Droid" }));
     await waitFor(() => expect(patchSettingsMock).toHaveBeenCalledTimes(1));
     expect(patchSettingsMock).toHaveBeenCalledWith("ws_1", { selected_builder: "factory_droid" });
+  });
+
+  it("failed PATCH reverts and shows a clear error", async () => {
+    fetchSettingsMock.mockResolvedValue({
+      ok: true,
+      settings: settings({ selected_builder: "cursor" }),
+    });
+    patchSettingsMock.mockResolvedValueOnce({ ok: false, errorMessage: "nope" });
+    renderBuildersSection();
+    await waitFor(() => expect(screen.getByRole("radio", { name: "Cursor" })).toBeChecked());
+    fireEvent.click(screen.getByRole("radio", { name: "OpenCode" }));
+    await waitFor(() =>
+      expect(patchSettingsMock).toHaveBeenCalledWith("ws_1", { selected_builder: "opencode" }),
+    );
+    await waitFor(() => expect(screen.getByRole("radio", { name: "Cursor" })).toBeChecked());
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Couldn't save your builder choice. Check your session and try again.",
+    );
   });
 
   it("shows honest helper copy for Hermes Agent (coming soon)", async () => {
@@ -111,7 +195,12 @@ describe("WorkspaceSelectedBuilderControl", () => {
       ok: true,
       settings: settings({ selected_builder: "hermes_agent" }),
     });
-    render(<WorkspaceSelectedBuilderControl workspaceId="ws_1" />);
+    renderBuildersSection();
+    await waitFor(() =>
+      expect(
+        screen.getByText("Hermes Agent new-build support is coming soon."),
+      ).toBeInTheDocument(),
+    );
     await waitFor(() =>
       expect(screen.getByTestId("hww-selected-builder-helper")).toHaveTextContent(
         "Hermes Agent new-build support is coming soon.",
@@ -124,7 +213,7 @@ describe("WorkspaceSelectedBuilderControl", () => {
       ok: true,
       settings: settings({ selected_builder: "cursor" }),
     });
-    render(<WorkspaceSelectedBuilderControl workspaceId="ws_1" />);
+    renderBuildersSection();
     await waitFor(() =>
       expect(screen.getByTestId("hww-selected-builder-helper")).toHaveTextContent(
         "Cursor runs through its own build flow for now.",
@@ -133,7 +222,7 @@ describe("WorkspaceSelectedBuilderControl", () => {
   });
 
   it("does not render any build launch / approve / preview controls", async () => {
-    render(<WorkspaceSelectedBuilderControl workspaceId="ws_1" />);
+    renderBuildersSection();
     await waitFor(() => expect(fetchSettingsMock).toHaveBeenCalled());
     expect(screen.queryByRole("button", { name: /prepare build/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /approve build/i })).toBeNull();
@@ -146,7 +235,7 @@ describe("WorkspaceSelectedBuilderControl", () => {
       ok: true,
       settings: settings({ selected_builder: "opencode" }),
     });
-    const { container } = render(<WorkspaceSelectedBuilderControl workspaceId="ws_1" />);
+    const { container } = renderBuildersSection();
     await waitFor(() => expect(fetchSettingsMock).toHaveBeenCalled());
     const blob = (container.textContent || "").toLowerCase();
     for (const token of FORBIDDEN) {

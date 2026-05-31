@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CODING_AGENT_LABELS } from "../coding-agents/codingAgentLabels";
 
-export type BuilderConnectionLane = "claude" | "cursor" | "factory" | "opencode";
+export type BuilderConnectionLane = "claude" | "cursor" | "factory" | "opencode" | "hermes";
 
 export type BuilderConnectionStatusTone = "ready" | "attention" | "blocked" | "neutral";
 

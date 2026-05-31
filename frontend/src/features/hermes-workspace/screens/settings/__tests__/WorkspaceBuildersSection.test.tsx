@@ -2,8 +2,10 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockUseHamWorkspace } = vi.hoisted(() => ({
+const { mockUseHamWorkspace, fetchSettingsMock, patchSettingsMock } = vi.hoisted(() => ({
   mockUseHamWorkspace: vi.fn(),
+  fetchSettingsMock: vi.fn(),
+  patchSettingsMock: vi.fn(),
 }));
 
 vi.mock("@/lib/ham/HamWorkspaceContext", async (importOriginal) => {
@@ -38,10 +40,13 @@ vi.mock("@/features/hermes-workspace/adapters/codingAgentsAdapter", async (impor
       opencode: "needs_setup" as const,
       claudeAgent: "needs_setup" as const,
     })),
+    fetchCodingAgentAccessSettings: fetchSettingsMock,
+    patchCodingAgentAccessSettings: patchSettingsMock,
   };
 });
 
 import WorkspaceBuildersSection from "../WorkspaceBuildersSection";
+import { DEFAULT_CODING_AGENT_SETTINGS } from "@/features/hermes-workspace/adapters/codingAgentsAdapter";
 
 function readyWs() {
   return {
@@ -77,10 +82,20 @@ function readyWs() {
 
 beforeEach(() => {
   mockUseHamWorkspace.mockReturnValue(readyWs());
+  fetchSettingsMock.mockResolvedValue({
+    ok: true,
+    settings: { ...DEFAULT_CODING_AGENT_SETTINGS, workspace_id: "ws_1" },
+  });
+  patchSettingsMock.mockResolvedValue({
+    ok: true,
+    settings: { ...DEFAULT_CODING_AGENT_SETTINGS, workspace_id: "ws_1" },
+  });
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
+  fetchSettingsMock.mockReset();
+  patchSettingsMock.mockReset();
 });
 
 describe("WorkspaceBuildersSection", () => {
@@ -95,8 +110,11 @@ describe("WorkspaceBuildersSection", () => {
       expect(screen.getByRole("heading", { name: "Builders", level: 2 })).toBeInTheDocument();
     });
     expect(
-      screen.getByText("Builders are configured here. Work starts in chat."),
-    ).toBeInTheDocument();
+      screen.getAllByText(
+        "Choose which builder HAM uses for normal builds. Work still starts in chat.",
+      ).length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole("heading", { name: "Builder", level: 2 })).toBeInTheDocument();
   });
 
   it("does not render launch / create / approve / test-plan CTAs", async () => {
@@ -114,5 +132,6 @@ describe("WorkspaceBuildersSection", () => {
     expect(screen.queryByRole("button", { name: /new task/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /test plan/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /approve launch/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /prepare build/i })).toBeNull();
   });
 });
