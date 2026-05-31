@@ -158,7 +158,9 @@ def build_coding_agent_access_settings_store() -> CodingAgentAccessSettingsStore
         ).strip()
         proj = (os.environ.get("HAM_CODING_AGENT_SETTINGS_FIRESTORE_PROJECT") or "").strip() or None
         database = (
-            os.environ.get("HAM_CODING_AGENT_SETTINGS_FIRESTORE_DATABASE") or ""
+            os.environ.get("HAM_CODING_AGENT_SETTINGS_FIRESTORE_DATABASE")
+            or os.environ.get("HAM_FIRESTORE_DATABASE")
+            or ""
         ).strip() or None
         return FirestoreCodingAgentAccessSettingsStore(coll, project=proj, database=database)
     return LocalJsonCodingAgentAccessSettingsStore(_local_base_path())

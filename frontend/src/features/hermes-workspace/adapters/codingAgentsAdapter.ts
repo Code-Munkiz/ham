@@ -534,12 +534,33 @@ export async function patchCodingAgentAccessSettings(
           errorMessage: "Couldn't save your builder choice. Refresh or sign in again.",
         };
       }
+      if (res.status === 404) {
+        return {
+          ok: false,
+          errorMessage: "Couldn't save your builder choice. Choose or create a workspace first.",
+        };
+      }
+      if (res.status === 422) {
+        return {
+          ok: false,
+          errorMessage: "Couldn't save your builder choice. The selected builder is not valid.",
+        };
+      }
+      if (res.status >= 500) {
+        return {
+          ok: false,
+          errorMessage: "Couldn't save your builder choice. Builder settings are unavailable.",
+        };
+      }
       return { ok: false, errorMessage: CODING_AGENT_LABELS.settingsSaveError };
     }
     const body = (await res.json()) as CodingAgentAccessSettings;
     return { ok: true, settings: body };
   } catch {
-    return { ok: false, errorMessage: CODING_AGENT_LABELS.settingsSaveError };
+    return {
+      ok: false,
+      errorMessage: "Couldn't save your builder choice. Check your connection and try again.",
+    };
   }
 }
 

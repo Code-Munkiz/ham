@@ -36,7 +36,9 @@ from src.ham.coding_router.types import (
 )
 from src.ham.workspace_models import WorkspaceMember, WorkspaceRecord
 from src.persistence.coding_agent_access_settings_store import (
+    FirestoreCodingAgentAccessSettingsStore,
     LocalJsonCodingAgentAccessSettingsStore,
+    build_coding_agent_access_settings_store,
     workspace_settings_scope_key,
 )
 from src.persistence.project_store import ProjectStore, set_project_store_for_tests
@@ -78,6 +80,34 @@ def test_store_scope_keys_are_distinct_per_workspace(tmp_path: Path) -> None:
     store.put_raw(key_b, {"allow_opencode": False})
     assert store.get_raw(key_a)["allow_opencode"] is True
     assert store.get_raw(key_b)["allow_opencode"] is False
+
+
+def test_firestore_store_uses_workspace_database_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Hosted workspaces use a named Firestore DB, not project ``(default)``."""
+
+    monkeypatch.setenv("HAM_CODING_AGENT_SETTINGS_STORE", "firestore")
+    monkeypatch.delenv("HAM_CODING_AGENT_SETTINGS_FIRESTORE_DATABASE", raising=False)
+    monkeypatch.setenv("HAM_FIRESTORE_DATABASE", "ham-workspaces")
+
+    store = build_coding_agent_access_settings_store()
+
+    assert isinstance(store, FirestoreCodingAgentAccessSettingsStore)
+    assert store._db._database == "ham-workspaces"  # noqa: SLF001
+
+
+def test_firestore_store_specific_database_overrides_workspace_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HAM_CODING_AGENT_SETTINGS_STORE", "firestore")
+    monkeypatch.setenv("HAM_CODING_AGENT_SETTINGS_FIRESTORE_DATABASE", "agent-settings")
+    monkeypatch.setenv("HAM_FIRESTORE_DATABASE", "ham-workspaces")
+
+    store = build_coding_agent_access_settings_store()
+
+    assert isinstance(store, FirestoreCodingAgentAccessSettingsStore)
+    assert store._db._database == "agent-settings"  # noqa: SLF001
 
 
 # ---------------------------------------------------------------------------

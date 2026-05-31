@@ -13,6 +13,7 @@ import {
   fetchOpencodeReadinessForCodingAgentsScreen,
   launchDroidAuditFlow,
   launchNewCodingTask,
+  patchCodingAgentAccessSettings,
   previewDroidAuditFlow,
   userFacingDroidPreviewFailureMessage,
   userFacingLaunchFailureMessage,
@@ -660,6 +661,57 @@ describe("fetchCodingReadinessSnapshot", () => {
     vi.spyOn(api, "hamApiFetch").mockResolvedValue(makeResponse({}, 503));
     const out = await fetchCodingReadinessSnapshot();
     expect(out).toEqual({ opencode: "needs_setup", claudeAgent: "needs_setup" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Workspace builder settings
+// ---------------------------------------------------------------------------
+
+describe("patchCodingAgentAccessSettings", () => {
+  function makeResponse(body: unknown, status = 200): Response {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  it("sends the selected_builder payload to the workspace settings route", async () => {
+    const fetchSpy = vi.spyOn(api, "hamApiFetch").mockResolvedValue(
+      makeResponse({
+        kind: "ham_coding_agent_access_settings",
+        workspace_id: "ws_live",
+        selected_builder: "opencode",
+      }),
+    );
+
+    const out = await patchCodingAgentAccessSettings("ws_live", {
+      selected_builder: "opencode",
+    });
+
+    expect(out.ok).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/workspaces/ws_live/coding-agent-access-settings",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ selected_builder: "opencode" }),
+      }),
+    );
+  });
+
+  it("maps backend 500s to a service-unavailable builder settings message", async () => {
+    vi.spyOn(api, "hamApiFetch").mockResolvedValue(
+      makeResponse({ detail: "Internal Server Error" }, 500),
+    );
+
+    const out = await patchCodingAgentAccessSettings("ws_live", {
+      selected_builder: "opencode",
+    });
+
+    expect(out).toEqual({
+      ok: false,
+      errorMessage: "Couldn't save your builder choice. Builder settings are unavailable.",
+    });
   });
 });
 

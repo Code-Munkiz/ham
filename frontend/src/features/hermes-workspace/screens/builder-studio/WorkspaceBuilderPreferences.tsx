@@ -216,6 +216,18 @@ function saveFailureCopy(workspaceId: string, raw?: string | null) {
   if (msg.includes("refresh or sign in again")) {
     return "Couldn't save your builder choice. Refresh or sign in again.";
   }
+  if (msg.includes("choose or create a workspace")) {
+    return "Couldn't save your builder choice. Choose or create a workspace first.";
+  }
+  if (msg.includes("not valid")) {
+    return "Couldn't save your builder choice. The selected builder is not valid.";
+  }
+  if (msg.includes("unavailable")) {
+    return "Couldn't save your builder choice. Builder settings are unavailable.";
+  }
+  if (msg.includes("connection")) {
+    return "Couldn't save your builder choice. Check your connection and try again.";
+  }
   if (!workspaceId.trim()) return saveErrorCopy(workspaceId);
   return "Couldn't save your builder choice. Try again.";
 }
