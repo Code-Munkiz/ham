@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import type { WorkbenchPreviewPhase } from "@/lib/ham/workbenchPreviewMessages";
 import type { ManagedProviderBuildPhase } from "@/features/hermes-workspace/screens/chat/coding-plan/ManagedProviderBuildApprovalPanel";
+import type { BuildGenerationPhase } from "@/features/hermes-workspace/screens/chat/coding-plan/codingPlanCardCopy";
 
 export type WorkbenchBuildStatusValue =
   | "preparing-preview"
@@ -9,6 +10,7 @@ export type WorkbenchBuildStatusValue =
   | "building"
   | "preview-updated"
   | "build-completed"
+  | "checking"
   | "attention";
 
 const STATUS_COPY: Record<WorkbenchBuildStatusValue, string> = {
@@ -18,6 +20,7 @@ const STATUS_COPY: Record<WorkbenchBuildStatusValue, string> = {
   building: "Building…",
   "preview-updated": "Preview updated",
   "build-completed": "Build completed",
+  checking: "Checking latest status…",
   attention: "Something needs attention",
 };
 
@@ -65,6 +68,31 @@ export function buildStatusFromManagedPhase(
       return "build-completed";
     case "failed":
       return "attention";
+    case "idle":
+    default:
+      return null;
+  }
+}
+
+/**
+ * Map the Builder Happy Path scaffold lifecycle to a plain-language status.
+ *
+ * Returns ``null`` for ``idle``/``ready`` so the preview-iframe phase takes over
+ * once generation finishes (it then announces "Preview ready"/etc.). The
+ * ``interrupted`` phase maps to a **recoverable** "Checking latest status…" —
+ * never the failure-flavored "Something needs attention".
+ */
+export function buildStatusFromGenerationPhase(
+  phase: BuildGenerationPhase,
+): WorkbenchBuildStatusValue | null {
+  switch (phase) {
+    case "preparing":
+      return "preparing-preview";
+    case "generating":
+      return "building";
+    case "interrupted":
+      return "checking";
+    case "ready":
     case "idle":
     default:
       return null;

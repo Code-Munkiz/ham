@@ -4,6 +4,7 @@ import { render, screen, within } from "@testing-library/react";
 import { FORBIDDEN_USER_COPY_PATTERN } from "@/lib/ham/workbenchPreviewMessages";
 import {
   WorkbenchBuildStatusPanel,
+  buildStatusFromGenerationPhase,
   buildStatusFromManagedPhase,
   type WorkbenchBuildStatusValue,
 } from "../WorkbenchBuildStatusPanel";
@@ -15,6 +16,7 @@ const ALLOWED_COPY = [
   "Building…",
   "Preview updated",
   "Build completed",
+  "Checking latest status…",
   "Something needs attention",
 ] as const;
 
@@ -25,6 +27,7 @@ const STATE_COPY: Array<[WorkbenchBuildStatusValue, (typeof ALLOWED_COPY)[number
   ["building", "Building…"],
   ["preview-updated", "Preview updated"],
   ["build-completed", "Build completed"],
+  ["checking", "Checking latest status…"],
   ["attention", "Something needs attention"],
 ];
 
@@ -184,5 +187,28 @@ describe("buildStatusFromManagedPhase", () => {
       expect(FORBIDDEN_USER_COPY_PATTERN.test(text)).toBe(false);
       unmount();
     }
+  });
+});
+
+describe("buildStatusFromGenerationPhase", () => {
+  it("maps the Builder Happy Path scaffold lifecycle to plain-language status", () => {
+    expect(buildStatusFromGenerationPhase("preparing")).toBe("preparing-preview");
+    expect(buildStatusFromGenerationPhase("generating")).toBe("building");
+    expect(buildStatusFromGenerationPhase("interrupted")).toBe("checking");
+  });
+
+  it("returns null for idle/ready so the preview phase takes over", () => {
+    expect(buildStatusFromGenerationPhase("idle")).toBeNull();
+    expect(buildStatusFromGenerationPhase("ready")).toBeNull();
+  });
+
+  it("interrupted maps to a recoverable status, never the failure 'attention' copy", () => {
+    const status = buildStatusFromGenerationPhase("interrupted");
+    expect(status).toBe("checking");
+    render(<WorkbenchBuildStatusPanel status={status!} />);
+    const text = screen.getByTestId("hww-build-status-shell").textContent ?? "";
+    expect(text).toContain("Checking latest status…");
+    expect(text).not.toContain("Something needs attention");
+    expect(FORBIDDEN_USER_COPY_PATTERN.test(text)).toBe(false);
   });
 });

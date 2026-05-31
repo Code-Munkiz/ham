@@ -62,6 +62,22 @@ const WORKBENCH_HOSTED_APP_VERB_OR_COLOR =
 const REPO_CODING_HARD_SIGNAL =
   /\b(pull request|open a pr\b|@\w+\/\w+|jest|vitest|cypress|ruff\b|flake8|migrate the schema|postgresql|sequelize|prisma|opentelemetry|graphql|openapi|kubernetes|dockerfile\b|pnpm-lock|Cargo\.toml)\b/i;
 
+/**
+ * True for builder-style "make me an app/site/game/dashboard" prompts that
+ * route to the Builder Happy Path scaffold (not the conductor preview or the
+ * managed approval lane). UI-only signal: lets chat/workbench show a build
+ * generation lifecycle. Mirrors the `BUILDER_PROMPT` exclusion in
+ * {@link isLikelyCodingIntent}; never decides routing or execution.
+ */
+export function looksLikeBuilderAppPrompt(rawText: string | null | undefined): boolean {
+  const text = String(rawText || "").trim();
+  if (text.length < MIN_LEN || text.length > MAX_LEN) return false;
+  if (GREETING_ONLY.test(text) || NEGATIVE_LEAD.test(text) || BRAINSTORM_LEAD.test(text)) {
+    return false;
+  }
+  return BUILDER_PROMPT.test(text);
+}
+
 /** True when firing `previewCodingConductor` side-by-side chat would distract from Builder iteration. */
 export function looksLikeWorkbenchHostedAppIteration(rawText: string | null | undefined): boolean {
   const text = String(rawText || "").trim();

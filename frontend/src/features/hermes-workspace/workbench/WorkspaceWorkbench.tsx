@@ -73,12 +73,14 @@ import { detectPreviewIframeProxySignals } from "@/features/hermes-workspace/wor
 import { cn } from "@/lib/utils";
 import {
   WorkbenchBuildStatusPanel,
+  buildStatusFromGenerationPhase,
   buildStatusFromManagedPhase,
   buildStatusFromPreviewPhase,
   type WorkbenchBuildStatusValue,
 } from "./WorkbenchBuildStatusPanel";
 import { WorkbenchManagedApprovalMount } from "./WorkbenchManagedApprovalMount";
 import type { ManagedProviderBuildPhase } from "@/features/hermes-workspace/screens/chat/coding-plan/ManagedProviderBuildApprovalPanel";
+import type { BuildGenerationPhase } from "@/features/hermes-workspace/screens/chat/coding-plan/codingPlanCardCopy";
 import { ProjectSourceIntakeDialog } from "./ProjectSourceIntakeDialog";
 import { WorkbenchSavedVersionsDialog } from "./WorkbenchSavedVersionsDialog";
 import { WorkbenchProjectSettingsPanel } from "./WorkbenchProjectSettingsPanel";
@@ -124,6 +126,13 @@ export type WorkspaceWorkbenchProps = {
    * building / completed / needs attention). Never gates or mutates launch.
    */
   onManagedBuildPhaseChange?: (phase: ManagedProviderBuildPhase) => void;
+  /**
+   * Builder Happy Path scaffold lifecycle (a "make me an app/dashboard" prompt).
+   * Drives an in-progress right-pane status + non-empty preview placeholder
+   * while generation is underway. Distinct from the managed approval lane; never
+   * adds approval/launch controls.
+   */
+  buildGenerationPhase?: BuildGenerationPhase;
 };
 
 export type WorkspaceWorkbenchTabId = "preview" | "code" | "database" | "storage" | "settings";
@@ -144,6 +153,7 @@ export function WorkspaceWorkbench({
   managedApprovalPayload = null,
   managedApprovalPrompt = "",
   onManagedBuildPhaseChange,
+  buildGenerationPhase = "idle",
 }: WorkspaceWorkbenchProps) {
   const [activeTab, setActiveTab] = React.useState<WorkspaceWorkbenchTabId>("preview");
   const [managedBuildPhase, setManagedBuildPhase] =
@@ -189,6 +199,12 @@ export function WorkspaceWorkbench({
   // shell; null when idle so the preview phase remains the source of truth.
   const managedBuildStatus: WorkbenchBuildStatusValue | null =
     buildStatusFromManagedPhase(managedBuildPhase);
+
+  // Builder Happy Path scaffold status (no approval controls). Managed approval
+  // takes precedence when both are somehow active; null when idle/ready so the
+  // preview-iframe phase remains the source of truth.
+  const buildGenerationStatus: WorkbenchBuildStatusValue | null =
+    buildStatusFromGenerationPhase(buildGenerationPhase);
 
   React.useEffect(() => {
     if (!ws || !pid) {
@@ -443,6 +459,7 @@ export function WorkspaceWorkbench({
             previewTabRefreshKey={previewTabRefreshKey}
             onStaleBuilderProject={onStaleBuilderProject}
             managedBuildStatus={managedBuildStatus}
+            buildGenerationStatus={buildGenerationStatus}
           />
         ) : null}
         {activeTab === "code" ? (
@@ -544,6 +561,7 @@ function WorkbenchPreviewPanel({
   previewTabRefreshKey = 0,
   onStaleBuilderProject,
   managedBuildStatus = null,
+  buildGenerationStatus = null,
 }: {
   workspaceId?: string | null;
   projectId?: string | null;
@@ -552,6 +570,8 @@ function WorkbenchPreviewPanel({
   onStaleBuilderProject?: () => void;
   /** When a managed build is active, overrides the preview-phase status copy. */
   managedBuildStatus?: WorkbenchBuildStatusValue | null;
+  /** When a Builder Happy Path scaffold is generating, overrides idle status + empty copy. */
+  buildGenerationStatus?: WorkbenchBuildStatusValue | null;
 }) {
   const PREVIEW_AUTOPOLL_MS = 2500;
   /** Bound iframe document reloads while preview-proxy serves warmup JSON (avoids hammering nginx with 502s). */
@@ -1237,6 +1257,17 @@ function WorkbenchPreviewPanel({
     activityTitle: activity[0]?.title ?? null,
     rawError: error,
   });
+  // While a Builder Happy Path scaffold is generating and the preview canvas is
+  // still empty, replace the "Tell HAM what to build." idle copy with an
+  // in-progress placeholder so the right pane never looks idle mid-generation.
+  const generationInProgress = buildGenerationStatus != null;
+  const effectivePrimaryState =
+    generationInProgress && (previewPhase === "no_project" || previewPhase === "no_source")
+      ? {
+          title: "Generating your dashboard…",
+          subtitle: "HAM is creating the first version. It'll appear here shortly.",
+        }
+      : primaryState;
   const previewStateError =
     previewPhase === "error" ? sanitizePreviewStateError(error, preview?.message) : null;
   const showPreviewRetry =
@@ -1360,7 +1391,9 @@ function WorkbenchPreviewPanel({
         </Button>
       </div>
       <WorkbenchBuildStatusPanel
-        status={managedBuildStatus ?? buildStatusFromPreviewPhase(previewPhase)}
+        status={
+          managedBuildStatus ?? buildGenerationStatus ?? buildStatusFromPreviewPhase(previewPhase)
+        }
       />
       {previewPhase !== "ready" ? (
         <div className="flex flex-wrap items-center gap-1.5" data-testid="hww-preview-status-pills">
@@ -1531,14 +1564,14 @@ function WorkbenchPreviewPanel({
                   : "hww-preview-primary-title"
               }
             >
-              {primaryState.title}
+              {effectivePrimaryState.title}
             </p>
-            {primaryState.subtitle ? (
+            {effectivePrimaryState.subtitle ? (
               <p
                 className="max-w-md text-[12px] text-white/55"
                 data-testid="hww-preview-primary-subtitle"
               >
-                {primaryState.subtitle}
+                {effectivePrimaryState.subtitle}
               </p>
             ) : null}
             {previewPhase === "ready" && preview?.mode === "cloud" && previewProxySessionMinting ? (

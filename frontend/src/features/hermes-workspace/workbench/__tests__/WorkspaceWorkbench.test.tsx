@@ -698,6 +698,48 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.queryByText(/build stream/i)).toBeNull();
   });
 
+  it("VAL-GEN-001: build generation in progress shows Building… and replaces the empty preview copy", async () => {
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench
+          projectId="proj_abc"
+          workspaceId="ws_abc"
+          buildGenerationPhase="generating"
+        />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-build-status-shell")).toHaveTextContent("Building…");
+    });
+    // Right pane must NOT read idle/"Ready to build" while generation is underway.
+    expect(screen.getByTestId("hww-build-status-shell")).not.toHaveTextContent("Ready to build");
+    // The empty "Tell HAM what to build." copy is replaced by an in-progress placeholder.
+    const emptyCopy = screen.getByTestId("hww-preview-tell-ham");
+    expect(emptyCopy).toHaveTextContent("Generating your dashboard…");
+    expect(emptyCopy).not.toHaveTextContent("Tell HAM what to build");
+  });
+
+  it("VAL-GEN-002: an interrupted build shows a recoverable Checking… status, not a failure", async () => {
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench
+          projectId="proj_abc"
+          workspaceId="ws_abc"
+          buildGenerationPhase="interrupted"
+        />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-build-status-shell")).toHaveTextContent(
+        "Checking latest status…",
+      );
+    });
+    expect(screen.getByTestId("hww-build-status-shell")).not.toHaveTextContent("Ready to build");
+    expect(screen.getByTestId("hww-build-status-shell")).not.toHaveTextContent(
+      "Something needs attention",
+    );
+  });
+
   it("No project state does not call builder preview APIs", async () => {
     getBuilderPreviewStatusMock.mockClear();
     getBuilderCloudRuntimeMock.mockClear();

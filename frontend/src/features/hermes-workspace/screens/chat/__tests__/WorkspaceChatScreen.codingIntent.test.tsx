@@ -347,6 +347,56 @@ describe("WorkspaceChatScreen conversational coding conductor", () => {
     expect(container.querySelector('[data-hww-coding-plan="card"]')).toBeNull();
   });
 
+  it("VAL-CHATGEN-001: a builder prompt shows a persistent lifecycle pointer, not the giant card", async () => {
+    previewCodingConductorMock.mockResolvedValue(samplePreviewPayload);
+    getStreamAuthMock.mockResolvedValue(undefined);
+    const { container } = renderChat();
+    // Well-formed scaffold success so the lifecycle reaches the "ready" pointer.
+    chatStreamMock.mockImplementation(async () => ({
+      session_id: "sid_ci",
+      execution_mode: null,
+      builder: { scaffolded: true },
+      messages: [
+        { role: "user", content: "Build me a sales ops dashboard with static sample data" },
+        { role: "assistant", content: "Building your app from this prompt…" },
+      ],
+      gateway_error: null,
+    }));
+
+    await waitFor(() => expect(screen.getByTestId("hww-command-panel")).toBeInTheDocument());
+    await typeAndSend(container, "Build me a sales ops dashboard with static sample data");
+
+    await waitFor(() => {
+      const pointer = container.querySelector("[data-hww-build-gen-pointer]");
+      expect(pointer).not.toBeNull();
+      expect(pointer!.textContent).toContain("Preview is ready on the right");
+    });
+    // Conductor preview is NOT fired for builder prompts, and the giant card never mounts.
+    expect(previewCodingConductorMock).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-hww-coding-plan="card"]')).toBeNull();
+    assertNoForbiddenTokens(container);
+  });
+
+  it("VAL-CHATGEN-002: a stream interruption keeps a recoverable pointer instead of removing it", async () => {
+    previewCodingConductorMock.mockResolvedValue(samplePreviewPayload);
+    getStreamAuthMock.mockResolvedValue(undefined);
+    const { container } = renderChat();
+    chatStreamMock.mockImplementation(async () => {
+      throw new Error("Chat stream ended without a done event");
+    });
+
+    await waitFor(() => expect(screen.getByTestId("hww-command-panel")).toBeInTheDocument());
+    await typeAndSend(container, "Build me a sales ops dashboard with static sample data");
+
+    await waitFor(() => {
+      const pointer = container.querySelector("[data-hww-build-gen-pointer]");
+      expect(pointer).not.toBeNull();
+      expect(pointer!.getAttribute("data-build-gen-phase")).toBe("interrupted");
+      expect(pointer!.textContent).toContain("checking the latest status");
+    });
+    assertNoForbiddenTokens(container);
+  });
+
   it("does NOT auto-fire conductor preview for conceptual / explain prompts", async () => {
     previewCodingConductorMock.mockResolvedValue(samplePreviewPayload);
     chatStreamMock.mockImplementation(async () => ({ ok: true }));

@@ -84,8 +84,12 @@ import {
   loadBuilderPlanEntry,
   type BuilderPlanCardEntry,
 } from "../../chat/WorkspaceBuilderPlanCards";
-import { isLikelyCodingIntent } from "./coding-plan/codingIntent";
-import { shouldSurfaceCodingConductorCard } from "./coding-plan/codingPlanCardCopy";
+import { isLikelyCodingIntent, looksLikeBuilderAppPrompt } from "./coding-plan/codingIntent";
+import {
+  buildGenerationChatPointer,
+  shouldSurfaceCodingConductorCard,
+  type BuildGenerationPhase,
+} from "./coding-plan/codingPlanCardCopy";
 import type { ManagedProviderBuildPhase } from "./coding-plan/ManagedProviderBuildApprovalPanel";
 import type {
   ComposerExportPdfState,
@@ -660,6 +664,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [codingPlanPrompt, setCodingPlanPrompt] = React.useState<string>("");
   const [codingPlanBuildPhase, setCodingPlanBuildPhase] =
     React.useState<ManagedProviderBuildPhase>("idle");
+  // Builder Happy Path scaffold lifecycle (a "make me an app/dashboard" prompt).
+  // Persisted in component state (not in the chat transcript) so a stream
+  // interruption + server restore never silently drops the lifecycle pointer.
+  const [buildGenPhase, setBuildGenPhase] = React.useState<BuildGenerationPhase>("idle");
   const [codingPlanLoading, setCodingPlanLoading] = React.useState(false);
   const [codingPlanInlineError, setCodingPlanInlineError] = React.useState<string | null>(null);
   const [codingPlanPreferring, setCodingPlanPreferring] = React.useState<"opencode_cli" | null>(
@@ -2182,6 +2190,10 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       });
       setLoadErr(null);
       setSending(true);
+      // Detect a Builder Happy Path scaffold prompt up front so the lifecycle
+      // pointer survives both the success and the interrupted/catch paths.
+      const builderPromptInFlight = looksLikeBuilderAppPrompt(displayContent);
+      setBuildGenPhase("idle");
       streamTurnSessionRef.current = null;
       const requestWorkspaceId = activeWorkspaceId;
       const requestStillCurrent = () => activeWorkspaceIdRef.current === requestWorkspaceId;
@@ -2595,6 +2607,9 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         ) {
           execPrefEffective = "browser";
         }
+        if (builderPromptInFlight) {
+          setBuildGenPhase("generating");
+        }
         const res = await workspaceChatAdapter.stream(
           {
             session_id: sessionId ?? undefined,
@@ -2665,6 +2680,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         const b = res.builder;
         if (b && (b.scaffolded === true || b.deduplicated === true)) {
           setWorkbenchBounce((x) => x + 1);
+          setBuildGenPhase("ready");
+        } else if (builderPromptInFlight) {
+          // Builder-style prompt that did not scaffold (e.g. a clarifying reply):
+          // clear the in-progress pointer rather than implying work continues.
+          setBuildGenPhase("idle");
         }
         browserSessionFollowThroughRef.current = res.execution_mode?.selected_mode === "browser";
         const normalizedMessages = res.messages.some((m) => m.role === "user")
@@ -2739,6 +2759,11 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
         );
       } catch (err) {
         if (!requestStillCurrent()) return;
+        // Keep a recoverable lifecycle pointer instead of silently dropping it
+        // when the chat stream is interrupted mid-scaffold.
+        if (builderPromptInFlight) {
+          setBuildGenPhase("interrupted");
+        }
         if (err instanceof HamChatStreamAlreadyActiveError) {
           setStreamConflictUntilMs(Date.now() + err.retryAfterMs);
           setInspectorEvents((prev) =>
@@ -3719,11 +3744,25 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
             )}
           </div>
           <div className="flex w-full max-w-full min-w-0 shrink-0 flex-col overflow-x-hidden">
-            {(codingPlanLoading || codingPlanInlineError || codingPlanApprovalVisible) && (
+            {(codingPlanLoading ||
+              codingPlanInlineError ||
+              codingPlanApprovalVisible ||
+              buildGenPhase !== "idle") && (
               <div
                 className="w-full max-w-full shrink-0 border-t border-white/[0.06] bg-[#050b10]/95 px-3 py-2 md:px-6"
                 data-hww-coding-plan-strip
               >
+                {buildGenPhase !== "idle" && buildGenerationChatPointer(buildGenPhase) ? (
+                  <p
+                    className="text-[11px] leading-snug text-cyan-100/85"
+                    data-hww-build-gen-pointer
+                    data-build-gen-phase={buildGenPhase}
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {buildGenerationChatPointer(buildGenPhase)}
+                  </p>
+                ) : null}
                 {codingPlanRestoredBanner && codingPlanApprovalVisible && !codingPlanLoading ? (
                   <p
                     className="mb-2 text-[10px] leading-snug text-cyan-100/85"
@@ -3990,6 +4029,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           managedApprovalPayload={codingPlanPreview}
           managedApprovalPrompt={codingPlanPrompt}
           onManagedBuildPhaseChange={setCodingPlanBuildPhase}
+          buildGenerationPhase={buildGenPhase}
           onStaleBuilderProject={() => {
             setProjectId(null);
             setHamProjectId(null);

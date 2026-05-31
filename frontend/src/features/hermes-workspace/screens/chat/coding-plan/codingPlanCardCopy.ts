@@ -80,6 +80,40 @@ export function codingPlanPointerForPhase(phase: CodingPlanBuildPhase | null | u
   }
 }
 
+/**
+ * Build-generation lifecycle phase for the **Builder Happy Path scaffold** flow
+ * (a "make me an app/dashboard" prompt that streams a reply and scaffolds a
+ * preview). This is distinct from the managed Droid/OpenCode approval lane: it
+ * has no approval/launch controls. Chat shows a concise, persistent pointer so
+ * the user always knows HAM is working, done, or recovering — even if the chat
+ * stream is interrupted and the transcript is restored from the server.
+ */
+export type BuildGenerationPhase = "idle" | "preparing" | "generating" | "interrupted" | "ready";
+
+export const BUILD_GENERATION_PREPARING_POINTER = "I'm preparing your preview…";
+export const BUILD_GENERATION_GENERATING_POINTER =
+  "I'm generating the first version — it'll appear on the right.";
+export const BUILD_GENERATION_READY_POINTER = "Preview is ready on the right.";
+export const BUILD_GENERATION_INTERRUPTED_POINTER =
+  "Something interrupted. I'm checking the latest status…";
+
+/** Concise persistent chat pointer mirroring the build generation lifecycle. */
+export function buildGenerationChatPointer(phase: BuildGenerationPhase): string | null {
+  switch (phase) {
+    case "preparing":
+      return BUILD_GENERATION_PREPARING_POINTER;
+    case "generating":
+      return BUILD_GENERATION_GENERATING_POINTER;
+    case "ready":
+      return BUILD_GENERATION_READY_POINTER;
+    case "interrupted":
+      return BUILD_GENERATION_INTERRUPTED_POINTER;
+    case "idle":
+    default:
+      return null;
+  }
+}
+
 export const MANAGED_BUILD_APPROVAL_HEADLINE = "Approve build";
 
 export const MANAGED_BUILD_APPROVAL_BODY =
