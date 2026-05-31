@@ -110,7 +110,9 @@ describe("WorkspaceBuildersSection", () => {
       expect(screen.getByRole("heading", { name: "Builders", level: 2 })).toBeInTheDocument();
     });
     expect(
-      screen.getAllByText("Choose an external builder for HAM to use. Work starts in chat.").length,
+      screen.getAllByText(
+        "Choose an external builder for HAM to use. If none is selected, HAM builds natively. Native HAM build support is being wired.",
+      ).length,
     ).toBeGreaterThanOrEqual(1);
   });
 

@@ -30,15 +30,13 @@ ModelSourcePreference = Literal[
 
 # User/product-facing external builder selection ids. These are deliberately
 # distinct from internal ``ProviderKind`` routing strings so they can appear in
-# settings without leaking provider internals. ``hermes_agent`` remains accepted
-# for backward-compatible stored values, but Settings no longer offers it as an
-# external builder because HAM/Hermes is the always-on orchestrator.
+# settings without leaking provider internals. Settings offers only external
+# harnesses because HAM/Hermes is the always-on orchestrator.
 SelectedBuilder = Literal[
     "cursor",
     "claude",
     "opencode",
     "factory_droid",
-    "hermes_agent",
 ]
 
 ProviderKind = Literal[

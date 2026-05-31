@@ -154,7 +154,9 @@ describe("Workspace Builders selected-builder rows", () => {
     await waitFor(() => expect(fetchSettingsMock).toHaveBeenCalled());
     expect(screen.getByRole("heading", { name: "Builders" })).toBeInTheDocument();
     expect(
-      screen.getAllByText("Choose an external builder for HAM to use. Work starts in chat.").length,
+      screen.getAllByText(
+        "Choose an external builder for HAM to use. If none is selected, HAM builds natively. Native HAM build support is being wired.",
+      ).length,
     ).toBeGreaterThanOrEqual(1);
     for (const name of ["OpenCode", "Factory Droid", "Cursor", "Claude"]) {
       expect(screen.getByRole("switch", { name })).toBeInTheDocument();
@@ -308,7 +310,7 @@ describe("Workspace Builders selected-builder rows", () => {
     renderBuildersSection();
     await waitFor(() =>
       expect(screen.getByTestId("hww-selected-builder-helper")).toHaveTextContent(
-        "No external builder selected — HAM will build natively.",
+        "No external builder selected — HAM builds natively. Native HAM build support is being wired.",
       ),
     );
     expect(screen.queryByRole("switch", { name: "Hermes Agent" })).toBeNull();
@@ -323,7 +325,7 @@ describe("Workspace Builders selected-builder rows", () => {
     renderBuildersSection();
     await waitFor(() =>
       expect(screen.getByTestId("hww-selected-builder-helper")).toHaveTextContent(
-        "No external builder selected — HAM will build natively.",
+        "No external builder selected — HAM builds natively. Native HAM build support is being wired.",
       ),
     );
   });

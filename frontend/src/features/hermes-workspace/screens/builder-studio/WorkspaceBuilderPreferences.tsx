@@ -227,7 +227,7 @@ function inChatBuilderRowStatus(opts: {
 
 function selectedBuilderHelp(selected: SelectedBuilder | null) {
   if (!selected || selected === "hermes_agent") {
-    return "No external builder selected — HAM will build natively.";
+    return "No external builder selected — HAM builds natively. Native HAM build support is being wired.";
   }
   if (selected === "cursor") return "Cursor runs through its own build flow for now.";
   if (selected === "claude") return "Claude runs through its own build flow for now.";

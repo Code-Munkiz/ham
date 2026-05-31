@@ -2,11 +2,11 @@
 
 Status:
 - **Phase 1 (docs) shipped** — this plan (`a6176aea`).
-- **Phase 2 (availability guard) shipped** — `1a085c50`: the chat hook stops
-  silently scaffolding when a premium harness is *available* (transitional,
-  availability-based — see the model correction below).
-- **This revision corrects the model** from a "fallback hierarchy" to a
-  **user-selected builder** model. No further code changed in this revision.
+- **Phase 2 (availability guard) shipped** — `1a085c50`.
+- **Current:** normal build turns no longer use the old internal scaffold as the
+  user-facing builder. No selected external harness routes to HAM Native Builder
+  through Hermes, or returns "HAM Native Builder is not ready yet" when the live
+  gateway path is unavailable.
 
 Baseline: `main`, repo `Code-Munkiz/ham`. All file/line references below were
 read directly from the working tree (no assumed contents).
@@ -30,8 +30,9 @@ read directly from the working tree (no assumed contents).
 > - OpenCode is an optional free external builder, not the conceptual default.
 >   `HAM_DEFAULT_BUILDER=opencode` is a deployment override for OpenCode-first
 >   environments, not the product model.
-> - The **internal scaffold is not a builder.** It is an **explicit Quick
->   Preview tool only** — never a silent default and never an automatic fallback.
+> - The **old internal scaffold is not a builder.** It is not used for normal
+>   user builds, and Quick Preview routes through HAM Native/Hermes unless an
+>   internal development flag explicitly enables the legacy preview scaffold.
 >
 > Sections below are written against this corrected model. The shipped Phase 2
 > guard is an *availability-based* transitional step (it still allows the
@@ -47,22 +48,18 @@ to an explicit Quick Preview tool.
 
 ## 1. Executive summary
 
-**HAM is not harness-first today.** A normal build prompt
-("build me a tetris game", "make a calculator app") does **not** consult the
-enabled coding harnesses at all. It is intercepted by the **Builder Happy Path**
-chat hook and turned into an **internal HAM scaffold** (a single OpenRouter LLM
-call that emits files), materialized as a workspace snapshot, and shown as a
-preview. The premium harness routes (Cursor, Claude Agent, OpenCode, Factory
-Droid) exist and are well-gated, but they are reached only through **separate,
-frontend-driven approval surfaces** — never from the default build prompt path.
+HAM/Hermes is now the center of the build conversation. A normal build prompt
+resolves an optional external execution harness (Cursor, Claude, OpenCode,
+Factory Droid). If none is selected, HAM routes to HAM Native Builder through
+Hermes. The old internal scaffold path is no longer the user-facing product
+builder.
 
 Key facts established by this audit:
 
 - The default build path is `run_builder_happy_path_hook` →
-  `maybe_chat_scaffold_for_turn` → `_maybe_llm_scaffold_replace` →
-  `generate_scaffold` (internal LLM scaffold). It runs **first** in both
-  `POST /api/chat` and `POST /api/chat/stream` and short-circuits the rest of
-  the dispatcher when intent is `build_or_create`.
+  selected external harness / explicit deployment default / `run_hermes_native_build`.
+  It runs first in both `POST /api/chat` and `POST /api/chat/stream` and
+  short-circuits the rest of the dispatcher when intent is `build_or_create`.
 - The legacy *deterministic* templates (calculator/tetris) are retired at
   runtime; the scaffold is now an **internal LLM scaffold generator**. That is
   still **internal scaffold generation**, not a harness, and not Hermes Agent.
@@ -71,22 +68,15 @@ Key facts established by this audit:
   managed approval mount (Droid + OpenCode only) and by operator/Cursor flows.
 - The conductor (`POST /api/coding/conductor/preview`) is **preview-only**
   (it explicitly never launches) and is **not consulted** by the scaffold path.
-- **Hermes Agent is not a build harness today.** It is used only as an *edit*
-  worker for `update_existing_project` follow-ups via the Hermes gateway
-  (`builder_edit_worker.py`), and it is **absent from the coding-router
-  provider set** entirely (no `hermes` `ProviderKind`).
+- HAM Native Builder now has a bounded Hermes gateway new-build entry point that
+  can create Workbench source snapshots when the gateway is live. Hermes remains
+  the orchestrator/native path, not a selectable Settings row and not a coding
+  router provider.
 
-**Net (pre-Phase-2):** normal build requests silently used the internal scaffold
-generator as the primary builder, violating the product law.
-
-**Net (now, post-Phase-2 + corrected model):** Phase 2 stops the *silent
-scaffold* when a premium harness is available, but it is availability-based, not
-**external-selection**-based. Under the corrected product law the target is: a
-normal build prompt always talks to HAM/Hermes, optionally routes through the
-selected external harness, uses an explicit deployment default only when
-configured, and otherwise uses native HAM/Hermes mode. The internal scaffold
-runs only on an explicit Quick Preview request. Native HAM/Hermes new-build
-support (§9) is not yet implemented.
+**Net now:** normal build requests no longer silently use the internal scaffold.
+They use the selected external harness, an explicit deployment default such as
+temporary `HAM_DEFAULT_BUILDER=opencode`, or HAM Native Builder through Hermes.
+If native mode is not ready on a host, HAM says so honestly.
 
 ---
 
@@ -97,28 +87,28 @@ For a new "build me X" prompt with a resolved workspace + project:
 ```
 POST /api/chat  (or /api/chat/stream)
   src/api/chat.py:1841 / :2054
-    run_builder_happy_path_hook(...)                 src/ham/builder_chat_hooks.py:376
+    run_builder_happy_path_hook(...)
       classify_builder_chat_intent -> "build_or_create"
-      maybe_chat_scaffold_for_turn(...)              src/ham/builder_chat_scaffold.py:1739
-        _bounded_files(...) -> placeholder_fallback (deterministic templates retired)
-        _maybe_llm_scaffold_replace(...)             src/ham/builder_chat_scaffold.py:1604
-          generate_scaffold(synthetic_plan, ...)     src/ham/builder_llm_scaffold.py:342
-            complete_chat_messages_openrouter(...)    # ONE internal LLM call (BYO OpenRouter)
-        verify_builder_scaffold_artifact(...)
-        materialize_inline_files_as_zip_artifact(...) # snapshot + ProjectSource + ImportJob
-      maybe_enqueue_chat_scaffold_cloud_runtime_job(...)  # preview env
-  -> chat replies "I'll create ... and prepare the Workbench"
-  -> right-pane preview shows the scaffolded app
+      selected external builder?
+        OpenCode / Factory Droid -> managed approval handoff
+        Cursor / Claude -> separate-flow copy
+      no selection/default -> run_hermes_native_build(...)
+        complete_chat_turn(...) via Hermes gateway
+        validate bounded file bundle
+        ProjectSource + SourceSnapshot + ImportJob
+        maybe_enqueue_chat_scaffold_cloud_runtime_job(...)
+  -> chat replies that HAM is building natively, or honestly says native is not ready
+  -> right-pane preview shows the generated snapshot when available
 ```
 
 When `build_or_create` fires, the dispatcher gates **off** the operator path
 (`chat.py:1913-1917`: operator turn only runs when `builder_intent != "build_or_create"`),
 so no harness selection or conductor consultation happens on that turn.
 
-Failure modes the path already emits (none of which are "use a harness"):
-- `model_access_required` → "Connect OpenRouter in Settings" (no OpenRouter key).
-- `llm_scaffold_failed` → "selected scaffold model is unavailable / call failed".
-- `artifact_verification_failed` → "I couldn't build that yet".
+Failure modes stay user-safe:
+- native gateway unavailable → "HAM Native Builder is not ready yet."
+- selected external harness not ready → safe setup copy.
+- generated bundle invalid → safe failure metadata, no internal details.
 
 So even the *fallback* of the internal scaffold is "ask for an OpenRouter key",
 not "escalate to a premium harness or Hermes Agent".
@@ -141,12 +131,13 @@ execution harness**:
 
 The original behavior violated this:
 
-- **Internal scaffold ran unconditionally** for `build_or_create`, with no read
-  of any external builder selection.
-- **The external builders were unreachable** from a plain "build me X" prompt —
-  reachable only via the separate `CodingPlanCard` / managed-approval surface.
-- **Native HAM/Hermes new-build mode is not wired as a real builder path yet**
-  (Hermes gateway support is edit-only today).
+- **Internal scaffold used to run unconditionally** for `build_or_create`; this
+  is now removed from normal user build flow.
+- **The external builders used to be unreachable** from plain build prompts;
+  OpenCode and Factory Droid now hand off to their managed approval surfaces
+  when selected and ready.
+- **Native HAM/Hermes new-build mode is now bounded and gateway-backed**, with
+  honest unavailable copy when host configuration cannot run it.
 
 The internal scaffold being an LLM call rather than a deterministic template
 does **not** satisfy the invariant — it is still HAM's internal generator, not a
@@ -162,8 +153,8 @@ harness and not Hermes Agent.
 | **Claude** | `claude_code` is **always blocked** (`readiness.py:_build_claude_readiness`, status "planned"). `claude_agent` = SDK installed + Anthropic/Bedrock/Vertex auth (`worker_adapters/claude_agent_adapter`) | `src/api/claude_agent_build.py` (`/api/claude-agent/build/preview|launch`), gated by `CLAUDE_AGENT_ENABLED` + SDK + auth + exec token | **No** | Managed-workspace snapshot edits. Not on `CodingPlanCard`. |
 | **OpenCode** | `HAM_OPENCODE_ENABLED` + `HAM_OPENCODE_EXECUTION_ENABLED` + readiness `CONFIGURED` + managed-workspace + `HAM_OPENCODE_EXEC_TOKEN` | `src/api/opencode_build.py` (`/api/opencode/build/preview|launch`) | **No** (reachable via `CodingPlanCard` managed approval) | Managed snapshot. Shares approval lane with Droid. |
 | **Factory Droid** | `_droid_runner_kind()` (remote URL+token or local `droid`) + `safe_edit_low` workflow registered + `HAM_DROID_EXEC_TOKEN` | `src/api/droid_build.py` (`/api/droid/build/preview|launch`) | **No** (reachable via `CodingPlanCard` managed approval) | github_pr or managed snapshot. |
-| **HAM/Hermes native** | Always-on orchestration; Hermes gateway mode is edit-only today | None for *new builds*. `builder_edit_worker.run_builder_edit_worker_maybe` handles edits to existing snapshots only | **No** | Native new-build mode still needs implementation; not a Settings builder row. |
-| **Internal scaffold** | Always "available" when an OpenRouter key resolves | `builder_chat_scaffold.maybe_chat_scaffold_for_turn` → `builder_llm_scaffold.generate_scaffold` | **Yes — default** | The current de-facto primary builder. |
+| **HAM/Hermes native** | Always-on orchestration; live Hermes gateway required for execution | `src/ham/builder_native_hermes.py` new-build snapshot path; `builder_edit_worker.py` for existing snapshot edits | **Yes, when no external builder/default is selected** | Not a Settings builder row. If gateway is unavailable, HAM says native builder is not ready. |
+| **Old internal scaffold** | Internal dev flag only for Quick Preview | `builder_chat_scaffold.maybe_chat_scaffold_for_turn` → `builder_llm_scaffold.generate_scaffold` | **No** | Retained for dev/legacy utility only; not the product builder. |
 
 ---
 
@@ -189,9 +180,9 @@ Native / partial:
 
 ## 6. Which paths are only preview / scaffold generation
 
-- **Internal scaffold** — `src/ham/builder_chat_scaffold.py` +
-  `src/ham/builder_llm_scaffold.py`. Emits files via one LLM call, snapshots
-  them, and renders a preview. No repo execution, no agent loop, no approval.
+- **Old internal scaffold** — `src/ham/builder_chat_scaffold.py` +
+  `src/ham/builder_llm_scaffold.py`. Retained for legacy/dev utility and tests;
+  not used for normal user builds and not a substitute for HAM Native Builder.
 - **`builder_chat_scaffold.py` deterministic template helpers**
   (`_build_tetris_scaffold_files`, `_calculator_app_tsx`, etc.) — **retired at
   runtime** (guarded by `use_tetris_template = False` /
@@ -253,7 +244,8 @@ For a normal build prompt, resolve in this order. This is **selection**
 resolution, not a quality/fallback cascade:
 
 1. **Explicit Quick Preview request** (e.g. "quick preview", "mockup",
-   "wireframe") → run the **internal scaffold** (the only path that does).
+   "wireframe") → route through HAM Native/Hermes or return the honest native
+   unavailable copy. The old internal scaffold requires an internal dev flag.
 2. **An external builder is selected for this workspace** → route through that
    harness's existing launch path:
    - Cursor → `cursor_agent_workflow` / Cursor mission routes
@@ -269,8 +261,9 @@ resolution, not a quality/fallback cascade:
    `HAM_DEFAULT_BUILDER=opencode`). This should be treated as an environment
    override, not the product concept.
 4. **No external builder selected, no configured default** → native HAM/Hermes
-   new-build path. If that path is not wired yet, say so honestly and do **not**
-   fall through to the internal scaffold.
+   new-build path. If the gateway-backed path is unavailable on the host, say
+   "HAM Native Builder is not ready yet" and do **not** fall through to the old
+   scaffold.
 
 The internal scaffold is never reached by (2)–(4); it is reached only by (1).
 There is no "premium first, then OpenCode, then Hermes, then scaffold" ranking —
@@ -281,46 +274,36 @@ normal-build selector.
 
 ## 9. Native HAM/Hermes builder gap
 
-HAM/Hermes is **always** the orchestration layer. It should not appear as a
-selectable builder row next to external harnesses. Today, though, the native
-new-build path is not a properly wired Hermes builder: Hermes gateway support is
-only an **edit-only** worker (`builder_edit_worker.py`) and is **not** a
-coding-router provider. To make "no external builder selected — HAM will build
-natively" true:
+HAM/Hermes is **always** the orchestration layer. It does not appear as a
+selectable builder row next to external harnesses. Native new-build support now
+exists as a bounded gateway-backed source snapshot path:
 
-1. **Add a native new-build entry point.** Generalize `builder_edit_worker` (or add a
-   thin sibling) so Hermes can produce a *new-build* file set, not only patches
-   over an existing snapshot. Reuse the existing snapshot/import-job
-   materialization and verifier so output is shaped like every other build.
-2. **Add readiness and honest copy.** Native mode should report unavailable until
-   the gateway and new-build entry point are live. Keep operator-secret signals
-   out of user copy.
-3. **Respect boundaries.** Hermes remains supervisory/critique elsewhere; native
-   build execution must be a bounded path invoked through HAM. Do not turn
-   Hermes into a second general orchestrator.
+1. **Native new-build entry point.** `builder_native_hermes.py` asks the Hermes
+   gateway for structured full-file JSON, validates paths/content, writes
+   `ProjectSource` + `SourceSnapshot` + `ImportJob`, and enqueues the existing
+   Workbench preview job when available.
+2. **Readiness and honest copy.** Native mode reports unavailable until a live
+   gateway route is configured. User copy does not expose env names or internals.
+3. **Boundaries.** Hermes remains the orchestrator/native builder path, not a
+   selectable external harness and not a second third-party orchestration
+   framework.
 
-Until (1) lands, do **not** claim native HAM/Hermes new-build mode is fully
-wired, and do **not** route native new-build prompts to the legacy internal
-scaffold except for explicit Quick Preview.
+Do **not** route native new-build prompts to the old internal scaffold when the
+gateway-backed path is unavailable.
 
 ---
 
 ## 10. Internal scaffold = Quick Preview tool only (not a builder, not a fallback)
 
-- The internal scaffold is **not a builder** and is **not an automatic
-  fallback**. It runs **only** when the user explicitly asks for a Quick Preview
-  / mockup.
-- Gate `maybe_chat_scaffold_for_turn` so it is invoked only when the turn is an
-  explicit Quick Preview request (e.g. a `operation="quick_preview"` / explicit
-  preview flag threaded from `run_builder_happy_path_hook`). It must **not** run
-  for a normal `build_or_create` turn, even when no builder is selected/ready —
-  in that case HAM asks the user to choose (or applies a configured OpenCode
-  default), it does not scaffold.
+- The old internal scaffold is **not a builder** and is **not an automatic
+  fallback**. Normal user builds do not invoke it.
+- `maybe_chat_scaffold_for_turn` is not invoked for a normal `build_or_create`
+  turn, even when no external builder is selected/ready. Quick Preview also
+  routes through HAM Native/Hermes by default; the old scaffold requires an
+  internal dev flag.
 - Keep the retired deterministic template code dormant (do not revive); keep the
-  scaffold's bounded-size + verifier guarantees.
-- Do **not** delete the scaffold path — it remains the legitimate Quick Preview
-  engine. (Consistent with the deprecation audit: "old deterministic scaffold
-  runtime is retired" but the LLM scaffold is kept.)
+  scaffold's bounded-size + verifier guarantees while legacy callers remain.
+- Do **not** expose the scaffold path as a product builder.
 
 ---
 

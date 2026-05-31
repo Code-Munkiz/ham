@@ -472,13 +472,12 @@ export const DEFAULT_CODING_AGENT_SETTINGS: CodingAgentAccessSettings = {
   updated_by: null,
 };
 
-/** Valid stored builder ids (UI shows only external builders; hermes_agent is legacy-safe). */
+/** Valid external builder ids shown by Settings. Legacy hermes_agent values normalize to native mode. */
 export const SELECTABLE_BUILDERS: readonly SelectedBuilder[] = [
   "opencode",
   "factory_droid",
   "cursor",
   "claude",
-  "hermes_agent",
 ] as const;
 
 /** Normalize an arbitrary stored value to a valid SelectedBuilder or null. */

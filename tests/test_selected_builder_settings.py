@@ -42,9 +42,14 @@ def test_policy_response_includes_selected_builder() -> None:
 
 
 def test_patch_model_accepts_valid_selected_builders() -> None:
-    for v in ("cursor", "claude", "opencode", "factory_droid", "hermes_agent"):
+    for v in ("cursor", "claude", "opencode", "factory_droid"):
         patch = CodingAgentAccessSettingsPatch(selected_builder=v)
         assert patch.selected_builder == v
+
+
+def test_patch_model_rejects_hermes_as_selectable_builder() -> None:
+    with pytest.raises(ValidationError):
+        CodingAgentAccessSettingsPatch(selected_builder="hermes_agent")
 
 
 def test_patch_model_accepts_null_selected_builder_for_clear() -> None:

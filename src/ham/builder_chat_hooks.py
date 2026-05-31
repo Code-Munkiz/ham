@@ -1,8 +1,8 @@
-"""Chat turn hooks for workspace builder happy-path (project + scaffold).
+"""Chat turn hooks for workspace builder routing (project + native/external build).
 
 Conductor ownership boundary (see AGENTS.md → "HAM bet"):
 
-- This module is the **canonical user-facing path for Builder turns**
+- This module is the **canonical user-facing path for builder turns**
   (``classify_builder_chat_intent`` → ``build_or_create`` /
   ``answer_question`` / ``plan_only``). Builder ack copy, clarification
   prompts, and verification-failure copy are produced here.
@@ -299,12 +299,14 @@ _PREMIUM_BUILD_HARNESS_PROVIDERS: frozenset[str] = frozenset(
     {"cursor_cloud", "claude_agent", "opencode_cli", "factory_droid_build"}
 )
 
-# Quick Preview acknowledgement — the internal scaffold runs here as a preview
-# tool, explicitly NOT the product builder.
+# Quick Preview acknowledgement. By default Quick Preview goes through HAM
+# Native/Hermes too; the legacy internal scaffold is available only behind a
+# deliberate internal dev flag.
 _QUICK_PREVIEW_ACK = (
-    "Generating a quick preview (a lightweight mockup, not a full build). "
+    "Generating a quick preview through HAM Native Builder. "
     "It'll appear in the workbench on the right.\n\n"
 )
+_OLD_QUICK_PREVIEW_DEV_FLAG = "HAM_ENABLE_INTERNAL_SCAFFOLD_QUICK_PREVIEW"
 
 
 def _looks_like_quick_preview_request(last_user_plain: str) -> bool:
@@ -380,7 +382,6 @@ _BUILDER_DISPLAY_LABEL: dict[str, str] = {
     "claude": "Claude",
     "opencode": "OpenCode",
     "factory_droid": "Factory Droid",
-    "hermes_agent": "Hermes Agent",
 }
 
 # Selectable builder id -> coding_router ProviderKind used only for readiness.
@@ -406,17 +407,12 @@ _DEFAULT_BUILDER_ENV = "HAM_DEFAULT_BUILDER"
 _HANDOFF_SUPPORTED_BUILDERS: frozenset[str] = frozenset({"opencode", "factory_droid"})
 
 _BUILDER_CHOOSE_MESSAGE = (
-    "Which builder should I use for this build? Choose Cursor, Claude, OpenCode, "
-    "Factory Droid, or Hermes Agent in Settings (coding agents). If you just want "
-    'a fast mockup, say "quick preview".'
+    "HAM Native Builder is not ready yet."
     "\n\n"
 )
 
-_HERMES_AGENT_NEW_BUILD_UNAVAILABLE_MESSAGE = (
-    "Hermes Agent is not available for new builds yet. Pick another builder "
-    "(Cursor, Claude, OpenCode, or Factory Droid) in Settings, or say "
-    '"quick preview" for a fast mockup.'
-    "\n\n"
+_HAM_NATIVE_BUILDING_MESSAGE = (
+    "HAM is building natively through Hermes. I'll prepare the Workbench preview on the right.\n\n"
 )
 
 
@@ -443,7 +439,49 @@ def _selected_builder_for_workspace(workspace_id: str) -> str | None:
     if policy is None:
         return None
     sel = getattr(policy, "selected_builder", None)
+    if sel == "hermes_agent":
+        return None
     return sel if sel in _BUILDER_DISPLAY_LABEL else None
+
+
+def _old_internal_quick_preview_enabled() -> bool:
+    return (os.environ.get(_OLD_QUICK_PREVIEW_DEV_FLAG) or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _run_ham_native_builder_turn(
+    *,
+    workspace_id: str,
+    project_id: str,
+    session_id: str,
+    user_prompt: str,
+    created_by: str,
+    meta: dict[str, Any],
+    directive_prefix: str,
+    success_message: str = _HAM_NATIVE_BUILDING_MESSAGE,
+) -> tuple[str, dict[str, Any]]:
+    from src.ham.builder_native_hermes import run_hermes_native_build
+
+    native = run_hermes_native_build(
+        workspace_id=workspace_id,
+        project_id=project_id,
+        session_id=session_id,
+        user_prompt=user_prompt,
+        created_by=created_by,
+    )
+    out = {
+        **meta,
+        **native,
+        "selected_builder_state": "native",
+        "builder_harness_first": True,
+    }
+    if native.get("scaffolded"):
+        return f"{directive_prefix}{success_message}", out
+    return f"{directive_prefix}{_BUILDER_CHOOSE_MESSAGE}", out
 
 
 def _selected_builder_ready(
@@ -455,8 +493,7 @@ def _selected_builder_ready(
 ) -> bool:
     """True when the selected builder's underlying provider is ready.
 
-    Uses `collate_readiness` + `WorkspaceAgentPolicy` (no secret values). Returns
-    ``False`` for builders with no wired new-build provider (e.g. Hermes Agent).
+    Uses `collate_readiness` + `WorkspaceAgentPolicy` (no secret values).
     """
     provider = _BUILDER_READINESS_PROVIDER.get(builder_id)
     if provider is None:
@@ -500,7 +537,7 @@ def _builder_ready_handoff_message(label: str) -> str:
 def _builder_setup_required_message(label: str) -> str:
     return (
         f"{label} is selected, but setup is not finished yet. Open Settings → "
-        'Builders to finish setup. If you just want a fast mockup, say "quick preview".\n\n'
+        "Builders to finish setup, or clear the external builder selection so HAM builds natively.\n\n"
     )
 
 
@@ -510,8 +547,8 @@ def _builder_separate_flow_message(label: str) -> str:
     return (
         f"{label} is your selected builder. {label} runs through its own build flow "
         "for now — in-chat managed approval for it is coming in a later phase. Pick "
-        'OpenCode or Factory Droid for the in-chat build, or say "quick preview" for '
-        "a fast mockup.\n\n"
+        "OpenCode or Factory Droid for the in-chat build, or clear the external "
+        "builder selection so HAM builds natively.\n\n"
     )
 
 
@@ -539,17 +576,19 @@ def _resolve_selected_builder_turn(
     }
 
     if selected is None:
-        base["selected_builder_state"] = "choose"
-        return f"{directive_prefix}{_BUILDER_CHOOSE_MESSAGE}", base
+        return _run_ham_native_builder_turn(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            session_id=str(meta.get("session_id") or ""),
+            user_prompt=str(meta.get("effective_plain") or ""),
+            created_by=str(meta.get("created_by") or ""),
+            meta=base,
+            directive_prefix=directive_prefix,
+        )
 
     label = _BUILDER_DISPLAY_LABEL[selected]
     base["selected_builder_label"] = label
     base["selected_builder_source"] = source
-
-    if selected == "hermes_agent":
-        # Selectable HAM-native builder, but new-build path not wired yet.
-        base["selected_builder_state"] = "unavailable"
-        return f"{directive_prefix}{_HERMES_AGENT_NEW_BUILD_UNAVAILABLE_MESSAGE}", base
 
     if selected not in _HANDOFF_SUPPORTED_BUILDERS:
         # cursor / claude: no compatible in-chat managed approval lane yet.
@@ -736,7 +775,12 @@ def run_builder_happy_path_hook(
         has_active_snapshot=has_active_snapshot,
         active_template=active_template,
     )
-    meta: dict[str, Any] = {"builder_intent": base_intent, "builder_action_decision": action_decision.to_safe_dict()}
+    meta: dict[str, Any] = {
+        "builder_intent": base_intent,
+        "builder_action_decision": action_decision.to_safe_dict(),
+        "session_id": session_id,
+        "effective_plain": effective_plain,
+    }
     if action_decision.kind == "ask_clarification":
         clar = action_decision.clarification_prompt or "What should I change?\n\n"
         return f"{directive_prefix}{clar}", {
@@ -748,6 +792,7 @@ def run_builder_happy_path_hook(
     advice_only = action_decision.kind == "answer_only"
 
     created_by = ham_actor.user_id if ham_actor is not None else ""
+    meta["created_by"] = created_by
 
     wants_update = (not advice_only) and (
         is_builder_edit_like_followup(effective_plain)
@@ -909,11 +954,9 @@ def run_builder_happy_path_hook(
                         )
 
     # User-selected builder model: a normal new-build prompt routes to the
-    # builder the user selected (or asks them to choose / use a configured
-    # default). The internal scaffold is NOT a builder and is reached only on an
-    # explicit Quick Preview request. The update_existing_project edit path is
-    # unaffected. See docs/build-kit-registry-v2/HARNESS_FIRST_ARCHITECTURE_PLAN.md
-    # (Phase 3).
+    # selected external harness, an explicit deployment default, or HAM Native
+    # Builder. The old scaffold is not a builder and is reachable only for an
+    # explicit Quick Preview under an internal dev flag.
     quick_preview = _looks_like_quick_preview_request(effective_plain)
     if operation == "build_or_create" and not quick_preview:
         return _resolve_selected_builder_turn(
@@ -924,9 +967,18 @@ def run_builder_happy_path_hook(
             directive_prefix=directive_prefix,
         )
     if operation == "build_or_create" and quick_preview:
-        # Explicit Quick Preview: the internal scaffold runs, but as a preview
-        # tool — not the product builder.
         meta["builder_quick_preview"] = True
+        if not _old_internal_quick_preview_enabled():
+            return _run_ham_native_builder_turn(
+                workspace_id=ws,
+                project_id=pid,
+                session_id=session_id,
+                user_prompt=effective_plain,
+                created_by=created_by,
+                meta=meta,
+                directive_prefix=directive_prefix,
+                success_message=_QUICK_PREVIEW_ACK,
+            )
 
     summary = maybe_chat_scaffold_for_turn(
         workspace_id=ws,

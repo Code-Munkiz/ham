@@ -71,10 +71,7 @@ _VALID_MODEL_SOURCE_PREFS: frozenset[str] = frozenset(
     ["ham_default", "connected_tools_byok", "workspace_default"]
 )
 _VALID_SELECTED_BUILDERS: frozenset[str] = frozenset(
-    # ``hermes_agent`` is accepted for backward-compatible stored values. The
-    # Settings UI no longer offers it because HAM/Hermes is always-on
-    # orchestration, not an optional external builder.
-    ["cursor", "claude", "opencode", "factory_droid", "hermes_agent"]
+    ["cursor", "claude", "opencode", "factory_droid"]
 )
 
 

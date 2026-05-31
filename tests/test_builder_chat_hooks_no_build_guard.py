@@ -71,10 +71,9 @@ def test_explicit_no_build_phrase_does_not_invoke_scaffold(
 def test_positive_control_build_phrase_routes_to_selection_not_scaffold(
     _empty_store: BuilderSourceStore,
 ) -> None:
-    """A normal build phrase is recognized as a build and routed to the
-    user-selected builder model. With no selection/default it asks the user to
-    choose — it does NOT silently run the internal scaffold (user-selected
-    builder model; see HARNESS_FIRST_ARCHITECTURE_PLAN.md)."""
+    """A normal build phrase is recognized as a build and routed to HAM Native
+    when there is no external selection/default; it does NOT silently run the
+    internal scaffold."""
     with (
         patch(
             "src.ham.builder_chat_hooks._selected_builder_for_workspace",
@@ -83,6 +82,15 @@ def test_positive_control_build_phrase_routes_to_selection_not_scaffold(
         patch(
             "src.ham.builder_chat_hooks.configured_default_builder",
             return_value=None,
+        ),
+        patch(
+            "src.ham.builder_native_hermes.run_hermes_native_build",
+            return_value={
+                "builder_intent": "build_or_create",
+                "builder_operation": "build_or_create",
+                "scaffolded": False,
+                "ham_native_builder": {"status": "unavailable"},
+            },
         ),
         patch(
             "src.ham.builder_chat_scaffold.maybe_chat_scaffold_for_turn",
@@ -97,5 +105,6 @@ def test_positive_control_build_phrase_routes_to_selection_not_scaffold(
             ham_actor=_byo_actor(),
         )
     scaffold_mock.assert_not_called()
-    assert meta.get("selected_builder_state") == "choose"
+    assert meta.get("selected_builder_state") == "native"
+    assert meta.get("ham_native_builder", {}).get("status") == "unavailable"
     assert isinstance(prefix, str) and prefix.strip()

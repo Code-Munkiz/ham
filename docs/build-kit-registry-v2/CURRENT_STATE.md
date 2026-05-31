@@ -13,21 +13,24 @@ chooses only the execution harness HAM routes work through.**
 - **Settings → Builders shows external execution harnesses only:** **Cursor,
   Claude, OpenCode, Factory Droid**.
 - **No external builder selected means native HAM/Hermes mode.** The UI should
-  say: "No external builder selected — HAM will build natively." Do not present
-  Hermes as optional, disabled, or "coming soon" in the builder selector.
+  say HAM builds natively and, until the backend path is fully live everywhere,
+  that native HAM build support is being wired. Do not present Hermes as
+  optional, disabled, or "coming soon" in the builder selector.
 - **OpenCode is an optional free external builder, not the conceptual default.**
   It may be auto-selected only in deployments that explicitly configure
   `HAM_DEFAULT_BUILDER=opencode`; otherwise no external selection means native
   HAM/Hermes.
-- **The internal scaffold is not a builder.** It is an **explicit Quick Preview
-  tool only** — never a silent default and never an automatic fallback.
+- **The old internal scaffold is not a product builder.** Normal build turns do
+  not use it, and Quick Preview must route through HAM Native/Hermes unless an
+  internal development flag deliberately exercises the legacy preview path.
 
 ### Honest current state (do not overstate)
 
-- **Shipped:** the chat builder hook no longer *silently* scaffolds when a
-  premium harness is **available** (an availability-based transitional guard;
-  commit `1a085c50`). When no harness is available it still falls back to the
-  internal scaffold.
+- **Shipped:** the chat builder hook no longer silently falls back to the old
+  internal scaffold for normal user build turns. With no selected external
+  harness and no deployment override, HAM routes to HAM Native Builder through
+  Hermes; if that path is not ready on the host, it says
+  "HAM Native Builder is not ready yet."
 - **Shipped:** selected-builder persistence exists in workspace coding-agent
   settings (`selected_builder`), and OpenCode / Factory Droid can hand off to
   the managed approval surface when ready.
@@ -36,12 +39,10 @@ chooses only the execution harness HAM routes work through.**
   That conflicts with the corrected native-default product model unless this is
   an intentional deployment override for OpenCode-first testing. Production
   should remove that env default when native HAM/Hermes mode is intended.
-- **Not yet implemented (tracked in `HARNESS_FIRST_ARCHITECTURE_PLAN.md`):**
-  - a true **native HAM/Hermes new-build path** for "no external builder
-    selected";
-  - confining the internal scaffold to an explicit Quick Preview request.
-  Today the HAM-native new-build path is not a properly wired Hermes builder;
-  native mode needs implementation before it can honestly become the default.
+- **Partially wired:** HAM Native Builder has a bounded Hermes gateway
+  new-build entry point that writes Workbench-compatible source snapshots when
+  the gateway is live. Hosts without a live gateway return the honest
+  unavailable message above; the old scaffold is not used as a substitute.
 
 Selectable-builder preference is expected to live in the workspace coding-agent
 settings (`WorkspaceAgentPolicy` + `/api/workspaces/{id}/coding-agent-access-settings`).
@@ -59,9 +60,9 @@ product decision.
 
 ## Current Build System
 
-> Scope note: this section describes the **internal scaffold context** system
-> (the Quick Preview path). It is **not** the normal-build builder. Normal
-> builds use the user-selected builder per the "Builder selection model" above.
+> Scope note: this section describes the internal playbook context available to
+> HAM Native Builder and external harness launch prompts. It is not exposed to
+> users as build-kit internals.
 
 Build Registry v2 is the current intended routed playbook system. It supplies
 internal scaffold context for narrowly matched lanes and is gated by
