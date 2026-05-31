@@ -82,6 +82,21 @@ export interface ManagedProviderBuildConfig<
   pollIntervalMs?: number;
 }
 
+/**
+ * Lifecycle phase of the managed build panel. Exposed so host surfaces
+ * (right-pane status shell, chat pointer) can mirror plain-language state
+ * without re-deriving or duplicating the launch/approval controls. This is a
+ * read-only notification — it does not change digest/launch/polling behavior.
+ */
+export type ManagedProviderBuildPhase =
+  | "idle"
+  | "previewing"
+  | "previewed"
+  | "launching"
+  | "running"
+  | "succeeded"
+  | "failed";
+
 export interface ManagedProviderBuildApprovalPanelProps<
   P extends ManagedProviderBuildPreviewLike,
   L extends ManagedProviderBuildLaunchLike,
@@ -90,6 +105,8 @@ export interface ManagedProviderBuildApprovalPanelProps<
   userPrompt: string;
   className?: string;
   config: ManagedProviderBuildConfig<P, L>;
+  /** Optional read-only notifier fired on each lifecycle phase transition. */
+  onPhaseChange?: (phase: ManagedProviderBuildPhase) => void;
 }
 
 type PanelState<
@@ -123,10 +140,22 @@ function readNumberField(ref: ManagedProviderBuildOutputRef, key: string): numbe
 export function ManagedProviderBuildApprovalPanel<
   P extends ManagedProviderBuildPreviewLike,
   L extends ManagedProviderBuildLaunchLike,
->({ projectId, userPrompt, className, config }: ManagedProviderBuildApprovalPanelProps<P, L>) {
+>({
+  projectId,
+  userPrompt,
+  className,
+  config,
+  onPhaseChange,
+}: ManagedProviderBuildApprovalPanelProps<P, L>) {
   const prefix = config.testIdPrefix;
   const { copy } = config;
   const [state, setState] = React.useState<PanelState<P, L>>({ phase: "idle" });
+
+  // Read-only lifecycle notification. Mirrors the panel's internal phase to host
+  // surfaces (right-pane status, chat pointer); never gates or mutates launch.
+  React.useEffect(() => {
+    onPhaseChange?.(state.phase);
+  }, [state.phase, onPhaseChange]);
 
   const trimmedPrompt = userPrompt.trim();
   const canStart = Boolean(projectId) && trimmedPrompt.length > 0;

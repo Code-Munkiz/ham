@@ -5,12 +5,15 @@ import {
 } from "@/features/hermes-workspace/screens/chat/coding-plan/codingPlanCardCopy";
 import { ManagedBuildApprovalPanel } from "@/features/hermes-workspace/screens/chat/coding-plan/ManagedBuildApprovalPanel";
 import { ManagedOpencodeBuildApprovalPanel } from "@/features/hermes-workspace/screens/chat/coding-plan/ManagedOpencodeBuildApprovalPanel";
+import type { ManagedProviderBuildPhase } from "@/features/hermes-workspace/screens/chat/coding-plan/ManagedProviderBuildApprovalPanel";
 import { cn } from "@/lib/utils";
 
 export type WorkbenchManagedApprovalMountProps = {
   payload?: CodingConductorPreviewPayload | null;
   userPrompt?: string;
   className?: string;
+  /** Read-only lifecycle notifier from the relocated approval panel. */
+  onPhaseChange?: (phase: ManagedProviderBuildPhase) => void;
 };
 
 /**
@@ -27,6 +30,7 @@ export function WorkbenchManagedApprovalMount({
   payload,
   userPrompt,
   className,
+  onPhaseChange,
 }: WorkbenchManagedApprovalMountProps) {
   if (!payload) return null;
   const projectId = payload.project.project_id;
@@ -45,9 +49,17 @@ export function WorkbenchManagedApprovalMount({
       )}
     >
       {showManaged ? (
-        <ManagedBuildApprovalPanel projectId={projectId} userPrompt={userPrompt ?? ""} />
+        <ManagedBuildApprovalPanel
+          projectId={projectId}
+          userPrompt={userPrompt ?? ""}
+          onPhaseChange={onPhaseChange}
+        />
       ) : (
-        <ManagedOpencodeBuildApprovalPanel projectId={projectId} userPrompt={userPrompt ?? ""} />
+        <ManagedOpencodeBuildApprovalPanel
+          projectId={projectId}
+          userPrompt={userPrompt ?? ""}
+          onPhaseChange={onPhaseChange}
+        />
       )}
     </div>
   );

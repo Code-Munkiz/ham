@@ -492,4 +492,62 @@ describe("CodingPlanCard chat pointer (relocated approval)", () => {
     expect(card.querySelector('[data-hww-coding-plan="recommendation-reason"]')).toBeNull();
     expect(card.querySelector('[data-hww-coding-plan="alternatives-toggle"]')).toBeNull();
   });
+
+  it("VAL-LIFECYCLE-001: pointer defaults to the preview-ready copy when no phase is set", () => {
+    const { container } = render(<CodingPlanCard payload={managedDroidPayload()} />);
+    const pointer = container.querySelector('[data-hww-coding-plan="right-pane-pointer"]');
+    expect(pointer).not.toBeNull();
+    expect(pointer!.getAttribute("data-build-phase")).toBe("idle");
+    expect(pointer!.textContent).toContain("Preview is ready on the right");
+  });
+
+  it("VAL-LIFECYCLE-002: pointer announces building while the right-pane build runs", () => {
+    for (const phase of ["launching", "running"] as const) {
+      const { container, unmount } = render(
+        <CodingPlanCard payload={managedDroidPayload()} buildPhase={phase} />,
+      );
+      const pointer = container.querySelector('[data-hww-coding-plan="right-pane-pointer"]');
+      expect(pointer!.getAttribute("data-build-phase")).toBe(phase);
+      expect(pointer!.textContent).toContain("HAM is building your app");
+      // Role=status keeps it an unobtrusive live region, not a dashboard card.
+      expect(pointer!.getAttribute("role")).toBe("status");
+      unmount();
+    }
+  });
+
+  it("VAL-LIFECYCLE-003: pointer summarizes completion when the build succeeds", () => {
+    const { container } = render(
+      <CodingPlanCard payload={managedDroidPayload()} buildPhase="succeeded" />,
+    );
+    const pointer = container.querySelector('[data-hww-coding-plan="right-pane-pointer"]');
+    expect(pointer!.textContent).toContain("Your build is ready");
+  });
+
+  it("VAL-LIFECYCLE-004: pointer flags attention when the build needs the user", () => {
+    const { container } = render(
+      <CodingPlanCard payload={managedDroidPayload()} buildPhase="failed" />,
+    );
+    const pointer = container.querySelector('[data-hww-coding-plan="right-pane-pointer"]');
+    expect(pointer!.textContent).toContain("needs your attention");
+  });
+
+  it("VAL-LIFECYCLE-005: no phase pointer ever mounts approval controls or leaks internals", () => {
+    for (const phase of ["previewing", "launching", "running", "succeeded", "failed"] as const) {
+      const { container, unmount } = render(
+        <CodingPlanCard payload={managedDroidPayload()} buildPhase={phase} />,
+      );
+      const card = container.querySelector('[data-hww-coding-plan="card"]') as HTMLElement;
+      // Still a pointer, never the relocated approval engine.
+      expect(card.querySelector('[data-hww-coding-plan="managed-build-approval"]')).toBeNull();
+      expect(card.querySelector('[data-hww-coding-plan="opencode-build-approval"]')).toBeNull();
+      expect(card.querySelector('input[type="checkbox"]')).toBeNull();
+      const buttons = Array.from(card.querySelectorAll("button"));
+      for (const b of buttons) {
+        const name = (b.textContent || "").toLowerCase();
+        expect(/approve build|prepare build|launch/.test(name)).toBe(false);
+      }
+      assertNoForbiddenTokens(card);
+      unmount();
+    }
+  });
 });

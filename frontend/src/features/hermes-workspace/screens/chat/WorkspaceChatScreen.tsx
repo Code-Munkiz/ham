@@ -86,6 +86,7 @@ import {
 } from "../../chat/WorkspaceBuilderPlanCards";
 import { isLikelyCodingIntent } from "./coding-plan/codingIntent";
 import { shouldSurfaceCodingConductorCard } from "./coding-plan/codingPlanCardCopy";
+import type { ManagedProviderBuildPhase } from "./coding-plan/ManagedProviderBuildApprovalPanel";
 import type {
   ComposerExportPdfState,
   ComposerGenerateImageState,
@@ -657,6 +658,8 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
   const [codingPlanPreview, setCodingPlanPreview] =
     React.useState<CodingConductorPreviewPayload | null>(null);
   const [codingPlanPrompt, setCodingPlanPrompt] = React.useState<string>("");
+  const [codingPlanBuildPhase, setCodingPlanBuildPhase] =
+    React.useState<ManagedProviderBuildPhase>("idle");
   const [codingPlanLoading, setCodingPlanLoading] = React.useState(false);
   const [codingPlanInlineError, setCodingPlanInlineError] = React.useState<string | null>(null);
   const [codingPlanPreferring, setCodingPlanPreferring] = React.useState<"opencode_cli" | null>(
@@ -3082,6 +3085,15 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
     codingPlanPreview && shouldSurfaceCodingConductorCard(codingPlanPreview),
   );
 
+  // Reset the mirrored build lifecycle when the approval surface is dismissed
+  // (new message / cleared preview) so a stale "completed"/"building" pointer
+  // never lingers in chat.
+  React.useEffect(() => {
+    if (!codingPlanApprovalVisible) {
+      setCodingPlanBuildPhase("idle");
+    }
+  }, [codingPlanApprovalVisible]);
+
   const composerGenerateImage = React.useMemo((): ComposerGenerateImageState => {
     const uploadsPending = attachments.some((a) => a.uploadPhase === "uploading");
     const supportsGen = Boolean(chatCapabilities?.generation?.supports_image_generation);
@@ -3750,6 +3762,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
                       userPrompt={codingPlanPrompt}
                       onPreferProvider={handlePreferProvider}
                       preferringProvider={codingPlanPreferring}
+                      buildPhase={codingPlanBuildPhase}
                     />
                   </div>
                 ) : null}
@@ -3976,6 +3989,7 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
           workbenchRefreshSignal={workbenchBounce}
           managedApprovalPayload={codingPlanPreview}
           managedApprovalPrompt={codingPlanPrompt}
+          onManagedBuildPhaseChange={setCodingPlanBuildPhase}
           onStaleBuilderProject={() => {
             setProjectId(null);
             setHamProjectId(null);

@@ -73,9 +73,12 @@ import { detectPreviewIframeProxySignals } from "@/features/hermes-workspace/wor
 import { cn } from "@/lib/utils";
 import {
   WorkbenchBuildStatusPanel,
+  buildStatusFromManagedPhase,
   buildStatusFromPreviewPhase,
+  type WorkbenchBuildStatusValue,
 } from "./WorkbenchBuildStatusPanel";
 import { WorkbenchManagedApprovalMount } from "./WorkbenchManagedApprovalMount";
+import type { ManagedProviderBuildPhase } from "@/features/hermes-workspace/screens/chat/coding-plan/ManagedProviderBuildApprovalPanel";
 import { ProjectSourceIntakeDialog } from "./ProjectSourceIntakeDialog";
 import { WorkbenchSavedVersionsDialog } from "./WorkbenchSavedVersionsDialog";
 import { WorkbenchProjectSettingsPanel } from "./WorkbenchProjectSettingsPanel";
@@ -115,6 +118,12 @@ export type WorkspaceWorkbenchProps = {
   managedApprovalPayload?: CodingConductorPreviewPayload | null;
   /** Prompt threaded into the relocated approval wrapper unchanged. */
   managedApprovalPrompt?: string;
+  /**
+   * Read-only lifecycle notifier bubbled from the relocated approval panel so
+   * chat can mirror plain-language build status (started / preview ready /
+   * building / completed / needs attention). Never gates or mutates launch.
+   */
+  onManagedBuildPhaseChange?: (phase: ManagedProviderBuildPhase) => void;
 };
 
 export type WorkspaceWorkbenchTabId = "preview" | "code" | "database" | "storage" | "settings";
@@ -134,8 +143,11 @@ export function WorkspaceWorkbench({
   onStaleBuilderProject,
   managedApprovalPayload = null,
   managedApprovalPrompt = "",
+  onManagedBuildPhaseChange,
 }: WorkspaceWorkbenchProps) {
   const [activeTab, setActiveTab] = React.useState<WorkspaceWorkbenchTabId>("preview");
+  const [managedBuildPhase, setManagedBuildPhase] =
+    React.useState<ManagedProviderBuildPhase>("idle");
   const [projectSourceOpen, setProjectSourceOpen] = React.useState(false);
   const [sourceRefreshKey, setSourceRefreshKey] = React.useState(0);
   const [previewTabRefreshKey, setPreviewTabRefreshKey] = React.useState(0);
@@ -156,6 +168,27 @@ export function WorkspaceWorkbench({
   const ws = workspaceId?.trim() || "";
   const pid = projectId?.trim() || "";
   const canDownloadProject = Boolean(ws && pid && exportSnapshotId && !exportSnapshotLoading);
+
+  const handleManagedBuildPhaseChange = React.useCallback(
+    (phase: ManagedProviderBuildPhase) => {
+      setManagedBuildPhase(phase);
+      onManagedBuildPhaseChange?.(phase);
+    },
+    [onManagedBuildPhaseChange],
+  );
+
+  // Drop stale managed-build status when the approval payload is cleared (e.g.
+  // a fresh chat message), so the right-pane status falls back to preview phase.
+  React.useEffect(() => {
+    if (!managedApprovalPayload) {
+      setManagedBuildPhase("idle");
+    }
+  }, [managedApprovalPayload]);
+
+  // Active managed-build status overrides the preview-iframe phase in the status
+  // shell; null when idle so the preview phase remains the source of truth.
+  const managedBuildStatus: WorkbenchBuildStatusValue | null =
+    buildStatusFromManagedPhase(managedBuildPhase);
 
   React.useEffect(() => {
     if (!ws || !pid) {
@@ -395,6 +428,7 @@ export function WorkspaceWorkbench({
       <WorkbenchManagedApprovalMount
         payload={managedApprovalPayload}
         userPrompt={managedApprovalPrompt}
+        onPhaseChange={handleManagedBuildPhaseChange}
       />
 
       <div
@@ -408,6 +442,7 @@ export function WorkspaceWorkbench({
             sourceRefreshKey={sourceRefreshKey}
             previewTabRefreshKey={previewTabRefreshKey}
             onStaleBuilderProject={onStaleBuilderProject}
+            managedBuildStatus={managedBuildStatus}
           />
         ) : null}
         {activeTab === "code" ? (
@@ -508,12 +543,15 @@ function WorkbenchPreviewPanel({
   sourceRefreshKey = 0,
   previewTabRefreshKey = 0,
   onStaleBuilderProject,
+  managedBuildStatus = null,
 }: {
   workspaceId?: string | null;
   projectId?: string | null;
   sourceRefreshKey?: number;
   previewTabRefreshKey?: number;
   onStaleBuilderProject?: () => void;
+  /** When a managed build is active, overrides the preview-phase status copy. */
+  managedBuildStatus?: WorkbenchBuildStatusValue | null;
 }) {
   const PREVIEW_AUTOPOLL_MS = 2500;
   /** Bound iframe document reloads while preview-proxy serves warmup JSON (avoids hammering nginx with 502s). */
@@ -1321,7 +1359,9 @@ function WorkbenchPreviewPanel({
           {visualEditModeActive ? "Exit edit mode" : "Edit"}
         </Button>
       </div>
-      <WorkbenchBuildStatusPanel status={buildStatusFromPreviewPhase(previewPhase)} />
+      <WorkbenchBuildStatusPanel
+        status={managedBuildStatus ?? buildStatusFromPreviewPhase(previewPhase)}
+      />
       {previewPhase !== "ready" ? (
         <div className="flex flex-wrap items-center gap-1.5" data-testid="hww-preview-status-pills">
           <span className="rounded-full border border-white/[0.12] bg-black/35 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/60">

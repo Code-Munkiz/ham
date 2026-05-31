@@ -27,12 +27,14 @@ import {
 import {
   ManagedProviderBuildApprovalPanel,
   type ManagedProviderBuildConfig,
+  type ManagedProviderBuildPhase,
 } from "./ManagedProviderBuildApprovalPanel";
 
 export type ManagedBuildApprovalPanelProps = {
   projectId: string;
   userPrompt: string;
   className?: string;
+  onPhaseChange?: (phase: ManagedProviderBuildPhase) => void;
 };
 
 const droidConfig: ManagedProviderBuildConfig<DroidBuildPreviewPayload, DroidBuildLaunchPayload> = {
@@ -94,6 +96,7 @@ export function ManagedBuildApprovalPanel({
   projectId,
   userPrompt,
   className,
+  onPhaseChange,
 }: ManagedBuildApprovalPanelProps) {
   return (
     <ManagedProviderBuildApprovalPanel
@@ -101,6 +104,7 @@ export function ManagedBuildApprovalPanel({
       userPrompt={userPrompt}
       className={className}
       config={droidConfig}
+      onPhaseChange={onPhaseChange}
     />
   );
 }

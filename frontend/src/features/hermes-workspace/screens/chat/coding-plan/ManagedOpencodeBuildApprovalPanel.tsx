@@ -30,6 +30,7 @@ import {
 import {
   ManagedProviderBuildApprovalPanel,
   type ManagedProviderBuildConfig,
+  type ManagedProviderBuildPhase,
 } from "./ManagedProviderBuildApprovalPanel";
 
 export type ManagedOpencodeBuildApprovalPanelProps = {
@@ -37,6 +38,7 @@ export type ManagedOpencodeBuildApprovalPanelProps = {
   userPrompt: string;
   model?: string | null;
   className?: string;
+  onPhaseChange?: (phase: ManagedProviderBuildPhase) => void;
 };
 
 function buildOpencodeConfig(
@@ -108,6 +110,7 @@ export function ManagedOpencodeBuildApprovalPanel({
   userPrompt,
   model,
   className,
+  onPhaseChange,
 }: ManagedOpencodeBuildApprovalPanelProps) {
   const config = React.useMemo(() => buildOpencodeConfig(model), [model]);
   return (
@@ -116,6 +119,7 @@ export function ManagedOpencodeBuildApprovalPanel({
       userPrompt={userPrompt}
       className={className}
       config={config}
+      onPhaseChange={onPhaseChange}
     />
   );
 }

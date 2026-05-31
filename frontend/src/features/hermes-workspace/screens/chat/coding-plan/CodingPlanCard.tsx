@@ -5,13 +5,14 @@ import { sanitizeConductorUserFacingLine } from "@/lib/ham/conductorUiMessaging"
 import { cn } from "@/lib/utils";
 
 import {
-  CODING_PLAN_RIGHT_PANE_POINTER,
+  codingPlanPointerForPhase,
   OPENCODE_PREFERRED_CTA,
   OPENCODE_PREFERRED_HINT,
   OPENCODE_PREFERRED_LOADING,
   shouldShowManagedBuildApproval,
   shouldShowOpencodeBuildApproval,
   shouldShowOpenCodeAffordance,
+  type CodingPlanBuildPhase,
 } from "./codingPlanCardCopy";
 
 export type CodingPlanCardProps = {
@@ -21,6 +22,12 @@ export type CodingPlanCardProps = {
   onPreferProvider?: (provider: "opencode_cli") => void;
   preferringProvider?: "opencode_cli" | null;
   builderName?: string;
+  /**
+   * Right-pane build lifecycle phase. Drives a concise, plain-language pointer
+   * so chat reflects building / completed / needs-attention without re-hosting
+   * any approval controls or exposing internals.
+   */
+  buildPhase?: CodingPlanBuildPhase | null;
 };
 
 const READY_TITLE = "Ready to build";
@@ -56,6 +63,7 @@ export function CodingPlanCard({
   className,
   onPreferProvider,
   preferringProvider = null,
+  buildPhase = null,
 }: CodingPlanCardProps) {
   const showManagedApproval = shouldShowManagedBuildApproval(payload);
   const showOpencodeApproval = shouldShowOpencodeBuildApproval(payload);
@@ -113,8 +121,10 @@ export function CodingPlanCard({
         <p
           className="mt-3 text-[11px] leading-snug text-cyan-100/85"
           data-hww-coding-plan="right-pane-pointer"
+          data-build-phase={buildPhase ?? "idle"}
+          role="status"
         >
-          {CODING_PLAN_RIGHT_PANE_POINTER}
+          {codingPlanPointerForPhase(buildPhase)}
         </p>
       ) : null}
     </section>

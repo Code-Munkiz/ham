@@ -4,10 +4,12 @@ import { render, screen, within } from "@testing-library/react";
 import { FORBIDDEN_USER_COPY_PATTERN } from "@/lib/ham/workbenchPreviewMessages";
 import {
   WorkbenchBuildStatusPanel,
+  buildStatusFromManagedPhase,
   type WorkbenchBuildStatusValue,
 } from "../WorkbenchBuildStatusPanel";
 
 const ALLOWED_COPY = [
+  "Preparing preview…",
   "Preview ready",
   "Ready to build",
   "Building…",
@@ -17,6 +19,7 @@ const ALLOWED_COPY = [
 ] as const;
 
 const STATE_COPY: Array<[WorkbenchBuildStatusValue, (typeof ALLOWED_COPY)[number]]> = [
+  ["preparing-preview", "Preparing preview…"],
   ["preview-ready", "Preview ready"],
   ["ready-to-build", "Ready to build"],
   ["building", "Building…"],
@@ -143,6 +146,41 @@ describe("WorkbenchBuildStatusPanel", () => {
     for (const [status] of STATE_COPY) {
       const { unmount } = render(<WorkbenchBuildStatusPanel status={status} />);
       const text = screen.getByTestId("hww-build-status-shell").textContent ?? "";
+      expect(FORBIDDEN_USER_COPY_PATTERN.test(text)).toBe(false);
+      unmount();
+    }
+  });
+});
+
+describe("buildStatusFromManagedPhase", () => {
+  it("maps the managed build lifecycle to plain-language status values", () => {
+    expect(buildStatusFromManagedPhase("previewing")).toBe("preparing-preview");
+    expect(buildStatusFromManagedPhase("previewed")).toBe("preview-ready");
+    expect(buildStatusFromManagedPhase("launching")).toBe("building");
+    expect(buildStatusFromManagedPhase("running")).toBe("building");
+    expect(buildStatusFromManagedPhase("succeeded")).toBe("build-completed");
+    expect(buildStatusFromManagedPhase("failed")).toBe("attention");
+  });
+
+  it("returns null for idle so the preview-iframe phase remains the source of truth", () => {
+    expect(buildStatusFromManagedPhase("idle")).toBeNull();
+  });
+
+  it("every non-idle phase renders an allowed plain-language phrase", () => {
+    const phases = [
+      "previewing",
+      "previewed",
+      "launching",
+      "running",
+      "succeeded",
+      "failed",
+    ] as const;
+    for (const phase of phases) {
+      const status = buildStatusFromManagedPhase(phase);
+      expect(status).not.toBeNull();
+      const { unmount } = render(<WorkbenchBuildStatusPanel status={status!} />);
+      const text = screen.getByTestId("hww-build-status-shell").textContent ?? "";
+      expect(ALLOWED_COPY.some((copy) => text.includes(copy))).toBe(true);
       expect(FORBIDDEN_USER_COPY_PATTERN.test(text)).toBe(false);
       unmount();
     }

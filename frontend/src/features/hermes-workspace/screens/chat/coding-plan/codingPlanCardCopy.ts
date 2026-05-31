@@ -33,6 +33,53 @@ export const CODING_PLAN_SECTION_LABEL = "Next step";
 export const CODING_PLAN_RIGHT_PANE_POINTER =
   "Preview is ready on the right — review and approve the build in the workbench.";
 
+/**
+ * Plain-language chat lifecycle pointers. Chat stays conversation-first (no
+ * approval controls, no dashboards), but mirrors the right-pane build lifecycle
+ * so the user can tell whether HAM is building, done, or needs attention.
+ * Never references build-kit internals, providers, or routing.
+ */
+export const CODING_PLAN_BUILDING_POINTER =
+  "HAM is building your app now — track progress in the workbench on the right.";
+
+export const CODING_PLAN_COMPLETED_POINTER =
+  "Your build is ready — open it from the workbench on the right.";
+
+export const CODING_PLAN_ATTENTION_POINTER =
+  "This build needs your attention — check the workbench on the right.";
+
+/**
+ * Lifecycle phase strings emitted by the relocated managed build panel. Kept as
+ * a local string union (not a type import) so the copy module stays free of
+ * component coupling while the selector below stays exhaustive.
+ */
+export type CodingPlanBuildPhase =
+  | "idle"
+  | "previewing"
+  | "previewed"
+  | "launching"
+  | "running"
+  | "succeeded"
+  | "failed";
+
+/** Pick the concise chat pointer that mirrors the right-pane build lifecycle. */
+export function codingPlanPointerForPhase(phase: CodingPlanBuildPhase | null | undefined): string {
+  switch (phase) {
+    case "launching":
+    case "running":
+      return CODING_PLAN_BUILDING_POINTER;
+    case "succeeded":
+      return CODING_PLAN_COMPLETED_POINTER;
+    case "failed":
+      return CODING_PLAN_ATTENTION_POINTER;
+    case "idle":
+    case "previewing":
+    case "previewed":
+    default:
+      return CODING_PLAN_RIGHT_PANE_POINTER;
+  }
+}
+
 export const MANAGED_BUILD_APPROVAL_HEADLINE = "Approve build";
 
 export const MANAGED_BUILD_APPROVAL_BODY =
