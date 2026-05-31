@@ -5,6 +5,41 @@ the first legacy/deprecation audit. Historical checkpoint docs remain useful
 for context, but this file should be treated as the current operator-facing
 summary.
 
+## Builder selection model (product law)
+
+**HAM uses the builder/harness selected by the user. There is no hidden fallback
+chain for normal builds.**
+
+- **Normal builds use the user-selected builder.** Valid selectable builders:
+  **Cursor, Claude, OpenCode, Factory Droid, Hermes Agent**.
+- **OpenCode may be the default selected builder _only if_ the product
+  explicitly configures it as the default.** When that default is not
+  configured and the user has not selected a builder, **HAM asks the user to
+  choose** — it does not silently pick one.
+- **Hermes Agent is a selectable HAM-native builder** (a peer of the external
+  harnesses, not a fallback).
+- **The internal scaffold is not a builder.** It is an **explicit Quick Preview
+  tool only** — never a silent default and never an automatic fallback.
+
+### Honest current state (do not overstate)
+
+- **Shipped:** the chat builder hook no longer *silently* scaffolds when a
+  premium harness is **available** (an availability-based transitional guard;
+  commit `1a085c50`). When no harness is available it still falls back to the
+  internal scaffold.
+- **Not yet implemented (tracked in `HARNESS_FIRST_ARCHITECTURE_PLAN.md`):**
+  - a persisted **selected builder** preference and selection-based routing on
+    the normal build prompt;
+  - the **OpenCode-as-default** product switch (today OpenCode is an *available
+    provider*, gated by env + workspace policy where `allow_opencode` defaults
+    **off** — it is **not** configured as a default selected builder);
+  - **Hermes Agent as a selectable new-build builder** (today it exists only as
+    an *edit worker* over the Hermes gateway, not a new-build builder);
+  - confining the internal scaffold to an explicit Quick Preview request.
+
+Selectable-builder preference is expected to live in the workspace coding-agent
+settings (`WorkspaceAgentPolicy` + `/api/workspaces/{id}/coding-agent-access-settings`).
+
 ## Current UX
 
 - **Chat** is for asking, guiding, revising, and summarizing.
@@ -17,6 +52,10 @@ Do not reintroduce Builder Studio as a task-launch surface without an explicit
 product decision.
 
 ## Current Build System
+
+> Scope note: this section describes the **internal scaffold context** system
+> (the Quick Preview path). It is **not** the normal-build builder. Normal
+> builds use the user-selected builder per the "Builder selection model" above.
 
 Build Registry v2 is the current intended routed playbook system. It supplies
 internal scaffold context for narrowly matched lanes and is gated by
