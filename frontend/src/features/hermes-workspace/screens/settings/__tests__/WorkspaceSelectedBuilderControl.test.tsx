@@ -381,6 +381,62 @@ describe("Workspace Builders selected-builder rows", () => {
     expect(screen.queryByRole("button", { name: "Finish setup" })).toBeNull();
   });
 
+  it("shows Ready OpenCode details without stale setup or model-access copy", async () => {
+    vi.mocked(listHamProjects).mockResolvedValueOnce({
+      projects: [{ id: "project_1", workspace_id: "ws_1" }],
+    } as Awaited<ReturnType<typeof listHamProjects>>);
+    fetchSettingsMock.mockResolvedValue({
+      ok: true,
+      settings: settings({ selected_builder: "opencode" }),
+    });
+    renderBuildersSection();
+    fireEvent.click(await screen.findByRole("button", { name: "Open details for OpenCode" }));
+    const dialog = await screen.findByRole("dialog", { name: "OpenCode" });
+    expect(dialog).toHaveTextContent("Ready");
+    expect(dialog).toHaveTextContent("HAM will use OpenCode when you ask it to build.");
+    expect(dialog).not.toHaveTextContent("Finish setup");
+    expect(dialog).not.toHaveTextContent("Configure model access");
+    expect(dialog).not.toHaveTextContent("Requires");
+    expect(dialog).not.toHaveTextContent("Safe next step");
+  });
+
+  it("shows Finish setup in OpenCode details when selected OpenCode is not build-ready", async () => {
+    fetchSettingsMock.mockResolvedValue({
+      ok: true,
+      settings: settings({ selected_builder: "opencode" }),
+    });
+    renderBuildersSection();
+    fireEvent.click(await screen.findByRole("button", { name: "Open details for OpenCode" }));
+    const dialog = await screen.findByRole("dialog", { name: "OpenCode" });
+    expect(dialog).toHaveTextContent("Finish setup before HAM can use OpenCode for builds.");
+    const buttons = screen.getAllByRole("button", { name: "Finish setup" });
+    expect(buttons.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("details Finish setup calls the same OpenCode setup flow as the row", async () => {
+    fetchSettingsMock.mockResolvedValue({
+      ok: true,
+      settings: settings({ selected_builder: "opencode" }),
+    });
+    renderBuildersSection();
+    fireEvent.click(await screen.findByRole("button", { name: "Open details for OpenCode" }));
+    const buttons = await screen.findAllByRole("button", { name: "Finish setup" });
+    fireEvent.click(buttons[buttons.length - 1]);
+    await waitFor(() => expect(ensureBuilderDefaultProject).toHaveBeenCalledWith("ws_1"));
+  });
+
+  it("shows coming-soon Hermes details without setup or build controls", async () => {
+    renderBuildersSection();
+    fireEvent.click(await screen.findByRole("button", { name: "Open details for Hermes Agent" }));
+    const dialog = await screen.findByRole("dialog", { name: "Hermes Agent" });
+    expect(dialog).toHaveTextContent("Coming soon");
+    expect(dialog).toHaveTextContent("Hermes Agent new-build support is coming soon.");
+    expect(dialog).not.toHaveTextContent("Finish setup");
+    expect(dialog).not.toHaveTextContent("Prepare build");
+    expect(dialog).not.toHaveTextContent("Approve");
+    expect(dialog).not.toHaveTextContent("Launch");
+  });
+
   it("does not render any build launch / approve / preview controls", async () => {
     renderBuildersSection();
     await waitFor(() => expect(fetchSettingsMock).toHaveBeenCalled());
@@ -400,6 +456,23 @@ describe("Workspace Builders selected-builder rows", () => {
     const blob = (container.textContent || "").toLowerCase();
     for (const token of FORBIDDEN) {
       expect(blob, `selector leaks ${token}`).not.toContain(token);
+    }
+  });
+
+  it("details modal does not expose build-kit internals, env names, or provider ids", async () => {
+    vi.mocked(listHamProjects).mockResolvedValueOnce({
+      projects: [{ id: "project_1", workspace_id: "ws_1" }],
+    } as Awaited<ReturnType<typeof listHamProjects>>);
+    fetchSettingsMock.mockResolvedValue({
+      ok: true,
+      settings: settings({ selected_builder: "opencode" }),
+    });
+    const { container } = renderBuildersSection();
+    fireEvent.click(await screen.findByRole("button", { name: "Open details for OpenCode" }));
+    await screen.findByRole("dialog", { name: "OpenCode" });
+    const blob = (container.textContent || "").toLowerCase();
+    for (const token of FORBIDDEN) {
+      expect(blob, `details leaks ${token}`).not.toContain(token);
     }
   });
 });

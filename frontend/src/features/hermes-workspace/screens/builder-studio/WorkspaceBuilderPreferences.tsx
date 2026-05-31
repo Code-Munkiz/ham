@@ -55,13 +55,6 @@ function ConnectionStatusBadge({ label, tone }: { label: string; tone: StatusTon
   );
 }
 
-function splitGoodFor(raw: string) {
-  return raw
-    .split("|")
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
 function BuilderSwitch({
   checked,
   disabled,
@@ -281,6 +274,41 @@ function hermesRowModel(): BuilderRowModel {
   };
 }
 
+function managedBuilderDetail(opts: {
+  lane: BuilderConnectionLane;
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  ready: boolean;
+  selected: boolean;
+  status: { statusLabel: string; statusTone: StatusTone };
+}): BuilderConnectionPanelModel {
+  if (opts.ready) {
+    return {
+      lane: opts.lane,
+      icon: opts.icon,
+      title: opts.title,
+      description: opts.description,
+      statusLabel: "Ready",
+      statusTone: "ready",
+      statusDetail: `HAM will use ${opts.title} when you ask it to build.`,
+    };
+  }
+
+  return {
+    lane: opts.lane,
+    icon: opts.icon,
+    title: opts.title,
+    description: opts.description,
+    statusLabel: opts.status.statusLabel,
+    statusTone: opts.status.statusTone,
+    statusDetail: opts.selected
+      ? `Finish setup before HAM can use ${opts.title} for builds.`
+      : `Turn this on, then finish setup so HAM can use ${opts.title} for builds.`,
+    primary: opts.selected ? { label: "Finish setup", action: "finish_setup" } : undefined,
+  };
+}
+
 export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: string }) {
   const [loading, setLoading] = React.useState(true);
   const [selectedBuilder, setSelectedBuilder] = React.useState<SelectedBuilder | null>(null);
@@ -371,9 +399,6 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
   );
 
   const settingsTools = "/workspace/settings?section=tools";
-  const settingsHermes = "/workspace/settings?section=hermes";
-  const settingsHermesModels = `${settingsHermes}#openrouter-models`;
-  const projectsPath = "/workspace/projects";
 
   let cursorStatusLabel: string;
   let cursorTone: StatusTone;
@@ -421,10 +446,6 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
   const panelModel: BuilderConnectionPanelModel | null = React.useMemo(() => {
     if (!openLane) return null;
 
-    const toolsSecondaries = [
-      { label: CODING_AGENT_LABELS.builderPanelSecondaryConnectedTools, to: settingsTools },
-    ];
-
     if (openLane === "hermes") {
       const hermes = hermesRowModel();
       return {
@@ -432,20 +453,9 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
         icon: hermes.icon,
         title: hermes.title,
         description: "Hermes Agent is the HAM-native builder option.",
-        goodForItems: ["HAM-native builds", "Future local orchestration"],
-        requires: "New-build support is coming soon.",
         statusLabel: hermes.statusLabel,
         statusTone: hermes.statusTone,
-        primary: {
-          label: "Open Hermes settings",
-          to: settingsHermes,
-        },
-        secondaries: [
-          {
-            label: CODING_AGENT_LABELS.builderPanelSecondaryOpenModelSettings,
-            to: settingsHermesModels,
-          },
-        ],
+        statusDetail: "Hermes Agent new-build support is coming soon.",
       };
     }
 
@@ -455,18 +465,16 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
         icon: Brain,
         title: CODING_AGENT_LABELS.builderConnectionClaudeTitle,
         description: CODING_AGENT_LABELS.builderConnectionClaudeSubtitle,
-        goodForItems: splitGoodFor(CODING_AGENT_LABELS.builderPanelClaudeGoodFor),
-        requires: CODING_AGENT_LABELS.builderPanelClaudeRequires,
         statusLabel: claudeStatusLabel,
         statusTone: claudeTone,
-        primary: {
-          label:
-            claudeReadiness === "ready"
-              ? CODING_AGENT_LABELS.builderPanelPrimaryManageClaude
-              : CODING_AGENT_LABELS.builderPanelPrimaryConnectClaude,
-          to: settingsTools,
-        },
-        secondaries: toolsSecondaries,
+        statusDetail:
+          claudeReadiness === "ready"
+            ? "Claude is ready. It runs through its own build flow for now."
+            : "Finish setup before HAM can use Claude for builds.",
+        primary:
+          claudeReadiness === "ready"
+            ? undefined
+            : { label: CODING_AGENT_LABELS.builderPanelSecondaryConnectedTools, to: settingsTools },
       };
     }
 
@@ -476,64 +484,40 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
         icon: Bot,
         title: CODING_AGENT_LABELS.builderConnectionCursorTitle,
         description: CODING_AGENT_LABELS.builderConnectionCursorSubtitle,
-        goodForItems: splitGoodFor(CODING_AGENT_LABELS.builderPanelCursorGoodFor),
-        requires: CODING_AGENT_LABELS.builderPanelCursorRequires,
         statusLabel: cursorStatusLabel,
         statusTone: cursorTone,
-        primary: {
-          label:
-            cursorReadiness === "ready" && !cursorError
-              ? CODING_AGENT_LABELS.builderPanelPrimaryManageCursor
-              : CODING_AGENT_LABELS.builderPanelPrimaryConnectCursor,
-          to: settingsTools,
-        },
-        secondaries: toolsSecondaries,
+        statusDetail:
+          cursorReadiness === "ready" && !cursorError
+            ? "Cursor is ready. It runs through its own build flow for now."
+            : "Finish setup before HAM can use Cursor for builds.",
+        primary:
+          cursorReadiness === "ready" && !cursorError
+            ? undefined
+            : { label: CODING_AGENT_LABELS.builderPanelSecondaryConnectedTools, to: settingsTools },
       };
     }
 
     if (openLane === "factory") {
-      return {
+      return managedBuilderDetail({
         lane: "factory",
         icon: ScanLine,
         title: CODING_AGENT_LABELS.builderConnectionFactoryTitle,
         description: CODING_AGENT_LABELS.builderConnectionFactorySubtitle,
-        goodForItems: splitGoodFor(CODING_AGENT_LABELS.builderPanelFactoryGoodFor),
-        requires: CODING_AGENT_LABELS.builderPanelFactoryRequires,
-        statusLabel: factoryRowStatus.statusLabel,
-        statusTone: factoryRowStatus.statusTone,
-        primary: {
-          label: factoryReady
-            ? CODING_AGENT_LABELS.builderPanelPrimaryManageFactory
-            : CODING_AGENT_LABELS.builderPanelPrimarySetupRunner,
-          to: factoryReady ? settingsTools : projectsPath,
-        },
-        secondaries: [
-          { label: CODING_AGENT_LABELS.builderPanelSecondaryOpenProjects, to: projectsPath },
-          { label: CODING_AGENT_LABELS.builderPanelSecondaryConnectedTools, to: settingsTools },
-        ],
-      };
+        ready: factoryBuildReady,
+        selected: selectedBuilder === "factory_droid",
+        status: factoryRowStatus,
+      });
     }
 
-    return {
+    return managedBuilderDetail({
       lane: "opencode",
       icon: Sparkles,
       title: CODING_AGENT_LABELS.opencodeProviderName,
       description: CODING_AGENT_LABELS.builderConnectionOpencodeSubtitle,
-      goodForItems: splitGoodFor(CODING_AGENT_LABELS.builderPanelOpencodeGoodFor),
-      requires: CODING_AGENT_LABELS.builderPanelOpencodeRequires,
-      statusLabel: opencodeRowStatus.statusLabel,
-      statusTone: opencodeRowStatus.statusTone,
-      primary: {
-        label: CODING_AGENT_LABELS.actionConfigureModelAccess,
-        to: settingsHermes,
-      },
-      secondaries: [
-        {
-          label: CODING_AGENT_LABELS.builderPanelSecondaryOpenModelSettings,
-          to: settingsHermesModels,
-        },
-      ],
-    };
+      ready: opencodeBuildReady,
+      selected: selectedBuilder === "opencode",
+      status: opencodeRowStatus,
+    });
   }, [
     openLane,
     claudeReadiness,
@@ -543,14 +527,13 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
     cursorError,
     cursorStatusLabel,
     cursorTone,
-    factoryReady,
+    factoryBuildReady,
     factoryRowStatus.statusLabel,
     factoryRowStatus.statusTone,
+    opencodeBuildReady,
     opencodeRowStatus.statusLabel,
     opencodeRowStatus.statusTone,
-    projectsPath,
-    settingsHermes,
-    settingsHermesModels,
+    selectedBuilder,
     settingsTools,
   ]);
 
@@ -660,7 +643,14 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
         ) : null}
       </section>
       {panelModel ? (
-        <BuilderConnectionDetailPanel model={panelModel} onClose={() => setOpenLane(null)} />
+        <BuilderConnectionDetailPanel
+          model={panelModel}
+          onClose={() => setOpenLane(null)}
+          onFinishSetup={(lane) => {
+            if (lane === "opencode") void onFinishSetup("opencode");
+            if (lane === "factory") void onFinishSetup("factory_droid");
+          }}
+        />
       ) : null}
     </>
   );

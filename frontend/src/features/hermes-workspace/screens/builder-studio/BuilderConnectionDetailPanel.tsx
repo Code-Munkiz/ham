@@ -37,20 +37,21 @@ export type BuilderConnectionPanelModel = {
   icon: LucideIcon;
   title: string;
   description: string;
-  goodForItems: string[];
-  requires: string;
   statusLabel: string;
   statusTone: BuilderConnectionStatusTone;
-  primary: { label: string; to: string };
-  secondaries: Array<{ label: string; to: string }>;
+  statusDetail: string;
+  primary?: { label: string; to?: string; action?: "finish_setup" };
+  secondaries?: Array<{ label: string; to: string }>;
 };
 
 export function BuilderConnectionDetailPanel({
   model,
   onClose,
+  onFinishSetup,
 }: {
   model: BuilderConnectionPanelModel;
   onClose: () => void;
+  onFinishSetup?: (lane: BuilderConnectionLane) => void;
 }) {
   const panelRef = React.useRef<HTMLDivElement | null>(null);
   const titleId = React.useId();
@@ -110,45 +111,33 @@ export function BuilderConnectionDetailPanel({
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4 text-sm text-white/85">
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wide text-white/50">
-              {CODING_AGENT_LABELS.builderPanelGoodForHeading}
-            </h3>
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-white/80">
-              {model.goodForItems.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-white/50">
-              {CODING_AGENT_LABELS.builderPanelRequiresHeading}
-            </h3>
-            <p className="mt-2 leading-relaxed text-white/75">{model.requires}</p>
-          </div>
-
-          <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-white/50">
               {CODING_AGENT_LABELS.builderPanelStatusHeading}
             </h3>
             <div className="mt-2">
               <ConnectionStatusBadge label={model.statusLabel} tone={model.statusTone} />
             </div>
+            <p className="mt-3 leading-relaxed text-white/75">{model.statusDetail}</p>
           </div>
 
-          <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-white/50">
-              {CODING_AGENT_LABELS.builderPanelNextStepHeading}
-            </h3>
-            <p className="mt-2 leading-relaxed text-white/70">
-              {CODING_AGENT_LABELS.builderPanelNextStepCaption}
-            </p>
+          {model.primary || model.secondaries?.length ? (
             <div className="mt-3 flex flex-col gap-2">
-              <Button asChild className="w-full sm:w-auto">
-                <Link to={model.primary.to} onClick={onClose}>
+              {model.primary?.to ? (
+                <Button asChild className="w-full sm:w-auto">
+                  <Link to={model.primary.to} onClick={onClose}>
+                    {model.primary.label}
+                  </Link>
+                </Button>
+              ) : null}
+              {model.primary?.action === "finish_setup" ? (
+                <Button
+                  type="button"
+                  className="w-full sm:w-auto"
+                  onClick={() => onFinishSetup?.(model.lane)}
+                >
                   {model.primary.label}
-                </Link>
-              </Button>
-              {model.secondaries.map((sec) => (
+                </Button>
+              ) : null}
+              {model.secondaries?.map((sec) => (
                 <Button
                   key={sec.label}
                   asChild
@@ -161,7 +150,7 @@ export function BuilderConnectionDetailPanel({
                 </Button>
               ))}
             </div>
-          </div>
+          ) : null}
         </div>
       </div>
     </div>
