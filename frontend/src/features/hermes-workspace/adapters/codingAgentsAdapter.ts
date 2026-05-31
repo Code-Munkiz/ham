@@ -454,7 +454,7 @@ export interface CodingAgentAccessSettingsPatch {
   allow_cursor?: boolean;
   preference_mode?: PreferenceMode;
   model_source_preference?: ModelSourcePreference;
-  selected_builder?: SelectedBuilder;
+  selected_builder?: SelectedBuilder | null;
 }
 
 /** Default settings returned when no workspace_id is provided or fetch fails. */
@@ -513,7 +513,10 @@ export async function patchCodingAgentAccessSettings(
   { ok: true; settings: CodingAgentAccessSettings } | { ok: false; errorMessage: string }
 > {
   if (!workspaceId.trim()) {
-    return { ok: false, errorMessage: CODING_AGENT_LABELS.settingsSaveError };
+    return {
+      ok: false,
+      errorMessage: "Choose or create a workspace before saving a builder choice.",
+    };
   }
   try {
     const res = await hamApiFetch(
@@ -524,7 +527,15 @@ export async function patchCodingAgentAccessSettings(
         body: JSON.stringify(patch),
       },
     );
-    if (!res.ok) return { ok: false, errorMessage: CODING_AGENT_LABELS.settingsSaveError };
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
+        return {
+          ok: false,
+          errorMessage: "Couldn't save your builder choice. Refresh or sign in again.",
+        };
+      }
+      return { ok: false, errorMessage: CODING_AGENT_LABELS.settingsSaveError };
+    }
     const body = (await res.json()) as CodingAgentAccessSettings;
     return { ok: true, settings: body };
   } catch {

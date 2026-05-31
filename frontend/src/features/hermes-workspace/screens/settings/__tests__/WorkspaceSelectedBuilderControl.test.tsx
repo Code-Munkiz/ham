@@ -142,7 +142,7 @@ describe("Workspace Builders selected-builder rows", () => {
       ).length,
     ).toBeGreaterThanOrEqual(1);
     for (const name of ["OpenCode", "Factory Droid", "Cursor", "Claude", "Hermes Agent"]) {
-      expect(screen.getByRole("radio", { name })).toBeInTheDocument();
+      expect(screen.getByRole("switch", { name })).toBeInTheDocument();
     }
     expect(screen.queryByText("Builder connections")).toBeNull();
   });
@@ -153,13 +153,18 @@ describe("Workspace Builders selected-builder rows", () => {
       settings: settings({ selected_builder: "factory_droid" }),
     });
     renderBuildersSection();
-    await waitFor(() => expect(screen.getByRole("radio", { name: "Factory Droid" })).toBeChecked());
+    await waitFor(() =>
+      expect(screen.getByRole("switch", { name: "Factory Droid" })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      ),
+    );
   });
 
   it("PATCHes selected_builder=opencode when OpenCode is chosen", async () => {
     renderBuildersSection();
     await waitFor(() => expect(fetchSettingsMock).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole("radio", { name: "OpenCode" }));
+    fireEvent.click(screen.getByRole("switch", { name: "OpenCode" }));
     await waitFor(() => expect(patchSettingsMock).toHaveBeenCalledTimes(1));
     expect(patchSettingsMock).toHaveBeenCalledWith("ws_1", { selected_builder: "opencode" });
   });
@@ -167,9 +172,64 @@ describe("Workspace Builders selected-builder rows", () => {
   it("PATCHes selected_builder=factory_droid when Factory Droid is chosen", async () => {
     renderBuildersSection();
     await waitFor(() => expect(fetchSettingsMock).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole("radio", { name: "Factory Droid" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Factory Droid" }));
     await waitFor(() => expect(patchSettingsMock).toHaveBeenCalledTimes(1));
     expect(patchSettingsMock).toHaveBeenCalledWith("ws_1", { selected_builder: "factory_droid" });
+  });
+
+  it("turning Factory Droid on visually turns OpenCode off", async () => {
+    fetchSettingsMock.mockResolvedValue({
+      ok: true,
+      settings: settings({ selected_builder: "opencode" }),
+    });
+    renderBuildersSection();
+    await waitFor(() =>
+      expect(screen.getByRole("switch", { name: "OpenCode" })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      ),
+    );
+    fireEvent.click(screen.getByRole("switch", { name: "Factory Droid" }));
+    await waitFor(() =>
+      expect(screen.getByRole("switch", { name: "Factory Droid" })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      ),
+    );
+    expect(screen.getByRole("switch", { name: "OpenCode" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    expect(patchSettingsMock).toHaveBeenCalledWith("ws_1", {
+      selected_builder: "factory_droid",
+    });
+  });
+
+  it("toggling the active builder off clears selected_builder", async () => {
+    fetchSettingsMock.mockResolvedValue({
+      ok: true,
+      settings: settings({ selected_builder: "opencode" }),
+    });
+    patchSettingsMock.mockResolvedValueOnce({
+      ok: true,
+      settings: settings({ selected_builder: null }),
+    });
+    renderBuildersSection();
+    await waitFor(() =>
+      expect(screen.getByRole("switch", { name: "OpenCode" })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      ),
+    );
+    fireEvent.click(screen.getByRole("switch", { name: "OpenCode" }));
+    await waitFor(() => expect(patchSettingsMock).toHaveBeenCalledTimes(1));
+    expect(patchSettingsMock).toHaveBeenCalledWith("ws_1", { selected_builder: null });
+    await waitFor(() =>
+      expect(screen.getByRole("switch", { name: "OpenCode" })).toHaveAttribute(
+        "aria-checked",
+        "false",
+      ),
+    );
   });
 
   it("failed PATCH reverts and shows a clear error", async () => {
@@ -179,14 +239,48 @@ describe("Workspace Builders selected-builder rows", () => {
     });
     patchSettingsMock.mockResolvedValueOnce({ ok: false, errorMessage: "nope" });
     renderBuildersSection();
-    await waitFor(() => expect(screen.getByRole("radio", { name: "Cursor" })).toBeChecked());
-    fireEvent.click(screen.getByRole("radio", { name: "OpenCode" }));
+    await waitFor(() =>
+      expect(screen.getByRole("switch", { name: "Cursor" })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      ),
+    );
+    fireEvent.click(screen.getByRole("switch", { name: "OpenCode" }));
     await waitFor(() =>
       expect(patchSettingsMock).toHaveBeenCalledWith("ws_1", { selected_builder: "opencode" }),
     );
-    await waitFor(() => expect(screen.getByRole("radio", { name: "Cursor" })).toBeChecked());
+    await waitFor(() =>
+      expect(screen.getByRole("switch", { name: "Cursor" })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      ),
+    );
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Couldn't save your builder choice. Check your session and try again.",
+      "Couldn't save your builder choice. Try again.",
+    );
+  });
+
+  it("failed auth-like PATCH suggests refresh or sign-in", async () => {
+    fetchSettingsMock.mockResolvedValue({
+      ok: true,
+      settings: settings({ selected_builder: "cursor" }),
+    });
+    patchSettingsMock.mockResolvedValueOnce({
+      ok: false,
+      errorMessage: "Couldn't save your builder choice. Refresh or sign in again.",
+    });
+    renderBuildersSection();
+    await waitFor(() =>
+      expect(screen.getByRole("switch", { name: "Cursor" })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      ),
+    );
+    fireEvent.click(screen.getByRole("switch", { name: "OpenCode" }));
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Couldn't save your builder choice. Refresh or sign in again.",
+      ),
     );
   });
 
@@ -201,6 +295,7 @@ describe("Workspace Builders selected-builder rows", () => {
         screen.getByText("Hermes Agent new-build support is coming soon."),
       ).toBeInTheDocument(),
     );
+    expect(screen.getByRole("switch", { name: "Hermes Agent" })).toBeDisabled();
     await waitFor(() =>
       expect(screen.getByTestId("hww-selected-builder-helper")).toHaveTextContent(
         "Hermes Agent new-build support is coming soon.",

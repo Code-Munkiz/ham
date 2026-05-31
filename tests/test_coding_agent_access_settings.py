@@ -547,6 +547,31 @@ def test_patch_settings_rejects_extra_fields(
     assert res.status_code == 422
 
 
+def test_patch_settings_clears_selected_builder_with_null(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_store: ProjectStore,
+    ws_store: tuple[InMemoryWorkspaceStore, str],
+) -> None:
+    monkeypatch.setenv("HAM_WORKSPACE_STORE_BACKEND", "local")
+    _, wid = ws_store
+    client = _client()
+    set_res = client.patch(
+        f"/api/workspaces/{wid}/coding-agent-access-settings",
+        json={"selected_builder": "opencode"},
+    )
+    assert set_res.status_code == 200, set_res.text
+    assert set_res.json()["selected_builder"] == "opencode"
+
+    clear_res = client.patch(
+        f"/api/workspaces/{wid}/coding-agent-access-settings",
+        json={"selected_builder": None},
+    )
+    assert clear_res.status_code == 200, clear_res.text
+    assert clear_res.json()["selected_builder"] is None
+    body = client.get(f"/api/workspaces/{wid}/coding-agent-access-settings").json()
+    assert body["selected_builder"] is None
+
+
 def test_patch_settings_workspace_scoped_separately(
     monkeypatch: pytest.MonkeyPatch,
     isolated_store: ProjectStore,

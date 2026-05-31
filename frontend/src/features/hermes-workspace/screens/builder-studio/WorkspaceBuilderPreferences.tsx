@@ -61,6 +61,44 @@ function splitGoodFor(raw: string) {
     .filter(Boolean);
 }
 
+function BuilderSwitch({
+  checked,
+  disabled,
+  onToggle,
+  label,
+}: {
+  checked: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onToggle}
+      className={cn(
+        "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors",
+        checked
+          ? "border-[var(--theme-accent)] bg-[var(--theme-accent)]/80"
+          : "border-white/20 bg-white/[0.08]",
+        disabled && "cursor-not-allowed opacity-60",
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "inline-block h-4 w-4 rounded-full bg-white shadow transition-transform",
+          checked ? "translate-x-5" : "translate-x-1",
+        )}
+      />
+    </button>
+  );
+}
+
 function BuilderConnectionRow({
   builderKey,
   icon: Icon,
@@ -72,7 +110,7 @@ function BuilderConnectionRow({
   selected,
   disabled,
   saving,
-  onSelect,
+  onToggle,
   onOpenDetails,
   isPanelOpen,
 }: {
@@ -86,7 +124,7 @@ function BuilderConnectionRow({
   selected: boolean;
   disabled: boolean;
   saving: boolean;
-  onSelect: (builder: SelectedBuilder) => void;
+  onToggle: (builder: SelectedBuilder) => void;
   onOpenDetails: () => void;
   isPanelOpen: boolean;
 }) {
@@ -98,16 +136,12 @@ function BuilderConnectionRow({
       )}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <label className="flex min-w-0 flex-1 cursor-pointer gap-3">
-          <input
-            type="radio"
-            aria-label={title}
-            name="workspace-builder"
-            value={builderKey}
+        <div className="flex min-w-0 flex-1 gap-3">
+          <BuilderSwitch
             checked={selected}
             disabled={disabled}
-            onChange={() => onSelect(builderKey)}
-            className="mt-1 h-4 w-4 shrink-0 accent-[var(--theme-accent)]"
+            onToggle={() => onToggle(builderKey)}
+            label={title}
           />
           <span className="min-w-0">
             <span className="flex items-center gap-2">
@@ -127,7 +161,7 @@ function BuilderConnectionRow({
               {helper}
             </span>
           </span>
-        </label>
+        </div>
         <button
           type="button"
           aria-expanded={isPanelOpen}
@@ -175,6 +209,15 @@ function saveErrorCopy(workspaceId: string) {
     return "Choose or create a workspace before saving a builder choice.";
   }
   return "Couldn't save your builder choice. Check your session and try again.";
+}
+
+function saveFailureCopy(workspaceId: string, raw?: string | null) {
+  const msg = (raw || "").toLowerCase();
+  if (msg.includes("refresh or sign in again")) {
+    return "Couldn't save your builder choice. Refresh or sign in again.";
+  }
+  if (!workspaceId.trim()) return saveErrorCopy(workspaceId);
+  return "Couldn't save your builder choice. Try again.";
 }
 
 function hermesRowModel(): BuilderRowModel {
@@ -228,21 +271,22 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
     void refresh();
   }, [refresh]);
 
-  const onSelectBuilder = React.useCallback(
+  const onToggleBuilder = React.useCallback(
     async (builder: SelectedBuilder) => {
-      if (!workspaceId.trim() || savingBuilder || builder === selectedBuilder) return;
+      if (!workspaceId.trim() || savingBuilder) return;
       const previous = selectedBuilder;
+      const next = builder === selectedBuilder ? null : builder;
       setSaveError(null);
       setSavingBuilder(builder);
-      setSelectedBuilder(builder);
+      setSelectedBuilder(next);
       const res = await patchCodingAgentAccessSettings(workspaceId, {
-        selected_builder: builder,
+        selected_builder: next,
       });
-      if (res.ok) {
+      if (res.ok === true) {
         setSelectedBuilder(normalizeSelectedBuilder(res.settings.selected_builder));
       } else {
         setSelectedBuilder(previous);
-        setSaveError(saveErrorCopy(workspaceId));
+        setSaveError(saveFailureCopy(workspaceId, res.errorMessage));
       }
       setSavingBuilder(null);
     },
@@ -521,9 +565,14 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
               statusTone={row.statusTone}
               helper={row.helper}
               selected={selectedBuilder === row.key}
-              disabled={loading || savingBuilder !== null || !workspaceId.trim()}
+              disabled={
+                loading ||
+                savingBuilder !== null ||
+                !workspaceId.trim() ||
+                row.key === "hermes_agent"
+              }
               saving={savingBuilder === row.key}
-              onSelect={onSelectBuilder}
+              onToggle={onToggleBuilder}
               onOpenDetails={() => setOpenLane(row.lane)}
               isPanelOpen={openLane === row.lane}
             />

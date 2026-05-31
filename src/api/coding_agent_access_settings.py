@@ -202,6 +202,12 @@ async def patch_coding_agent_access_settings(
     raw = _load_raw(ctx.workspace_id)
 
     patch_data = body.model_dump(exclude_none=True)
+    # ``selected_builder=null`` is meaningful: clear the user's builder choice.
+    # Most other optional fields use ``None`` to mean "omitted", so keep
+    # exclude_none=True globally and opt this field back in only when the caller
+    # explicitly supplied it.
+    if "selected_builder" in body.model_fields_set:
+        patch_data["selected_builder"] = body.selected_builder
     for field_name, value in patch_data.items():
         raw[field_name] = value
 

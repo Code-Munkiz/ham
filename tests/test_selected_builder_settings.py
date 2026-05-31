@@ -47,6 +47,12 @@ def test_patch_model_accepts_valid_selected_builders() -> None:
         assert patch.selected_builder == v
 
 
+def test_patch_model_accepts_null_selected_builder_for_clear() -> None:
+    patch = CodingAgentAccessSettingsPatch(selected_builder=None)
+    assert patch.selected_builder is None
+    assert "selected_builder" in patch.model_fields_set
+
+
 def test_patch_model_rejects_unknown_selected_builder() -> None:
     with pytest.raises(ValidationError):
         CodingAgentAccessSettingsPatch(selected_builder="not_a_builder")
