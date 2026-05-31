@@ -1349,6 +1349,13 @@ def _should_defer_builder_scaffold_hook(
         return False
     if not resolve_openrouter_api_key_for_actor(ham_actor):
         return False
+    # Harness-first: when a premium harness is eligible the hook returns a
+    # transitional pointer instead of scaffolding, so take the synchronous path
+    # (no deferred "Building your app…" ack that would contradict that reply).
+    from src.ham.builder_chat_hooks import premium_harness_available_for_build
+
+    if premium_harness_available_for_build(workspace_id=ws, project_id=pid, ham_actor=ham_actor):
+        return False
     from src.persistence.builder_source_store import get_builder_source_store
 
     rows = get_builder_source_store().list_project_sources(workspace_id=ws, project_id=pid)
@@ -1366,6 +1373,15 @@ def _builder_clarification_turn(builder_meta: dict[str, Any] | None) -> bool:
 
 def _builder_grounded_status_turn(builder_meta: dict[str, Any] | None) -> bool:
     return bool((builder_meta or {}).get("builder_grounded_status"))
+
+
+def _builder_harness_first_turn(builder_meta: dict[str, Any] | None) -> bool:
+    """Harness-first build turn: a premium harness is available, so the hook
+    returned a transitional pointer instead of running the internal scaffold.
+
+    Emitted as a clean terminal text reply via the same path as the grounded
+    status turn (no LLM completion, no scaffold)."""
+    return bool((builder_meta or {}).get("builder_harness_first"))
 
 
 def _builder_plan_pending_turn(builder_meta: dict[str, Any] | None) -> bool:
@@ -1882,7 +1898,7 @@ async def post_chat(
             artifact_verification=_artifact_verification_payload(builder_meta),
             hermes_http_context_budget=None,
         )
-    if _builder_grounded_status_turn(builder_meta):
+    if _builder_grounded_status_turn(builder_meta) or _builder_harness_first_turn(builder_meta):
         grounded_msg = str(builder_prefix or "").strip()
         store.append_turns(sid, [ChatTurn(role="assistant", content=grounded_msg)])
         return ChatResponse(
@@ -2156,7 +2172,9 @@ def post_chat_stream(
                         _chat_payload_attach_artifact_verification(payload, builder_meta)
                         yield json.dumps(payload) + "\n"
                         return
-                    if _builder_grounded_status_turn(builder_meta):
+                    if _builder_grounded_status_turn(builder_meta) or _builder_harness_first_turn(
+                        builder_meta
+                    ):
                         grounded_msg = str(builder_prefix or "").strip()
                         store.append_turns(sid, [ChatTurn(role="assistant", content=grounded_msg)])
                         msgs = store.list_messages(sid)
@@ -2333,7 +2351,7 @@ def post_chat_stream(
                     "X-Accel-Buffering": "no",
                 },
             )
-        if _builder_grounded_status_turn(builder_meta):
+        if _builder_grounded_status_turn(builder_meta) or _builder_harness_first_turn(builder_meta):
             grounded_msg = str(builder_prefix or "").strip()
             store.append_turns(sid, [ChatTurn(role="assistant", content=grounded_msg)])
             msgs = store.list_messages(sid)

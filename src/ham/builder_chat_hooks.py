@@ -283,6 +283,90 @@ def _artifact_verification_failure_message(*, operation: str, detail: str) -> st
     return f"I couldn't build that yet{tail}.\n\n"
 
 
+# ---------------------------------------------------------------------------
+# Harness-first guard (Phase 2 of HARNESS_FIRST_ARCHITECTURE_PLAN.md)
+#
+# Premium coding/build harnesses (Cursor / Claude / OpenCode / Factory Droid)
+# own normal product builds. The internal chat scaffold is Quick Preview /
+# fallback only and must not silently replace an available harness build path.
+# ---------------------------------------------------------------------------
+
+# coding_router ProviderKind values for the premium build harnesses.
+# ``claude_code`` is intentionally excluded — it has no active launch route in
+# HAM and is always blocked (planned candidate).
+_PREMIUM_BUILD_HARNESS_PROVIDERS: frozenset[str] = frozenset(
+    {"cursor_cloud", "claude_agent", "opencode_cli", "factory_droid_build"}
+)
+
+# Transitional harness-first reply. Contains no build-kit internals, no
+# provider ids, and no env names. It points the user at the existing harness
+# build flow (right-pane panel) and keeps the explicit Quick Preview escape
+# hatch. It does NOT launch a harness — provider launch stays on the gated
+# harness routes.
+_HARNESS_FIRST_BUILD_MESSAGE = (
+    "This workspace has a coding harness ready, so I'll route this build through it "
+    "instead of generating a throwaway preview. Open the build panel on the right to "
+    'review and start the build. If you just want a fast mockup, say "quick preview".'
+    "\n\n"
+)
+
+
+def _looks_like_quick_preview_request(last_user_plain: str) -> bool:
+    """True when the user explicitly asked for a quick preview / mockup / scaffold.
+
+    Explicit preview intent keeps the internal scaffold path available even when
+    a premium harness is eligible (Quick Preview is an allowed scaffold use).
+    """
+    text = (last_user_plain or "").strip().lower()
+    if not text:
+        return False
+    return bool(
+        re.search(
+            r"\b(quick preview|preview only|just a (quick )?preview|mock[\s-]?up|"
+            r"wireframe|rough draft|throwaway|scaffold only|just scaffold)\b",
+            text,
+        )
+    )
+
+
+def premium_harness_available_for_build(
+    *,
+    workspace_id: str | None,
+    project_id: str | None,
+    ham_actor: HamActor | None,
+) -> bool:
+    """Return True when at least one premium build harness is eligible.
+
+    Uses the existing readiness/policy primitives only: ``collate_readiness``
+    (platform availability) combined with the workspace ``WorkspaceAgentPolicy``
+    allow flags. Never inspects or returns secret values, env names, or runner
+    URLs. A harness counts as eligible when it is ``available`` and carries no
+    blockers. Best-effort: any failure resolves to ``False`` so the internal
+    scaffold fallback is preserved.
+    """
+    ws = (workspace_id or "").strip()
+    pid = (project_id or "").strip()
+    if not ws or not pid:
+        return False
+    try:
+        from src.api.coding_agent_access_settings import load_workspace_agent_policy
+        from src.ham.coding_router import collate_readiness
+
+        policy = load_workspace_agent_policy(ws)
+        readiness = collate_readiness(
+            actor=ham_actor,
+            project_id=pid,
+            include_operator_details=False,
+            workspace_policy=policy,
+        )
+    except Exception:  # noqa: BLE001 — never block the build turn on readiness errors
+        return False
+    return any(
+        p.provider in _PREMIUM_BUILD_HARNESS_PROVIDERS and p.available and not p.blockers
+        for p in readiness.providers
+    )
+
+
 def compose_builder_grounded_status_reply(*, workspace_id: str, project_id: str) -> str:
     """Deterministic Workbench status copy from source + preview job records (never raises)."""
     from src.persistence.builder_runtime_job_store import get_builder_runtime_job_store
@@ -618,6 +702,26 @@ def run_builder_happy_path_hook(
                             f"{directive_prefix}{_builder_ack_prefix(effective_plain, operation=operation)}",
                             meta,
                         )
+
+    # Harness-first guard: for normal new-build prompts, do not silently run
+    # the internal scaffold when a premium harness (Cursor / Claude / OpenCode /
+    # Factory Droid) is eligible. Quick Preview / mockup requests and the
+    # update_existing_project edit path are unaffected. See
+    # docs/build-kit-registry-v2/HARNESS_FIRST_ARCHITECTURE_PLAN.md (Phase 2).
+    if (
+        operation == "build_or_create"
+        and not _looks_like_quick_preview_request(effective_plain)
+        and premium_harness_available_for_build(
+            workspace_id=ws,
+            project_id=pid,
+            ham_actor=ham_actor,
+        )
+    ):
+        meta["builder_intent"] = "answer_question"
+        meta["builder_harness_first"] = True
+        meta["harness_build_available"] = True
+        meta["scaffolded"] = False
+        return f"{directive_prefix}{_HARNESS_FIRST_BUILD_MESSAGE}", meta
 
     summary = maybe_chat_scaffold_for_turn(
         workspace_id=ws,
