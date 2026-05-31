@@ -8,6 +8,7 @@ import { WorkspaceConnectedToolsSection } from "../WorkspaceConnectedToolsSectio
 
 const BASE_IDS = [
   "openrouter",
+  "opencode_cli",
   "cursor",
   "factory_droid",
   "claude_code",
@@ -63,6 +64,7 @@ function mockTool(
 
 const TOOL_LABELS: Record<string, string> = {
   openrouter: "OpenRouter",
+  opencode_cli: "OpenCode",
   cursor: "Cursor",
   factory_droid: "Factory Droid",
   claude_code: "Claude Code",
@@ -162,15 +164,27 @@ describe("WorkspaceConnectedToolsSection", () => {
     await waitFor(() => expect(scanSpy).toHaveBeenCalledTimes(1));
   });
 
-  it("renders all expected tools including AI Studio and Antigravity", async () => {
+  it("renders non-builder tools and links builder setup to Builders", async () => {
     vi.spyOn(HamApi, "fetchWorkspaceTools").mockResolvedValue(
       new Response(JSON.stringify(buildDefaultPayload()), { status: 200 }),
     );
     render(<WorkspaceConnectedToolsSection />);
     await waitFor(() => expect(screen.getByText("Connected tools")).toBeInTheDocument());
-    for (const id of BASE_IDS) {
+    for (const id of BASE_IDS.filter(
+      (x) => !["opencode_cli", "cursor", "factory_droid", "claude_code"].includes(x),
+    )) {
       expect(screen.getByText(TOOL_LABELS[id])).toBeInTheDocument();
     }
+    for (const hidden of ["OpenCode", "Cursor", "Factory Droid", "Claude Code"]) {
+      expect(screen.queryByText(hidden)).toBeNull();
+    }
+    expect(
+      screen.getByText("Builder setup is managed in Builders.", { exact: false }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Builders" })).toHaveAttribute(
+      "href",
+      "/workspace/settings?section=builders",
+    );
   });
 
   it("groups On vs Off sections", async () => {
@@ -381,7 +395,7 @@ describe("WorkspaceConnectedToolsSection", () => {
       new Response(JSON.stringify(payload), { status: 200 }),
     );
 
-    render(<WorkspaceConnectedToolsSection />);
+    render(<WorkspaceConnectedToolsSection visibleToolIds={["cursor"]} />);
     await waitFor(() => expect(screen.getByText("Cursor")).toBeInTheDocument());
 
     fireEvent.click(screen.getByText("Cursor"));

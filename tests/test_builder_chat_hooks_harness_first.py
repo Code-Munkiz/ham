@@ -143,7 +143,8 @@ def test_selected_builder_not_ready_returns_setup_copy_and_blocks_scaffold(_empt
     assert meta.get("selected_builder_state") == "setup_required"
     assert meta.get("selected_builder_label") == "Factory Droid"
     assert meta.get("builder_handoff_required") is None
-    assert "isn't set up" in prefix
+    assert "setup is not finished" in prefix
+    assert "Settings \u2192 Builders" in prefix
 
 
 def test_selected_cursor_uses_separate_flow_copy_and_no_handoff(_empty_store) -> None:

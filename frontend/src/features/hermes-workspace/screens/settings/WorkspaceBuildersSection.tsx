@@ -4,7 +4,7 @@ import { WorkspaceBuilderPreferences } from "../builder-studio/WorkspaceBuilderP
 
 const BUILDERS_HEADING = "Builders";
 const BUILDERS_SUBTITLE =
-  "Choose which builder HAM uses for normal builds. Work still starts in chat.";
+  "Choose the builder HAM uses when you ask it to build. Work starts in chat.";
 
 export default function WorkspaceBuildersSection() {
   const ctx = useHamWorkspace();

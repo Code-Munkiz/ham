@@ -111,10 +111,9 @@ describe("WorkspaceBuildersSection", () => {
     });
     expect(
       screen.getAllByText(
-        "Choose which builder HAM uses for normal builds. Work still starts in chat.",
+        "Choose the builder HAM uses when you ask it to build. Work starts in chat.",
       ).length,
     ).toBeGreaterThanOrEqual(1);
-    expect(screen.getByRole("heading", { name: "Builder", level: 2 })).toBeInTheDocument();
   });
 
   it("does not render launch / create / approve / test-plan CTAs", async () => {

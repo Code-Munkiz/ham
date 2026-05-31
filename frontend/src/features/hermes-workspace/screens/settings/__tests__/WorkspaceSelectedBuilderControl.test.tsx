@@ -2,14 +2,19 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockUseHamWorkspace, fetchSettingsMock, patchSettingsMock, readinessMock } = vi.hoisted(
-  () => ({
-    mockUseHamWorkspace: vi.fn(),
-    fetchSettingsMock: vi.fn(),
-    patchSettingsMock: vi.fn(),
-    readinessMock: vi.fn(),
-  }),
-);
+const {
+  mockUseHamWorkspace,
+  fetchSettingsMock,
+  patchSettingsMock,
+  readinessMock,
+  ensureDefaultProjectMock,
+} = vi.hoisted(() => ({
+  mockUseHamWorkspace: vi.fn(),
+  fetchSettingsMock: vi.fn(),
+  patchSettingsMock: vi.fn(),
+  readinessMock: vi.fn(),
+  ensureDefaultProjectMock: vi.fn(),
+}));
 
 vi.mock("@/lib/ham/HamWorkspaceContext", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/ham/HamWorkspaceContext")>();
@@ -24,6 +29,7 @@ vi.mock("@/lib/ham/api", async (importOriginal) => {
   return {
     ...actual,
     listHamProjects: vi.fn(async () => ({ projects: [{ id: "project_1" }] })),
+    ensureBuilderDefaultProject: ensureDefaultProjectMock,
   };
 });
 
@@ -47,7 +53,7 @@ vi.mock("@/features/hermes-workspace/adapters/codingAgentsAdapter", async (impor
 
 import WorkspaceBuildersSection from "../WorkspaceBuildersSection";
 import { DEFAULT_CODING_AGENT_SETTINGS } from "@/features/hermes-workspace/adapters/codingAgentsAdapter";
-import { listHamProjects } from "@/lib/ham/api";
+import { listHamProjects, ensureBuilderDefaultProject } from "@/lib/ham/api";
 
 function settings(over: Partial<typeof DEFAULT_CODING_AGENT_SETTINGS> = {}) {
   return { ...DEFAULT_CODING_AGENT_SETTINGS, workspace_id: "ws_1", ...over };
@@ -121,6 +127,16 @@ beforeEach(() => {
     ok: true,
     settings: settings(patch),
   }));
+  ensureDefaultProjectMock.mockResolvedValue({
+    workspace_id: "ws_1",
+    project_id: "project.builder-test",
+    project: {
+      id: "project.builder-test",
+      name: "Builder",
+      root: "/tmp/builder",
+      workspace_id: "ws_1",
+    },
+  });
 });
 
 afterEach(() => {
@@ -129,6 +145,7 @@ afterEach(() => {
   fetchSettingsMock.mockReset();
   patchSettingsMock.mockReset();
   readinessMock.mockReset();
+  ensureDefaultProjectMock.mockReset();
 });
 
 describe("Workspace Builders selected-builder rows", () => {
@@ -136,10 +153,9 @@ describe("Workspace Builders selected-builder rows", () => {
     renderBuildersSection();
     await waitFor(() => expect(fetchSettingsMock).toHaveBeenCalled());
     expect(screen.getByRole("heading", { name: "Builders" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Builder" })).toBeInTheDocument();
     expect(
       screen.getAllByText(
-        "Choose which builder HAM uses for normal builds. Work still starts in chat.",
+        "Choose the builder HAM uses when you ask it to build. Work starts in chat.",
       ).length,
     ).toBeGreaterThanOrEqual(1);
     for (const name of ["OpenCode", "Factory Droid", "Cursor", "Claude", "Hermes Agent"]) {
@@ -317,30 +333,36 @@ describe("Workspace Builders selected-builder rows", () => {
     );
   });
 
-  it("shows 'Selected, needs setup' for OpenCode when no managed workspace project exists", async () => {
+  it("shows Finish setup for selected OpenCode when it is not build-ready", async () => {
     // listHamProjects (mocked) returns a project with no workspace_id, so the
-    // managed-build gate is not satisfied even though the provider is platform-ready.
+    // build gate is not satisfied even though the provider is platform-ready.
     fetchSettingsMock.mockResolvedValue({
       ok: true,
       settings: settings({ selected_builder: "opencode" }),
     });
     renderBuildersSection();
-    await waitFor(() => expect(screen.getByText("Selected, needs setup")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Finish setup" })).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByText(
+        "Finish setup before HAM can use OpenCode. HAM will prepare a workspace project for builds.",
+      ),
+    ).toBeInTheDocument();
     // The selected, blocked builder must not be advertised as build-ready.
     expect(screen.queryByText("Ready")).toBeNull();
     expect(screen.queryByText("Available")).toBeNull();
   });
 
-  it("points the OpenCode setup action at the workspace projects surface", async () => {
+  it("Finish setup creates the default builder project and refreshes readiness", async () => {
     fetchSettingsMock.mockResolvedValue({
       ok: true,
       settings: settings({ selected_builder: "opencode" }),
     });
     renderBuildersSection();
-    const action = await screen.findByRole("link", {
-      name: "Create or attach a workspace project",
-    });
-    expect(action).toHaveAttribute("href", "/workspace/projects");
+    fireEvent.click(await screen.findByRole("button", { name: "Finish setup" }));
+    await waitFor(() => expect(ensureBuilderDefaultProject).toHaveBeenCalledWith("ws_1"));
+    await waitFor(() => expect(fetchSettingsMock).toHaveBeenCalledTimes(2));
   });
 
   it("shows 'Ready' for OpenCode once a managed workspace project exists", async () => {
@@ -353,8 +375,10 @@ describe("Workspace Builders selected-builder rows", () => {
     });
     renderBuildersSection();
     await waitFor(() => expect(screen.getAllByText("Ready").length).toBeGreaterThanOrEqual(1));
-    expect(screen.queryByText("Selected, needs setup")).toBeNull();
-    expect(screen.queryByRole("link", { name: "Create or attach a workspace project" })).toBeNull();
+    expect(
+      screen.queryByText("Finish setup before HAM can use OpenCode.", { exact: false }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Finish setup" })).toBeNull();
   });
 
   it("does not render any build launch / approve / preview controls", async () => {

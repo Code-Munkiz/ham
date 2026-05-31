@@ -499,9 +499,8 @@ def _builder_ready_handoff_message(label: str) -> str:
 
 def _builder_setup_required_message(label: str) -> str:
     return (
-        f"{label} is your selected builder, but it isn't set up on this workspace "
-        "yet. Enable it in Settings (coding agents), then try again. If you just "
-        'want a fast mockup, say "quick preview".\n\n'
+        f"{label} is selected, but setup is not finished yet. Open Settings → "
+        'Builders to finish setup. If you just want a fast mockup, say "quick preview".\n\n'
     )
 
 

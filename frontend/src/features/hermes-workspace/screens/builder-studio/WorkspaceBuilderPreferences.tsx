@@ -3,11 +3,10 @@
  * Task launches and routing happen from workspace chat, not from this surface.
  */
 import * as React from "react";
-import { Link } from "react-router-dom";
 import { Bot, Brain, ChevronRight, Cpu, ScanLine, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ProjectRecord } from "@/lib/ham/types";
-import { listHamProjects } from "@/lib/ham/api";
+import { ensureBuilderDefaultProject, listHamProjects } from "@/lib/ham/api";
 import { cn } from "@/lib/utils";
 import {
   fetchCodingReadinessSnapshot,
@@ -28,8 +27,6 @@ import {
 
 type StatusTone = BuilderConnectionStatusTone;
 
-type BuilderSetupAction = { label: string; to: string };
-
 type BuilderRowModel = {
   key: SelectedBuilder;
   lane: BuilderConnectionLane;
@@ -39,7 +36,7 @@ type BuilderRowModel = {
   statusLabel: string;
   statusTone: StatusTone;
   helper: string;
-  setupAction?: BuilderSetupAction;
+  setupActionLabel?: string;
 };
 
 function ConnectionStatusBadge({ label, tone }: { label: string; tone: StatusTone }) {
@@ -111,11 +108,13 @@ function BuilderConnectionRow({
   statusLabel,
   statusTone,
   helper,
-  setupAction,
+  setupActionLabel,
   selected,
   disabled,
   saving,
+  setupBusy,
   onToggle,
+  onSetup,
   onOpenDetails,
   isPanelOpen,
 }: {
@@ -126,11 +125,13 @@ function BuilderConnectionRow({
   statusLabel: string;
   statusTone: StatusTone;
   helper: string;
-  setupAction?: BuilderSetupAction;
+  setupActionLabel?: string;
   selected: boolean;
   disabled: boolean;
   saving: boolean;
+  setupBusy: boolean;
   onToggle: (builder: SelectedBuilder) => void;
+  onSetup: (builder: SelectedBuilder) => void;
   onOpenDetails: () => void;
   isPanelOpen: boolean;
 }) {
@@ -166,13 +167,15 @@ function BuilderConnectionRow({
             <span className="mt-2 block text-[11px] leading-relaxed text-[var(--theme-muted)]">
               {helper}
             </span>
-            {setupAction ? (
-              <Link
-                to={setupAction.to}
-                className="mt-2 inline-flex w-fit items-center text-[11px] font-medium text-[var(--theme-accent)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)]"
+            {setupActionLabel ? (
+              <button
+                type="button"
+                disabled={setupBusy}
+                onClick={() => onSetup(builderKey)}
+                className="mt-2 inline-flex w-fit items-center rounded-lg border border-[var(--theme-accent)]/35 px-2.5 py-1 text-[11px] font-medium text-[var(--theme-accent)] transition-colors hover:bg-[var(--theme-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {setupAction.label}
-              </Link>
+                {setupBusy ? "Finishing setup..." : setupActionLabel}
+              </button>
             ) : null}
           </span>
         </div>
@@ -219,7 +222,6 @@ function inChatBuilderRowStatus(opts: {
   loading: boolean;
   platformReady: boolean;
   managedProjectReady: boolean;
-  isSelected: boolean;
 }): { statusLabel: string; statusTone: StatusTone } {
   if (opts.loading) {
     return { statusLabel: CODING_AGENT_LABELS.connectionStatusChecking, statusTone: "neutral" };
@@ -227,29 +229,7 @@ function inChatBuilderRowStatus(opts: {
   if (opts.platformReady && opts.managedProjectReady) {
     return { statusLabel: "Ready", statusTone: "ready" };
   }
-  if (opts.isSelected) {
-    return { statusLabel: "Selected, needs setup", statusTone: "attention" };
-  }
-  if (!opts.platformReady) {
-    return { statusLabel: "Needs setup", statusTone: "attention" };
-  }
-  return { statusLabel: "Needs workspace setup", statusTone: "attention" };
-}
-
-function inChatBuilderSetupAction(opts: {
-  builder: "opencode" | "factory_droid";
-  platformReady: boolean;
-  managedProjectReady: boolean;
-  settingsHermes: string;
-  settingsTools: string;
-  projectsPath: string;
-}): BuilderSetupAction {
-  if (!opts.platformReady) {
-    return opts.builder === "opencode"
-      ? { label: "Open setup", to: opts.settingsHermes }
-      : { label: "Go to Connected Tools", to: opts.settingsTools };
-  }
-  return { label: "Create or attach a workspace project", to: opts.projectsPath };
+  return { statusLabel: "Finish setup", statusTone: "attention" };
 }
 
 function selectedBuilderHelp(selected: SelectedBuilder | null) {
@@ -305,7 +285,9 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
   const [loading, setLoading] = React.useState(true);
   const [selectedBuilder, setSelectedBuilder] = React.useState<SelectedBuilder | null>(null);
   const [savingBuilder, setSavingBuilder] = React.useState<SelectedBuilder | null>(null);
+  const [setupBuilder, setSetupBuilder] = React.useState<SelectedBuilder | null>(null);
   const [saveError, setSaveError] = React.useState<string | null>(null);
+  const [setupMessage, setSetupMessage] = React.useState<string | null>(null);
   const [cursorReadiness, setCursorReadiness] = React.useState<CodingAgentReadiness>("needs_setup");
   const [cursorError, setCursorError] = React.useState<string | null>(null);
   const [claudeReadiness, setClaudeReadiness] = React.useState<CodingAgentReadiness>("needs_setup");
@@ -319,6 +301,7 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
     setLoading(true);
     setCursorError(null);
     setSaveError(null);
+    setSetupMessage(null);
     const [settingsRes, cursorRes, codingSnap, projectsRes] = await Promise.all([
       fetchCodingAgentAccessSettings(workspaceId),
       fetchCursorReadiness(),
@@ -367,6 +350,26 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
     [selectedBuilder, savingBuilder, workspaceId],
   );
 
+  const onFinishSetup = React.useCallback(
+    async (builder: SelectedBuilder) => {
+      if (!workspaceId.trim() || setupBuilder) return;
+      if (builder !== "opencode" && builder !== "factory_droid") return;
+      setSetupMessage(null);
+      setSetupBuilder(builder);
+      try {
+        await ensureBuilderDefaultProject(workspaceId);
+        await refresh();
+      } catch {
+        setSetupMessage(
+          "Couldn't finish setup here. Open Projects and create or attach a workspace project.",
+        );
+      } finally {
+        setSetupBuilder(null);
+      }
+    },
+    [refresh, setupBuilder, workspaceId],
+  );
+
   const settingsTools = "/workspace/settings?section=tools";
   const settingsHermes = "/workspace/settings?section=hermes";
   const settingsHermesModels = `${settingsHermes}#openrouter-models`;
@@ -381,10 +384,10 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
     cursorStatusLabel = CODING_AGENT_LABELS.connectionStatusUnavailable;
     cursorTone = "blocked";
   } else if (cursorReadiness === "ready") {
-    cursorStatusLabel = "Available";
+    cursorStatusLabel = "Ready";
     cursorTone = "ready";
   } else {
-    cursorStatusLabel = CODING_AGENT_LABELS.connectionStatusNeedsConnection;
+    cursorStatusLabel = "Finish setup";
     cursorTone = "attention";
   }
 
@@ -394,38 +397,26 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
     claudeStatusLabel = CODING_AGENT_LABELS.connectionStatusChecking;
     claudeTone = "neutral";
   } else if (claudeReadiness === "ready") {
-    claudeStatusLabel = "Available";
+    claudeStatusLabel = "Ready";
     claudeTone = "ready";
   } else {
-    claudeStatusLabel = CODING_AGENT_LABELS.connectionStatusNeedsCredentials;
+    claudeStatusLabel = "Finish setup";
     claudeTone = "attention";
   }
 
-  let factoryStatusLabel: string;
-  let factoryTone: StatusTone;
-  if (loading) {
-    factoryStatusLabel = CODING_AGENT_LABELS.connectionStatusChecking;
-    factoryTone = "neutral";
-  } else if (factoryReady) {
-    factoryStatusLabel = "Available";
-    factoryTone = "ready";
-  } else {
-    factoryStatusLabel = "Needs workspace setup";
-    factoryTone = "attention";
-  }
-
-  let opencodeStatusLabel: string;
-  let opencodeTone: StatusTone;
-  if (loading) {
-    opencodeStatusLabel = CODING_AGENT_LABELS.connectionStatusChecking;
-    opencodeTone = "neutral";
-  } else if (opencodeReadiness === "ready") {
-    opencodeStatusLabel = "Available";
-    opencodeTone = "ready";
-  } else {
-    opencodeStatusLabel = CODING_AGENT_LABELS.settingsStatusNeedsModelAccess;
-    opencodeTone = "attention";
-  }
+  const opencodePlatformReady = opencodeReadiness === "ready";
+  const opencodeBuildReady = opencodePlatformReady && managedProjectReady;
+  const opencodeRowStatus = inChatBuilderRowStatus({
+    loading,
+    platformReady: opencodePlatformReady,
+    managedProjectReady,
+  });
+  const factoryBuildReady = factoryReady && managedProjectReady;
+  const factoryRowStatus = inChatBuilderRowStatus({
+    loading,
+    platformReady: factoryReady,
+    managedProjectReady,
+  });
 
   const panelModel: BuilderConnectionPanelModel | null = React.useMemo(() => {
     if (!openLane) return null;
@@ -508,8 +499,8 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
         description: CODING_AGENT_LABELS.builderConnectionFactorySubtitle,
         goodForItems: splitGoodFor(CODING_AGENT_LABELS.builderPanelFactoryGoodFor),
         requires: CODING_AGENT_LABELS.builderPanelFactoryRequires,
-        statusLabel: factoryStatusLabel,
-        statusTone: factoryTone,
+        statusLabel: factoryRowStatus.statusLabel,
+        statusTone: factoryRowStatus.statusTone,
         primary: {
           label: factoryReady
             ? CODING_AGENT_LABELS.builderPanelPrimaryManageFactory
@@ -530,8 +521,8 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
       description: CODING_AGENT_LABELS.builderConnectionOpencodeSubtitle,
       goodForItems: splitGoodFor(CODING_AGENT_LABELS.builderPanelOpencodeGoodFor),
       requires: CODING_AGENT_LABELS.builderPanelOpencodeRequires,
-      statusLabel: opencodeStatusLabel,
-      statusTone: opencodeTone,
+      statusLabel: opencodeRowStatus.statusLabel,
+      statusTone: opencodeRowStatus.statusTone,
       primary: {
         label: CODING_AGENT_LABELS.actionConfigureModelAccess,
         to: settingsHermes,
@@ -553,31 +544,15 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
     cursorStatusLabel,
     cursorTone,
     factoryReady,
-    factoryStatusLabel,
-    factoryTone,
-    opencodeStatusLabel,
-    opencodeTone,
+    factoryRowStatus.statusLabel,
+    factoryRowStatus.statusTone,
+    opencodeRowStatus.statusLabel,
+    opencodeRowStatus.statusTone,
     projectsPath,
     settingsHermes,
     settingsHermesModels,
     settingsTools,
   ]);
-
-  const opencodePlatformReady = opencodeReadiness === "ready";
-  const opencodeBuildReady = opencodePlatformReady && managedProjectReady;
-  const opencodeRowStatus = inChatBuilderRowStatus({
-    loading,
-    platformReady: opencodePlatformReady,
-    managedProjectReady,
-    isSelected: selectedBuilder === "opencode",
-  });
-  const factoryBuildReady = factoryReady && managedProjectReady;
-  const factoryRowStatus = inChatBuilderRowStatus({
-    loading,
-    platformReady: factoryReady,
-    managedProjectReady,
-    isSelected: selectedBuilder === "factory_droid",
-  });
 
   const rows: BuilderRowModel[] = [
     {
@@ -589,19 +564,12 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
       statusLabel: opencodeRowStatus.statusLabel,
       statusTone: opencodeRowStatus.statusTone,
       helper: opencodeBuildReady
-        ? "Runs as a managed build you review before it runs."
-        : "Runs as a managed build you review first. Needs model access and a workspace-ready project.",
-      setupAction:
-        selectedBuilder === "opencode" && !opencodeBuildReady
-          ? inChatBuilderSetupAction({
-              builder: "opencode",
-              platformReady: opencodePlatformReady,
-              managedProjectReady,
-              settingsHermes,
-              settingsTools,
-              projectsPath,
-            })
-          : undefined,
+        ? "Ready for normal builds. Work starts in chat."
+        : selectedBuilder === "opencode"
+          ? "Finish setup before HAM can use OpenCode. HAM will prepare a workspace project for builds."
+          : "Turn this on, then finish setup so HAM can use OpenCode for builds.",
+      setupActionLabel:
+        selectedBuilder === "opencode" && !opencodeBuildReady ? "Finish setup" : undefined,
     },
     {
       key: "factory_droid",
@@ -612,19 +580,12 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
       statusLabel: factoryRowStatus.statusLabel,
       statusTone: factoryRowStatus.statusTone,
       helper: factoryBuildReady
-        ? "Runs as a managed build you review before it runs."
-        : "Runs as a managed build you review first. Needs a workspace-ready project.",
-      setupAction:
-        selectedBuilder === "factory_droid" && !factoryBuildReady
-          ? inChatBuilderSetupAction({
-              builder: "factory_droid",
-              platformReady: factoryReady,
-              managedProjectReady,
-              settingsHermes,
-              settingsTools,
-              projectsPath,
-            })
-          : undefined,
+        ? "Ready for normal builds. Work starts in chat."
+        : selectedBuilder === "factory_droid"
+          ? "Finish setup before HAM can use Factory Droid. HAM will prepare a workspace project for builds."
+          : "Turn this on, then finish setup so HAM can use Factory Droid for builds.",
+      setupActionLabel:
+        selectedBuilder === "factory_droid" && !factoryBuildReady ? "Finish setup" : undefined,
     },
     {
       key: "cursor",
@@ -652,12 +613,6 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
   return (
     <>
       <section className="space-y-3 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)]/90 p-4 shadow-[0_12px_40px_var(--theme-shadow)]">
-        <div>
-          <h2 className="text-sm font-semibold text-[var(--theme-text)]">Builder</h2>
-          <p className="mt-0.5 text-[11px] leading-relaxed text-[var(--theme-muted)]">
-            Choose which builder HAM uses for normal builds. Work still starts in chat.
-          </p>
-        </div>
         <p
           data-testid="hww-selected-builder-helper"
           className="text-[11px] leading-relaxed text-[var(--theme-muted)]"
@@ -675,16 +630,19 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
               statusLabel={row.statusLabel}
               statusTone={row.statusTone}
               helper={row.helper}
-              setupAction={row.setupAction}
+              setupActionLabel={row.setupActionLabel}
               selected={selectedBuilder === row.key}
               disabled={
                 loading ||
                 savingBuilder !== null ||
+                setupBuilder !== null ||
                 !workspaceId.trim() ||
                 row.key === "hermes_agent"
               }
               saving={savingBuilder === row.key}
+              setupBusy={setupBuilder === row.key}
               onToggle={onToggleBuilder}
+              onSetup={onFinishSetup}
               onOpenDetails={() => setOpenLane(row.lane)}
               isPanelOpen={openLane === row.lane}
             />
@@ -693,6 +651,11 @@ export function WorkspaceBuilderPreferences({ workspaceId }: { workspaceId: stri
         {saveError ? (
           <p role="alert" className="text-[11px] font-medium text-amber-300">
             {saveError}
+          </p>
+        ) : null}
+        {setupMessage ? (
+          <p role="alert" className="text-[11px] font-medium text-amber-300">
+            {setupMessage}
           </p>
         ) : null}
       </section>

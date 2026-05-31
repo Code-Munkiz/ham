@@ -193,15 +193,14 @@ export const CODING_AGENT_LABELS = {
 
   builderPanelFactoryGoodFor:
     "Deterministic tasks|Repository audits|Controlled, structured workflows",
-  builderPanelFactoryRequires: "Factory entitlement, runner availability, and project readiness.",
+  builderPanelFactoryRequires: "Finish setup in Builders before using Factory Droid for builds.",
   builderPanelPrimarySetupRunner: "Set up runner",
   builderPanelPrimaryManageFactory: "Manage Factory",
   builderPanelSecondaryOpenProjects: "Open projects",
 
   builderPanelOpencodeGoodFor:
-    "Open or free builder workflows|Managed workspace builds|Bring-your-own-model and provider workflows",
-  builderPanelOpencodeRequires:
-    "OpenCode runtime or exec access. Model access is optional for some modes; provider-specific flows may need keys handled in settings.",
+    "Open builder workflows|Workspace builds|Bring-your-own-model workflows",
+  builderPanelOpencodeRequires: "Finish setup in Builders before using OpenCode for builds.",
   builderPanelSecondaryOpenModelSettings: "Open model settings",
 
   builderPanelSecondaryConnectedTools: "Open connected tools",

@@ -106,7 +106,8 @@ const TOOL_KEY_HELP: Record<string, { label: string; url: string }> = {
 
 const DEFAULT_CONNECTED_TOOLS_HEADING = "Connected tools";
 const DEFAULT_CONNECTED_TOOLS_SUBTITLE =
-  "Services and tools HAM can use for your projects. Each row shows whether it is connected (On or Off). Turn the switch On only after you connect — pasted keys stay on the server and are not stored in your browser.";
+  "Connect accounts and services HAM can use outside builder selection. Builder setup is managed in Builders.";
+const BUILDER_TOOL_IDS = new Set(["opencode_cli", "factory_droid", "cursor", "claude_code"]);
 
 export type WorkspaceConnectedToolsSectionProps = {
   /** When set, only these tool ids are shown after fetch (embedded workbench subsets). */
@@ -178,7 +179,7 @@ export function WorkspaceConnectedToolsSection({
 
   const toolsAfterScope = React.useMemo(() => {
     const allow = visibleToolIds && visibleToolIds.length ? new Set(visibleToolIds) : null;
-    if (!allow) return toolsWithEffective;
+    if (!allow) return toolsWithEffective.filter((t) => !BUILDER_TOOL_IDS.has(t.id));
     return toolsWithEffective.filter((t) => allow.has(t.id));
   }, [toolsWithEffective, visibleToolIds]);
 
@@ -296,6 +297,14 @@ export function WorkspaceConnectedToolsSection({
       <div>
         <h2 className="text-base font-semibold text-white/90">{heading}</h2>
         <p className="mt-1 text-[13px] leading-relaxed text-white/45">{subtitle}</p>
+        {!visibleToolIds ? (
+          <a
+            href="/workspace/settings?section=builders"
+            className="mt-2 inline-flex text-[12px] font-medium text-emerald-300/90 underline-offset-2 hover:underline"
+          >
+            Open Builders
+          </a>
+        ) : null}
       </div>
 
       {data && !data.scan_available && data.scan_hint && (

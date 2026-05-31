@@ -677,9 +677,11 @@ def test_builder_default_project_post_idempotent(tmp_path: Path) -> None:
     assert r1.status_code == 200, r1.text
     pid = r1.json()["project_id"]
     assert pid
+    assert r1.json()["project"]["workspace_id"] == ws_id
     r2 = client.post(f"/api/workspaces/{ws_id}/builder/default-project")
     assert r2.status_code == 200, r2.text
     assert r2.json()["project_id"] == pid
+    assert r2.json()["project"]["workspace_id"] == ws_id
     set_project_store_for_tests(None)
     set_builder_source_store_for_tests(None)
 

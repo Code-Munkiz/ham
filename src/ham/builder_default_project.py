@@ -65,6 +65,8 @@ def ensure_default_builder_project(workspace_id: str) -> ProjectRecord:
     if existing is not None:
         meta = _record_workspace_id(dict(existing.metadata or {}), ws)
         updated = existing.model_copy(update={"metadata": meta})
+        if not updated.workspace_id:
+            updated = updated.model_copy(update={"workspace_id": ws})
         store.register(updated)
         return updated
     record = ProjectRecord(
@@ -73,6 +75,7 @@ def ensure_default_builder_project(workspace_id: str) -> ProjectRecord:
         root=str(root),
         description="HAM default builder project for workspace chat (virtual root).",
         metadata=_record_workspace_id({}, ws),
+        workspace_id=ws,
     )
     store.register(record)
     return record
