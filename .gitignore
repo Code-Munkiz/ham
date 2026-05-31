@@ -55,3 +55,12 @@ repomix-output-*.txt
 # Docs scratch and generated inventories (canonical prose stays tracked)
 docs/_scratch/
 docs/_generated/
+
+# Local agent/mission scratch artifacts
+.branch-audit/
+.mission-notes/
+browser-harness/
+canary/
+ham-default
+ham-default-*
+=2.8.0
