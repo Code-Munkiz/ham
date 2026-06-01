@@ -213,6 +213,43 @@ def _extract_json_object(raw: str) -> dict[str, Any] | None:
     return fallback
 
 
+def _coerce_file_path(raw_path: Any) -> str | None:
+    if isinstance(raw_path, str):
+        path = raw_path.strip()
+        return path or None
+    if raw_path is None:
+        return None
+    path = str(raw_path).strip()
+    return path or None
+
+
+def _coerce_file_content(raw_content: Any) -> str | None:
+    """Normalize Hermes file payloads that should be UTF-8 text but often arrive as objects."""
+    if isinstance(raw_content, str):
+        return raw_content
+    if isinstance(raw_content, (bytes, bytearray)):
+        return bytes(raw_content).decode("utf-8", errors="replace")
+    if isinstance(raw_content, dict):
+        for key in ("content", "text", "body", "source"):
+            val = raw_content.get(key)
+            if isinstance(val, str):
+                return val
+        try:
+            return json.dumps(raw_content, indent=2, ensure_ascii=False) + "\n"
+        except (TypeError, ValueError):
+            return None
+    if isinstance(raw_content, list):
+        if raw_content and all(isinstance(item, str) for item in raw_content):
+            return "\n".join(raw_content) + "\n"
+        try:
+            return json.dumps(raw_content, indent=2, ensure_ascii=False) + "\n"
+        except (TypeError, ValueError):
+            return None
+    if isinstance(raw_content, (int, float, bool)):
+        return str(raw_content)
+    return None
+
+
 def _forbidden_generated_content(text: str) -> bool:
     low = text.lower()
     if "-----begin" in low and "private key" in low:
@@ -236,16 +273,19 @@ def _validate_file_bundle(
     out: dict[str, str] = {}
     total = 0
     skipped_paths = 0
+    skipped_invalid = 0
     for raw_path, raw_content in files_raw.items():
-        if not isinstance(raw_path, str) or not isinstance(raw_content, str):
-            return {}, "file_entry_invalid", skipped_paths
-        norm = raw_path.replace("\\", "/").lstrip("/")
+        path_text = _coerce_file_path(raw_path)
+        body = _coerce_file_content(raw_content)
+        if path_text is None or body is None:
+            skipped_invalid += 1
+            continue
+        norm = path_text.replace("\\", "/").lstrip("/")
         if not norm or ".." in norm.split("/"):
             return {}, "path_not_allowed", skipped_paths
         if not _ALLOWED_PATH_RE.fullmatch(norm):
             skipped_paths += 1
             continue
-        body = raw_content
         if not body.strip():
             return {}, "empty_file_content", skipped_paths
         size = len(body.encode("utf-8"))
@@ -260,6 +300,8 @@ def _validate_file_bundle(
         if len(out) > _MAX_FILES:
             return {}, "too_many_files", skipped_paths
     if not out:
+        if skipped_invalid:
+            return {}, "file_entry_invalid", skipped_paths
         return {}, ("path_not_allowed" if skipped_paths else "empty_files"), skipped_paths
     return out, None, skipped_paths
 
