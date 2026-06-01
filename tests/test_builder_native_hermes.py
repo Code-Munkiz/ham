@@ -144,6 +144,8 @@ def _native_env(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://127.0.0.1:8642")
     monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "disabled")
+    # Native builds require a dedicated fast artifact model/profile to be configured.
+    monkeypatch.setenv("HERMES_BUILDER_MODEL", "hermes-builder-fast")
 
 
 def test_hermes_native_build_repairs_prose_then_succeeds(tmp_path, monkeypatch) -> None:
@@ -492,3 +494,78 @@ def test_hermes_native_build_stream_max_duration_maps_to_gateway(tmp_path, monke
     haystack = (msg + json.dumps(result, default=str)).lower()
     for token in ("registry_v2", "proposal_digest", "stream_max_duration", "inline_files"):
         assert token not in haystack
+
+
+def test_native_build_upstream_timeout_maps_to_gateway(tmp_path, monkeypatch) -> None:
+    """The production UPSTREAM_TIMEOUT surfaces as a safe gateway failure (no internals, no fake success)."""
+    _native_env(tmp_path, monkeypatch)
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+
+    def _fake_artifact(messages, *, timeout_sec=None, diag=None):
+        if diag is not None:
+            diag["artifact_mode"] = "json_mode"
+            diag["artifact_transport"] = "non_streaming"
+            diag["model_channel"] = "builder"
+            diag["elapsed_ms"] = 300082.6
+        raise GatewayCallError("UPSTREAM_TIMEOUT", "Gateway request timed out")
+
+    monkeypatch.setattr(
+        "src.ham.builder_native_hermes.complete_artifact_turn",
+        _fake_artifact,
+    )
+    try:
+        result = run_hermes_native_build(
+            workspace_id="ws_native",
+            project_id="proj_native",
+            session_id="sess_native",
+            user_prompt="build a small native app",
+            created_by="user_native",
+        )
+    finally:
+        set_builder_source_store_for_tests(None)
+
+    assert result["scaffolded"] is False
+    assert result["ham_native_builder"] == {"status": "failed", "failure_reason": "gateway"}
+    msg = ham_native_builder_user_message(result["ham_native_builder"])
+    assert msg.startswith("HAM Native Builder could not reach the Hermes runtime.")
+    haystack = (msg + json.dumps(result, default=str)).lower()
+    for token in ("registry_v2", "proposal_digest", "upstream_timeout", "inline_files", "hermes-builder"):
+        assert token not in haystack
+
+
+def test_native_build_fails_clearly_when_builder_model_unconfigured(tmp_path, monkeypatch) -> None:
+    """Without HERMES_BUILDER_MODEL the native build fails fast with safe copy, not a 300s timeout."""
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://127.0.0.1:8642")
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "disabled")
+    monkeypatch.delenv("HERMES_BUILDER_MODEL", raising=False)
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    called = {"n": 0}
+
+    def _fake_artifact(messages, *, timeout_sec=None, diag=None):
+        called["n"] += 1
+        return json.dumps(_VALID_BUNDLE)
+
+    monkeypatch.setattr(
+        "src.ham.builder_native_hermes.complete_artifact_turn",
+        _fake_artifact,
+    )
+    try:
+        result = run_hermes_native_build(
+            workspace_id="ws_native",
+            project_id="proj_native",
+            session_id="sess_native",
+            user_prompt="build a small native app",
+            created_by="user_native",
+        )
+    finally:
+        set_builder_source_store_for_tests(None)
+
+    assert called["n"] == 0  # the slow gateway model is never invoked -> no 300s burn
+    assert result["scaffolded"] is False
+    assert result["ham_native_builder"] == {"status": "unavailable", "failure_reason": "unconfigured"}
+    msg = ham_native_builder_user_message(result["ham_native_builder"])
+    assert msg.startswith("HAM Native Builder is still being configured.")

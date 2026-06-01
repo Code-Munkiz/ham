@@ -24,6 +24,7 @@ from src.ham.builder_chat_cloud_runtime import maybe_enqueue_chat_scaffold_cloud
 from src.ham.builder_preview_bootstrap import ensure_preview_bootstrap_files
 from src.integrations.nous_gateway_client import (
     GatewayCallError,
+    builder_artifact_model_override,
     complete_artifact_turn,
 )
 from src.persistence.builder_source_store import (
@@ -33,9 +34,12 @@ from src.persistence.builder_source_store import (
 )
 
 _MANIFEST_KIND_INLINE = "inline_text_bundle"
-_MAX_FILES = 40
+# Keep the first native bundle minimal so a conversational gateway can finish well
+# within the request budget; richer files are added by later iterative edits, not
+# the initial build. (See artifact-timeout mitigation: smaller bundle => faster turn.)
+_MAX_FILES = 16
 _MAX_FILE_BYTES = 80_000
-_MAX_TOTAL_TEXT = 300_000
+_MAX_TOTAL_TEXT = 150_000
 # Hermes is a conversational agent: one initial turn plus one bounded repair turn
 # that re-asks for a JSON-only artifact when the first reply is prose / non-strict.
 _NATIVE_BUILD_MAX_ATTEMPTS = 2
@@ -363,9 +367,12 @@ def _build_native_messages(user_prompt: str) -> list[dict[str, Any]]:
         "You are HAM Native Builder running through Hermes. Output exactly one JSON object "
         "and nothing else. Schema: {\"status\":\"success\", \"summary\":\"...\", "
         "\"files\":{\"path\":\"full UTF-8 file text\"}, \"checks\":[\"...\"]}. "
-        "Create a small, runnable Vite + React + TypeScript project. Include complete "
-        "source files, not placeholders. Required files include package.json, index.html, "
-        "vite.config.ts, src/main.tsx, and at least one app/component file. Use paths only "
+        "Create the SMALLEST runnable Vite + React + TypeScript project that satisfies the "
+        "request: aim for about 6-10 files total and keep source compact so it builds "
+        "quickly; this is a first preview that can be enhanced by later edits. Include "
+        "complete source files, not placeholders. Required files include package.json, "
+        "index.html, vite.config.ts, src/main.tsx, and at least one app/component file. "
+        "Prefer a single App component over many components for this first version. Use paths only "
         "under package.json, index.html, vite.config.ts, tsconfig*.json, src/**, or public/** "
         "(no README, .env, or repo-root components/ paths). Do not include secrets, local URLs, "
         "internal ids, provider names, registry metadata, proposal digests, base revisions, or "
@@ -409,6 +416,42 @@ def _build_repair_messages(
     ]
 
 
+def _bundle_failure_error_code(bundle_detail: str) -> str:
+    if bundle_detail == "invalid_response":
+        return "HAM_NATIVE_BUILDER_INVALID_RESPONSE"
+    return "HAM_NATIVE_BUILDER_INVALID_FILES"
+
+
+def _native_build_preflight(
+    complete_turn: Callable[..., str] | None,
+) -> tuple[bool, dict[str, Any] | None]:
+    """Return ``(builder_model_configured, early_result)`` for native build gating.
+
+    Combines two fail-fast checks so the caller keeps a single early-return branch:
+    (1) the gateway must be configured (``hermes_native_builder_ready``); (2) a dedicated
+    fast artifact model/profile (``HERMES_BUILDER_MODEL``) must be set on the real gateway
+    path — the conversational chat model is too slow to emit a full file bundle inside the
+    request budget and would time out (``UPSTREAM_TIMEOUT``). When either is missing, return
+    the safe "still being configured" result and fail fast instead of burning the budget.
+    Tests/programmatic callers that inject their own turn bypass the model gate.
+    """
+    builder_model_configured = builder_artifact_model_override() is not None
+    if not hermes_native_builder_ready():
+        logger.info("ham_native_builder_unavailable reason=unconfigured")
+        return builder_model_configured, _native_result(
+            status="unavailable", failure_reason="unconfigured"
+        )
+    if complete_turn is None and not builder_model_configured:
+        logger.warning(
+            "ham_native_builder_unavailable reason=builder_model_unconfigured "
+            "builder_model_configured=false",
+        )
+        return builder_model_configured, _native_result(
+            status="unavailable", failure_reason="unconfigured"
+        )
+    return builder_model_configured, None
+
+
 def run_hermes_native_build(
     *,
     workspace_id: str,
@@ -418,9 +461,9 @@ def run_hermes_native_build(
     created_by: str,
     complete_turn: Callable[..., str] | None = None,
 ) -> dict[str, Any]:
-    if not hermes_native_builder_ready():
-        logger.info("ham_native_builder_unavailable reason=unconfigured")
-        return _native_result(status="unavailable", failure_reason="unconfigured")
+    builder_model_configured, early_result = _native_build_preflight(complete_turn)
+    if early_result is not None:
+        return early_result
 
     store = get_builder_source_store()
     job = store.create_import_job(
@@ -478,11 +521,14 @@ def run_hermes_native_build(
             )
             logger.warning(
                 "ham_native_builder_failed reason=gateway import_job_id=%s gateway_code=%s "
-                "artifact_mode=%s artifact_transport=%s elapsed_ms=%s repair_attempted=%s",
+                "artifact_mode=%s artifact_transport=%s model_channel=%s "
+                "builder_model_configured=%s elapsed_ms=%s repair_attempted=%s",
                 job.id,
                 exc.code,
                 gateway_diag.get("artifact_mode") or "json_mode",
                 gateway_diag.get("artifact_transport") or "unknown",
+                gateway_diag.get("model_channel") or ("injected" if injected else "default"),
+                str(builder_model_configured).lower(),
                 gateway_diag.get("elapsed_ms") if gateway_diag.get("elapsed_ms") is not None else "n/a",
                 repair_attempted,
             )
@@ -531,11 +577,7 @@ def run_hermes_native_build(
             )
 
     if bundle_detail is not None:
-        error_code = (
-            "HAM_NATIVE_BUILDER_INVALID_RESPONSE"
-            if bundle_detail == "invalid_response"
-            else "HAM_NATIVE_BUILDER_INVALID_FILES"
-        )
+        error_code = _bundle_failure_error_code(bundle_detail)
         job = store.mark_import_job_failed(
             import_job_id=job.id,
             phase="hermes_native_build",
@@ -546,7 +588,8 @@ def run_hermes_native_build(
             "ham_native_builder_failed reason=bundle import_job_id=%s detail=%s "
             "first_attempt_json_found=%s first_attempt_files_found=%s repair_attempted=%s "
             "repair_json_found=%s repair_files_found=%s validation_error_kind=%s "
-            "artifact_mode=%s artifact_transport=%s gateway_capability_detected=%s model_channel=%s",
+            "artifact_mode=%s artifact_transport=%s gateway_capability_detected=%s model_channel=%s "
+            "builder_model_configured=%s",
             job.id,
             bundle_detail,
             first_json_found,
@@ -559,6 +602,7 @@ def run_hermes_native_build(
             gateway_diag.get("artifact_transport") or "unknown",
             gateway_diag.get("gateway_capability_detected") or "unknown",
             gateway_diag.get("model_channel") or "default",
+            str(builder_model_configured).lower(),
         )
         return _native_result(
             status="failed",
@@ -655,7 +699,7 @@ def run_hermes_native_build(
     logger.info(
         "ham_native_builder_succeeded import_job_id=%s file_count=%d "
         "artifact_mode=%s artifact_transport=%s elapsed_ms=%s "
-        "gateway_capability_detected=%s model_channel=%s "
+        "gateway_capability_detected=%s model_channel=%s builder_model_configured=%s "
         "first_attempt_json_found=%s first_attempt_files_found=%s repair_attempted=%s",
         job.id,
         len(files),
@@ -664,6 +708,7 @@ def run_hermes_native_build(
         gateway_diag.get("elapsed_ms") if gateway_diag.get("elapsed_ms") is not None else "n/a",
         gateway_diag.get("gateway_capability_detected") or "unknown",
         gateway_diag.get("model_channel") or "default",
+        str(builder_model_configured).lower(),
         first_json_found,
         first_files_found,
         repair_attempted,
