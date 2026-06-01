@@ -11,6 +11,8 @@ import json
 import threading
 import time
 
+import pytest
+
 import src.ham.builder_native_hermes as native_hermes
 from src.ham.builder_native_hermes import (
     _NATIVE_BUILD_MAX_ATTEMPTS,
@@ -32,6 +34,11 @@ from src.integrations.nous_gateway_client import GatewayCallError
 from src.persistence.builder_source_store import (
     BuilderSourceStore,
     set_builder_source_store_for_tests,
+)
+from src.persistence.native_build_context_store import (
+    NativeBuildContextStore,
+    get_native_build_context_store,
+    set_native_build_context_store_for_tests,
 )
 
 _FORBIDDEN_TOKENS = (
@@ -86,6 +93,18 @@ def _durable_env(tmp_path, monkeypatch) -> None:
     monkeypatch.delenv("HAM_NATIVE_BUILD_DISPATCH", raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_native_build_context_store(tmp_path):
+    """Keep the durable context store off the real ~/.ham file for every test."""
+    set_native_build_context_store_for_tests(
+        NativeBuildContextStore(store_path=tmp_path / "native_build_contexts.json")
+    )
+    try:
+        yield
+    finally:
+        set_native_build_context_store_for_tests(None)
+
+
 class _RecordingEnqueue:
     def __init__(self) -> None:
         self.calls: list = []
@@ -123,8 +142,9 @@ def test_durable_dispatch_persists_context_and_enqueues_without_inline_build(
     assert jobs[0].status == "queued"
     assert jobs[0].phase == NATIVE_BUILD_PHASE_QUEUED
     assert store.list_source_snapshots(workspace_id="ws_v2", project_id="proj_v2") == []
-    # Durable execution context is persisted by job id for the out-of-process worker.
-    ctx = store.get_native_build_context(import_job_id=job_id)
+    # Durable execution context is persisted by job id in the dedicated context
+    # store (not the file-backed source store) for the out-of-process worker.
+    ctx = get_native_build_context_store().get_native_build_context(import_job_id=job_id)
     assert ctx is not None
     assert ctx.workspace_id == "ws_v2"
     assert ctx.project_id == "proj_v2"

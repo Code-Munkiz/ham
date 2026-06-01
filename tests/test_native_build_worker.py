@@ -26,8 +26,13 @@ from src.ham.native_build_worker_enqueue import (
 )
 from src.persistence.builder_source_store import (
     BuilderSourceStore,
-    NativeBuildContext,
     set_builder_source_store_for_tests,
+)
+from src.persistence.native_build_context_store import (
+    NativeBuildContext,
+    NativeBuildContextStore,
+    get_native_build_context_store,
+    set_native_build_context_store_for_tests,
 )
 
 _FORBIDDEN_TOKENS = (
@@ -74,6 +79,18 @@ def _valid_token() -> str:
 
 
 @pytest.fixture(autouse=True)
+def _isolate_native_build_context_store(tmp_path):
+    """Keep the durable context store off the real ~/.ham file for every test."""
+    set_native_build_context_store_for_tests(
+        NativeBuildContextStore(store_path=tmp_path / "native_build_contexts.json")
+    )
+    try:
+        yield
+    finally:
+        set_native_build_context_store_for_tests(None)
+
+
+@pytest.fixture(autouse=True)
 def _stub_google_oidc_verifier(monkeypatch):
     """Keep tests offline by stubbing Google signature verification (shared verifier)."""
     import src.api.internal_dispatcher as internal_dispatcher
@@ -114,7 +131,7 @@ def _seed_context(store, *, job_id: str, workspace_id: str = "ws", project_id: s
     )
     # The store assigns its own job id; rebuild context against the created job.
     job = store.list_import_jobs(workspace_id=workspace_id, project_id=project_id)[0]
-    store.put_native_build_context(
+    get_native_build_context_store().put_native_build_context(
         NativeBuildContext(
             import_job_id=job.id,
             workspace_id=workspace_id,

@@ -36,6 +36,7 @@ from src.ham.builder_native_hermes import (
 )
 from src.ham.native_build_worker_enqueue import NativeBuildExecuteEnvelope
 from src.persistence.builder_source_store import get_builder_source_store
+from src.persistence.native_build_context_store import get_native_build_context_store
 
 _LOG = logging.getLogger(__name__)
 
@@ -82,7 +83,9 @@ async def execute_native_build(
         ) from exc
 
     store = get_builder_source_store()
-    context = store.get_native_build_context(import_job_id=envelope.import_job_id)
+    context = get_native_build_context_store().get_native_build_context(
+        import_job_id=envelope.import_job_id
+    )
     if context is None:
         # No durable context (already cleaned up, or never created) — non-retryable.
         _LOG.info(

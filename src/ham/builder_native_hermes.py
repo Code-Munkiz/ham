@@ -29,10 +29,13 @@ from src.integrations.nous_gateway_client import (
     complete_artifact_turn,
 )
 from src.persistence.builder_source_store import (
-    NativeBuildContext,
     ProjectSource,
     SourceSnapshot,
     get_builder_source_store,
+)
+from src.persistence.native_build_context_store import (
+    NativeBuildContext,
+    get_native_build_context_store,
 )
 
 _MANIFEST_KIND_INLINE = "inline_text_bundle"
@@ -977,9 +980,11 @@ def start_native_build_job(
         metadata={"origin": NATIVE_BUILD_JOB_ORIGIN},
     )
     # Persist enough context (keyed by job id) for an out-of-process worker to run
-    # the build without any in-memory thread state. Stored server-side only; never
-    # surfaced through the import-jobs status API.
-    store.put_native_build_context(
+    # the build without any in-memory thread state. Uses the dedicated durable
+    # context store (Firestore in hosted deployments) so a worker on a different
+    # Cloud Run instance can load it. Stored server-side only; never surfaced
+    # through the import-jobs status API.
+    get_native_build_context_store().put_native_build_context(
         NativeBuildContext(
             import_job_id=job.id,
             workspace_id=workspace_id,
