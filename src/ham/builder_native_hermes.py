@@ -484,7 +484,48 @@ def run_hermes_native_build(
             "activity_message": "HAM is building natively through Hermes.",
         },
     )
-    job = store.mark_import_job_running(import_job_id=job.id, phase="hermes_native_build")
+    return _execute_native_build_core(
+        import_job_id=job.id,
+        workspace_id=workspace_id,
+        project_id=project_id,
+        session_id=session_id,
+        user_prompt=user_prompt,
+        created_by=created_by,
+        complete_turn=complete_turn,
+        builder_model_configured=builder_model_configured,
+        running_phase="hermes_native_build",
+        success_phase="materialized",
+        failure_phase="hermes_native_build",
+    )
+
+
+def _execute_native_build_core(
+    *,
+    import_job_id: str,
+    workspace_id: str,
+    project_id: str,
+    session_id: str,
+    user_prompt: str,
+    created_by: str,
+    complete_turn: Callable[..., str] | None,
+    builder_model_configured: bool,
+    running_phase: str,
+    success_phase: str,
+    failure_phase: str,
+) -> dict[str, Any]:
+    """Run one bounded Hermes artifact/build step against an existing job.
+
+    Shared by the synchronous one-shot path (`run_hermes_native_build`) and the
+    async v2 executor (`execute_native_build_job`); only the lifecycle phase
+    labels differ. Marks the job running, asks the private artifact channel for a
+    bounded full-file bundle (with one repair attempt), validates and normalizes
+    the files, applies the preview bootstrap, materializes the source snapshot the
+    Workbench understands, enqueues the preview runtime, and marks the job
+    succeeded/failed. Build Registry v2 / kit context is applied invisibly via
+    `_build_native_messages`. No internals are returned to callers.
+    """
+    store = get_builder_source_store()
+    job = store.mark_import_job_running(import_job_id=import_job_id, phase=running_phase)
 
     # Private artifact channel: a JSON-mode build request, distinct from the
     # user-facing conversational chat. Tests may inject a plain text producer.
@@ -521,7 +562,7 @@ def run_hermes_native_build(
         except GatewayCallError as exc:
             job = store.mark_import_job_failed(
                 import_job_id=job.id,
-                phase="hermes_native_build",
+                phase=failure_phase,
                 error_code="HAM_NATIVE_BUILDER_GATEWAY_ERROR",
                 error_message="HAM Native Builder could not reach Hermes.",
             )
@@ -547,7 +588,7 @@ def run_hermes_native_build(
         if _looks_like_mock_assistant_text(raw):
             job = store.mark_import_job_failed(
                 import_job_id=job.id,
-                phase="hermes_native_build",
+                phase=failure_phase,
                 error_code="HAM_NATIVE_BUILDER_GATEWAY_MOCK",
                 error_message="Mock gateway cannot produce structured native builds.",
             )
@@ -586,7 +627,7 @@ def run_hermes_native_build(
         error_code = _bundle_failure_error_code(bundle_detail)
         job = store.mark_import_job_failed(
             import_job_id=job.id,
-            phase="hermes_native_build",
+            phase=failure_phase,
             error_code=error_code,
             error_message=f"HAM Native Builder did not return a valid file bundle: {bundle_detail}.",
         )
@@ -626,7 +667,7 @@ def run_hermes_native_build(
     if not artifact_verification.get("verified"):
         job = store.mark_import_job_failed(
             import_job_id=job.id,
-            phase="hermes_native_build",
+            phase=failure_phase,
             error_code="HAM_NATIVE_BUILDER_VERIFY_FAILED",
             error_message="HAM Native Builder output did not pass verification.",
         )
@@ -690,7 +731,7 @@ def run_hermes_native_build(
     source = store.upsert_project_source(source)
     job = store.mark_import_job_succeeded(
         import_job_id=job.id,
-        phase="materialized",
+        phase=success_phase,
         source_snapshot_id=snapshot.id,
         stats={"file_count": len(files), "inline_bytes": total_bytes, "artifact_zip_bytes": zip_size},
     )
@@ -733,16 +774,20 @@ def run_hermes_native_build(
 
 
 # ---------------------------------------------------------------------------
-# HAM Native Builder v2 — async job boundary
+# HAM Native Builder v2 — async job boundary + functional executor
 #
-# The synchronous path above (`run_hermes_native_build`) generates a full file
-# bundle in one Hermes turn inside the `/api/chat/stream` request, which exceeds
-# the request budget with a conversational gateway and times out. v2 splits the
-# work: `start_native_build_job` persists a job and returns immediately; the
-# executor runs off the request path and is independently invocable so a future
-# out-of-process worker (Cloud Tasks -> worker endpoint, or a Cloud Run Job) can
-# run it by job id. v1 ships a placeholder executor; the iterative agentic build
-# (inspect/edit/recover across multiple steps) is "Job 2".
+# The synchronous path (`run_hermes_native_build`) generates a full file bundle
+# in one Hermes turn inside the `/api/chat/stream` request, which exceeds the
+# request budget with a conversational gateway and times out. v2 splits the work:
+# `start_native_build_job` persists a job and returns immediately; the executor
+# (`execute_native_build_job`) runs off the request path via the dispatcher and is
+# independently invocable so a future out-of-process worker (Cloud Tasks -> worker
+# endpoint, or a Cloud Run Job) can run it by job id.
+#
+# The executor performs one bounded artifact/build step on the existing job by
+# delegating to `_execute_native_build_core` (shared with the synchronous path).
+# The multi-step inspect/edit/recover agent loop layers on top of this and is
+# "Job 3".
 #
 # The job is the existing ImportJob record tagged with a native-builder origin,
 # so status is already pollable via the import-jobs status endpoint. No build-kit
@@ -753,7 +798,6 @@ def run_hermes_native_build(
 # strings; no change to the shared store schema or its status enum).
 NATIVE_BUILD_PHASE_QUEUED = "native_build_queued"
 NATIVE_BUILD_PHASE_RUNNING = "native_build_running"
-NATIVE_BUILD_PHASE_PENDING_EXECUTOR = "native_build_pending_executor"
 NATIVE_BUILD_PHASE_SUCCEEDED = "native_build_succeeded"
 NATIVE_BUILD_PHASE_FAILED = "native_build_failed"
 
@@ -761,9 +805,8 @@ NATIVE_BUILD_PHASE_FAILED = "native_build_failed"
 # reused import job as a native-builder v2 record. Surfaced via the status API.
 NATIVE_BUILD_JOB_ORIGIN = "ham_native_builder_v2"
 
-# v1 placeholder outcome: the real agentic executor is deferred to Job 2.
-_EXECUTOR_PENDING_CODE = "HAM_NATIVE_BUILDER_V2_PENDING_EXECUTOR"
-_EXECUTOR_PENDING_MESSAGE = "HAM Native Builder v2 execution is not implemented yet."
+# Safe outcome when the executor crashes unexpectedly (defense-in-depth; known
+# gateway/bundle/verification failures are already marked inside the core).
 _EXECUTOR_ERROR_CODE = "HAM_NATIVE_BUILDER_V2_EXECUTOR_ERROR"
 _EXECUTOR_ERROR_MESSAGE = "HAM Native Builder could not complete the native build."
 
@@ -771,17 +814,20 @@ _DISPATCH_ENV = "HAM_NATIVE_BUILD_DISPATCH"
 
 
 def _native_build_dispatch_mode() -> str:
-    """Return the async dispatch mode: ``inline`` (default) or ``thread``.
+    """Return the async dispatch mode: ``thread`` (default) or ``inline``.
 
-    ``inline`` runs the executor synchronously; this is safe and deterministic
-    only while the executor is a fast placeholder (no Hermes call), so the chat
-    turn never blocks on artifact generation. ``thread`` runs it on a daemon
-    thread (non-blocking for a slow executor). When the real agentic executor
-    lands, dispatch must move out-of-process — neither in-process mode survives
-    post-response CPU throttling for a long build.
+    ``thread`` runs the executor on a daemon thread so the chat turn returns
+    immediately and never blocks on Hermes artifact generation — the right shape
+    for the functional executor in development. ``inline`` runs it synchronously
+    (used by tests for deterministic execution and assertions).
+
+    Neither in-process mode is production-grade for a long build: a request-scoped
+    Cloud Run container throttles CPU after the response, so production must move
+    dispatch out-of-process (Cloud Tasks -> authenticated worker endpoint, or a
+    Cloud Run Job) calling ``execute_native_build_job`` by job id. That is Job 3.
     """
     raw = (os.environ.get(_DISPATCH_ENV) or "").strip().lower()
-    return raw if raw in {"inline", "thread"} else "inline"
+    return raw if raw in {"inline", "thread"} else "thread"
 
 
 def start_native_build_job(
@@ -884,25 +930,39 @@ def execute_native_build_job(
     user_prompt: str,
     created_by: str,
     complete_turn: Callable[..., str] | None = None,
-):
-    """v1 placeholder executor — the independently invocable worker entry point.
+) -> dict[str, Any]:
+    """Functional v1 native build executor — the independently invocable entry point.
 
-    Job 2 replaces this body with the iterative agentic build (multiple Hermes
-    steps: inspect, edit, recover) running in an out-of-process worker, and
-    materializes the source snapshot the Workbench preview understands. For now
-    it honestly marks the job as pending that implementation instead of faking a
-    build or running the disabled scaffold.
+    Runs off the chat request (via the dispatcher) and performs one bounded Hermes
+    artifact/build step against the already-created job: marks it running, asks the
+    private artifact channel for a full-file bundle (with one repair attempt),
+    applies Build Registry v2 / kit context invisibly, validates and normalizes the
+    files, applies the preview bootstrap, materializes the source snapshot, enqueues
+    the preview runtime, and marks the job succeeded or failed with a safe phase /
+    error. It never re-enables the old scaffold and never fakes success.
+
+    A future out-of-process worker (Cloud Tasks -> worker endpoint, or a Cloud Run
+    Job) calls this by job id; the multi-step inspect/edit/recover agent loop layers
+    on top of this single bounded step and is "Job 3".
     """
-    store = get_builder_source_store()
-    store.mark_import_job_running(
-        import_job_id=import_job_id, phase=NATIVE_BUILD_PHASE_RUNNING
+    builder_model_configured = builder_artifact_model_override() is not None
+    logger.info(
+        "ham_native_builder_v2_executor_start import_job_id=%s builder_model_configured=%s",
+        import_job_id,
+        str(builder_model_configured).lower(),
     )
-    logger.info("ham_native_builder_v2_executor_pending import_job_id=%s", import_job_id)
-    return store.mark_import_job_failed(
+    return _execute_native_build_core(
         import_job_id=import_job_id,
-        phase=NATIVE_BUILD_PHASE_PENDING_EXECUTOR,
-        error_code=_EXECUTOR_PENDING_CODE,
-        error_message=_EXECUTOR_PENDING_MESSAGE,
+        workspace_id=workspace_id,
+        project_id=project_id,
+        session_id=session_id,
+        user_prompt=user_prompt,
+        created_by=created_by,
+        complete_turn=complete_turn,
+        builder_model_configured=builder_model_configured,
+        running_phase=NATIVE_BUILD_PHASE_RUNNING,
+        success_phase=NATIVE_BUILD_PHASE_SUCCEEDED,
+        failure_phase=NATIVE_BUILD_PHASE_FAILED,
     )
 
 
