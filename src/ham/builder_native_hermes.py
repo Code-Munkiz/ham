@@ -14,6 +14,7 @@ import os
 import re
 import uuid
 import zipfile
+from collections.abc import Iterator
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable
@@ -32,7 +33,11 @@ _MANIFEST_KIND_INLINE = "inline_text_bundle"
 _MAX_FILES = 40
 _MAX_FILE_BYTES = 80_000
 _MAX_TOTAL_TEXT = 300_000
-_JSON_OBJECT_RE = re.compile(r"\{[\s\S]*\}")
+# Hermes is a conversational agent: one initial turn plus one bounded repair turn
+# that re-asks for a JSON-only artifact when the first reply is prose / non-strict.
+_NATIVE_BUILD_MAX_ATTEMPTS = 2
+_REPAIR_MAX_PREVIOUS_CHARS = 8_000
+_FAILURE_STATUS_VALUES = frozenset({"error", "failed", "failed_validation", "unsupported"})
 _ALLOWED_PATH_RE = re.compile(
     r"^(?:package\.json|index\.html|vite\.config\.(?:ts|js)|tsconfig(?:\.\w+)?\.json|"
     r"src/[\w./-]+\.(?:tsx|ts|jsx|js|css|json)|public/[\w./-]+)$"
@@ -137,30 +142,73 @@ def _materialize_inline_files_as_zip_artifact(
     return f"builder-artifact://{artifact_id}", len(payload)
 
 
+def _iter_balanced_json_objects(text: str) -> Iterator[str]:
+    """Yield top-level brace-balanced ``{...}`` spans, ignoring braces in strings.
+
+    Conversational replies often wrap the bundle in prose; a greedy regex would
+    span from the first ``{`` to the last ``}`` and fail to parse. Scanning for
+    balanced objects lets us recover the real JSON artifact from chatter.
+    """
+    depth = 0
+    start = -1
+    in_str = False
+    esc = False
+    for i, ch in enumerate(text):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+            continue
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}" and depth > 0:
+            depth -= 1
+            if depth == 0 and start >= 0:
+                yield text[start : i + 1]
+                start = -1
+
+
 def _extract_json_object(raw: str) -> dict[str, Any] | None:
     text = str(raw or "").strip()
     if not text:
         return None
     try:
         parsed = json.loads(text)
-        return parsed if isinstance(parsed, dict) else None
+        if isinstance(parsed, dict):
+            return parsed
     except json.JSONDecodeError:
         pass
     fence = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", text, re.IGNORECASE)
     if fence:
         try:
             parsed = json.loads(fence.group(1))
-            return parsed if isinstance(parsed, dict) else None
+            if isinstance(parsed, dict):
+                return parsed
         except json.JSONDecodeError:
             pass
-    match = _JSON_OBJECT_RE.search(text)
-    if not match:
-        return None
-    try:
-        parsed = json.loads(match.group(0))
-        return parsed if isinstance(parsed, dict) else None
-    except json.JSONDecodeError:
-        return None
+    # Prefer a prose-embedded object that actually carries a files map; fall back
+    # to the first parseable object otherwise.
+    fallback: dict[str, Any] | None = None
+    for candidate in _iter_balanced_json_objects(text):
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(parsed, dict):
+            continue
+        if isinstance(parsed.get("files"), dict):
+            return parsed
+        if fallback is None:
+            fallback = parsed
+    return fallback
 
 
 def _forbidden_generated_content(text: str) -> bool:
@@ -207,6 +255,23 @@ def _validate_file_bundle(payload: dict[str, Any]) -> tuple[dict[str, str], str 
     return out, None
 
 
+def _coerce_files_from_response(raw: str) -> tuple[dict[str, str], str | None]:
+    """Recover a validated file bundle from a (possibly conversational) reply.
+
+    Hermes stays conversational to the user elsewhere; here the project-file
+    artifact is private backend output, so we tolerate prose-wrapped JSON and a
+    missing/loose ``status`` field as long as a valid ``files`` map is present.
+    An explicit failure status is still rejected.
+    """
+    payload = _extract_json_object(raw)
+    if not isinstance(payload, dict):
+        return {}, "invalid_response"
+    status = str(payload.get("status") or "").strip().lower()
+    if status in _FAILURE_STATUS_VALUES:
+        return {}, "invalid_response"
+    return _validate_file_bundle(payload)
+
+
 def _append_native_build_context(user_prompt: str) -> str:
     prompt = str(user_prompt or "")
     try:
@@ -248,6 +313,37 @@ def _build_native_messages(user_prompt: str) -> list[dict[str, Any]]:
     ]
 
 
+def _build_repair_messages(
+    base_messages: list[dict[str, Any]],
+    *,
+    previous_raw: str,
+) -> list[dict[str, Any]]:
+    """Re-ask Hermes for a JSON-only artifact, feeding back its prior (bounded) reply.
+
+    This is a real second model turn (no faked execution); the prior reply is
+    capped so the repair prompt stays bounded, and the artifact never reaches the
+    user.
+    """
+    prev = str(previous_raw or "")
+    if len(prev) > _REPAIR_MAX_PREVIOUS_CHARS:
+        prev = prev[:_REPAIR_MAX_PREVIOUS_CHARS]
+    repair = (
+        "Your previous reply was not a single valid JSON object matching the required "
+        "schema, so it could not be used. Reply again with EXACTLY one JSON object and "
+        "nothing else: no prose, no markdown, no code fences. Schema: "
+        '{"status":"success","summary":"...","files":{"path":"full UTF-8 file text"},'
+        '"checks":["..."]}. Include complete runnable files: package.json, index.html, '
+        "vite.config.ts, src/main.tsx, and at least one app/component file. Do not include "
+        "secrets, local URLs, internal ids, provider names, registry metadata, proposal "
+        "digests, base revisions, or workflow identifiers."
+    )
+    return [
+        *base_messages,
+        {"role": "assistant", "content": prev},
+        {"role": "user", "content": repair},
+    ]
+
+
 def run_hermes_native_build(
     *,
     workspace_id: str,
@@ -277,73 +373,81 @@ def run_hermes_native_build(
     job = store.mark_import_job_running(import_job_id=job.id, phase="hermes_native_build")
 
     turn = complete_turn or complete_chat_turn
-    try:
-        raw = turn(_build_native_messages(user_prompt))
-    except GatewayCallError as exc:
-        job = store.mark_import_job_failed(
-            import_job_id=job.id,
-            phase="hermes_native_build",
-            error_code="HAM_NATIVE_BUILDER_GATEWAY_ERROR",
-            error_message="HAM Native Builder could not reach Hermes.",
-        )
-        logger.warning(
-            "ham_native_builder_failed reason=gateway import_job_id=%s gateway_code=%s",
-            job.id,
-            exc.code,
-        )
-        return _native_result(
-            status="failed",
-            failure_reason="gateway",
-            import_job_id=job.id,
-        )
+    base_messages = _build_native_messages(user_prompt)
 
-    if _looks_like_mock_assistant_text(raw):
-        job = store.mark_import_job_failed(
-            import_job_id=job.id,
-            phase="hermes_native_build",
-            error_code="HAM_NATIVE_BUILDER_GATEWAY_MOCK",
-            error_message="Mock gateway cannot produce structured native builds.",
+    files: dict[str, str] = {}
+    bundle_detail: str | None = None
+    raw = ""
+    for attempt in range(_NATIVE_BUILD_MAX_ATTEMPTS):
+        messages = (
+            base_messages
+            if attempt == 0
+            else _build_repair_messages(base_messages, previous_raw=raw)
         )
-        logger.warning(
-            "ham_native_builder_failed reason=gateway import_job_id=%s gateway_code=mock",
-            job.id,
-        )
-        return _native_result(
-            status="failed",
-            failure_reason="gateway",
-            import_job_id=job.id,
-        )
+        try:
+            raw = turn(messages)
+        except GatewayCallError as exc:
+            job = store.mark_import_job_failed(
+                import_job_id=job.id,
+                phase="hermes_native_build",
+                error_code="HAM_NATIVE_BUILDER_GATEWAY_ERROR",
+                error_message="HAM Native Builder could not reach Hermes.",
+            )
+            logger.warning(
+                "ham_native_builder_failed reason=gateway import_job_id=%s gateway_code=%s",
+                job.id,
+                exc.code,
+            )
+            return _native_result(
+                status="failed",
+                failure_reason="gateway",
+                import_job_id=job.id,
+            )
 
-    payload = _extract_json_object(raw)
-    if not payload or str(payload.get("status") or "").strip().lower() != "success":
-        job = store.mark_import_job_failed(
-            import_job_id=job.id,
-            phase="hermes_native_build",
-            error_code="HAM_NATIVE_BUILDER_INVALID_RESPONSE",
-            error_message="HAM Native Builder did not return a valid file bundle.",
-        )
-        logger.warning(
-            "ham_native_builder_failed reason=bundle import_job_id=%s detail=invalid_response",
-            job.id,
-        )
-        return _native_result(
-            status="failed",
-            failure_reason="bundle",
-            import_job_id=job.id,
-        )
+        if _looks_like_mock_assistant_text(raw):
+            job = store.mark_import_job_failed(
+                import_job_id=job.id,
+                phase="hermes_native_build",
+                error_code="HAM_NATIVE_BUILDER_GATEWAY_MOCK",
+                error_message="Mock gateway cannot produce structured native builds.",
+            )
+            logger.warning(
+                "ham_native_builder_failed reason=gateway import_job_id=%s gateway_code=mock",
+                job.id,
+            )
+            return _native_result(
+                status="failed",
+                failure_reason="gateway",
+                import_job_id=job.id,
+            )
 
-    files, err = _validate_file_bundle(payload)
-    if err:
+        candidate_files, bundle_detail = _coerce_files_from_response(raw)
+        if bundle_detail is None:
+            files = candidate_files
+            break
+        if attempt + 1 < _NATIVE_BUILD_MAX_ATTEMPTS:
+            logger.info(
+                "ham_native_builder_repair_attempt import_job_id=%s detail=%s",
+                job.id,
+                bundle_detail,
+            )
+
+    if bundle_detail is not None:
+        error_code = (
+            "HAM_NATIVE_BUILDER_INVALID_RESPONSE"
+            if bundle_detail == "invalid_response"
+            else "HAM_NATIVE_BUILDER_INVALID_FILES"
+        )
         job = store.mark_import_job_failed(
             import_job_id=job.id,
             phase="hermes_native_build",
-            error_code="HAM_NATIVE_BUILDER_INVALID_FILES",
-            error_message=f"HAM Native Builder file bundle failed validation: {err}.",
+            error_code=error_code,
+            error_message=f"HAM Native Builder did not return a valid file bundle: {bundle_detail}.",
         )
         logger.warning(
             "ham_native_builder_failed reason=bundle import_job_id=%s detail=%s",
             job.id,
-            err,
+            bundle_detail,
         )
         return _native_result(
             status="failed",
