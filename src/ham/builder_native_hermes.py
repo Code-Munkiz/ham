@@ -39,8 +39,10 @@ _NATIVE_BUILD_MAX_ATTEMPTS = 2
 _REPAIR_MAX_PREVIOUS_CHARS = 8_000
 _FAILURE_STATUS_VALUES = frozenset({"error", "failed", "failed_validation", "unsupported"})
 _ALLOWED_PATH_RE = re.compile(
-    r"^(?:package\.json|index\.html|vite\.config\.(?:ts|js)|tsconfig(?:\.\w+)?\.json|"
-    r"src/[\w./-]+\.(?:tsx|ts|jsx|js|css|json)|public/[\w./-]+)$"
+    r"^(?:package\.json|index\.html|vite\.config\.(?:ts|js)|"
+    r"postcss\.config\.(?:js|cjs|mjs)|eslint\.config\.(?:js|cjs|mjs)|"
+    r"tsconfig(?:\.\w+)?\.json|"
+    r"src/[\w./-]+\.(?:tsx|ts|d\.ts|jsx|js|css|json|svg)|public/[\w./-]+)$"
 )
 
 logger = logging.getLogger(__name__)
@@ -224,35 +226,49 @@ def _forbidden_generated_content(text: str) -> bool:
     return False
 
 
-def _validate_file_bundle(payload: dict[str, Any]) -> tuple[dict[str, str], str | None]:
+def _validate_file_bundle(
+    payload: dict[str, Any],
+) -> tuple[dict[str, str], str | None, int]:
+    """Return validated files, error kind (if any), and count of skipped disallowed paths."""
     files_raw = payload.get("files")
     if not isinstance(files_raw, dict):
-        return {}, "files_not_object"
+        return {}, "files_not_object", 0
     out: dict[str, str] = {}
     total = 0
+    skipped_paths = 0
     for raw_path, raw_content in files_raw.items():
         if not isinstance(raw_path, str) or not isinstance(raw_content, str):
-            return {}, "file_entry_invalid"
+            return {}, "file_entry_invalid", skipped_paths
         norm = raw_path.replace("\\", "/").lstrip("/")
-        if not norm or ".." in norm.split("/") or not _ALLOWED_PATH_RE.fullmatch(norm):
-            return {}, "path_not_allowed"
+        if not norm or ".." in norm.split("/"):
+            return {}, "path_not_allowed", skipped_paths
+        if not _ALLOWED_PATH_RE.fullmatch(norm):
+            skipped_paths += 1
+            continue
         body = raw_content
         if not body.strip():
-            return {}, "empty_file_content"
+            return {}, "empty_file_content", skipped_paths
         size = len(body.encode("utf-8"))
         if size > _MAX_FILE_BYTES:
-            return {}, "file_too_large"
+            return {}, "file_too_large", skipped_paths
         total += size
         if total > _MAX_TOTAL_TEXT:
-            return {}, "bundle_too_large"
+            return {}, "bundle_too_large", skipped_paths
         if _forbidden_generated_content(body):
-            return {}, "forbidden_content"
+            return {}, "forbidden_content", skipped_paths
         out[norm] = body
         if len(out) > _MAX_FILES:
-            return {}, "too_many_files"
+            return {}, "too_many_files", skipped_paths
     if not out:
-        return {}, "empty_files"
-    return out, None
+        return {}, ("path_not_allowed" if skipped_paths else "empty_files"), skipped_paths
+    return out, None, skipped_paths
+
+
+def _response_shape_flags(raw: str) -> tuple[bool, bool]:
+    payload = _extract_json_object(raw)
+    json_found = isinstance(payload, dict)
+    files_found = json_found and isinstance(payload.get("files"), dict)
+    return json_found, files_found
 
 
 def _coerce_files_from_response(raw: str) -> tuple[dict[str, str], str | None]:
@@ -269,7 +285,8 @@ def _coerce_files_from_response(raw: str) -> tuple[dict[str, str], str | None]:
     status = str(payload.get("status") or "").strip().lower()
     if status in _FAILURE_STATUS_VALUES:
         return {}, "invalid_response"
-    return _validate_file_bundle(payload)
+    files, err, _skipped = _validate_file_bundle(payload)
+    return files, err
 
 
 def _append_native_build_context(user_prompt: str) -> str:
@@ -303,9 +320,11 @@ def _build_native_messages(user_prompt: str) -> list[dict[str, Any]]:
         "\"files\":{\"path\":\"full UTF-8 file text\"}, \"checks\":[\"...\"]}. "
         "Create a small, runnable Vite + React + TypeScript project. Include complete "
         "source files, not placeholders. Required files include package.json, index.html, "
-        "vite.config.ts, src/main.tsx, and at least one app/component file. Do not include "
-        "secrets, local URLs, internal ids, provider names, registry metadata, proposal "
-        "digests, base revisions, or workflow identifiers."
+        "vite.config.ts, src/main.tsx, and at least one app/component file. Use paths only "
+        "under package.json, index.html, vite.config.ts, tsconfig*.json, src/**, or public/** "
+        "(no README, .env, or repo-root components/ paths). Do not include secrets, local URLs, "
+        "internal ids, provider names, registry metadata, proposal digests, base revisions, or "
+        "workflow identifiers."
     )
     return [
         {"role": "system", "content": system},
@@ -333,9 +352,10 @@ def _build_repair_messages(
         "nothing else: no prose, no markdown, no code fences. Schema: "
         '{"status":"success","summary":"...","files":{"path":"full UTF-8 file text"},'
         '"checks":["..."]}. Include complete runnable files: package.json, index.html, '
-        "vite.config.ts, src/main.tsx, and at least one app/component file. Do not include "
-        "secrets, local URLs, internal ids, provider names, registry metadata, proposal "
-        "digests, base revisions, or workflow identifiers."
+        "vite.config.ts, src/main.tsx, and at least one app/component file. Use paths only "
+        "under package.json, index.html, vite.config.ts, tsconfig*.json, src/**, or public/**. "
+        "Do not include secrets, local URLs, internal ids, provider names, registry metadata, "
+        "proposal digests, base revisions, or workflow identifiers."
     )
     return [
         *base_messages,
@@ -378,12 +398,20 @@ def run_hermes_native_build(
     files: dict[str, str] = {}
     bundle_detail: str | None = None
     raw = ""
+    repair_attempted = False
+    first_json_found = False
+    first_files_found = False
+    repair_json_found = False
+    repair_files_found = False
+    validation_error_kind = ""
     for attempt in range(_NATIVE_BUILD_MAX_ATTEMPTS):
         messages = (
             base_messages
             if attempt == 0
             else _build_repair_messages(base_messages, previous_raw=raw)
         )
+        if attempt > 0:
+            repair_attempted = True
         try:
             raw = turn(messages)
         except GatewayCallError as exc:
@@ -421,7 +449,17 @@ def run_hermes_native_build(
                 import_job_id=job.id,
             )
 
+        json_found, files_found = _response_shape_flags(raw)
+        if attempt == 0:
+            first_json_found = json_found
+            first_files_found = files_found
+        else:
+            repair_json_found = json_found
+            repair_files_found = files_found
+
         candidate_files, bundle_detail = _coerce_files_from_response(raw)
+        if bundle_detail is not None:
+            validation_error_kind = bundle_detail
         if bundle_detail is None:
             files = candidate_files
             break
@@ -445,9 +483,17 @@ def run_hermes_native_build(
             error_message=f"HAM Native Builder did not return a valid file bundle: {bundle_detail}.",
         )
         logger.warning(
-            "ham_native_builder_failed reason=bundle import_job_id=%s detail=%s",
+            "ham_native_builder_failed reason=bundle import_job_id=%s detail=%s "
+            "first_attempt_json_found=%s first_attempt_files_found=%s repair_attempted=%s "
+            "repair_json_found=%s repair_files_found=%s validation_error_kind=%s",
             job.id,
             bundle_detail,
+            first_json_found,
+            first_files_found,
+            repair_attempted,
+            repair_json_found,
+            repair_files_found,
+            validation_error_kind or bundle_detail,
         )
         return _native_result(
             status="failed",
