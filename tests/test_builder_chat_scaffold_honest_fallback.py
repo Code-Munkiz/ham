@@ -143,6 +143,7 @@ def test_llm_scaffold_failure_surfaces_model_slug_in_meta_and_message(
 
     resolved_model = "openrouter/anthropic/claude-3.5-haiku"
     monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    monkeypatch.setenv("HAM_ENABLE_INTERNAL_SCAFFOLD_QUICK_PREVIEW", "1")
     store = BuilderSourceStore(store_path=tmp_path / "sources.json")
     set_builder_source_store_for_tests(store)
     actor = _byo_actor()
@@ -161,8 +162,8 @@ def test_llm_scaffold_failure_surfaces_model_slug_in_meta_and_message(
                 workspace_id="ws_model_fail",
                 project_id="proj_model_fail",
                 session_id="sess_model_fail",
-                # Quick Preview reaches the internal scaffold (the only path that
-                # runs it under the user-selected builder model).
+                # The legacy scaffold path is now dev-flagged; this test opts in
+                # to keep the old scaffold failure copy covered.
                 last_user_plain="build me a game like asteroids as a quick preview",
                 ham_actor=actor,
             )

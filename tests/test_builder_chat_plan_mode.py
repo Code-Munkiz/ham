@@ -74,11 +74,20 @@ def test_plan_mode_false_build_intent_routes_to_selected_builder(
     empty_source_store: BuilderSourceStore,
     plan_store: BuilderPlanStore,
 ) -> None:
-    """Plan mode off: a normal build routes to the user-selected builder model
-    (no plan proposal, no silent internal scaffold)."""
+    """Plan mode off: a normal build routes to HAM Native when no external
+    builder/default is selected (no plan proposal, no silent internal scaffold)."""
     with (
         patch("src.ham.builder_chat_hooks._selected_builder_for_workspace", return_value=None),
         patch("src.ham.builder_chat_hooks.configured_default_builder", return_value=None),
+        patch(
+            "src.ham.builder_native_hermes.run_hermes_native_build",
+            return_value={
+                "builder_intent": "build_or_create",
+                "builder_operation": "build_or_create",
+                "scaffolded": False,
+                "ham_native_builder": {"status": "unavailable"},
+            },
+        ),
         patch(
             "src.ham.builder_chat_scaffold.maybe_chat_scaffold_for_turn",
             side_effect=_raise_if_scaffold,
@@ -94,7 +103,8 @@ def test_plan_mode_false_build_intent_routes_to_selected_builder(
         )
     scaffold_mock.assert_not_called()
     assert meta.get("builder_plan_pending") is not True
-    assert meta.get("selected_builder_state") == "choose"
+    assert meta.get("selected_builder_state") == "native"
+    assert meta.get("ham_native_builder", {}).get("status") == "unavailable"
     assert prefix is not None
 
 
@@ -188,6 +198,15 @@ def test_plan_mode_true_affirmation_continues_into_selected_builder(
         patch("src.ham.builder_chat_hooks._selected_builder_for_workspace", return_value=None),
         patch("src.ham.builder_chat_hooks.configured_default_builder", return_value=None),
         patch(
+            "src.ham.builder_native_hermes.run_hermes_native_build",
+            return_value={
+                "builder_intent": "build_or_create",
+                "builder_operation": "build_or_create",
+                "scaffolded": False,
+                "ham_native_builder": {"status": "unavailable"},
+            },
+        ),
+        patch(
             "src.ham.builder_chat_scaffold.maybe_chat_scaffold_for_turn",
             side_effect=_raise_if_scaffold,
         ) as scaffold_mock,
@@ -201,11 +220,12 @@ def test_plan_mode_true_affirmation_continues_into_selected_builder(
             plan_mode=True,
         )
     # Affirmation still continues the pending plan, but a normal build then
-    # routes to the user-selected builder model (no silent internal scaffold).
+    # routes to HAM Native when no external/default builder is selected.
     scaffold_mock.assert_not_called()
     assert meta.get("builder_plan_continuation") is True
     assert meta.get("builder_plan_id") == plan.plan_id
-    assert meta.get("selected_builder_state") == "choose"
+    assert meta.get("selected_builder_state") == "native"
+    assert meta.get("ham_native_builder", {}).get("status") == "unavailable"
     assert prefix is not None
 
 
