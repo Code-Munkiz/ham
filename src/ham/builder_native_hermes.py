@@ -42,8 +42,10 @@ _NATIVE_BUILD_MAX_ATTEMPTS = 2
 _REPAIR_MAX_PREVIOUS_CHARS = 8_000
 _FAILURE_STATUS_VALUES = frozenset({"error", "failed", "failed_validation", "unsupported"})
 _ALLOWED_PATH_RE = re.compile(
-    r"^(?:package\.json|index\.html|vite\.config\.(?:ts|js)|tsconfig(?:\.\w+)?\.json|"
-    r"src/[\w./-]+\.(?:tsx|ts|jsx|js|css|json)|public/[\w./-]+)$"
+    r"^(?:package\.json|index\.html|vite\.config\.(?:ts|js)|"
+    r"postcss\.config\.(?:js|cjs|mjs)|eslint\.config\.(?:js|cjs|mjs)|"
+    r"tsconfig(?:\.\w+)?\.json|"
+    r"src/[\w./-]+\.(?:tsx|ts|d\.ts|jsx|js|css|json|svg)|public/[\w./-]+)$"
 )
 
 logger = logging.getLogger(__name__)
@@ -214,6 +216,43 @@ def _extract_json_object(raw: str) -> dict[str, Any] | None:
     return fallback
 
 
+def _coerce_file_path(raw_path: Any) -> str | None:
+    if isinstance(raw_path, str):
+        path = raw_path.strip()
+        return path or None
+    if raw_path is None:
+        return None
+    path = str(raw_path).strip()
+    return path or None
+
+
+def _coerce_file_content(raw_content: Any) -> str | None:
+    """Normalize Hermes file payloads that should be UTF-8 text but often arrive as objects."""
+    if isinstance(raw_content, str):
+        return raw_content
+    if isinstance(raw_content, (bytes, bytearray)):
+        return bytes(raw_content).decode("utf-8", errors="replace")
+    if isinstance(raw_content, dict):
+        for key in ("content", "text", "body", "source"):
+            val = raw_content.get(key)
+            if isinstance(val, str):
+                return val
+        try:
+            return json.dumps(raw_content, indent=2, ensure_ascii=False) + "\n"
+        except (TypeError, ValueError):
+            return None
+    if isinstance(raw_content, list):
+        if raw_content and all(isinstance(item, str) for item in raw_content):
+            return "\n".join(raw_content) + "\n"
+        try:
+            return json.dumps(raw_content, indent=2, ensure_ascii=False) + "\n"
+        except (TypeError, ValueError):
+            return None
+    if isinstance(raw_content, (int, float, bool)):
+        return str(raw_content)
+    return None
+
+
 def _forbidden_generated_content(text: str) -> bool:
     low = text.lower()
     if "-----begin" in low and "private key" in low:
@@ -227,56 +266,72 @@ def _forbidden_generated_content(text: str) -> bool:
     return False
 
 
-def _validate_file_bundle(payload: dict[str, Any]) -> tuple[dict[str, str], str | None]:
+def _validate_file_bundle(
+    payload: dict[str, Any],
+) -> tuple[dict[str, str], str | None, int]:
+    """Return validated files, error kind (if any), and count of skipped disallowed paths."""
     files_raw = payload.get("files")
     if not isinstance(files_raw, dict):
-        return {}, "files_not_object"
+        return {}, "files_not_object", 0
     out: dict[str, str] = {}
     total = 0
+    skipped_paths = 0
+    skipped_invalid = 0
     for raw_path, raw_content in files_raw.items():
-        if not isinstance(raw_path, str) or not isinstance(raw_content, str):
-            return {}, "file_entry_invalid"
-        norm = raw_path.replace("\\", "/").lstrip("/")
-        if not norm or ".." in norm.split("/") or not _ALLOWED_PATH_RE.fullmatch(norm):
-            return {}, "path_not_allowed"
-        body = raw_content
+        path_text = _coerce_file_path(raw_path)
+        body = _coerce_file_content(raw_content)
+        if path_text is None or body is None:
+            skipped_invalid += 1
+            continue
+        norm = path_text.replace("\\", "/").lstrip("/")
+        if not norm or ".." in norm.split("/"):
+            return {}, "path_not_allowed", skipped_paths
+        if not _ALLOWED_PATH_RE.fullmatch(norm):
+            skipped_paths += 1
+            continue
         if not body.strip():
-            return {}, "empty_file_content"
+            return {}, "empty_file_content", skipped_paths
         size = len(body.encode("utf-8"))
         if size > _MAX_FILE_BYTES:
-            return {}, "file_too_large"
+            return {}, "file_too_large", skipped_paths
         total += size
         if total > _MAX_TOTAL_TEXT:
-            return {}, "bundle_too_large"
+            return {}, "bundle_too_large", skipped_paths
         if _forbidden_generated_content(body):
-            return {}, "forbidden_content"
+            return {}, "forbidden_content", skipped_paths
         out[norm] = body
         if len(out) > _MAX_FILES:
-            return {}, "too_many_files"
+            return {}, "too_many_files", skipped_paths
     if not out:
-        return {}, "empty_files"
-    return out, None
+        if skipped_invalid:
+            return {}, "file_entry_invalid", skipped_paths
+        return {}, ("path_not_allowed" if skipped_paths else "empty_files"), skipped_paths
+    return out, None, skipped_paths
 
 
-def _coerce_files_from_response(raw: str) -> tuple[dict[str, str], str | None, bool]:
+def _response_shape_flags(raw: str) -> tuple[bool, bool]:
+    payload = _extract_json_object(raw)
+    json_found = isinstance(payload, dict)
+    files_found = json_found and isinstance(payload.get("files"), dict)
+    return json_found, files_found
+
+
+def _coerce_files_from_response(raw: str) -> tuple[dict[str, str], str | None]:
     """Recover a validated file bundle from a (possibly conversational) reply.
 
     Hermes stays conversational to the user elsewhere; here the project-file
     artifact is private backend output, so we tolerate prose-wrapped JSON and a
     missing/loose ``status`` field as long as a valid ``files`` map is present.
     An explicit failure status is still rejected.
-
-    Returns ``(files, error_kind, json_found)`` where ``json_found`` reports
-    whether a parseable JSON object was present at all (used for diagnostics).
     """
     payload = _extract_json_object(raw)
     if not isinstance(payload, dict):
-        return {}, "invalid_response", False
+        return {}, "invalid_response"
     status = str(payload.get("status") or "").strip().lower()
     if status in _FAILURE_STATUS_VALUES:
-        return {}, "invalid_response", True
-    files, err = _validate_file_bundle(payload)
-    return files, err, True
+        return {}, "invalid_response"
+    files, err, _skipped = _validate_file_bundle(payload)
+    return files, err
 
 
 def _append_native_build_context(user_prompt: str) -> str:
@@ -310,9 +365,11 @@ def _build_native_messages(user_prompt: str) -> list[dict[str, Any]]:
         "\"files\":{\"path\":\"full UTF-8 file text\"}, \"checks\":[\"...\"]}. "
         "Create a small, runnable Vite + React + TypeScript project. Include complete "
         "source files, not placeholders. Required files include package.json, index.html, "
-        "vite.config.ts, src/main.tsx, and at least one app/component file. Do not include "
-        "secrets, local URLs, internal ids, provider names, registry metadata, proposal "
-        "digests, base revisions, or workflow identifiers."
+        "vite.config.ts, src/main.tsx, and at least one app/component file. Use paths only "
+        "under package.json, index.html, vite.config.ts, tsconfig*.json, src/**, or public/** "
+        "(no README, .env, or repo-root components/ paths). Do not include secrets, local URLs, "
+        "internal ids, provider names, registry metadata, proposal digests, base revisions, or "
+        "workflow identifiers."
     )
     return [
         {"role": "system", "content": system},
@@ -340,9 +397,10 @@ def _build_repair_messages(
         "nothing else: no prose, no markdown, no code fences. Schema: "
         '{"status":"success","summary":"...","files":{"path":"full UTF-8 file text"},'
         '"checks":["..."]}. Include complete runnable files: package.json, index.html, '
-        "vite.config.ts, src/main.tsx, and at least one app/component file. Do not include "
-        "secrets, local URLs, internal ids, provider names, registry metadata, proposal "
-        "digests, base revisions, or workflow identifiers."
+        "vite.config.ts, src/main.tsx, and at least one app/component file. Use paths only "
+        "under package.json, index.html, vite.config.ts, tsconfig*.json, src/**, or public/**. "
+        "Do not include secrets, local URLs, internal ids, provider names, registry metadata, "
+        "proposal digests, base revisions, or workflow identifiers."
     )
     return [
         *base_messages,
@@ -395,20 +453,20 @@ def run_hermes_native_build(
     files: dict[str, str] = {}
     bundle_detail: str | None = None
     raw = ""
+    repair_attempted = False
     first_json_found = False
     first_files_found = False
-    repair_attempted = False
     repair_json_found = False
     repair_files_found = False
     validation_error_kind = ""
     for attempt in range(_NATIVE_BUILD_MAX_ATTEMPTS):
-        if attempt > 0:
-            repair_attempted = True
         messages = (
             base_messages
             if attempt == 0
             else _build_repair_messages(base_messages, previous_raw=raw)
         )
+        if attempt > 0:
+            repair_attempted = True
         try:
             raw = turn(messages)
         except GatewayCallError as exc:
@@ -449,15 +507,17 @@ def run_hermes_native_build(
                 import_job_id=job.id,
             )
 
-        candidate_files, bundle_detail, json_found = _coerce_files_from_response(raw)
-        files_found = bundle_detail is None
+        json_found, files_found = _response_shape_flags(raw)
         if attempt == 0:
             first_json_found = json_found
             first_files_found = files_found
         else:
             repair_json_found = json_found
             repair_files_found = files_found
-        validation_error_kind = bundle_detail or ""
+
+        candidate_files, bundle_detail = _coerce_files_from_response(raw)
+        if bundle_detail is not None:
+            validation_error_kind = bundle_detail
         if bundle_detail is None:
             files = candidate_files
             break
@@ -467,17 +527,6 @@ def run_hermes_native_build(
                 job.id,
                 bundle_detail,
             )
-
-    artifact_mode = gateway_diag.get("artifact_mode") or ("injected" if injected else "unavailable")
-    capability = gateway_diag.get("gateway_capability_detected") or "unknown"
-    model_channel = gateway_diag.get("model_channel") or "default"
-    diag_suffix = (
-        f"artifact_mode={artifact_mode} gateway_capability_detected={capability} "
-        f"model_channel={model_channel} first_attempt_json_found={first_json_found} "
-        f"first_attempt_files_found={first_files_found} repair_attempted={repair_attempted} "
-        f"repair_json_found={repair_json_found} repair_files_found={repair_files_found} "
-        f"validation_error_kind={validation_error_kind or 'none'}"
-    )
 
     if bundle_detail is not None:
         error_code = (
@@ -492,10 +541,21 @@ def run_hermes_native_build(
             error_message=f"HAM Native Builder did not return a valid file bundle: {bundle_detail}.",
         )
         logger.warning(
-            "ham_native_builder_failed reason=bundle import_job_id=%s detail=%s %s",
+            "ham_native_builder_failed reason=bundle import_job_id=%s detail=%s "
+            "first_attempt_json_found=%s first_attempt_files_found=%s repair_attempted=%s "
+            "repair_json_found=%s repair_files_found=%s validation_error_kind=%s "
+            "artifact_mode=%s gateway_capability_detected=%s model_channel=%s",
             job.id,
             bundle_detail,
-            diag_suffix,
+            first_json_found,
+            first_files_found,
+            repair_attempted,
+            repair_json_found,
+            repair_files_found,
+            validation_error_kind or bundle_detail,
+            gateway_diag.get("artifact_mode") or ("injected" if injected else "unavailable"),
+            gateway_diag.get("gateway_capability_detected") or "unknown",
+            gateway_diag.get("model_channel") or "default",
         )
         return _native_result(
             status="failed",
@@ -590,10 +650,17 @@ def run_hermes_native_build(
         requested_by=created_by,
     )
     logger.info(
-        "ham_native_builder_succeeded import_job_id=%s file_count=%d %s",
+        "ham_native_builder_succeeded import_job_id=%s file_count=%d "
+        "artifact_mode=%s gateway_capability_detected=%s model_channel=%s "
+        "first_attempt_json_found=%s first_attempt_files_found=%s repair_attempted=%s",
         job.id,
         len(files),
-        diag_suffix,
+        gateway_diag.get("artifact_mode") or ("injected" if injected else "unavailable"),
+        gateway_diag.get("gateway_capability_detected") or "unknown",
+        gateway_diag.get("model_channel") or "default",
+        first_json_found,
+        first_files_found,
+        repair_attempted,
     )
     return {
         "builder_intent": "build_or_create",

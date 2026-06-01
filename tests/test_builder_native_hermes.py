@@ -240,6 +240,123 @@ def test_hermes_native_build_prose_only_returns_bundle_reason_no_internals(tmp_p
         assert token not in haystack
 
 
+def test_hermes_native_build_bootstraps_main_when_hermes_omits_entry(tmp_path, monkeypatch) -> None:
+    """Hermes may return App without main; preview bootstrap must supply src/main.tsx."""
+    _native_env(tmp_path, monkeypatch)
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    payload = {
+        "status": "success",
+        "summary": "Built.",
+        "files": {
+            "src/App.tsx": "export default function App() { return <main>Hello</main>; }\n",
+            "src/styles.css": "body { margin: 0; }\n",
+        },
+    }
+    try:
+        result = run_hermes_native_build(
+            workspace_id="ws_native",
+            project_id="proj_native",
+            session_id="sess_native",
+            user_prompt="build a small native app",
+            created_by="user_native",
+            complete_turn=lambda _messages: json.dumps(payload),
+        )
+    finally:
+        set_builder_source_store_for_tests(None)
+
+    assert result["scaffolded"] is True
+    inline = store.list_source_snapshots(workspace_id="ws_native", project_id="proj_native")[0].manifest[
+        "inline_files"
+    ]
+    assert "src/main.tsx" in inline
+    assert "package.json" in inline
+
+
+def test_hermes_native_build_accepts_object_wrapped_file_entries(tmp_path, monkeypatch) -> None:
+    """Hermes repair turns may return JSON objects instead of raw UTF-8 strings per file."""
+    _native_env(tmp_path, monkeypatch)
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    payload = {
+        "status": "success",
+        "summary": "Built.",
+        "files": {
+            "package.json": {
+                "name": "ham-native-demo",
+                "private": True,
+                "type": "module",
+                "scripts": {"dev": "vite", "build": "vite build", "preview": "vite preview"},
+            },
+            "src/App.tsx": {
+                "content": "export default function App() { return <main>Hello</main>; }\n",
+            },
+            "src/main.tsx": {
+                "text": (
+                    "import React from 'react';\n"
+                    "import ReactDOM from 'react-dom/client';\n"
+                    "import App from './App';\n"
+                    "ReactDOM.createRoot(document.getElementById('root')!).render(<App />);\n"
+                ),
+            },
+            "src/styles.css": "body { margin: 0; }\n",
+        },
+    }
+    try:
+        result = run_hermes_native_build(
+            workspace_id="ws_native",
+            project_id="proj_native",
+            session_id="sess_native",
+            user_prompt="build a small native app",
+            created_by="user_native",
+            complete_turn=lambda _messages: json.dumps(payload),
+        )
+    finally:
+        set_builder_source_store_for_tests(None)
+
+    assert result["scaffolded"] is True
+    assert result["ham_native_builder"]["status"] == "succeeded"
+    snapshots = store.list_source_snapshots(workspace_id="ws_native", project_id="proj_native")
+    inline = snapshots[0].manifest["inline_files"]
+    assert '"ham-native-demo"' in inline["package.json"]
+    assert "Hello" in inline["src/App.tsx"]
+
+
+def test_hermes_native_build_skips_disallowed_paths_and_succeeds(tmp_path, monkeypatch) -> None:
+    """Hermes may include README or eslint paths; keep runnable src/ files for preview."""
+    _native_env(tmp_path, monkeypatch)
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    payload = {
+        "status": "success",
+        "summary": "Built.",
+        "files": {
+            **dict(_VALID_BUNDLE["files"]),
+            "README.md": "# Demo\n",
+            "eslint.config.js": "export default {};\n",
+            "components/App.tsx": "export default function App() { return null; }\n",
+        },
+    }
+    try:
+        result = run_hermes_native_build(
+            workspace_id="ws_native",
+            project_id="proj_native",
+            session_id="sess_native",
+            user_prompt="build a small native app",
+            created_by="user_native",
+            complete_turn=lambda _messages: json.dumps(payload),
+        )
+    finally:
+        set_builder_source_store_for_tests(None)
+
+    assert result["scaffolded"] is True
+    assert result["ham_native_builder"]["status"] == "succeeded"
+    snapshots = store.list_source_snapshots(workspace_id="ws_native", project_id="proj_native")
+    inline = snapshots[0].manifest["inline_files"]
+    assert "README.md" not in inline
+    assert "components/App.tsx" not in inline
+
+
 def test_hermes_native_build_repair_gateway_error_reports_gateway(tmp_path, monkeypatch) -> None:
     """If the repair turn loses the gateway, surface the gateway reason honestly."""
     _native_env(tmp_path, monkeypatch)
