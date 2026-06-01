@@ -20,6 +20,7 @@ Conductor ownership boundary (see AGENTS.md → "HAM bet"):
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from typing import Any
@@ -34,6 +35,8 @@ from src.ham.builder_chat_intent import (
     looks_like_explicit_no_build,
 )
 from src.ham.builder_mutation_router import classify_builder_project_action, resolve_snapshot_project_template
+
+_LOG = logging.getLogger(__name__)
 
 
 def _looks_like_followup_edit(last_user_plain: str) -> bool:
@@ -481,6 +484,10 @@ def _run_ham_native_builder_turn(
         "builder_harness_first": True,
     }
     status = str((native.get("ham_native_builder") or {}).get("status") or "").strip().lower()
+    _LOG.info(
+        "builder_hook_result_status status=%s selected_builder=native",
+        status,
+    )
     if status == "started":
         return f"{directive_prefix}{success_message}", out
     failure_copy = ham_native_builder_user_message(native.get("ham_native_builder"))
