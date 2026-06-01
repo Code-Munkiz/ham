@@ -626,6 +626,40 @@ def test_chat_stream_gateway_failure_done_with_safe_assistant_and_signal(
     assert "try again" in body.lower() or "settings" in body.lower()
 
 
+def test_chat_stream_gateway_error_after_tokens_does_not_clobber_persisted_assistant(
+    mock_mode: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """After partial deltas, a gateway failure must persist the safe error, not an interrupted checkpoint."""
+
+    def stream_then_fail(*_a, **_k):
+        yield "partial-token "
+        raise GatewayCallError(
+            "UPSTREAM_REJECTED",
+            "secret-upstream-body-do-not-show-users",
+            http_status=503,
+        )
+
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", stream_then_fail)
+
+    res = client.post(
+        "/api/chat/stream",
+        json={"messages": [{"role": "user", "content": "x"}]},
+    )
+    assert res.status_code == 200, res.text
+    events = _parse_ndjson(res.text)
+    assert events[-1]["type"] == "done"
+    done = events[-1]
+    assert done.get("gateway_error") == {"code": "UPSTREAM_REJECTED", "upstream_http_status": 503}
+    sid = str(done["session_id"])
+    detail = client.get(f"/api/chat/sessions/{sid}")
+    assert detail.status_code == 200
+    persisted = detail.json()["messages"][-1]["content"]
+    assert "partial-token" not in persisted
+    assert "Connection interrupted. Ask me to continue." not in persisted
+    assert "try again" in persisted.lower() or "settings" in persisted.lower()
+
+
 def test_chat_stream_openrouter_model_rejected_done_with_safe_assistant_and_signal(
     mock_mode: None,
     monkeypatch: pytest.MonkeyPatch,
