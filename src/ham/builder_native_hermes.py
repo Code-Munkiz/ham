@@ -29,6 +29,7 @@ from src.integrations.nous_gateway_client import (
     complete_artifact_turn,
 )
 from src.persistence.builder_source_store import (
+    NativeBuildContext,
     ProjectSource,
     SourceSnapshot,
     get_builder_source_store,
@@ -814,20 +815,22 @@ _DISPATCH_ENV = "HAM_NATIVE_BUILD_DISPATCH"
 
 
 def _native_build_dispatch_mode() -> str:
-    """Return the async dispatch mode: ``thread`` (default) or ``inline``.
+    """Return the dispatch mode: ``durable`` (default), ``inline``, or ``thread``.
 
-    ``thread`` runs the executor on a daemon thread so the chat turn returns
-    immediately and never blocks on Hermes artifact generation — the right shape
-    for the functional executor in development. ``inline`` runs it synchronously
-    (used by tests for deterministic execution and assertions).
+    ``durable`` hands the persisted job id to the out-of-process enqueue seam
+    (:mod:`src.ham.native_build_worker_enqueue`) instead of running the build in
+    the request: with ``HAM_NATIVE_BUILD_DISPATCH=cloud_tasks`` it pushes a task to
+    the authenticated worker endpoint; otherwise the no-op backend leaves the job
+    queued (pollable) for a worker to drive. This is the default because a
+    request-scoped Cloud Run container throttles CPU after the response, so a
+    daemon thread is not durable for a multi-second Hermes build.
 
-    Neither in-process mode is production-grade for a long build: a request-scoped
-    Cloud Run container throttles CPU after the response, so production must move
-    dispatch out-of-process (Cloud Tasks -> authenticated worker endpoint, or a
-    Cloud Run Job) calling ``execute_native_build_job`` by job id. That is Job 3.
+    ``inline`` runs the executor synchronously and ``thread`` on a daemon thread —
+    both in-process and intended only for tests / local dev, never as the hosted
+    default.
     """
     raw = (os.environ.get(_DISPATCH_ENV) or "").strip().lower()
-    return raw if raw in {"inline", "thread"} else "thread"
+    return raw if raw in {"inline", "thread"} else "durable"
 
 
 def start_native_build_job(
@@ -860,6 +863,19 @@ def start_native_build_job(
         status="queued",
         metadata={"origin": NATIVE_BUILD_JOB_ORIGIN},
     )
+    # Persist enough context (keyed by job id) for an out-of-process worker to run
+    # the build without any in-memory thread state. Stored server-side only; never
+    # surfaced through the import-jobs status API.
+    store.put_native_build_context(
+        NativeBuildContext(
+            import_job_id=job.id,
+            workspace_id=workspace_id,
+            project_id=project_id,
+            session_id=session_id,
+            user_prompt=user_prompt,
+            created_by=created_by,
+        )
+    )
     logger.info(
         "ham_native_builder_v2_started import_job_id=%s dispatch=%s builder_model_configured=%s",
         job.id,
@@ -884,12 +900,18 @@ def start_native_build_job(
 
 
 def _dispatch_native_build_job(**kwargs: Any) -> None:
-    """Async boundary: run the executor off the start path.
+    """Async boundary: hand the persisted job off to the executor / worker.
 
-    Dispatch failures never escape into the chat turn — the job is already
-    persisted, so a crash here is logged and the job is marked failed.
+    Dispatch failures never escape into the chat turn — the job and its durable
+    context are already persisted, so a crash here is logged and (for in-process
+    modes) the job is marked failed; the durable path leaves the job queued for a
+    worker / retry.
     """
-    if _native_build_dispatch_mode() == "thread":
+    mode = _native_build_dispatch_mode()
+    if mode == "inline":
+        _run_native_build_executor_guarded(**kwargs)
+        return
+    if mode == "thread":
         threading.Thread(
             target=_run_native_build_executor_guarded,
             kwargs=kwargs,
@@ -897,7 +919,40 @@ def _dispatch_native_build_job(**kwargs: Any) -> None:
             daemon=True,
         ).start()
         return
-    _run_native_build_executor_guarded(**kwargs)
+    _enqueue_native_build_job_guarded(
+        import_job_id=str(kwargs.get("import_job_id") or ""),
+        workspace_id=str(kwargs.get("workspace_id") or ""),
+        project_id=str(kwargs.get("project_id") or ""),
+    )
+
+
+def _enqueue_native_build_job_guarded(
+    *, import_job_id: str, workspace_id: str, project_id: str
+) -> None:
+    """Durable dispatch: enqueue the job for out-of-process execution.
+
+    A misconfigured / unavailable backend never breaks the chat turn — the job and
+    its context are persisted, so the job simply stays queued (pollable) for a
+    worker or a retry to pick up. We deliberately do not mark it failed here: an
+    enqueue/config error is recoverable, unlike a build failure.
+    """
+    from src.ham.native_build_worker_enqueue import (  # noqa: PLC0415
+        NativeBuildExecuteEnvelope,
+        get_native_build_enqueue,
+    )
+
+    try:
+        get_native_build_enqueue().enqueue(
+            NativeBuildExecuteEnvelope(
+                import_job_id=import_job_id,
+                workspace_id=workspace_id,
+                project_id=project_id,
+            )
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "ham_native_builder_v2_enqueue_failed import_job_id=%s", import_job_id
+        )
 
 
 def _run_native_build_executor_guarded(**kwargs: Any) -> None:

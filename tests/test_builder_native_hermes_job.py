@@ -20,6 +20,7 @@ from src.ham.builder_native_hermes import (
     ham_native_builder_user_message,
     start_native_build_job,
 )
+from src.ham.native_build_worker_enqueue import set_native_build_enqueue_for_tests
 from src.integrations.nous_gateway_client import GatewayCallError
 from src.persistence.builder_source_store import (
     BuilderSourceStore,
@@ -66,6 +67,63 @@ def _ready_env(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "disabled")
     monkeypatch.setenv("HAM_NATIVE_BUILD_DISPATCH", "inline")
+
+
+def _durable_env(tmp_path, monkeypatch) -> None:
+    """Gateway + builder model configured; default (durable) dispatch — not inline."""
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://127.0.0.1:8642")
+    monkeypatch.setenv("HERMES_BUILDER_MODEL", "hermes-builder-fast")
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "disabled")
+    monkeypatch.delenv("HAM_NATIVE_BUILD_DISPATCH", raising=False)
+
+
+class _RecordingEnqueue:
+    def __init__(self) -> None:
+        self.calls: list = []
+
+    def enqueue(self, envelope) -> None:
+        self.calls.append(envelope)
+
+
+def test_durable_dispatch_persists_context_and_enqueues_without_inline_build(
+    tmp_path, monkeypatch
+) -> None:
+    _durable_env(tmp_path, monkeypatch)
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    recorder = _RecordingEnqueue()
+    set_native_build_enqueue_for_tests(recorder)
+    try:
+        result = start_native_build_job(
+            workspace_id="ws_v2",
+            project_id="proj_v2",
+            session_id="sess_v2",
+            user_prompt="build a small native app",
+            created_by="user_v2",
+        )
+    finally:
+        set_native_build_enqueue_for_tests(None)
+        set_builder_source_store_for_tests(None)
+
+    job_id = result["native_build_job_id"]
+    assert result["ham_native_builder"]["status"] == "started"
+    # Durable default: handed to the enqueue seam exactly once, build NOT run inline.
+    assert len(recorder.calls) == 1
+    assert recorder.calls[0].import_job_id == job_id
+    jobs = store.list_import_jobs(workspace_id="ws_v2", project_id="proj_v2")
+    assert jobs[0].status == "queued"
+    assert jobs[0].phase == NATIVE_BUILD_PHASE_QUEUED
+    assert store.list_source_snapshots(workspace_id="ws_v2", project_id="proj_v2") == []
+    # Durable execution context is persisted by job id for the out-of-process worker.
+    ctx = store.get_native_build_context(import_job_id=job_id)
+    assert ctx is not None
+    assert ctx.workspace_id == "ws_v2"
+    assert ctx.project_id == "proj_v2"
+    assert ctx.session_id == "sess_v2"
+    assert ctx.user_prompt == "build a small native app"
+    assert ctx.created_by == "user_v2"
 
 
 def test_start_creates_job_and_returns_started(tmp_path, monkeypatch) -> None:

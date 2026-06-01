@@ -63,6 +63,7 @@ from src.api.workspaces import router as workspaces_router
 from src.api.builder_sources import router as builder_sources_router
 from src.api.internal_dispatcher import router as internal_dispatcher_router
 from src.api.jobs import router as jobs_router
+from src.api.native_build_worker import router as native_build_worker_router
 from src.api.plans import router as plans_router
 from src.api.request_id_middleware import request_id_middleware
 from src.ham import sentry_wiring
@@ -171,6 +172,7 @@ app.include_router(workspace_operations_router)
 app.include_router(workspace_voice_settings_router)
 app.include_router(builder_sources_router)
 app.include_router(internal_dispatcher_router)
+app.include_router(native_build_worker_router)
 app.include_router(jobs_router)
 app.include_router(plans_router)
 app.include_router(tts_router)

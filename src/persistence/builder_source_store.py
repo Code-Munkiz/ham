@@ -78,6 +78,27 @@ class ImportJob(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class NativeBuildContext(BaseModel):
+    """Durable execution context for an out-of-process native build worker.
+
+    Persisted by ``import_job_id`` so a worker (Cloud Tasks -> internal endpoint,
+    or a Cloud Run Job) can reconstruct the ``execute_native_build_job`` arguments
+    without relying on in-memory thread state. Stored server-side only and never
+    surfaced through the import-jobs status API.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    import_job_id: str
+    version: str = "1.0.0"
+    project_id: str
+    workspace_id: str
+    session_id: str = ""
+    user_prompt: str = ""
+    created_by: str = ""
+    created_at: str = Field(default_factory=_utc_now_iso)
+
+
 @runtime_checkable
 class BuilderSourceStoreProtocol(Protocol):
     def list_project_sources(self, *, workspace_id: str, project_id: str) -> list[ProjectSource]: ...
@@ -115,6 +136,9 @@ class BuilderSourceStoreProtocol(Protocol):
         error_code: str,
         error_message: str,
     ) -> ImportJob: ...
+
+    def put_native_build_context(self, record: NativeBuildContext) -> NativeBuildContext: ...
+    def get_native_build_context(self, *, import_job_id: str) -> NativeBuildContext | None: ...
 
 
 class BuilderSourceStore:
@@ -257,6 +281,28 @@ class BuilderSourceStore:
         record.updated_at = _utc_now_iso()
         return self.upsert_import_job(record)
 
+    def put_native_build_context(self, record: NativeBuildContext) -> NativeBuildContext:
+        raw = self._load_raw()
+        rows = [
+            r
+            for r in raw.get("native_build_contexts", [])
+            if str(r.get("import_job_id") or "") != record.import_job_id
+        ]
+        rows.append(record.model_dump(mode="json"))
+        raw["native_build_contexts"] = rows
+        self._save_raw(raw)
+        return record
+
+    def get_native_build_context(self, *, import_job_id: str) -> NativeBuildContext | None:
+        for item in self._load_raw().get("native_build_contexts", []):
+            try:
+                rec = NativeBuildContext.model_validate(item)
+            except ValidationError:
+                continue
+            if rec.import_job_id == import_job_id:
+                return rec
+        return None
+
     def _require_import_job(self, import_job_id: str) -> ImportJob:
         for item in self._load_raw().get("import_jobs", []):
             try:
@@ -268,17 +314,22 @@ class BuilderSourceStore:
         raise KeyError(f"Unknown import job id: {import_job_id}")
 
     def _load_raw(self) -> dict[str, Any]:
+        empty: dict[str, Any] = {
+            "project_sources": [],
+            "source_snapshots": [],
+            "import_jobs": [],
+            "native_build_contexts": [],
+        }
         if not self._path.is_file():
-            return {"project_sources": [], "source_snapshots": [], "import_jobs": []}
+            return dict(empty)
         try:
             data = json.loads(self._path.read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-            return {"project_sources": [], "source_snapshots": [], "import_jobs": []}
+            return dict(empty)
         if not isinstance(data, dict):
-            return {"project_sources": [], "source_snapshots": [], "import_jobs": []}
-        data.setdefault("project_sources", [])
-        data.setdefault("source_snapshots", [])
-        data.setdefault("import_jobs", [])
+            return dict(empty)
+        for key in empty:
+            data.setdefault(key, [])
         return data
 
     def _save_raw(self, payload: dict[str, Any]) -> None:
