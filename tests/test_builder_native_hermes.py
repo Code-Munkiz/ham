@@ -267,3 +267,74 @@ def test_hermes_native_build_repair_gateway_error_reports_gateway(tmp_path, monk
 
     assert len(calls) == 2
     assert result["ham_native_builder"] == {"status": "failed", "failure_reason": "gateway"}
+
+
+def test_native_build_default_path_uses_artifact_channel(tmp_path, monkeypatch) -> None:
+    """With no injected turn, the native build uses the private artifact channel."""
+    _native_env(tmp_path, monkeypatch)
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    seen: dict[str, object] = {}
+
+    def _fake_artifact(messages, *, timeout_sec=None, diag=None):
+        seen["called"] = True
+        if diag is not None:
+            diag["artifact_mode"] = "json_mode"
+            diag["gateway_capability_detected"] = "response_format_supported"
+            diag["model_channel"] = "default"
+        return json.dumps(_VALID_BUNDLE)
+
+    monkeypatch.setattr(
+        "src.ham.builder_native_hermes.complete_artifact_turn",
+        _fake_artifact,
+    )
+    try:
+        result = run_hermes_native_build(
+            workspace_id="ws_native",
+            project_id="proj_native",
+            session_id="sess_native",
+            user_prompt="build a small native app",
+            created_by="user_native",
+        )
+    finally:
+        set_builder_source_store_for_tests(None)
+
+    assert seen.get("called") is True
+    assert result["scaffolded"] is True
+    assert result["ham_native_builder"]["status"] == "succeeded"
+
+
+def test_native_build_default_path_artifact_unavailable_is_safe(tmp_path, monkeypatch) -> None:
+    """If the artifact channel raises a gateway error, surface gateway reason (no fake success)."""
+    _native_env(tmp_path, monkeypatch)
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+
+    def _fake_artifact(messages, *, timeout_sec=None, diag=None):
+        raise GatewayCallError("UPSTREAM_UNAVAILABLE", "connection refused")
+
+    monkeypatch.setattr(
+        "src.ham.builder_native_hermes.complete_artifact_turn",
+        _fake_artifact,
+    )
+    try:
+        result = run_hermes_native_build(
+            workspace_id="ws_native",
+            project_id="proj_native",
+            session_id="sess_native",
+            user_prompt="build a small native app",
+            created_by="user_native",
+        )
+    finally:
+        set_builder_source_store_for_tests(None)
+
+    assert result["scaffolded"] is False
+    assert result["ham_native_builder"] == {"status": "failed", "failure_reason": "gateway"}
+
+
+def test_native_module_does_not_use_conversational_chat_turn() -> None:
+    """The native builder must drive the private artifact channel, not user chat."""
+    import src.ham.builder_native_hermes as native
+
+    assert hasattr(native, "complete_artifact_turn")
+    assert not hasattr(native, "complete_chat_turn")

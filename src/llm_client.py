@@ -130,6 +130,7 @@ def complete_chat_messages_openrouter(
     model_override: str | None = None,
     api_key_override: str | None = None,
     timeout_sec: float | None = None,
+    response_format: dict[str, Any] | None = None,
 ) -> str:
     """
     Multi-turn chat completion via OpenRouter (LiteLLM).
@@ -138,6 +139,7 @@ def complete_chat_messages_openrouter(
     optional ``OPENROUTER_HTTP_REFERER`` / ``OPENROUTER_APP_TITLE`` headers.
 
     ``model_override`` must be a LiteLLM-ready id (e.g. ``openrouter/minimax/minimax-m2.5:free``).
+    ``response_format`` (e.g. ``{"type": "json_object"}``) is passed through when set.
     """
     return "".join(
         stream_chat_messages_openrouter(
@@ -145,6 +147,7 @@ def complete_chat_messages_openrouter(
             model_override=model_override,
             api_key_override=api_key_override,
             timeout_sec=timeout_sec,
+            response_format=response_format,
         ),
     ).strip()
 
@@ -155,6 +158,7 @@ def stream_chat_messages_openrouter(
     model_override: str | None = None,
     api_key_override: str | None = None,
     timeout_sec: float | None = None,
+    response_format: dict[str, Any] | None = None,
 ):
     """Streaming chat completion via OpenRouter (LiteLLM). Yields content deltas (str)."""
     import litellm
@@ -193,6 +197,8 @@ def stream_chat_messages_openrouter(
         kwargs["extra_headers"] = extra_headers
     if timeout_sec is not None and timeout_sec > 0:
         kwargs["timeout"] = timeout_sec
+    if response_format is not None:
+        kwargs["response_format"] = response_format
 
     stream = litellm.completion(**kwargs)
     for chunk in stream:

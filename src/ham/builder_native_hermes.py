@@ -22,7 +22,10 @@ from typing import Any, Callable
 from src.ham.builder_artifact_verifier import verify_builder_scaffold_artifact
 from src.ham.builder_chat_cloud_runtime import maybe_enqueue_chat_scaffold_cloud_runtime_job
 from src.ham.builder_preview_bootstrap import ensure_preview_bootstrap_files
-from src.integrations.nous_gateway_client import GatewayCallError, complete_chat_turn
+from src.integrations.nous_gateway_client import (
+    GatewayCallError,
+    complete_artifact_turn,
+)
 from src.persistence.builder_source_store import (
     ProjectSource,
     SourceSnapshot,
@@ -255,21 +258,25 @@ def _validate_file_bundle(payload: dict[str, Any]) -> tuple[dict[str, str], str 
     return out, None
 
 
-def _coerce_files_from_response(raw: str) -> tuple[dict[str, str], str | None]:
+def _coerce_files_from_response(raw: str) -> tuple[dict[str, str], str | None, bool]:
     """Recover a validated file bundle from a (possibly conversational) reply.
 
     Hermes stays conversational to the user elsewhere; here the project-file
     artifact is private backend output, so we tolerate prose-wrapped JSON and a
     missing/loose ``status`` field as long as a valid ``files`` map is present.
     An explicit failure status is still rejected.
+
+    Returns ``(files, error_kind, json_found)`` where ``json_found`` reports
+    whether a parseable JSON object was present at all (used for diagnostics).
     """
     payload = _extract_json_object(raw)
     if not isinstance(payload, dict):
-        return {}, "invalid_response"
+        return {}, "invalid_response", False
     status = str(payload.get("status") or "").strip().lower()
     if status in _FAILURE_STATUS_VALUES:
-        return {}, "invalid_response"
-    return _validate_file_bundle(payload)
+        return {}, "invalid_response", True
+    files, err = _validate_file_bundle(payload)
+    return files, err, True
 
 
 def _append_native_build_context(user_prompt: str) -> str:
@@ -372,13 +379,31 @@ def run_hermes_native_build(
     )
     job = store.mark_import_job_running(import_job_id=job.id, phase="hermes_native_build")
 
-    turn = complete_turn or complete_chat_turn
+    # Private artifact channel: a JSON-mode build request, distinct from the
+    # user-facing conversational chat. Tests may inject a plain text producer.
+    gateway_diag: dict[str, Any] = {}
+    injected = complete_turn is not None
+    if injected:
+        turn = complete_turn
+    else:
+
+        def turn(msgs: list[dict[str, Any]]) -> str:
+            return complete_artifact_turn(msgs, diag=gateway_diag)
+
     base_messages = _build_native_messages(user_prompt)
 
     files: dict[str, str] = {}
     bundle_detail: str | None = None
     raw = ""
+    first_json_found = False
+    first_files_found = False
+    repair_attempted = False
+    repair_json_found = False
+    repair_files_found = False
+    validation_error_kind = ""
     for attempt in range(_NATIVE_BUILD_MAX_ATTEMPTS):
+        if attempt > 0:
+            repair_attempted = True
         messages = (
             base_messages
             if attempt == 0
@@ -394,9 +419,12 @@ def run_hermes_native_build(
                 error_message="HAM Native Builder could not reach Hermes.",
             )
             logger.warning(
-                "ham_native_builder_failed reason=gateway import_job_id=%s gateway_code=%s",
+                "ham_native_builder_failed reason=gateway import_job_id=%s gateway_code=%s "
+                "artifact_mode=%s repair_attempted=%s",
                 job.id,
                 exc.code,
+                gateway_diag.get("artifact_mode") or "json_mode",
+                repair_attempted,
             )
             return _native_result(
                 status="failed",
@@ -421,7 +449,15 @@ def run_hermes_native_build(
                 import_job_id=job.id,
             )
 
-        candidate_files, bundle_detail = _coerce_files_from_response(raw)
+        candidate_files, bundle_detail, json_found = _coerce_files_from_response(raw)
+        files_found = bundle_detail is None
+        if attempt == 0:
+            first_json_found = json_found
+            first_files_found = files_found
+        else:
+            repair_json_found = json_found
+            repair_files_found = files_found
+        validation_error_kind = bundle_detail or ""
         if bundle_detail is None:
             files = candidate_files
             break
@@ -431,6 +467,17 @@ def run_hermes_native_build(
                 job.id,
                 bundle_detail,
             )
+
+    artifact_mode = gateway_diag.get("artifact_mode") or ("injected" if injected else "unavailable")
+    capability = gateway_diag.get("gateway_capability_detected") or "unknown"
+    model_channel = gateway_diag.get("model_channel") or "default"
+    diag_suffix = (
+        f"artifact_mode={artifact_mode} gateway_capability_detected={capability} "
+        f"model_channel={model_channel} first_attempt_json_found={first_json_found} "
+        f"first_attempt_files_found={first_files_found} repair_attempted={repair_attempted} "
+        f"repair_json_found={repair_json_found} repair_files_found={repair_files_found} "
+        f"validation_error_kind={validation_error_kind or 'none'}"
+    )
 
     if bundle_detail is not None:
         error_code = (
@@ -445,9 +492,10 @@ def run_hermes_native_build(
             error_message=f"HAM Native Builder did not return a valid file bundle: {bundle_detail}.",
         )
         logger.warning(
-            "ham_native_builder_failed reason=bundle import_job_id=%s detail=%s",
+            "ham_native_builder_failed reason=bundle import_job_id=%s detail=%s %s",
             job.id,
             bundle_detail,
+            diag_suffix,
         )
         return _native_result(
             status="failed",
@@ -540,6 +588,12 @@ def run_hermes_native_build(
         source_snapshot_id=snapshot.id,
         session_id=session_id,
         requested_by=created_by,
+    )
+    logger.info(
+        "ham_native_builder_succeeded import_job_id=%s file_count=%d %s",
+        job.id,
+        len(files),
+        diag_suffix,
     )
     return {
         "builder_intent": "build_or_create",

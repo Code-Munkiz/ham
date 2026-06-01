@@ -20,6 +20,13 @@ DEFAULT_MODEL = "hermes-agent"
 DEFAULT_STREAM_STALL_SEC = 45.0
 DEFAULT_STREAM_MAX_EXTRA_SEC = 120.0
 
+# Private builder artifact channel (NOT user-facing chat). Optional dedicated
+# model/profile for artifact generation; falls back to the configured chat model
+# when unset. JSON mode is requested via response_format so the backend receives a
+# parseable file artifact rather than conversational prose.
+BUILDER_MODEL_ENV = "HERMES_BUILDER_MODEL"
+_ARTIFACT_RESPONSE_FORMAT: dict[str, Any] = {"type": "json_object"}
+
 logger = logging.getLogger(__name__)
 
 # Retry primary Hermes request with HAM_CHAT_FALLBACK_MODEL on overload / transport / stall errors.
@@ -154,6 +161,17 @@ def _stream_max_wall_sec(timeout_sec: float) -> float:
     return max(timeout_sec + DEFAULT_STREAM_MAX_EXTRA_SEC, 300.0)
 
 
+def _http_chat_payload(
+    model: str,
+    messages: list[dict[str, Any]],
+    response_format: dict[str, Any] | None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {"model": model, "messages": messages, "stream": True}
+    if response_format is not None:
+        payload["response_format"] = response_format
+    return payload
+
+
 def _iter_http_chat_completions(
     *,
     base: str,
@@ -161,6 +179,7 @@ def _iter_http_chat_completions(
     model: str,
     messages: list[dict[str, Any]],
     timeout_sec: float,
+    response_format: dict[str, Any] | None = None,
 ) -> Iterator[str]:
     """Single POST to Hermes /v1/chat/completions (streaming SSE)."""
     url = f"{base}/v1/chat/completions"
@@ -168,11 +187,7 @@ def _iter_http_chat_completions(
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
-    payload: dict[str, Any] = {
-        "model": model,
-        "messages": messages,
-        "stream": True,
-    }
+    payload = _http_chat_payload(model, messages, response_format)
 
     stall_sec = _stream_stall_sec()
     max_wall_sec = _stream_max_wall_sec(timeout_sec)
@@ -459,3 +474,151 @@ def complete_chat_turn(
             http_model_override=http_model_override,
         ),
     ).strip()
+
+
+def builder_artifact_model_override() -> str | None:
+    """Optional dedicated model/profile id for the private builder artifact channel."""
+    raw = (os.environ.get(BUILDER_MODEL_ENV) or "").strip()
+    return raw or None
+
+
+def _artifact_openrouter_turn(
+    messages: list[dict[str, Any]],
+    *,
+    builder_model: str | None,
+    timeout_sec: float,
+    diag: dict[str, Any],
+) -> str:
+    from src.llm_client import (
+        complete_chat_messages_openrouter,
+        normalized_openrouter_api_key,
+        openrouter_api_key_is_plausible,
+        resolve_openrouter_model_name_for_chat,
+    )
+
+    key = normalized_openrouter_api_key()
+    if not key or not openrouter_api_key_is_plausible(key):
+        raise GatewayCallError(
+            "CONFIG_ERROR",
+            "OPENROUTER_API_KEY is not set or not plausible for builder artifact mode.",
+        )
+    if builder_model:
+        model_override = (
+            builder_model
+            if builder_model.startswith("openrouter/")
+            else f"openrouter/{builder_model}"
+        )
+    else:
+        model_override = resolve_openrouter_model_name_for_chat()
+    try:
+        text = complete_chat_messages_openrouter(
+            messages,
+            model_override=model_override,
+            timeout_sec=timeout_sec,
+            response_format=_ARTIFACT_RESPONSE_FORMAT,
+        )
+    except RuntimeError as exc:
+        raise GatewayCallError("CONFIG_ERROR", str(exc)) from exc
+    except Exception:
+        # Capability fallback: retry once without the JSON-mode field.
+        try:
+            text = complete_chat_messages_openrouter(
+                messages,
+                model_override=model_override,
+                timeout_sec=timeout_sec,
+            )
+        except RuntimeError as exc2:
+            raise GatewayCallError("CONFIG_ERROR", str(exc2)) from exc2
+        except Exception as exc2:
+            raise GatewayCallError("UPSTREAM_REJECTED", str(exc2)) from exc2
+        diag["artifact_mode"] = "plain_adapter"
+        diag["gateway_capability_detected"] = "response_format_unsupported"
+        return text
+    diag["artifact_mode"] = "json_mode"
+    diag["gateway_capability_detected"] = "response_format_supported"
+    return text
+
+
+def _artifact_http_turn(
+    messages: list[dict[str, Any]],
+    *,
+    builder_model: str | None,
+    timeout_sec: float,
+    diag: dict[str, Any],
+) -> str:
+    base = (os.environ.get("HERMES_GATEWAY_BASE_URL") or "").strip().rstrip("/")
+    if not base:
+        raise GatewayCallError(
+            "CONFIG_ERROR",
+            "HERMES_GATEWAY_BASE_URL is required when HERMES_GATEWAY_MODE=http",
+        )
+    api_key = (os.environ.get("HERMES_GATEWAY_API_KEY") or "").strip()
+    model = builder_model or (os.environ.get("HERMES_GATEWAY_MODEL") or DEFAULT_MODEL).strip() or DEFAULT_MODEL
+
+    def _collect(response_format: dict[str, Any] | None) -> str:
+        return "".join(
+            _iter_http_chat_completions(
+                base=base,
+                api_key=api_key,
+                model=model,
+                messages=messages,
+                timeout_sec=timeout_sec,
+                response_format=response_format,
+            ),
+        ).strip()
+
+    try:
+        text = _collect(_ARTIFACT_RESPONSE_FORMAT)
+    except GatewayCallError as exc:
+        # A 400/422 may mean the gateway does not accept the JSON-mode field; retry
+        # once without it (capability fallback). Other failures propagate unchanged.
+        if exc.http_status in {400, 422}:
+            text = _collect(None)
+            diag["artifact_mode"] = "plain_adapter"
+            diag["gateway_capability_detected"] = "response_format_unsupported"
+            return text
+        raise
+    diag["artifact_mode"] = "json_mode"
+    diag["gateway_capability_detected"] = "response_format_supported"
+    return text
+
+
+def complete_artifact_turn(
+    messages: list[dict[str, Any]],
+    *,
+    timeout_sec: float = DEFAULT_TIMEOUT_SEC,
+    diag: dict[str, Any] | None = None,
+) -> str:
+    """Private builder artifact channel — distinct from user-facing chat.
+
+    Requests a strict JSON object (``response_format``) so the backend receives a
+    parseable file artifact instead of conversational prose, optionally routed to a
+    dedicated builder model/profile via ``HERMES_BUILDER_MODEL``. If the gateway
+    rejects the JSON-mode field (HTTP 400/422), it retries once in plain mode
+    (capability fallback). This is never used for conversational replies and the
+    caller keeps the artifact private.
+
+    ``diag`` (optional) is populated with non-sensitive routing facts for logging:
+    ``artifact_mode`` (``json_mode``|``plain_adapter``|``mock``),
+    ``gateway_capability_detected``, and ``model_channel`` (``builder``|``default``).
+    Raw model output and file contents are never written into ``diag``.
+    """
+    if not messages:
+        raise GatewayCallError("INVALID_REQUEST", "messages must not be empty")
+
+    sink = diag if diag is not None else {}
+    builder_model = builder_artifact_model_override()
+    sink["model_channel"] = "builder" if builder_model else "default"
+
+    mode = _resolve_mode()
+    if mode == "mock":
+        sink["artifact_mode"] = "mock"
+        sink["gateway_capability_detected"] = "mock"
+        return _mock_assistant_text(messages)
+    if mode == "openrouter":
+        return _artifact_openrouter_turn(
+            messages, builder_model=builder_model, timeout_sec=timeout_sec, diag=sink
+        )
+    return _artifact_http_turn(
+        messages, builder_model=builder_model, timeout_sec=timeout_sec, diag=sink
+    )
