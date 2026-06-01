@@ -407,7 +407,7 @@ _DEFAULT_BUILDER_ENV = "HAM_DEFAULT_BUILDER"
 _HANDOFF_SUPPORTED_BUILDERS: frozenset[str] = frozenset({"opencode", "factory_droid"})
 
 _HAM_NATIVE_BUILDING_MESSAGE = (
-    "HAM is building natively through Hermes. I'll prepare the Workbench preview on the right.\n\n"
+    "HAM started the native build. I'll prepare the Workbench preview on the right as it runs.\n\n"
 )
 
 
@@ -461,10 +461,13 @@ def _run_ham_native_builder_turn(
 ) -> tuple[str, dict[str, Any]]:
     from src.ham.builder_native_hermes import (
         ham_native_builder_user_message,
-        run_hermes_native_build,
+        start_native_build_job,
     )
 
-    native = run_hermes_native_build(
+    # v2 async boundary: create the native build job and return immediately. The
+    # chat turn never blocks on full Hermes artifact generation; the executor runs
+    # off the request path and status is pollable via the import-jobs endpoint.
+    native = start_native_build_job(
         workspace_id=workspace_id,
         project_id=project_id,
         session_id=session_id,
@@ -477,7 +480,8 @@ def _run_ham_native_builder_turn(
         "selected_builder_state": "native",
         "builder_harness_first": True,
     }
-    if native.get("scaffolded"):
+    status = str((native.get("ham_native_builder") or {}).get("status") or "").strip().lower()
+    if status == "started":
         return f"{directive_prefix}{success_message}", out
     failure_copy = ham_native_builder_user_message(native.get("ham_native_builder"))
     return f"{directive_prefix}{failure_copy}", out

@@ -84,7 +84,7 @@ def test_positive_control_build_phrase_routes_to_selection_not_scaffold(
             return_value=None,
         ),
         patch(
-            "src.ham.builder_native_hermes.run_hermes_native_build",
+            "src.ham.builder_native_hermes.start_native_build_job",
             return_value={
                 "builder_intent": "build_or_create",
                 "builder_operation": "build_or_create",

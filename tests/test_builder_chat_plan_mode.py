@@ -80,7 +80,7 @@ def test_plan_mode_false_build_intent_routes_to_selected_builder(
         patch("src.ham.builder_chat_hooks._selected_builder_for_workspace", return_value=None),
         patch("src.ham.builder_chat_hooks.configured_default_builder", return_value=None),
         patch(
-            "src.ham.builder_native_hermes.run_hermes_native_build",
+            "src.ham.builder_native_hermes.start_native_build_job",
             return_value={
                 "builder_intent": "build_or_create",
                 "builder_operation": "build_or_create",
@@ -198,7 +198,7 @@ def test_plan_mode_true_affirmation_continues_into_selected_builder(
         patch("src.ham.builder_chat_hooks._selected_builder_for_workspace", return_value=None),
         patch("src.ham.builder_chat_hooks.configured_default_builder", return_value=None),
         patch(
-            "src.ham.builder_native_hermes.run_hermes_native_build",
+            "src.ham.builder_native_hermes.start_native_build_job",
             return_value={
                 "builder_intent": "build_or_create",
                 "builder_operation": "build_or_create",

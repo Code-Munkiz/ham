@@ -170,7 +170,7 @@ def test_no_selection_native_gateway_failure_shows_reachability_copy(_empty_stor
         patch(f"{_HOOKS}._selected_builder_for_workspace", return_value=None),
         patch(f"{_HOOKS}.configured_default_builder", return_value=None),
         patch(
-            "src.ham.builder_native_hermes.run_hermes_native_build",
+            "src.ham.builder_native_hermes.start_native_build_job",
             return_value={
                 "builder_intent": "build_or_create",
                 "builder_operation": "build_or_create",
@@ -197,7 +197,7 @@ def test_no_selection_no_default_routes_to_native_unavailable_and_blocks_scaffol
         patch(f"{_HOOKS}._selected_builder_for_workspace", return_value=None),
         patch(f"{_HOOKS}.configured_default_builder", return_value=None),
         patch(
-            "src.ham.builder_native_hermes.run_hermes_native_build",
+            "src.ham.builder_native_hermes.start_native_build_job",
             return_value={
                 "builder_intent": "build_or_create",
                 "builder_operation": "build_or_create",
@@ -216,6 +216,37 @@ def test_no_selection_no_default_routes_to_native_unavailable_and_blocks_scaffol
     assert meta.get("selected_builder_state") == "native"
     assert meta.get("ham_native_builder", {}).get("status") == "unavailable"
     assert prefix == "HAM Native Builder is not ready yet.\n\n"
+
+
+def test_no_selection_starts_native_build_and_returns_started_copy(_empty_store) -> None:
+    with (
+        patch(f"{_HOOKS}._selected_builder_for_workspace", return_value=None),
+        patch(f"{_HOOKS}.configured_default_builder", return_value=None),
+        patch(
+            "src.ham.builder_native_hermes.start_native_build_job",
+            return_value={
+                "builder_intent": "build_or_create",
+                "builder_operation": "build_or_create",
+                "scaffolded": False,
+                "ham_native_builder": {"status": "started"},
+                "import_job_id": "ijob_v2",
+                "native_build_job_id": "ijob_v2",
+            },
+        ) as native_mock,
+        patch(
+            "src.ham.builder_chat_scaffold.maybe_chat_scaffold_for_turn",
+            side_effect=_raise_if_called,
+        ) as scaffold_mock,
+    ):
+        prefix, meta = _run("build me a tetris game")
+    # The async boundary is taken: native build started, scaffold never runs.
+    scaffold_mock.assert_not_called()
+    native_mock.assert_called_once()
+    assert meta.get("selected_builder_state") == "native"
+    assert meta.get("ham_native_builder", {}).get("status") == "started"
+    assert prefix.startswith("HAM started the native build.")
+    for token in _FORBIDDEN_TOKENS:
+        assert token not in prefix.lower()
 
 
 def test_no_selection_with_configured_opencode_default_hands_off(_empty_store) -> None:
@@ -242,7 +273,7 @@ def test_selected_hermes_agent_legacy_value_is_treated_as_native_mode(_empty_sto
         patch(f"{_HOOKS}._selected_builder_for_workspace", return_value=None),
         patch(f"{_HOOKS}.configured_default_builder", return_value=None),
         patch(
-            "src.ham.builder_native_hermes.run_hermes_native_build",
+            "src.ham.builder_native_hermes.start_native_build_job",
             return_value={
                 "builder_intent": "build_or_create",
                 "builder_operation": "build_or_create",
@@ -265,7 +296,7 @@ def test_explicit_quick_preview_uses_native_or_honest_unavailable_not_scaffold(_
     with (
         patch(f"{_HOOKS}._selected_builder_for_workspace", return_value="opencode"),
         patch(
-            "src.ham.builder_native_hermes.run_hermes_native_build",
+            "src.ham.builder_native_hermes.start_native_build_job",
             return_value={
                 "builder_intent": "build_or_create",
                 "builder_operation": "build_or_create",
@@ -317,7 +348,7 @@ def test_selected_builder_responses_expose_no_internals(_empty_store) -> None:
             patch(f"{_HOOKS}.configured_default_builder", return_value=default),
             patch(f"{_HOOKS}._selected_builder_ready", return_value=ready),
             patch(
-                "src.ham.builder_native_hermes.run_hermes_native_build",
+                "src.ham.builder_native_hermes.start_native_build_job",
                 return_value={
                     "builder_intent": "build_or_create",
                     "builder_operation": "build_or_create",
