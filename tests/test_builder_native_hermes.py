@@ -2,12 +2,20 @@ from __future__ import annotations
 
 import json
 
-from src.ham.builder_native_hermes import run_hermes_native_build
+import pytest
+
+from src.ham.builder_native_hermes import (
+    ham_native_builder_user_message,
+    hermes_native_builder_ready,
+    run_hermes_native_build,
+)
+from src.integrations.nous_gateway_client import GatewayCallError
 from src.persistence.builder_source_store import BuilderSourceStore, set_builder_source_store_for_tests
 
 
 def test_hermes_native_build_creates_source_snapshot(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://127.0.0.1:8642")
     monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "disabled")
     store = BuilderSourceStore(store_path=tmp_path / "sources.json")
@@ -47,6 +55,7 @@ def test_hermes_native_build_creates_source_snapshot(tmp_path, monkeypatch) -> N
 
 def test_hermes_native_build_rejects_internal_tokens(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://127.0.0.1:8642")
     monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
     store = BuilderSourceStore(store_path=tmp_path / "sources.json")
     set_builder_source_store_for_tests(store)
@@ -70,3 +79,47 @@ def test_hermes_native_build_rejects_internal_tokens(tmp_path, monkeypatch) -> N
 
     assert result["scaffolded"] is False
     assert result["ham_native_builder"]["status"] == "failed"
+    assert result["ham_native_builder"]["failure_reason"] == "bundle"
+
+
+def test_hermes_native_builder_ready_requires_http_base_url(monkeypatch) -> None:
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.delenv("HERMES_GATEWAY_BASE_URL", raising=False)
+    assert hermes_native_builder_ready() is False
+
+
+def test_hermes_native_build_gateway_error_returns_gateway_reason(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
+    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://127.0.0.1:8642")
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    try:
+
+        def _boom(_messages: object) -> str:
+            raise GatewayCallError("UPSTREAM_UNAVAILABLE", "connection refused")
+
+        result = run_hermes_native_build(
+            workspace_id="ws_native",
+            project_id="proj_native",
+            session_id="sess_native",
+            user_prompt="build a small native app",
+            created_by="user_native",
+            complete_turn=_boom,
+        )
+    finally:
+        set_builder_source_store_for_tests(None)
+
+    assert result["scaffolded"] is False
+    assert result["ham_native_builder"] == {"status": "failed", "failure_reason": "gateway"}
+    assert result.get("import_job_id")
+    assert ham_native_builder_user_message(result["ham_native_builder"]).startswith(
+        "HAM Native Builder could not reach the Hermes runtime."
+    )
+
+
+def test_ham_native_builder_user_messages_are_non_internal() -> None:
+    assert "registry" not in ham_native_builder_user_message({"status": "failed", "failure_reason": "bundle"}).lower()
+    assert ham_native_builder_user_message({"status": "unavailable", "failure_reason": "unconfigured"}).startswith(
+        "HAM Native Builder is still being configured."
+    )

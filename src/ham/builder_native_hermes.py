@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import uuid
@@ -37,14 +38,75 @@ _ALLOWED_PATH_RE = re.compile(
     r"src/[\w./-]+\.(?:tsx|ts|jsx|js|css|json)|public/[\w./-]+)$"
 )
 
+logger = logging.getLogger(__name__)
+
+_NATIVE_UNAVAILABLE_MESSAGE = "HAM Native Builder is not ready yet.\n\n"
+_NATIVE_UNCONFIGURED_MESSAGE = "HAM Native Builder is still being configured.\n\n"
+_NATIVE_GATEWAY_MESSAGE = "HAM Native Builder could not reach the Hermes runtime.\n\n"
+_NATIVE_BUNDLE_MESSAGE = "HAM Native Builder could not prepare the project files.\n\n"
+
+
+def _looks_like_mock_assistant_text(text: str) -> bool:
+    return "mock assistant reply" in str(text or "").lower()
+
 
 def hermes_native_builder_ready() -> bool:
     raw = (os.environ.get("HERMES_GATEWAY_MODE") or "").strip().lower()
-    if raw in {"http", "openrouter"}:
-        return True
     if raw == "mock":
         return False
+    if raw == "openrouter":
+        try:
+            from src.llm_client import normalized_openrouter_api_key, openrouter_api_key_is_plausible
+
+            key = normalized_openrouter_api_key()
+            return bool(key and openrouter_api_key_is_plausible(key))
+        except Exception:  # noqa: BLE001
+            return False
+    if raw == "http":
+        return bool((os.environ.get("HERMES_GATEWAY_BASE_URL") or "").strip())
     return bool((os.environ.get("HERMES_GATEWAY_BASE_URL") or "").strip())
+
+
+def ham_native_builder_user_message(ham_native: dict[str, Any] | None) -> str:
+    """User-facing chat copy for a native build outcome (no build-kit internals)."""
+    block = ham_native if isinstance(ham_native, dict) else {}
+    status = str(block.get("status") or "").strip().lower()
+    reason = str(block.get("failure_reason") or "").strip().lower()
+    if status == "unavailable":
+        if reason == "unconfigured":
+            return _NATIVE_UNCONFIGURED_MESSAGE
+        return _NATIVE_UNAVAILABLE_MESSAGE
+    if status == "failed":
+        if reason == "gateway":
+            return _NATIVE_GATEWAY_MESSAGE
+        if reason in {"bundle", "verification"}:
+            return _NATIVE_BUNDLE_MESSAGE
+        return _NATIVE_BUNDLE_MESSAGE
+    return _NATIVE_UNAVAILABLE_MESSAGE
+
+
+def _native_result(
+    *,
+    status: str,
+    failure_reason: str | None = None,
+    scaffolded: bool = False,
+    import_job_id: str | None = None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    ham_native: dict[str, Any] = {"status": status}
+    if failure_reason:
+        ham_native["failure_reason"] = failure_reason
+    out: dict[str, Any] = {
+        "builder_intent": "build_or_create",
+        "builder_operation": "build_or_create",
+        "scaffolded": scaffolded,
+        "ham_native_builder": ham_native,
+    }
+    if import_job_id:
+        out["import_job_id"] = import_job_id
+    if extra:
+        out.update(extra)
+    return out
 
 
 def _artifact_root() -> Path:
@@ -196,12 +258,8 @@ def run_hermes_native_build(
     complete_turn: Callable[..., str] | None = None,
 ) -> dict[str, Any]:
     if not hermes_native_builder_ready():
-        return {
-            "builder_intent": "build_or_create",
-            "builder_operation": "build_or_create",
-            "scaffolded": False,
-            "ham_native_builder": {"status": "unavailable"},
-        }
+        logger.info("ham_native_builder_unavailable reason=unconfigured")
+        return _native_result(status="unavailable", failure_reason="unconfigured")
 
     store = get_builder_source_store()
     job = store.create_import_job(
@@ -221,20 +279,40 @@ def run_hermes_native_build(
     turn = complete_turn or complete_chat_turn
     try:
         raw = turn(_build_native_messages(user_prompt))
-    except GatewayCallError:
+    except GatewayCallError as exc:
         job = store.mark_import_job_failed(
             import_job_id=job.id,
             phase="hermes_native_build",
             error_code="HAM_NATIVE_BUILDER_GATEWAY_ERROR",
             error_message="HAM Native Builder could not reach Hermes.",
         )
-        return {
-            "builder_intent": "build_or_create",
-            "builder_operation": "build_or_create",
-            "scaffolded": False,
-            "ham_native_builder": {"status": "failed"},
-            "import_job_id": job.id,
-        }
+        logger.warning(
+            "ham_native_builder_failed reason=gateway import_job_id=%s gateway_code=%s",
+            job.id,
+            exc.code,
+        )
+        return _native_result(
+            status="failed",
+            failure_reason="gateway",
+            import_job_id=job.id,
+        )
+
+    if _looks_like_mock_assistant_text(raw):
+        job = store.mark_import_job_failed(
+            import_job_id=job.id,
+            phase="hermes_native_build",
+            error_code="HAM_NATIVE_BUILDER_GATEWAY_MOCK",
+            error_message="Mock gateway cannot produce structured native builds.",
+        )
+        logger.warning(
+            "ham_native_builder_failed reason=gateway import_job_id=%s gateway_code=mock",
+            job.id,
+        )
+        return _native_result(
+            status="failed",
+            failure_reason="gateway",
+            import_job_id=job.id,
+        )
 
     payload = _extract_json_object(raw)
     if not payload or str(payload.get("status") or "").strip().lower() != "success":
@@ -244,13 +322,15 @@ def run_hermes_native_build(
             error_code="HAM_NATIVE_BUILDER_INVALID_RESPONSE",
             error_message="HAM Native Builder did not return a valid file bundle.",
         )
-        return {
-            "builder_intent": "build_or_create",
-            "builder_operation": "build_or_create",
-            "scaffolded": False,
-            "ham_native_builder": {"status": "failed"},
-            "import_job_id": job.id,
-        }
+        logger.warning(
+            "ham_native_builder_failed reason=bundle import_job_id=%s detail=invalid_response",
+            job.id,
+        )
+        return _native_result(
+            status="failed",
+            failure_reason="bundle",
+            import_job_id=job.id,
+        )
 
     files, err = _validate_file_bundle(payload)
     if err:
@@ -260,13 +340,16 @@ def run_hermes_native_build(
             error_code="HAM_NATIVE_BUILDER_INVALID_FILES",
             error_message=f"HAM Native Builder file bundle failed validation: {err}.",
         )
-        return {
-            "builder_intent": "build_or_create",
-            "builder_operation": "build_or_create",
-            "scaffolded": False,
-            "ham_native_builder": {"status": "failed"},
-            "import_job_id": job.id,
-        }
+        logger.warning(
+            "ham_native_builder_failed reason=bundle import_job_id=%s detail=%s",
+            job.id,
+            err,
+        )
+        return _native_result(
+            status="failed",
+            failure_reason="bundle",
+            import_job_id=job.id,
+        )
 
     files = ensure_preview_bootstrap_files(files, project_name=user_prompt)
     artifact_verification = verify_builder_scaffold_artifact(
@@ -282,14 +365,16 @@ def run_hermes_native_build(
             error_code="HAM_NATIVE_BUILDER_VERIFY_FAILED",
             error_message="HAM Native Builder output did not pass verification.",
         )
-        return {
-            "builder_intent": "build_or_create",
-            "builder_operation": "build_or_create",
-            "scaffolded": False,
-            "ham_native_builder": {"status": "failed"},
-            "import_job_id": job.id,
-            "artifact_verification": artifact_verification,
-        }
+        logger.warning(
+            "ham_native_builder_failed reason=verification import_job_id=%s",
+            job.id,
+        )
+        return _native_result(
+            status="failed",
+            failure_reason="verification",
+            import_job_id=job.id,
+            extra={"artifact_verification": artifact_verification},
+        )
 
     digest = hashlib.sha256(json.dumps(files, sort_keys=True).encode("utf-8")).hexdigest()
     artifact_uri, zip_size = _materialize_inline_files_as_zip_artifact(
@@ -365,4 +450,8 @@ def run_hermes_native_build(
     }
 
 
-__all__ = ["hermes_native_builder_ready", "run_hermes_native_build"]
+__all__ = [
+    "ham_native_builder_user_message",
+    "hermes_native_builder_ready",
+    "run_hermes_native_build",
+]

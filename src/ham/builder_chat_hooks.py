@@ -406,11 +406,6 @@ _DEFAULT_BUILDER_ENV = "HAM_DEFAULT_BUILDER"
 # entry point is not wired. See HARNESS_FIRST_ARCHITECTURE_PLAN.md §8/§9.
 _HANDOFF_SUPPORTED_BUILDERS: frozenset[str] = frozenset({"opencode", "factory_droid"})
 
-_BUILDER_CHOOSE_MESSAGE = (
-    "HAM Native Builder is not ready yet."
-    "\n\n"
-)
-
 _HAM_NATIVE_BUILDING_MESSAGE = (
     "HAM is building natively through Hermes. I'll prepare the Workbench preview on the right.\n\n"
 )
@@ -464,7 +459,10 @@ def _run_ham_native_builder_turn(
     directive_prefix: str,
     success_message: str = _HAM_NATIVE_BUILDING_MESSAGE,
 ) -> tuple[str, dict[str, Any]]:
-    from src.ham.builder_native_hermes import run_hermes_native_build
+    from src.ham.builder_native_hermes import (
+        ham_native_builder_user_message,
+        run_hermes_native_build,
+    )
 
     native = run_hermes_native_build(
         workspace_id=workspace_id,
@@ -481,7 +479,8 @@ def _run_ham_native_builder_turn(
     }
     if native.get("scaffolded"):
         return f"{directive_prefix}{success_message}", out
-    return f"{directive_prefix}{_BUILDER_CHOOSE_MESSAGE}", out
+    failure_copy = ham_native_builder_user_message(native.get("ham_native_builder"))
+    return f"{directive_prefix}{failure_copy}", out
 
 
 def _selected_builder_ready(

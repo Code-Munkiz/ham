@@ -165,6 +165,33 @@ def test_selected_cursor_uses_separate_flow_copy_and_no_handoff(_empty_store) ->
     assert "own build flow" in prefix
 
 
+def test_no_selection_native_gateway_failure_shows_reachability_copy(_empty_store) -> None:
+    with (
+        patch(f"{_HOOKS}._selected_builder_for_workspace", return_value=None),
+        patch(f"{_HOOKS}.configured_default_builder", return_value=None),
+        patch(
+            "src.ham.builder_native_hermes.run_hermes_native_build",
+            return_value={
+                "builder_intent": "build_or_create",
+                "builder_operation": "build_or_create",
+                "scaffolded": False,
+                "ham_native_builder": {"status": "failed", "failure_reason": "gateway"},
+                "import_job_id": "ijob_test",
+            },
+        ),
+        patch(
+            "src.ham.builder_chat_scaffold.maybe_chat_scaffold_for_turn",
+            side_effect=_raise_if_called,
+        ) as scaffold_mock,
+    ):
+        prefix, meta = _run("build me a tetris game")
+    scaffold_mock.assert_not_called()
+    assert meta.get("ham_native_builder", {}).get("failure_reason") == "gateway"
+    assert prefix.startswith("HAM Native Builder could not reach the Hermes runtime.")
+    for token in _FORBIDDEN_TOKENS:
+        assert token not in prefix.lower()
+
+
 def test_no_selection_no_default_routes_to_native_unavailable_and_blocks_scaffold(_empty_store) -> None:
     with (
         patch(f"{_HOOKS}._selected_builder_for_workspace", return_value=None),
