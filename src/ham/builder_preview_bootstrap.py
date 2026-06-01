@@ -17,6 +17,27 @@ _PREVIEW_DEV_SCRIPT = "vite build && vite preview"
 _PREVIEW_BUILD_SCRIPT = "vite build"
 _PREVIEW_PREVIEW_SCRIPT = "vite preview"
 
+_DEFAULT_APP_TSX = (
+    "export default function App() {\n"
+    "  return (\n"
+    "    <main style={{ fontFamily: 'system-ui, sans-serif', padding: '2rem' }}>\n"
+    "      HAM preview is ready.\n"
+    "    </main>\n"
+    "  );\n"
+    "}\n"
+)
+_DEFAULT_MAIN_TSX = (
+    "import React from 'react';\n"
+    "import ReactDOM from 'react-dom/client';\n"
+    "import App from './App';\n"
+    "ReactDOM.createRoot(document.getElementById('root')!).render(\n"
+    "  <React.StrictMode>\n"
+    "    <App />\n"
+    "  </React.StrictMode>,\n"
+    ");\n"
+)
+_DEFAULT_STYLES_CSS = "body { margin: 0; }\n"
+
 
 def build_vite_bootstrap_files(*, title: str, safe_pkg: str) -> dict[str, str]:
     """Return package.json, index.html, and vite.config.ts for cloud preview."""
@@ -160,6 +181,13 @@ def ensure_preview_bootstrap_files(files: dict[str, str], *, project_name: str) 
     for key in ("package.json", "vite.config.ts", "index.html"):
         if key not in out:
             out[key] = bootstrap[key]
+    for key, content in (
+        ("src/main.tsx", _DEFAULT_MAIN_TSX),
+        ("src/App.tsx", _DEFAULT_APP_TSX),
+        ("src/styles.css", _DEFAULT_STYLES_CSS),
+    ):
+        if key not in out:
+            out[key] = content
     out = repair_package_json(out)
     out = normalize_preview_scripts(out)
     out = normalize_esm_config_extensions(out)

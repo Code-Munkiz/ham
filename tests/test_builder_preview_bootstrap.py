@@ -29,6 +29,18 @@ def test_ensure_preview_bootstrap_adds_missing_files() -> None:
     assert out["index.html"] == files["index.html"]
 
 
+def test_ensure_preview_bootstrap_adds_entry_files_when_missing() -> None:
+    files = {
+        "src/App.tsx": "export default function App() { return <main>Only app</main>; }\n",
+    }
+    out = ensure_preview_bootstrap_files(files, project_name="Native Preview")
+    assert "src/main.tsx" in out
+    assert "src/App.tsx" in out
+    assert "Only app" in out["src/App.tsx"]
+    assert "index.html" in out
+    assert "/src/main.tsx" in out["index.html"]
+
+
 def test_ensure_preview_bootstrap_adds_index_html_when_missing() -> None:
     files = {
         "src/App.tsx": "export default function App() { return null; }\n",

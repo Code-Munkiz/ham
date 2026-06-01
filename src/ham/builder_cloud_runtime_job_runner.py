@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from src.ham.builder_runtime_worker import execute_cloud_runtime_job, get_cloud_runtime_provider_mode
 from src.persistence.builder_runtime_job_store import CloudRuntimeJob, get_builder_runtime_job_store
@@ -86,7 +89,17 @@ def run_persist_builder_cloud_runtime_job(
             )
         )
     result = execute_cloud_runtime_job(job)
-    saved_job = job_store.upsert_cloud_runtime_job(result.job)
+    saved_job = result.job
+    if str(saved_job.status or "").strip().lower() in {"failed", "unsupported"}:
+        logger.warning(
+            "cloud_runtime_job_failed job_id=%s status=%s error_code=%s phase=%s provider=%s",
+            saved_job.id,
+            saved_job.status,
+            saved_job.error_code,
+            saved_job.phase,
+            saved_job.provider,
+        )
+    saved_job = job_store.upsert_cloud_runtime_job(saved_job)
     if result.usage_event is not None:
         get_builder_usage_event_store().append_usage_event(
             UsageEvent(
