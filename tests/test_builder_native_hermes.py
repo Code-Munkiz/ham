@@ -455,3 +455,40 @@ def test_native_module_does_not_use_conversational_chat_turn() -> None:
 
     assert hasattr(native, "complete_artifact_turn")
     assert not hasattr(native, "complete_chat_turn")
+
+
+def test_hermes_native_build_stream_max_duration_maps_to_gateway(tmp_path, monkeypatch) -> None:
+    """An artifact STREAM_MAX_DURATION timeout surfaces as a safe gateway failure (no internals)."""
+    _native_env(tmp_path, monkeypatch)
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+
+    def _fake_artifact(messages, *, timeout_sec=None, diag=None):
+        if diag is not None:
+            diag["artifact_mode"] = "json_mode"
+            diag["artifact_transport"] = "non_streaming"
+            diag["model_channel"] = "default"
+        raise GatewayCallError("STREAM_MAX_DURATION", "No completion within 300s wall clock")
+
+    monkeypatch.setattr(
+        "src.ham.builder_native_hermes.complete_artifact_turn",
+        _fake_artifact,
+    )
+    try:
+        result = run_hermes_native_build(
+            workspace_id="ws_native",
+            project_id="proj_native",
+            session_id="sess_native",
+            user_prompt="build a small native app",
+            created_by="user_native",
+        )
+    finally:
+        set_builder_source_store_for_tests(None)
+
+    assert result["scaffolded"] is False
+    assert result["ham_native_builder"] == {"status": "failed", "failure_reason": "gateway"}
+    msg = ham_native_builder_user_message(result["ham_native_builder"])
+    assert msg.startswith("HAM Native Builder could not reach the Hermes runtime.")
+    haystack = (msg + json.dumps(result, default=str)).lower()
+    for token in ("registry_v2", "proposal_digest", "stream_max_duration", "inline_files"):
+        assert token not in haystack

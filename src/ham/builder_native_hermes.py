@@ -478,10 +478,12 @@ def run_hermes_native_build(
             )
             logger.warning(
                 "ham_native_builder_failed reason=gateway import_job_id=%s gateway_code=%s "
-                "artifact_mode=%s repair_attempted=%s",
+                "artifact_mode=%s artifact_transport=%s elapsed_ms=%s repair_attempted=%s",
                 job.id,
                 exc.code,
                 gateway_diag.get("artifact_mode") or "json_mode",
+                gateway_diag.get("artifact_transport") or "unknown",
+                gateway_diag.get("elapsed_ms") if gateway_diag.get("elapsed_ms") is not None else "n/a",
                 repair_attempted,
             )
             return _native_result(
@@ -544,7 +546,7 @@ def run_hermes_native_build(
             "ham_native_builder_failed reason=bundle import_job_id=%s detail=%s "
             "first_attempt_json_found=%s first_attempt_files_found=%s repair_attempted=%s "
             "repair_json_found=%s repair_files_found=%s validation_error_kind=%s "
-            "artifact_mode=%s gateway_capability_detected=%s model_channel=%s",
+            "artifact_mode=%s artifact_transport=%s gateway_capability_detected=%s model_channel=%s",
             job.id,
             bundle_detail,
             first_json_found,
@@ -554,6 +556,7 @@ def run_hermes_native_build(
             repair_files_found,
             validation_error_kind or bundle_detail,
             gateway_diag.get("artifact_mode") or ("injected" if injected else "unavailable"),
+            gateway_diag.get("artifact_transport") or "unknown",
             gateway_diag.get("gateway_capability_detected") or "unknown",
             gateway_diag.get("model_channel") or "default",
         )
@@ -651,11 +654,14 @@ def run_hermes_native_build(
     )
     logger.info(
         "ham_native_builder_succeeded import_job_id=%s file_count=%d "
-        "artifact_mode=%s gateway_capability_detected=%s model_channel=%s "
+        "artifact_mode=%s artifact_transport=%s elapsed_ms=%s "
+        "gateway_capability_detected=%s model_channel=%s "
         "first_attempt_json_found=%s first_attempt_files_found=%s repair_attempted=%s",
         job.id,
         len(files),
         gateway_diag.get("artifact_mode") or ("injected" if injected else "unavailable"),
+        gateway_diag.get("artifact_transport") or "unknown",
+        gateway_diag.get("elapsed_ms") if gateway_diag.get("elapsed_ms") is not None else "n/a",
         gateway_diag.get("gateway_capability_detected") or "unknown",
         gateway_diag.get("model_channel") or "default",
         first_json_found,

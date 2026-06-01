@@ -27,6 +27,15 @@ DEFAULT_STREAM_MAX_EXTRA_SEC = 120.0
 BUILDER_MODEL_ENV = "HERMES_BUILDER_MODEL"
 _ARTIFACT_RESPONSE_FORMAT: dict[str, Any] = {"type": "json_object"}
 
+# Artifact transport budget — deliberately independent of the user-chat SSE
+# stall/wall guards (HAM_CHAT_HTTP_*) that keep conversational replies snappy.
+# A native build returns one large file bundle, so artifact mode prefers a single
+# non-streaming completion with a generous blocking budget; this avoids
+# STREAM_MAX_DURATION when the bundle takes longer than the chat stream cap.
+ARTIFACT_TIMEOUT_ENV = "HERMES_ARTIFACT_TIMEOUT_SEC"
+ARTIFACT_STREAM_ENV = "HERMES_ARTIFACT_STREAM"
+DEFAULT_ARTIFACT_TIMEOUT_SEC = 300.0
+
 logger = logging.getLogger(__name__)
 
 # Retry primary Hermes request with HAM_CHAT_FALLBACK_MODEL on overload / transport / stall errors.
@@ -180,8 +189,15 @@ def _iter_http_chat_completions(
     messages: list[dict[str, Any]],
     timeout_sec: float,
     response_format: dict[str, Any] | None = None,
+    stall_sec: float | None = None,
+    max_wall_sec: float | None = None,
 ) -> Iterator[str]:
-    """Single POST to Hermes /v1/chat/completions (streaming SSE)."""
+    """Single POST to Hermes /v1/chat/completions (streaming SSE).
+
+    ``stall_sec`` / ``max_wall_sec`` default to the user-chat guards
+    (``HAM_CHAT_HTTP_*``); callers (e.g. the artifact channel) may override them
+    with a transport-specific budget without changing conversational behavior.
+    """
     url = f"{base}/v1/chat/completions"
     headers: dict[str, str] = {"Content-Type": "application/json"}
     if api_key:
@@ -189,8 +205,8 @@ def _iter_http_chat_completions(
 
     payload = _http_chat_payload(model, messages, response_format)
 
-    stall_sec = _stream_stall_sec()
-    max_wall_sec = _stream_max_wall_sec(timeout_sec)
+    stall_sec = _stream_stall_sec() if stall_sec is None else max(0.001, stall_sec)
+    max_wall_sec = _stream_max_wall_sec(timeout_sec) if max_wall_sec is None else max(30.0, max_wall_sec)
     # Per-chunk read timeout catches TCP silence; stall_sec also enforced on empty SSE deltas below.
     connect_pool = min(30.0, max(5.0, stall_sec))
     httpx_timeout = httpx.Timeout(
@@ -482,6 +498,86 @@ def builder_artifact_model_override() -> str | None:
     return raw or None
 
 
+def _artifact_timeout_sec() -> float:
+    """Artifact transport budget (seconds), independent of chat stream guards."""
+    raw = (os.environ.get(ARTIFACT_TIMEOUT_ENV) or "").strip()
+    if raw:
+        try:
+            return max(30.0, min(600.0, float(raw)))
+        except ValueError:
+            pass
+    return DEFAULT_ARTIFACT_TIMEOUT_SEC
+
+
+def _artifact_prefer_streaming() -> bool:
+    """Opt-in to force streaming for artifact mode (default: prefer non-streaming)."""
+    raw = (os.environ.get(ARTIFACT_STREAM_ENV) or "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _http_chat_completion_blocking(
+    *,
+    base: str,
+    api_key: str,
+    model: str,
+    messages: list[dict[str, Any]],
+    timeout_sec: float,
+    response_format: dict[str, Any] | None = None,
+) -> str:
+    """Single non-streaming POST to Hermes /v1/chat/completions (``stream: false``).
+
+    Returns the full assistant content in one blocking response, free of the SSE
+    stall/wall guards used for user chat. Raises ``NON_STREAMING_UNSUPPORTED`` if
+    the gateway does not return a parseable one-shot JSON body (caller may then
+    fall back to streaming). Raw bodies are never logged here.
+    """
+    url = f"{base}/v1/chat/completions"
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    payload: dict[str, Any] = {"model": model, "messages": messages, "stream": False}
+    if response_format is not None:
+        payload["response_format"] = response_format
+
+    connect = min(30.0, max(5.0, timeout_sec))
+    httpx_timeout = httpx.Timeout(
+        connect=connect,
+        read=timeout_sec,
+        write=min(60.0, max(10.0, connect)),
+        pool=connect,
+    )
+    try:
+        with httpx.Client(timeout=httpx_timeout) as client:
+            resp = client.post(url, headers=headers, json=payload)
+    except httpx.TimeoutException as exc:
+        raise GatewayCallError("UPSTREAM_TIMEOUT", f"Gateway request timed out: {exc}") from exc
+    except httpx.RequestError as exc:
+        raise GatewayCallError("UPSTREAM_UNAVAILABLE", f"Gateway connection failed: {exc}") from exc
+
+    if resp.status_code >= 400:
+        raise GatewayCallError(
+            "UPSTREAM_REJECTED",
+            f"Gateway HTTP {resp.status_code}",
+            http_status=resp.status_code,
+        )
+    try:
+        data = resp.json()
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise GatewayCallError(
+            "NON_STREAMING_UNSUPPORTED",
+            "Gateway did not return a one-shot JSON completion body",
+        ) from exc
+    choices = data.get("choices") if isinstance(data, dict) else None
+    if not choices or not isinstance(choices[0], dict):
+        raise GatewayCallError("NON_STREAMING_UNSUPPORTED", "Gateway response had no choices")
+    message = choices[0].get("message") or {}
+    content = message.get("content")
+    if not isinstance(content, str) or not content.strip():
+        raise GatewayCallError("NON_STREAMING_UNSUPPORTED", "Gateway response had no message content")
+    return content.strip()
+
+
 def _artifact_openrouter_turn(
     messages: list[dict[str, Any]],
     *,
@@ -510,6 +606,9 @@ def _artifact_openrouter_turn(
         )
     else:
         model_override = resolve_openrouter_model_name_for_chat()
+    # LiteLLM streaming has its own request timeout (no HAM SSE wall guard).
+    diag["artifact_transport"] = "streaming"
+    start = time.monotonic()
     try:
         text = complete_chat_messages_openrouter(
             messages,
@@ -531,9 +630,11 @@ def _artifact_openrouter_turn(
             raise GatewayCallError("CONFIG_ERROR", str(exc2)) from exc2
         except Exception as exc2:
             raise GatewayCallError("UPSTREAM_REJECTED", str(exc2)) from exc2
+        diag["elapsed_ms"] = round((time.monotonic() - start) * 1000.0, 1)
         diag["artifact_mode"] = "plain_adapter"
         diag["gateway_capability_detected"] = "response_format_unsupported"
         return text
+    diag["elapsed_ms"] = round((time.monotonic() - start) * 1000.0, 1)
     diag["artifact_mode"] = "json_mode"
     diag["gateway_capability_detected"] = "response_format_supported"
     return text
@@ -554,19 +655,45 @@ def _artifact_http_turn(
         )
     api_key = (os.environ.get("HERMES_GATEWAY_API_KEY") or "").strip()
     model = builder_model or (os.environ.get("HERMES_GATEWAY_MODEL") or DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    budget = timeout_sec
+    prefer_streaming = _artifact_prefer_streaming()
 
     def _collect(response_format: dict[str, Any] | None) -> str:
-        return "".join(
-            _iter_http_chat_completions(
-                base=base,
-                api_key=api_key,
-                model=model,
-                messages=messages,
-                timeout_sec=timeout_sec,
-                response_format=response_format,
-            ),
-        ).strip()
+        # Prefer one non-streaming completion (no SSE wall/stall cap); fall back to
+        # streaming with the artifact budget only if the gateway can't do stream=false.
+        start = time.monotonic()
+        try:
+            if not prefer_streaming:
+                diag["artifact_transport"] = "non_streaming"
+                try:
+                    return _http_chat_completion_blocking(
+                        base=base,
+                        api_key=api_key,
+                        model=model,
+                        messages=messages,
+                        timeout_sec=budget,
+                        response_format=response_format,
+                    )
+                except GatewayCallError as exc:
+                    if exc.code != "NON_STREAMING_UNSUPPORTED":
+                        raise
+            diag["artifact_transport"] = "streaming"
+            return "".join(
+                _iter_http_chat_completions(
+                    base=base,
+                    api_key=api_key,
+                    model=model,
+                    messages=messages,
+                    timeout_sec=budget,
+                    response_format=response_format,
+                    stall_sec=budget,
+                    max_wall_sec=budget,
+                ),
+            ).strip()
+        finally:
+            diag["elapsed_ms"] = round((time.monotonic() - start) * 1000.0, 1)
 
+    diag["artifact_mode"] = "json_mode"
     try:
         text = _collect(_ARTIFACT_RESPONSE_FORMAT)
     except GatewayCallError as exc:
@@ -578,7 +705,6 @@ def _artifact_http_turn(
             diag["gateway_capability_detected"] = "response_format_unsupported"
             return text
         raise
-    diag["artifact_mode"] = "json_mode"
     diag["gateway_capability_detected"] = "response_format_supported"
     return text
 
@@ -586,7 +712,7 @@ def _artifact_http_turn(
 def complete_artifact_turn(
     messages: list[dict[str, Any]],
     *,
-    timeout_sec: float = DEFAULT_TIMEOUT_SEC,
+    timeout_sec: float | None = None,
     diag: dict[str, Any] | None = None,
 ) -> str:
     """Private builder artifact channel — distinct from user-facing chat.
@@ -598,15 +724,23 @@ def complete_artifact_turn(
     (capability fallback). This is never used for conversational replies and the
     caller keeps the artifact private.
 
+    Artifact mode prefers a single non-streaming completion with its own budget
+    (``HERMES_ARTIFACT_TIMEOUT_SEC``), independent of the user-chat SSE guards, and
+    only falls back to streaming if the gateway can't do ``stream: false`` (or when
+    ``HERMES_ARTIFACT_STREAM`` opts in). This avoids ``STREAM_MAX_DURATION`` on large
+    bundles while leaving conversational streaming untouched.
+
     ``diag`` (optional) is populated with non-sensitive routing facts for logging:
     ``artifact_mode`` (``json_mode``|``plain_adapter``|``mock``),
-    ``gateway_capability_detected``, and ``model_channel`` (``builder``|``default``).
-    Raw model output and file contents are never written into ``diag``.
+    ``artifact_transport`` (``non_streaming``|``streaming``|``mock``),
+    ``gateway_capability_detected``, ``model_channel`` (``builder``|``default``), and
+    ``elapsed_ms``. Raw model output and file contents are never written into ``diag``.
     """
     if not messages:
         raise GatewayCallError("INVALID_REQUEST", "messages must not be empty")
 
     sink = diag if diag is not None else {}
+    budget = timeout_sec if timeout_sec is not None else _artifact_timeout_sec()
     builder_model = builder_artifact_model_override()
     sink["model_channel"] = "builder" if builder_model else "default"
 
@@ -614,11 +748,12 @@ def complete_artifact_turn(
     if mode == "mock":
         sink["artifact_mode"] = "mock"
         sink["gateway_capability_detected"] = "mock"
+        sink["artifact_transport"] = "mock"
         return _mock_assistant_text(messages)
     if mode == "openrouter":
         return _artifact_openrouter_turn(
-            messages, builder_model=builder_model, timeout_sec=timeout_sec, diag=sink
+            messages, builder_model=builder_model, timeout_sec=budget, diag=sink
         )
     return _artifact_http_turn(
-        messages, builder_model=builder_model, timeout_sec=timeout_sec, diag=sink
+        messages, builder_model=builder_model, timeout_sec=budget, diag=sink
     )
