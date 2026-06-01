@@ -12,7 +12,7 @@ from pathlib import Path
 from threading import Lock, RLock
 from time import monotonic
 from types import SimpleNamespace
-from typing import Any, Literal, Self
+from typing import Any, Callable, Literal, Self
 from uuid import uuid4
 
 import httpx
@@ -1392,17 +1392,103 @@ def _native_build_started_turn(builder_meta: dict[str, Any] | None) -> bool:
     """Native Builder v2 started an async build job — chat must return immediately.
 
     This is a dedicated short-circuit guard: when ``ham_native_builder.status``
-    is ``"started"``, the chat stream/emitted response MUST terminate without
-    continuing to any Hermes gateway streaming path or awaiting worker execution.
-    Belt-and-suspenders on top of ``_builder_harness_first_turn`` — this check
-    is specific to the native build ``started`` state so it cannot be bypassed
-    by any meta key overlap or code-path reordering.
+    is ``"started"`` (or the hook sets ``chat_native_build_terminal``), the chat
+    stream/emitted response MUST terminate without continuing to any Hermes
+    gateway streaming path or awaiting worker execution.
     """
     meta = builder_meta or {}
+    if meta.get("chat_native_build_terminal") is True:
+        return True
     native_block = meta.get("ham_native_builder")
     if not isinstance(native_block, dict):
         return False
     return str(native_block.get("status") or "").strip().lower() == "started"
+
+
+def _safe_builder_meta_keys_for_log(builder_meta: dict[str, Any] | None) -> list[str]:
+    if not builder_meta:
+        return []
+    return sorted(str(k) for k in builder_meta.keys())
+
+
+def _log_native_build_chat_short_circuit(
+    *,
+    stream_path: str,
+    builder_meta: dict[str, Any] | None,
+) -> None:
+    _LOG.warning(
+        "ham_native_builder_v2_started_chat_return",
+        extra={
+            "chat_stream_short_circuited": True,
+            "builder_hook_result_status": "started",
+            "stream_path": stream_path,
+            "builder_hook_meta_keys": _safe_builder_meta_keys_for_log(builder_meta),
+            "selected_builder": "native",
+        },
+    )
+
+
+def _native_build_started_done_payload(
+    *,
+    sid: str,
+    msgs: list[Any],
+    stream_execution_mode: dict[str, Any],
+    stream_active_meta: dict[str, Any] | None,
+    builder_meta: dict[str, Any] | None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "type": "done",
+        "session_id": sid,
+        "messages": msgs,
+        "actions": [],
+        "operator_result": None,
+        "execution_mode": stream_execution_mode,
+    }
+    if stream_active_meta:
+        payload["active_agent"] = stream_active_meta
+    if builder_meta is not None:
+        payload["builder"] = builder_meta
+    _chat_payload_attach_artifact_verification(payload, builder_meta)
+    return payload
+
+
+def _build_native_build_started_stream_response(
+    *,
+    sid: str,
+    started_msg: str,
+    msgs: list[Any],
+    stream_execution_mode: dict[str, Any],
+    stream_active_meta: dict[str, Any] | None,
+    builder_meta: dict[str, Any] | None,
+    release_stream_lock: Callable[[], None],
+    stream_path: str,
+) -> StreamingResponse:
+    _log_native_build_chat_short_circuit(stream_path=stream_path, builder_meta=builder_meta)
+
+    def native_build_started_only():
+        try:
+            yield json.dumps({"type": "session", "session_id": sid}) + "\n"
+            yield json.dumps({"type": "delta", "text": started_msg}) + "\n"
+            yield json.dumps(
+                _native_build_started_done_payload(
+                    sid=sid,
+                    msgs=msgs,
+                    stream_execution_mode=stream_execution_mode,
+                    stream_active_meta=stream_active_meta,
+                    builder_meta=builder_meta,
+                )
+            ) + "\n"
+        finally:
+            release_stream_lock()
+
+    return StreamingResponse(
+        native_build_started_only(),
+        media_type="application/x-ndjson; charset=utf-8",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 def _builder_plan_pending_turn(builder_meta: dict[str, Any] | None) -> bool:
@@ -1892,6 +1978,23 @@ async def post_chat(
         and "acknowledgement_template" not in builder_meta
     ):
         builder_meta["acknowledgement_template"] = builder_prefix
+    # Earliest REST terminal return: native build started off the request path.
+    if _native_build_started_turn(builder_meta):
+        started_msg = str(builder_prefix or "").strip()
+        _log_native_build_chat_short_circuit(stream_path="rest", builder_meta=builder_meta)
+        store.append_turns(sid, [ChatTurn(role="assistant", content=started_msg)])
+        execution_mode = _execution_mode_payload(body_eff, last_user_plain=last_user_plain)
+        return ChatResponse(
+            session_id=sid,
+            messages=store.list_messages(sid),
+            actions=[],
+            active_agent=ChatActiveAgentMeta.model_validate(active_meta) if active_meta else None,
+            operator_result=None,
+            execution_mode=execution_mode,
+            builder=builder_meta,
+            artifact_verification=_artifact_verification_payload(builder_meta),
+            hermes_http_context_budget=None,
+        )
     or_override, litellm_hint_key, litellm_http_bypass, http_override = (
         _resolve_chat_openrouter_route(
             body=body,
@@ -1905,33 +2008,6 @@ async def post_chat(
         body=body_eff,
         last_user_plain=last_user_plain,
     )
-    # --- Native Builder v2 started short-circuit ---
-    # When the native builder v2 started an async job, the REST response must
-    # return immediately. No Hermes conversational gateway call, no worker
-    # execution is awaited. Belt-and-suspenders on top of the
-    # _builder_harness_first_turn / _builder_grounded_status_turn checks.
-    if _native_build_started_turn(builder_meta):
-        started_msg = str(builder_prefix or "").strip()
-        _LOG.info(
-            "ham_native_builder_v2_started_chat_return",
-            extra={
-                "chat_stream_short_circuited": True,
-                "builder_hook_result_status": "started",
-                "selected_builder": "native",
-            },
-        )
-        store.append_turns(sid, [ChatTurn(role="assistant", content=started_msg)])
-        return ChatResponse(
-            session_id=sid,
-            messages=store.list_messages(sid),
-            actions=[],
-            active_agent=ChatActiveAgentMeta.model_validate(active_meta) if active_meta else None,
-            operator_result=None,
-            execution_mode=execution_mode,
-            builder=builder_meta,
-            artifact_verification=_artifact_verification_payload(builder_meta),
-            hermes_http_context_budget=None,
-        )
     if _builder_clarification_turn(builder_meta):
         clar_msg = str(builder_prefix or "").strip() or "What should I change?\n\n"
         store.append_turns(sid, [ChatTurn(role="assistant", content=clar_msg)])
@@ -2132,6 +2208,22 @@ def post_chat_stream(
         and "acknowledgement_template" not in builder_meta
     ):
         builder_meta["acknowledgement_template"] = builder_prefix
+    # Earliest non-deferred stream terminal return (before lock / gateway streaming).
+    if not defer_builder_hook and _native_build_started_turn(builder_meta):
+        started_msg = str(builder_prefix or "").strip()
+        store.append_turns(sid, [ChatTurn(role="assistant", content=started_msg)])
+        msgs = store.list_messages(sid)
+        stream_execution_mode = _execution_mode_payload(body_eff, last_user_plain=last_user_plain)
+        return _build_native_build_started_stream_response(
+            sid=sid,
+            started_msg=started_msg,
+            msgs=msgs,
+            stream_execution_mode=stream_execution_mode,
+            stream_active_meta=stream_active_meta,
+            builder_meta=builder_meta,
+            release_stream_lock=lambda: None,
+            stream_path="non_deferred",
+        )
     or_override, litellm_hint_key, litellm_http_bypass, http_override = (
         _resolve_chat_openrouter_route(
             body=body,
@@ -2200,41 +2292,32 @@ def post_chat_stream(
                         and "acknowledgement_template" not in builder_meta
                     ):
                         builder_meta["acknowledgement_template"] = builder_prefix
+                    # Earliest deferred terminal return (before any other builder branch).
+                    if _native_build_started_turn(builder_meta):
+                        started_msg = str(builder_prefix or "").strip()
+                        _log_native_build_chat_short_circuit(
+                            stream_path="deferred",
+                            builder_meta=builder_meta,
+                        )
+                        store.append_turns(sid, [ChatTurn(role="assistant", content=started_msg)])
+                        msgs = store.list_messages(sid)
+                        yield json.dumps({"type": "delta", "text": started_msg}) + "\n"
+                        yield json.dumps(
+                            _native_build_started_done_payload(
+                                sid=sid,
+                                msgs=msgs,
+                                stream_execution_mode=stream_execution_mode,
+                                stream_active_meta=stream_active_meta,
+                                builder_meta=builder_meta,
+                            )
+                        ) + "\n"
+                        return
                     if _builder_clarification_turn(builder_meta):
                         clar_msg = str(builder_prefix or "").strip() or "What should I change?\n\n"
                         store.append_turns(sid, [ChatTurn(role="assistant", content=clar_msg)])
                         msgs = store.list_messages(sid)
                         yield json.dumps({"type": "delta", "text": clar_msg}) + "\n"
                         payload: dict[str, Any] = {
-                            "type": "done",
-                            "session_id": sid,
-                            "messages": msgs,
-                            "actions": [],
-                            "operator_result": None,
-                            "execution_mode": stream_execution_mode,
-                        }
-                        if stream_active_meta:
-                            payload["active_agent"] = stream_active_meta
-                        if builder_meta is not None:
-                            payload["builder"] = builder_meta
-                        _chat_payload_attach_artifact_verification(payload, builder_meta)
-                        yield json.dumps(payload) + "\n"
-                        return
-                    # --- Native Builder v2 started deferred short-circuit ---
-                    if _native_build_started_turn(builder_meta):
-                        started_msg = str(builder_prefix or "").strip()
-                        _LOG.info(
-                            "ham_native_builder_v2_started_chat_return",
-                            extra={
-                                "chat_stream_short_circuited": True,
-                                "builder_hook_result_status": "started",
-                                "selected_builder": "native",
-                            },
-                        )
-                        store.append_turns(sid, [ChatTurn(role="assistant", content=started_msg)])
-                        msgs = store.list_messages(sid)
-                        yield json.dumps({"type": "delta", "text": started_msg}) + "\n"
-                        payload = {
                             "type": "done",
                             "session_id": sid,
                             "messages": msgs,
@@ -2422,54 +2505,6 @@ def post_chat_stream(
 
             return StreamingResponse(
                 clarify_only(),
-                media_type="application/x-ndjson; charset=utf-8",
-                headers={
-                    "Cache-Control": "no-cache",
-                    "X-Accel-Buffering": "no",
-                },
-            )
-        # --- Native Builder v2 started stream short-circuit ---
-        # When the native builder v2 started an async job, the stream must
-        # emit safe copy and close immediately. No Hermes conversational
-        # gateway streaming call continues; no worker execution is awaited.
-        # Belt-and-suspenders on top of _builder_harness_first_turn so the
-        # short-circuit is guaranteed even if other meta keys shift.
-        if _native_build_started_turn(builder_meta):
-            started_msg = str(builder_prefix or "").strip()
-            _LOG.info(
-                "ham_native_builder_v2_started_chat_return",
-                extra={
-                    "chat_stream_short_circuited": True,
-                    "builder_hook_result_status": "started",
-                    "selected_builder": "native",
-                },
-            )
-            store.append_turns(sid, [ChatTurn(role="assistant", content=started_msg)])
-            msgs = store.list_messages(sid)
-
-            def native_build_started_only():
-                try:
-                    yield json.dumps({"type": "session", "session_id": sid}) + "\n"
-                    yield json.dumps({"type": "delta", "text": started_msg}) + "\n"
-                    payload: dict[str, Any] = {
-                        "type": "done",
-                        "session_id": sid,
-                        "messages": msgs,
-                        "actions": [],
-                        "operator_result": None,
-                        "execution_mode": stream_execution_mode,
-                    }
-                    if stream_active_meta:
-                        payload["active_agent"] = stream_active_meta
-                    if builder_meta is not None:
-                        payload["builder"] = builder_meta
-                    _chat_payload_attach_artifact_verification(payload, builder_meta)
-                    yield json.dumps(payload) + "\n"
-                finally:
-                    release_stream_lock()
-
-            return StreamingResponse(
-                native_build_started_only(),
                 media_type="application/x-ndjson; charset=utf-8",
                 headers={
                     "Cache-Control": "no-cache",

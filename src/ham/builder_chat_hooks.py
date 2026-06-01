@@ -484,9 +484,15 @@ def _run_ham_native_builder_turn(
         "builder_harness_first": True,
     }
     status = str((native.get("ham_native_builder") or {}).get("status") or "").strip().lower()
-    _LOG.info(
-        "builder_hook_result_status status=%s selected_builder=native",
-        status,
+    if status == "started":
+        out["chat_native_build_terminal"] = True
+    _LOG.warning(
+        "ham_native_builder_v2_started_source_return",
+        extra={
+            "builder_hook_result_status": status,
+            "selected_builder": "native",
+            "builder_hook_meta_keys": sorted(str(k) for k in out.keys()),
+        },
     )
     if status == "started":
         return f"{directive_prefix}{success_message}", out

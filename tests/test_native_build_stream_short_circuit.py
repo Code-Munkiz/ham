@@ -11,13 +11,15 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.api.server import app
-from src.ham.clerk_auth import HamActor
 from src.persistence.builder_source_store import (
     BuilderSourceStore,
     set_builder_source_store_for_tests,
 )
 
 client = TestClient(app)
+
+_HOOKS = "src.ham.builder_chat_hooks"
+_NATIVE_JOB = "src.ham.builder_native_hermes.start_native_build_job"
 
 _FORBIDDEN_TOKENS = (
     "registry_v2",
@@ -44,6 +46,18 @@ def _parse_ndjson(text: str) -> list[dict]:
     return out
 
 
+def _real_start_native_build_job_return(**_kwargs: object) -> dict:
+    """Return shape from ``start_native_build_job`` / ``_native_result`` (not hand-built chat meta)."""
+    return {
+        "builder_intent": "build_or_create",
+        "builder_operation": "build_or_create",
+        "scaffolded": False,
+        "ham_native_builder": {"status": "started"},
+        "import_job_id": "ijob_real_hook",
+        "native_build_job_id": "ijob_real_hook",
+    }
+
+
 def _native_started_meta() -> dict:
     return {
         "builder_intent": "build_or_create",
@@ -54,6 +68,7 @@ def _native_started_meta() -> dict:
         "native_build_job_id": "ijob_short_circuit",
         "selected_builder_state": "native",
         "builder_harness_first": True,
+        "chat_native_build_terminal": True,
     }
 
 
@@ -85,7 +100,128 @@ def mock_mode(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Stream short-circuit
+# Real hook return shape (patch only start_native_build_job)
+# ---------------------------------------------------------------------------
+
+
+def test_real_hook_native_started_non_deferred_stream_closes_immediately(
+    mock_mode, _empty_store, monkeypatch
+) -> None:
+    """Non-deferred stream uses the live hook meta from ``start_native_build_job``."""
+    stream_calls = {"n": 0}
+
+    def _must_not_stream(*_a, **_k):
+        stream_calls["n"] += 1
+        raise AssertionError("stream_chat_turn must not run after native build started")
+
+    def _scaffold_must_not_run(**_kw: object) -> object:
+        raise AssertionError("scaffold must not run for native started")
+
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", _must_not_stream)
+    with (
+        patch(_NATIVE_JOB, side_effect=_real_start_native_build_job_return) as native_mock,
+        patch(f"{_HOOKS}._selected_builder_for_workspace", return_value=None),
+        patch(f"{_HOOKS}.configured_default_builder", return_value=None),
+        patch(
+            "src.ham.builder_chat_scaffold.maybe_chat_scaffold_for_turn",
+            side_effect=_scaffold_must_not_run,
+        ),
+    ):
+        res = client.post(
+            "/api/chat/stream",
+            json={
+                "messages": [{"role": "user", "content": "build me a calculator"}],
+                "workspace_id": "ws_real_hook",
+                "project_id": "proj_real_hook",
+            },
+        )
+    native_mock.assert_called_once()
+    assert res.status_code == 200, res.text
+    assert stream_calls["n"] == 0
+    events = _parse_ndjson(res.text)
+    done = [e for e in events if e["type"] == "done"][0]
+    builder = done.get("builder") or {}
+    assert builder.get("ham_native_builder", {}).get("status") == "started"
+    assert builder.get("chat_native_build_terminal") is True
+    assert "HAM started the native build" in done["messages"][-1]["content"]
+
+
+def test_real_hook_native_started_deferred_stream_closes_immediately(
+    mock_mode, _empty_store, monkeypatch
+) -> None:
+    """Deferred /api/chat/stream closes after native job started (real hook meta)."""
+    monkeypatch.setenv(
+        "OPENROUTER_API_KEY",
+        "sk-or-v1-testkey000000000000000000000000000000",
+    )
+    stream_calls = {"n": 0}
+
+    def _must_not_stream(*_a, **_k):
+        stream_calls["n"] += 1
+        raise AssertionError("stream_chat_turn must not run after native build started")
+
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", _must_not_stream)
+    with patch(_NATIVE_JOB, side_effect=_real_start_native_build_job_return) as native_mock:
+        res = client.post(
+            "/api/chat/stream",
+            json={
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "build me a calculator, quick preview",
+                    }
+                ],
+                "workspace_id": "ws_defer_real",
+                "project_id": "proj_defer_real",
+            },
+        )
+    native_mock.assert_called_once()
+    assert res.status_code == 200, res.text
+    assert stream_calls["n"] == 0
+    events = _parse_ndjson(res.text)
+    assert events[0]["type"] == "session"
+    assert events[1]["type"] == "delta"
+    assert "quick preview" in events[1]["text"].lower()
+    done = [e for e in events if e["type"] == "done"][0]
+    builder = done.get("builder") or {}
+    assert builder.get("chat_native_build_terminal") is True
+    assert "HAM Native Builder" in done["messages"][-1]["content"]
+
+
+def test_real_hook_native_started_rest_post_chat_returns_immediately(
+    mock_mode, _empty_store, monkeypatch
+) -> None:
+    """REST /api/chat short-circuits from the live hook return shape."""
+    complete_calls = {"n": 0}
+
+    def _must_not_complete(*_a, **_k):
+        complete_calls["n"] += 1
+        raise AssertionError("complete_chat_turn must not run after native build started")
+
+    monkeypatch.setattr("src.api.chat.complete_chat_turn", _must_not_complete)
+    with (
+        patch(_NATIVE_JOB, side_effect=_real_start_native_build_job_return) as native_mock,
+        patch(f"{_HOOKS}._selected_builder_for_workspace", return_value=None),
+        patch(f"{_HOOKS}.configured_default_builder", return_value=None),
+    ):
+        res = client.post(
+            "/api/chat",
+            json={
+                "messages": [{"role": "user", "content": "build me a calculator"}],
+                "workspace_id": "ws_real_rest",
+                "project_id": "proj_real_rest",
+            },
+        )
+    native_mock.assert_called_once()
+    assert res.status_code == 200, res.text
+    assert complete_calls["n"] == 0
+    body = res.json()
+    assert body["builder"]["chat_native_build_terminal"] is True
+    assert "HAM started the native build" in body["messages"][-1]["content"]
+
+
+# ---------------------------------------------------------------------------
+# Stream short-circuit (hand-built meta regression guards)
 # ---------------------------------------------------------------------------
 
 
