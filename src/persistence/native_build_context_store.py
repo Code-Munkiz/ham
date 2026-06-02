@@ -123,6 +123,7 @@ class NativeBuildContextStore:
 _STORE_SINGLETON: list[NativeBuildContextStoreProtocol | None] = [None]
 
 _BACKEND_ENV = "HAM_NATIVE_BUILD_CONTEXT_STORE_BACKEND"
+_BUILDER_SOURCE_BACKEND_ENV = "HAM_BUILDER_SOURCE_STORE_BACKEND"
 
 
 def build_native_build_context_store() -> NativeBuildContextStoreProtocol:
@@ -130,8 +131,15 @@ def build_native_build_context_store() -> NativeBuildContextStoreProtocol:
 
     Defaults to the file-backed implementation. ``HAM_NATIVE_BUILD_CONTEXT_STORE_BACKEND
     =firestore`` selects :class:`FirestoreNativeBuildContextStore` (lazy import).
+
+    When only the builder *source* store is set to Firestore, execution context
+    must share that backend too (otherwise the worker cannot load context).
     """
     backend = (os.environ.get(_BACKEND_ENV) or "").strip().lower()
+    if not backend:
+        src_backend = (os.environ.get(_BUILDER_SOURCE_BACKEND_ENV) or "").strip().lower()
+        if src_backend == "firestore":
+            backend = "firestore"
     if backend == "firestore":
         from src.persistence.firestore_native_build_context_store import (  # noqa: PLC0415
             FirestoreNativeBuildContextStore,
