@@ -297,11 +297,11 @@ class TestResolveScaffoldContextUnknownAppType:
 
 
 class TestResolveScaffoldContextBadPackRoot:
-    def test_falls_back_to_v1_on_bad_pack_root(self, tmp_path: Path):
+    def test_falls_back_to_v1_on_bad_pack_root(self):
         result = resolve_scaffold_context(
             metadata={
                 "registry_v2_app_type": "game.idle-incremental",
-                "registry_v2_pack_root": str(tmp_path / "missing-pack"),
+                "registry_v2_pack_root": "docs/build-kit-registry-v2/__missing_pack_dir__",
             },
             template_kind="generic",
             env={"HAM_BUILD_REGISTRY_V2_ENABLED": "on"},
@@ -311,6 +311,36 @@ class TestResolveScaffoldContextBadPackRoot:
         assert result.fallback_reason is not None
         assert result.fallback_reason.startswith("registry_v2_error:")
         assert "Builder Kit: generic" in result.context
+
+
+class TestResolveScaffoldContextPackRootTraversal:
+    def test_falls_back_to_v1_when_pack_root_escapes_repo(self):
+        result = resolve_scaffold_context(
+            metadata={
+                "registry_v2_app_type": "game.idle-incremental",
+                "registry_v2_pack_root": "../../../etc",
+            },
+            template_kind="generic",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "on"},
+            repo_root=REPO_ROOT,
+        )
+        assert result.source == "v1"
+        assert result.fallback_reason is not None
+        assert result.fallback_reason.startswith("registry_v2_error:")
+        assert "Builder Kit: generic" in result.context
+
+    def test_falls_back_to_v1_on_absolute_pack_root_outside_repo(self):
+        result = resolve_scaffold_context(
+            metadata={
+                "registry_v2_app_type": "game.idle-incremental",
+                "registry_v2_pack_root": "/etc",
+            },
+            template_kind="generic",
+            env={"HAM_BUILD_REGISTRY_V2_ENABLED": "on"},
+            repo_root=REPO_ROOT,
+        )
+        assert result.source == "v1"
+        assert result.fallback_reason.startswith("registry_v2_error:")
 
 
 class TestResolveScaffoldContextNoV1Fallback:
