@@ -312,6 +312,7 @@ class BuilderSourceStore:
 _STORE_SINGLETON: list[BuilderSourceStoreProtocol | None] = [None]
 
 _BACKEND_ENV = "HAM_BUILDER_SOURCE_STORE_BACKEND"
+_NATIVE_CONTEXT_BACKEND_ENV = "HAM_NATIVE_BUILD_CONTEXT_STORE_BACKEND"
 
 
 def build_builder_source_store() -> BuilderSourceStoreProtocol:
@@ -319,8 +320,16 @@ def build_builder_source_store() -> BuilderSourceStoreProtocol:
 
     Defaults to the file-backed implementation. ``HAM_BUILDER_SOURCE_STORE_BACKEND
     =firestore`` selects :class:`FirestoreBuilderSourceStore` (lazy import).
+
+    When only the native build *context* store is set to Firestore, import jobs
+    must share that backend too (otherwise the worker loads context on instance B
+    but cannot find the job row and silently skips the build).
     """
     backend = (os.environ.get(_BACKEND_ENV) or "").strip().lower()
+    if not backend:
+        ctx_backend = (os.environ.get(_NATIVE_CONTEXT_BACKEND_ENV) or "").strip().lower()
+        if ctx_backend == "firestore":
+            backend = "firestore"
     if backend == "firestore":
         from src.persistence.firestore_builder_source_store import (  # noqa: PLC0415
             FirestoreBuilderSourceStore,

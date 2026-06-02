@@ -210,6 +210,12 @@ def test_backend_selector_selects_firestore(monkeypatch) -> None:
     assert isinstance(build_builder_source_store(), FirestoreBuilderSourceStore)
 
 
+def test_backend_selector_follows_native_context_firestore(monkeypatch) -> None:
+    monkeypatch.delenv("HAM_BUILDER_SOURCE_STORE_BACKEND", raising=False)
+    monkeypatch.setenv("HAM_NATIVE_BUILD_CONTEXT_STORE_BACKEND", "firestore")
+    assert isinstance(build_builder_source_store(), FirestoreBuilderSourceStore)
+
+
 def test_import_job_payload_carries_no_internals() -> None:
     job = ImportJob(workspace_id="ws", project_id="proj", phase="queued", status="queued")
     payload = json.dumps(job.model_dump(mode="json")).lower()
