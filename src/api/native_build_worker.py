@@ -94,11 +94,16 @@ async def execute_native_build(
         )
         return {"ok": True, "import_job_id": envelope.import_job_id, "skipped": True}
 
-    jobs = store.list_import_jobs(
-        workspace_id=context.workspace_id, project_id=context.project_id
-    )
-    job = next((j for j in jobs if j.id == context.import_job_id), None)
-    if job is not None and job.status in _TERMINAL_STATUSES:
+    job = store.get_import_job(import_job_id=context.import_job_id)
+    if job is None:
+        # Context exists but import job row is missing (split store or cleanup) — non-retryable.
+        _LOG.info(
+            "native-build worker: no import job for import_job_id=%s — idempotent skip",
+            context.import_job_id,
+        )
+        return {"ok": True, "import_job_id": context.import_job_id, "skipped": True}
+
+    if job.status in _TERMINAL_STATUSES:
         _LOG.info(
             "native-build worker: import_job_id=%s already terminal (%s) — idempotent skip",
             context.import_job_id,
@@ -131,6 +136,11 @@ async def execute_native_build(
                 phase=NATIVE_BUILD_PHASE_FAILED,
                 error_code=_WORKER_ERROR_CODE,
                 error_message=_WORKER_ERROR_MESSAGE,
+            )
+        except KeyError:
+            _LOG.info(
+                "native-build worker: import job missing while marking failed for import_job_id=%s",
+                context.import_job_id,
             )
         except Exception:  # noqa: BLE001
             _LOG.exception(

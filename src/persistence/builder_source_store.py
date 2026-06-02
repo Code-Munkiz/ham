@@ -84,6 +84,7 @@ class BuilderSourceStoreProtocol(Protocol):
     def list_source_snapshots(self, *, workspace_id: str, project_id: str) -> list[SourceSnapshot]: ...
     def list_import_jobs(self, *, workspace_id: str, project_id: str) -> list[ImportJob]: ...
 
+    def get_import_job(self, *, import_job_id: str) -> ImportJob | None: ...
     def upsert_project_source(self, record: ProjectSource) -> ProjectSource: ...
     def upsert_source_snapshot(self, record: SourceSnapshot) -> SourceSnapshot: ...
     def upsert_import_job(self, record: ImportJob) -> ImportJob: ...
@@ -118,7 +119,13 @@ class BuilderSourceStoreProtocol(Protocol):
 
 
 class BuilderSourceStore:
-    """File-backed builder source metadata store (~/.ham/builder_sources.json)."""
+    """File-backed builder source metadata store (~/.ham/builder_sources.json).
+
+    Suitable for local/dev and tests. Not safe across Cloud Run instances (the
+    worker may run on a different instance than the enqueuer); select the
+    Firestore backend via ``HAM_BUILDER_SOURCE_STORE_BACKEND=firestore`` for
+    hosted deployments.
+    """
 
     def __init__(self, store_path: Path | None = None) -> None:
         self._path = Path(store_path) if store_path is not None else _DEFAULT_STORE_PATH
@@ -214,6 +221,19 @@ class BuilderSourceStore:
         )
         return self.upsert_import_job(record)
 
+    def get_import_job(self, *, import_job_id: str) -> ImportJob | None:
+        jid = (import_job_id or "").strip()
+        if not jid:
+            return None
+        for item in self._load_raw().get("import_jobs", []):
+            try:
+                rec = ImportJob.model_validate(item)
+            except ValidationError:
+                continue
+            if rec.id == jid:
+                return rec
+        return None
+
     def mark_import_job_running(self, *, import_job_id: str, phase: str) -> ImportJob:
         record = self._require_import_job(import_job_id)
         record.phase = phase
@@ -258,14 +278,10 @@ class BuilderSourceStore:
         return self.upsert_import_job(record)
 
     def _require_import_job(self, import_job_id: str) -> ImportJob:
-        for item in self._load_raw().get("import_jobs", []):
-            try:
-                rec = ImportJob.model_validate(item)
-            except ValidationError:
-                continue
-            if rec.id == import_job_id:
-                return rec
-        raise KeyError(f"Unknown import job id: {import_job_id}")
+        record = self.get_import_job(import_job_id=import_job_id)
+        if record is None:
+            raise KeyError(f"Unknown import job id: {import_job_id}")
+        return record
 
     def _load_raw(self) -> dict[str, Any]:
         empty: dict[str, Any] = {
@@ -295,10 +311,28 @@ class BuilderSourceStore:
 
 _STORE_SINGLETON: list[BuilderSourceStoreProtocol | None] = [None]
 
+_BACKEND_ENV = "HAM_BUILDER_SOURCE_STORE_BACKEND"
+
+
+def build_builder_source_store() -> BuilderSourceStoreProtocol:
+    """Pick the builder source store backend based on env.
+
+    Defaults to the file-backed implementation. ``HAM_BUILDER_SOURCE_STORE_BACKEND
+    =firestore`` selects :class:`FirestoreBuilderSourceStore` (lazy import).
+    """
+    backend = (os.environ.get(_BACKEND_ENV) or "").strip().lower()
+    if backend == "firestore":
+        from src.persistence.firestore_builder_source_store import (  # noqa: PLC0415
+            FirestoreBuilderSourceStore,
+        )
+
+        return FirestoreBuilderSourceStore()
+    return BuilderSourceStore()
+
 
 def get_builder_source_store() -> BuilderSourceStoreProtocol:
     if _STORE_SINGLETON[0] is None:
-        _STORE_SINGLETON[0] = BuilderSourceStore()
+        _STORE_SINGLETON[0] = build_builder_source_store()
     return _STORE_SINGLETON[0]
 
 

@@ -289,6 +289,34 @@ def test_worker_skips_when_no_context(monkeypatch, tmp_path) -> None:
     assert res.json()["skipped"] is True
 
 
+def test_worker_skips_when_context_exists_but_import_job_missing(monkeypatch, tmp_path) -> None:
+    _configure_oidc(monkeypatch)
+    set_builder_source_store_for_tests(BuilderSourceStore(store_path=tmp_path / "s.json"))
+    try:
+        get_native_build_context_store().put_native_build_context(
+            NativeBuildContext(
+                import_job_id="ijob_orphan",
+                workspace_id="ws",
+                project_id="proj",
+                session_id="sess",
+                user_prompt="build",
+                created_by="user",
+            )
+        )
+        client = TestClient(_build_app(), raise_server_exceptions=False)
+        res = client.post(
+            "/api/internal/native-build/execute",
+            json={"import_job_id": "ijob_orphan", "workspace_id": "ws", "project_id": "proj"},
+            headers={"Authorization": f"Bearer {_valid_token()}"},
+        )
+    finally:
+        set_builder_source_store_for_tests(None)
+    assert res.status_code == 200
+    body = res.json()
+    assert body["skipped"] is True
+    assert body["import_job_id"] == "ijob_orphan"
+
+
 def test_worker_executes_job_by_id_and_materializes_snapshot(monkeypatch, tmp_path) -> None:
     _configure_oidc(monkeypatch)
     monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))

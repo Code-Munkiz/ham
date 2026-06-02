@@ -130,3 +130,9 @@ def test_import_job_lifecycle_helpers_update_status_and_links(tmp_path: Path) ->
     )
     assert failed.status == "failed"
     assert failed.error_code == "ZIP_INVALID"
+
+
+def test_get_import_job_returns_none_for_unknown(tmp_path: Path) -> None:
+    store = BuilderSourceStore(store_path=tmp_path / "builder_sources.json")
+    assert store.get_import_job(import_job_id="ijob_missing") is None
+    assert store.get_import_job(import_job_id="") is None
