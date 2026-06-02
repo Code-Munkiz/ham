@@ -19,7 +19,7 @@
     "format:check": "prettier --check \"**/*.{cjs,js,json,md}\""
   },
   "dependencies": {
-    "ws": "^8.20.0"
+    "ws": "^8.21.0"
   },
   "build": {
     "appId": "io.github.codemunkiz.ham-desktop",
