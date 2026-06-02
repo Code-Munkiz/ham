@@ -7,6 +7,7 @@ import json
 from src.ham.builder_plan import Plan, Step
 from src.ham.scaffold_quality import (
     ScaffoldQualityIssue,
+    _merge_repair_file_changes,
     build_scaffold_repair_prompt,
     inspect_generated_scaffold_quality,
     maybe_repair_generated_scaffold,
@@ -3193,6 +3194,29 @@ class TestBuildScaffoldRepairPrompt:
         assert "valid JSON" in body or "json/file_changes" in body.lower()
 
 
+class TestMergeRepairFileChanges:
+    def test_preserves_original_paths_when_repair_returns_subset(self):
+        original = [
+            ("src/reducer.ts", "ORIG_REDUCER"),
+            ("package.json", "{}"),
+        ]
+        repaired = [("src/App.tsx", "NEW_APP")]
+        merged = _merge_repair_file_changes(original, repaired)
+        assert merged == [
+            ("src/reducer.ts", "ORIG_REDUCER"),
+            ("package.json", "{}"),
+            ("src/App.tsx", "NEW_APP"),
+        ]
+
+    def test_overlays_content_for_paths_present_in_both(self):
+        original = [("src/App.tsx", "OLD"), ("package.json", "{}")]
+        repaired = [("src/App.tsx", "NEW")]
+        assert _merge_repair_file_changes(original, repaired) == [
+            ("src/App.tsx", "NEW"),
+            ("package.json", "{}"),
+        ]
+
+
 class TestMaybeRepairGeneratedScaffold:
     def test_skips_repair_when_no_issues(self):
         class _Result:
@@ -3223,7 +3247,7 @@ class TestMaybeRepairGeneratedScaffold:
             file_changes = [("src/gameReducer.ts", _STUB_REDUCER)]
 
         class _Repaired:
-            file_changes = [("src/gameReducer.ts", _IMPLEMENTED_REDUCER)]
+            file_changes = [("src/App.tsx", _IMPLEMENTED_REDUCER)]
 
         calls: list[list[dict]] = []
 
@@ -3231,7 +3255,7 @@ class TestMaybeRepairGeneratedScaffold:
             calls.append(messages)
             return json.dumps(
                 {
-                    "file_changes": [{"path": "src/App.tsx", "content": "ok"}],
+                    "file_changes": [{"path": "src/App.tsx", "content": "ignored"}],
                     "assertions": ["works"],
                 }
             )
@@ -3252,6 +3276,10 @@ class TestMaybeRepairGeneratedScaffold:
         assert isinstance(out, _Repaired)
         assert len(calls) == 1
         assert "repair mode" in calls[0][0]["content"].lower()
+        paths = [p for p, _ in out.file_changes]
+        assert paths == ["src/gameReducer.ts", "src/App.tsx"]
+        assert out.file_changes[0][1] == _STUB_REDUCER
+        assert out.file_changes[1][1] == _IMPLEMENTED_REDUCER
 
     def test_logs_remaining_issues_after_repair(self, caplog):
         import logging
@@ -3345,7 +3373,11 @@ class TestGenerateScaffoldQualityRepairIntegration:
         assert len(calls) == 2
         assert "repair mode" in calls[1].lower()
         assert isinstance(result, ScaffoldResult)
-        assert result.file_changes[0][0] == "src/App.tsx"
+        paths = [p for p, _ in result.file_changes]
+        assert paths == ["src/reducer.ts", "package.json", "src/App.tsx"]
+        assert result.file_changes[0][1] == _STUB_REDUCER
+        assert result.file_changes[1][1] == "{}"
+        assert result.file_changes[2][1] == _IMPLEMENTED_REDUCER
 
     def test_generate_scaffold_saas_triggers_escalated_second_repair_pass(self, monkeypatch):
         from src.ham.builder_llm_scaffold import ScaffoldResult, generate_scaffold
