@@ -1165,6 +1165,32 @@ def _finalize_incoming_for_store(
     return out
 
 
+def _fit_system_prompt_under_cap_with_vision_tail(
+    base_system: str,
+    *,
+    vision_tail: str,
+    max_chars: int,
+) -> str:
+    """Append ``vision_tail`` without silently dropping it when ``base_system`` is long.
+
+    Multimodal turns append ``vision_system_suffix()`` to the system message. A
+    naive ``combined[:max_chars]`` cut from the end removed the entire vision
+    contract whenever ``len(base_system) + len(vision_tail)`` exceeded the cap,
+    even though the skills/UI path already reserves tail space for UI actions.
+
+    When over budget, shrink ``base_system`` from the end so ``vision_tail``
+    remains a stable suffix. If ``vision_tail`` alone exceeds ``max_chars``,
+    truncate the tail only as a last resort.
+    """
+    if not vision_tail:
+        return base_system[:max_chars]
+    if len(vision_tail) >= max_chars:
+        return vision_tail[:max_chars]
+    keep = max_chars - len(vision_tail)
+    trimmed = base_system[:keep]
+    return f"{trimmed}{vision_tail}"
+
+
 def _prepare_chat_session(
     body: ChatRequest,
     *,
@@ -1205,6 +1231,20 @@ def _prepare_chat_session(
         ) from exc
 
     history = store.list_messages(sid)
+    h_llm: list[dict[str, Any]] = []
+    any_multimodal = False
+    for h in history:
+        role, stored = h["role"], h["content"]
+        if role == "user":
+            c = to_llm_message_content(stored, attachment_user_id=llm_attachment_user_id)
+            if isinstance(c, list):
+                any_multimodal = True
+            h_llm.append({"role": "user", "content": c})
+        else:
+            h_llm.append({"role": role, "content": stored})
+    vision_tail = vision_system_suffix() if any_multimodal else ""
+    vision_reserve = len(vision_tail)
+
     include_skills_eff, include_subagents_eff, include_active_eff = _effective_inventory_gating(
         body,
         last_user_plain,
@@ -1220,28 +1260,17 @@ def _prepare_chat_session(
         if root is not None:
             guidance_pack = try_active_agent_guidance_for_project_root(root)
             if guidance_pack is not None:
-                room = max(0, _MAX_SYSTEM_PROMPT_CHARS - len(base_system) - 4)
+                room = max(0, _MAX_SYSTEM_PROMPT_CHARS - len(base_system) - 4 - vision_reserve)
                 if room > 120:
                     g = guidance_pack.guidance_text[:room]
                     base_system = f"{base_system}\n\n{g}".strip()
                     active_meta = guidance_pack.meta
 
-    h_llm: list[dict[str, Any]] = []
-    any_multimodal = False
-    for h in history:
-        role, stored = h["role"], h["content"]
-        if role == "user":
-            c = to_llm_message_content(stored, attachment_user_id=llm_attachment_user_id)
-            if isinstance(c, list):
-                any_multimodal = True
-            h_llm.append({"role": "user", "content": c})
-        else:
-            h_llm.append({"role": role, "content": stored})
-    sys_content = base_system
-    if any_multimodal:
-        sys_content = f"{base_system}{vision_system_suffix()}"
-        if len(sys_content) > _MAX_SYSTEM_PROMPT_CHARS:
-            sys_content = sys_content[:_MAX_SYSTEM_PROMPT_CHARS]
+    sys_content = _fit_system_prompt_under_cap_with_vision_tail(
+        base_system,
+        vision_tail=vision_tail,
+        max_chars=_MAX_SYSTEM_PROMPT_CHARS,
+    )
     llm_messages: list[dict[str, Any]] = [
         {
             "role": "system",
