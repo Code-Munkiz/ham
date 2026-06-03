@@ -355,6 +355,14 @@ See commented template in [`docs/examples/ham-api-cloud-run-env.yaml`](examples/
 
 **Incident recovery:** if dashboard chat hangs or shows blank replies after model or gateway changes, align Cloud Run env with Hermes `config.yaml` using [`docs/RUNBOOK_HAM_MODEL_RECOVERY.md`](RUNBOOK_HAM_MODEL_RECOVERY.md).
 
+### Native Hermes workspace builds (optional)
+
+Filesystem-oriented native builds use the **`hermes` CLI** inside the **`ham-api` image** (`hermes-agent` PyPI pin in `Dockerfile` → `/usr/local/bin/hermes`). This is **separate** from the HTTP gateway above.
+
+- **Do not** set `HAM_HERMES_NATIVE_WORKSPACE_ENABLED=1` on staging until worker provider auth is verified.
+- Operator runbook: [`docs/NATIVE_HERMES_WORKSPACE_CLOUD_RUN.md`](NATIVE_HERMES_WORKSPACE_CLOUD_RUN.md)
+- Image smoke: `docker build -t ham-hermes-workspace-smoke . && ./scripts/verify_hermes_cli_image.sh`
+
 ## Smoke tests
 
 ```bash

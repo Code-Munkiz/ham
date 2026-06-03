@@ -7,13 +7,14 @@ materializes via :mod:`src.ham.build_materialization`.
 Required operator configuration (host / worker):
 
 - ``HAM_HERMES_NATIVE_WORKSPACE_ENABLED=1`` — enable the native workspace lane.
-- ``HAM_HERMES_CLI_PATH`` (optional) — path to ``hermes`` binary; otherwise ``PATH``.
+- ``HAM_HERMES_CLI_PATH`` (optional) — path to ``hermes`` binary; otherwise ``PATH`` (Docker: ``/usr/local/bin/hermes``).
 - ``HERMES_NATIVE_WORKSPACE_MAX_TURNS`` (optional) — ``--max-turns`` cap (default 40).
 - ``HERMES_NATIVE_WORKSPACE_TIMEOUT_SEC`` (optional) — subprocess budget (default 600).
 - ``HAM_HERMES_NATIVE_WORKSPACE_ROOT`` (optional) — parent dir for isolated workspaces.
+- Provider auth via env (``ANTHROPIC_API_KEY``, ``OPENROUTER_API_KEY``) or ``HERMES_HOME`` — see ``docs/NATIVE_HERMES_WORKSPACE_CLOUD_RUN.md``.
 
-Hermes must be installed and authenticated (``hermes login`` / provider env) on the
-build host. This module never calls :func:`complete_artifact_turn`.
+Cloud Run / Docker: ``hermes-agent`` is installed in the ``ham-api`` image (PyPI pin in ``Dockerfile``).
+Do not enable ``HAM_HERMES_NATIVE_WORKSPACE_ENABLED`` on staging until worker auth is verified.
 """
 
 from __future__ import annotations

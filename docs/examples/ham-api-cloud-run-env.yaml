@@ -145,3 +145,13 @@ HAM_CORS_ORIGIN_REGEX: "https://.*\\.vercel\\.app"
 # CLAUDE_AGENT_ENABLED: "1"
 # CLAUDE_AGENT_RUN_TIMEOUT_SEC: "600"
 # CLAUDE_AGENT_MAX_TURNS: "25"
+
+# --- Native Hermes workspace execution (optional; OFF by default on staging) ---
+# Filesystem-oriented native builds via `hermes chat` — see docs/NATIVE_HERMES_WORKSPACE_CLOUD_RUN.md.
+# Image includes hermes-agent (PyPI pin in Dockerfile). Do NOT enable until worker provider auth works.
+# HAM_HERMES_NATIVE_WORKSPACE_ENABLED: "1"
+# HAM_HERMES_CLI_PATH: "/usr/local/bin/hermes"
+# HERMES_NATIVE_WORKSPACE_MAX_TURNS: "40"
+# HERMES_NATIVE_WORKSPACE_TIMEOUT_SEC: "600"
+# Provider auth: ANTHROPIC_API_KEY (already in --set-secrets) and/or OPENROUTER_API_KEY — not HERMES_GATEWAY_API_KEY.
+# ham-api needs the enable flag for preflight; native-build worker needs flag + CLI + provider secrets.

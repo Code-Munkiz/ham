@@ -52,6 +52,15 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
     && python -m playwright install --with-deps chromium
 
+# Hermes Agent CLI — Native Builder workspace execution (`hermes chat` in isolated cwd).
+# PyPI pin (see requirements.txt); bump HERMES_AGENT_VERSION when upgrading operator runbooks.
+# Installs console script to /usr/local/bin/hermes (resolve_hermes_cli_binary() default).
+ARG HERMES_AGENT_VERSION=0.15.2
+RUN pip install --no-cache-dir "hermes-agent==${HERMES_AGENT_VERSION}" \
+    && command -v hermes \
+    && hermes --version | grep -Eiq 'hermes'
+ENV HERMES_HOME=/root/.hermes
+
 # Install backend-only Node bridge dependencies (kept isolated from frontend).
 COPY src/integrations/cursor_sdk_bridge/package.json src/integrations/cursor_sdk_bridge/package-lock.json src/integrations/cursor_sdk_bridge/
 RUN npm --prefix src/integrations/cursor_sdk_bridge ci --omit=dev
