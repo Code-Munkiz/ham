@@ -422,6 +422,82 @@ def test_executor_multistep_exhausts_attempts_and_fails_safely(tmp_path, monkeyp
         assert token not in haystack
 
 
+def test_executor_repair_preserves_files_when_repair_returns_subset(tmp_path, monkeypatch) -> None:
+    """A repair turn that returns only touched paths must not drop the first-turn bundle."""
+    _ready_env(tmp_path, monkeypatch)
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    monkeypatch.setattr(
+        "src.ham.builder_preview_typecheck.try_repair_identifier_case_mismatch",
+        lambda _files, _output: None,
+    )
+
+    first_bundle = {
+        "status": "success",
+        "summary": "Built.",
+        "files": {
+            **_VALID_BUNDLE["files"],
+            "src/gameLogic.ts": "export const score = 0;\n",
+            "src/App.tsx": (
+                "export default function App() {\n"
+                "  const TEAM = [{ id: 1, name: 'A' }];\n"
+                "  return <div>{team.map((t) => t.id)}</div>;\n"
+                "}\n"
+            ),
+        },
+        "checks": ["renders"],
+    }
+    repair_subset = {
+        "status": "success",
+        "summary": "Fixed.",
+        "files": {
+            "src/App.tsx": (
+                "export default function App() {\n"
+                "  const TEAM = [{ id: 1, name: 'A' }];\n"
+                "  return <div>{TEAM.map((t) => t.id)}</div>;\n"
+                "}\n"
+            ),
+        },
+        "checks": ["renders"],
+    }
+    calls: list[int] = []
+
+    def _turn(messages) -> str:
+        calls.append(1)
+        if len(calls) == 1:
+            return json.dumps(first_bundle)
+        return json.dumps(repair_subset)
+
+    try:
+        job = store.create_import_job(
+            workspace_id="ws_v2",
+            project_id="proj_v2",
+            created_by="user_v2",
+            phase=NATIVE_BUILD_PHASE_QUEUED,
+            status="queued",
+            metadata={"origin": NATIVE_BUILD_JOB_ORIGIN},
+        )
+        result = execute_native_build_job(
+            import_job_id=job.id,
+            workspace_id="ws_v2",
+            project_id="proj_v2",
+            session_id="sess_v2",
+            user_prompt="build a small native app",
+            created_by="user_v2",
+            complete_turn=_turn,
+        )
+    finally:
+        set_builder_source_store_for_tests(None)
+
+    assert len(calls) == 2
+    assert result["ham_native_builder"] == {"status": "succeeded"}
+    snapshots = store.list_source_snapshots(workspace_id="ws_v2", project_id="proj_v2")
+    inline = snapshots[0].manifest["inline_files"]
+    assert "src/gameLogic.ts" in inline
+    assert inline["src/gameLogic.ts"] == "export const score = 0;\n"
+    assert "TEAM.map" in inline["src/App.tsx"]
+
+
 def test_executor_repairs_on_verification_failure(tmp_path, monkeypatch) -> None:
     """Verification is now inside the loop: a failed verify triggers a real repair, then succeeds."""
     _ready_env(tmp_path, monkeypatch)
