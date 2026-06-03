@@ -257,6 +257,7 @@ def test_gke_scheduler_creates_job_with_required_spec() -> None:
     assert env["HAM_PROJECT_ID"] == "proj_demo"
     assert env["HAM_WORKER_IMAGE"] == _VALID_IMAGE_DIGEST
     assert env["HAM_BUILDER_PLAN_STORE_BACKEND"] == "firestore"
+    assert env["HAM_BUILDER_RUNTIME_STORE_BACKEND"] == "firestore"
     assert env["HAM_BUILDER_RUNTIME_JOB_STORE_BACKEND"] == "firestore"
     assert env["HAM_BUILDER_RUN_EVENTS_STORE_BACKEND"] == "firestore"
 

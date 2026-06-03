@@ -250,6 +250,7 @@ class WorkerPodSchedulerGKE(WorkerPodSchedulerProtocol):
             {"name": "HAM_PROJECT_ID", "value": project_id},
             {"name": "HAM_WORKER_IMAGE", "value": self._image or ""},
             {"name": "HAM_BUILDER_PLAN_STORE_BACKEND", "value": "firestore"},
+            {"name": "HAM_BUILDER_RUNTIME_STORE_BACKEND", "value": "firestore"},
             {"name": "HAM_BUILDER_RUNTIME_JOB_STORE_BACKEND", "value": "firestore"},
             {"name": "HAM_BUILDER_RUN_EVENTS_STORE_BACKEND", "value": "firestore"},
             {"name": "HAM_FIRESTORE_PROJECT_ID", "value": self._firestore_project or ""},

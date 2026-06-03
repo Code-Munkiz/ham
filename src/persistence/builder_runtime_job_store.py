@@ -181,13 +181,25 @@ _STORE_SINGLETON: list[BuilderRuntimeJobStoreProtocol | None] = [None]
 _BACKEND_ENV = "HAM_BUILDER_RUNTIME_JOB_STORE_BACKEND"
 
 
+_SOURCE_BACKEND_ENV = "HAM_BUILDER_SOURCE_STORE_BACKEND"
+_RUNTIME_BACKEND_ENV = "HAM_BUILDER_RUNTIME_STORE_BACKEND"
+
+
 def build_builder_runtime_job_store() -> BuilderRuntimeJobStoreProtocol:
     """Pick the runtime job store backend based on env.
 
     Defaults to the file-backed implementation. ``HAM_BUILDER_RUNTIME_JOB_STORE_BACKEND
     =firestore`` selects :class:`FirestoreBuilderRuntimeJobStore` (lazy import).
+
+    When the builder source or runtime session store is Firestore, jobs default to
+    Firestore too so ham-api can list worker-updated cloud runtime job status.
     """
     backend = (os.environ.get(_BACKEND_ENV) or "").strip().lower()
+    if not backend:
+        for env_name in (_SOURCE_BACKEND_ENV, _RUNTIME_BACKEND_ENV):
+            if (os.environ.get(env_name) or "").strip().lower() == "firestore":
+                backend = "firestore"
+                break
     if backend == "firestore":
         from src.persistence.firestore_builder_runtime_job_store import (  # noqa: PLC0415
             FirestoreBuilderRuntimeJobStore,

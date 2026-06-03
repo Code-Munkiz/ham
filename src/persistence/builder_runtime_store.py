@@ -316,10 +316,40 @@ class BuilderRuntimeStore:
 
 _STORE_SINGLETON: list[BuilderRuntimeStoreProtocol | None] = [None]
 
+_BACKEND_ENV = "HAM_BUILDER_RUNTIME_STORE_BACKEND"
+_SOURCE_BACKEND_ENV = "HAM_BUILDER_SOURCE_STORE_BACKEND"
+_JOB_BACKEND_ENV = "HAM_BUILDER_RUNTIME_JOB_STORE_BACKEND"
+
+
+def build_builder_runtime_store() -> BuilderRuntimeStoreProtocol:
+    """Pick the runtime session / preview endpoint store backend based on env.
+
+    Defaults to the file-backed implementation. ``HAM_BUILDER_RUNTIME_STORE_BACKEND
+    =firestore`` selects :class:`FirestoreBuilderRuntimeStore` (lazy import).
+
+    When the builder source store or cloud runtime job store is set to Firestore,
+    runtime sessions must share that backend too (otherwise the native builder worker
+    persists preview metadata on instance B while ham-api reads an empty file on
+    instance A).
+    """
+    backend = (os.environ.get(_BACKEND_ENV) or "").strip().lower()
+    if not backend:
+        for env_name in (_SOURCE_BACKEND_ENV, _JOB_BACKEND_ENV):
+            if (os.environ.get(env_name) or "").strip().lower() == "firestore":
+                backend = "firestore"
+                break
+    if backend == "firestore":
+        from src.persistence.firestore_builder_runtime_store import (  # noqa: PLC0415
+            FirestoreBuilderRuntimeStore,
+        )
+
+        return FirestoreBuilderRuntimeStore()
+    return BuilderRuntimeStore()
+
 
 def get_builder_runtime_store() -> BuilderRuntimeStoreProtocol:
     if _STORE_SINGLETON[0] is None:
-        _STORE_SINGLETON[0] = BuilderRuntimeStore()
+        _STORE_SINGLETON[0] = build_builder_runtime_store()
     return _STORE_SINGLETON[0]
 
 
