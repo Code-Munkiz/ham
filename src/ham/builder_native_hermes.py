@@ -480,6 +480,34 @@ def _bundle_failure_error_code(bundle_detail: str) -> str:
     return "HAM_NATIVE_BUILDER_INVALID_FILES"
 
 
+def _merge_native_file_bundles(
+    base: dict[str, str],
+    overlay: dict[str, str],
+) -> dict[str, str]:
+    """Overlay repair output onto a prior bundle without dropping untouched paths.
+
+    Repair models often return only the files they changed; using that list alone
+    would omit ``package.json``, entrypoints, and other paths from the first turn.
+    """
+    if not base:
+        return dict(overlay)
+    merged = dict(base)
+    merged.update(overlay)
+    return merged
+
+
+def _extract_bootstrapped_bundle(
+    raw: str,
+    *,
+    user_prompt: str,
+) -> tuple[dict[str, str] | None, str | None]:
+    """Coerce and bootstrap files from one Hermes reply before full validation."""
+    candidate_files, bundle_detail = _coerce_files_from_response(raw)
+    if bundle_detail is not None:
+        return None, bundle_detail
+    return ensure_preview_bootstrap_files(candidate_files, project_name=user_prompt), None
+
+
 def _validate_bootstrap_verify(
     raw: str, *, user_prompt: str
 ) -> tuple[dict[str, str] | None, str, str | None, dict[str, Any]]:
@@ -683,6 +711,7 @@ def _execute_native_build_core(
     repair_json_found = False
     repair_files_found = False
     validation_error_kind = ""
+    carry_forward_bundle: dict[str, str] = {}
     for attempt in range(_NATIVE_BUILD_MAX_ATTEMPTS):
         if attempt == 0:
             _advance(generating_phase)
@@ -744,11 +773,20 @@ def _execute_native_build_core(
             repair_files_found = files_found
 
         _advance(validating_phase)
+        partial_bundle, partial_err = _extract_bootstrapped_bundle(
+            raw, user_prompt=user_prompt
+        )
+        if partial_bundle is not None and partial_err is None:
+            carry_forward_bundle = _merge_native_file_bundles(
+                carry_forward_bundle, partial_bundle
+            )
         candidate_files, failure_kind, repair_summary, verification = _validate_bootstrap_verify(
             raw, user_prompt=user_prompt
         )
         if not failure_kind:
             files = candidate_files or {}
+            if attempt > 0 and carry_forward_bundle:
+                files = _merge_native_file_bundles(carry_forward_bundle, files)
             break
         validation_error_kind = (
             failure_kind.split(":", 1)[1] if failure_kind.startswith("bundle:") else failure_kind
