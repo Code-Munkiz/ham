@@ -6,6 +6,11 @@ import ast
 import json
 import re
 
+from src.ham.builder_preview_typecheck import (
+    ensure_preview_tsconfig,
+    ensure_tailwind_config_for_preview,
+)
+
 
 def safe_npm_package_name(project_name: str) -> str:
     """Match ``safe_pkg`` derivation in ``builder_chat_scaffold`` tetris path."""
@@ -55,6 +60,8 @@ def build_vite_bootstrap_files(*, title: str, safe_pkg: str) -> dict[str, str]:
                 },
                 "dependencies": {"react": "^18.3.1", "react-dom": "^18.3.1"},
                 "devDependencies": {
+                    "@types/react": "^18.3.12",
+                    "@types/react-dom": "^18.3.1",
                     "@vitejs/plugin-react": "^4.3.4",
                     "typescript": "^5.6.3",
                     "vite": "^5.4.11",
@@ -191,4 +198,6 @@ def ensure_preview_bootstrap_files(files: dict[str, str], *, project_name: str) 
     out = repair_package_json(out)
     out = normalize_preview_scripts(out)
     out = normalize_esm_config_extensions(out)
+    out = ensure_preview_tsconfig(out)
+    out = ensure_tailwind_config_for_preview(out)
     return out

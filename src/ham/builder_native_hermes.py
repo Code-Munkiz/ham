@@ -23,6 +23,11 @@ from typing import Any, Callable
 from src.ham.builder_artifact_verifier import verify_builder_scaffold_artifact
 from src.ham.builder_chat_cloud_runtime import maybe_enqueue_chat_scaffold_cloud_runtime_job
 from src.ham.builder_preview_bootstrap import ensure_preview_bootstrap_files
+from src.ham.builder_preview_typecheck import (
+    summarize_typecheck_for_repair,
+    user_safe_typecheck_failure_message,
+    validate_preview_app_files,
+)
 from src.integrations.nous_gateway_client import (
     GatewayCallError,
     builder_artifact_model_override,
@@ -54,7 +59,8 @@ _REPAIR_MAX_PREVIOUS_CHARS = 8_000
 _FAILURE_STATUS_VALUES = frozenset({"error", "failed", "failed_validation", "unsupported"})
 _ALLOWED_PATH_RE = re.compile(
     r"^(?:package\.json|index\.html|vite\.config\.(?:ts|js)|"
-    r"postcss\.config\.(?:js|cjs|mjs)|eslint\.config\.(?:js|cjs|mjs)|"
+    r"postcss\.config\.(?:js|cjs|mjs)|tailwind\.config\.(?:js|cjs|mjs)|"
+    r"eslint\.config\.(?:js|cjs|mjs)|"
     r"tsconfig(?:\.\w+)?\.json|"
     r"src/[\w./-]+\.(?:tsx|ts|d\.ts|jsx|js|css|json|svg)|public/[\w./-]+)$"
 )
@@ -409,6 +415,10 @@ _REPAIR_SUMMARY_BY_KIND: dict[str, str] = {
     "bundle_too_large": "The project was too large; produce a small app of about 6-10 compact files.",
     "too_many_files": "Too many files; produce about 6-10 files total.",
     "forbidden_content": "Remove secrets, local URLs, internal ids, provider names, or metadata from the files.",
+    "typecheck": (
+        "TypeScript reported errors in the generated source. Fix undefined identifiers "
+        "and type issues so names match their declarations."
+    ),
 }
 
 
@@ -465,6 +475,8 @@ def _build_repair_messages(
 def _bundle_failure_error_code(bundle_detail: str) -> str:
     if bundle_detail == "invalid_response":
         return "HAM_NATIVE_BUILDER_INVALID_RESPONSE"
+    if bundle_detail == "typecheck":
+        return "HAM_NATIVE_BUILDER_TYPECHECK_FAILED"
     return "HAM_NATIVE_BUILDER_INVALID_FILES"
 
 
@@ -483,6 +495,18 @@ def _validate_bootstrap_verify(
     if bundle_detail is not None:
         return None, f"bundle:{bundle_detail}", _repair_summary_for_bundle(bundle_detail), {}
     candidate_files = ensure_preview_bootstrap_files(candidate_files, project_name=user_prompt)
+    typecheck = validate_preview_app_files(candidate_files)
+    candidate_files = typecheck.files
+    if not typecheck.ok:
+        summary = typecheck.repair_summary or summarize_typecheck_for_repair(
+            typecheck.compiler_output
+        )
+        return (
+            None,
+            "bundle:typecheck",
+            summary,
+            {"typecheck": "failed", "user_message": typecheck.user_message},
+        )
     verification = verify_builder_scaffold_artifact(
         user_prompt, {"template": "hermes_native"}, candidate_files, "build_or_create"
     )
@@ -502,6 +526,8 @@ def _fail_native_build(
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Mark the job failed and return the safe, non-internal failure result."""
+    if failure_reason == "bundle" and error_code == "HAM_NATIVE_BUILDER_TYPECHECK_FAILED":
+        error_message = user_safe_typecheck_failure_message()
     store.mark_import_job_failed(
         import_job_id=import_job_id,
         phase=phase,
@@ -755,6 +781,12 @@ def _execute_native_build_core(
                 extra={"artifact_verification": verification},
             )
         detail = validation_error_kind or "invalid_response"
+        if detail == "typecheck":
+            bundle_error_message = user_safe_typecheck_failure_message()
+        else:
+            bundle_error_message = (
+                f"HAM Native Builder did not return a valid file bundle: {detail}."
+            )
         logger.warning(
             "ham_native_builder_failed reason=bundle import_job_id=%s detail=%s "
             "first_attempt_json_found=%s first_attempt_files_found=%s repair_attempted=%s "
@@ -781,7 +813,7 @@ def _execute_native_build_core(
             import_job_id=import_job_id,
             phase=failure_phase,
             error_code=_bundle_failure_error_code(detail),
-            error_message=f"HAM Native Builder did not return a valid file bundle: {detail}.",
+            error_message=bundle_error_message,
             failure_reason="bundle",
         )
 

@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from src.ham.builder_native_hermes import (
     _NATIVE_BUILD_MAX_ATTEMPTS,
     ham_native_builder_user_message,
     hermes_native_builder_ready,
     run_hermes_native_build,
 )
+from src.ham.builder_preview_typecheck import user_safe_typecheck_failure_message
 from src.integrations.nous_gateway_client import GatewayCallError
 from src.persistence.builder_source_store import (
     BuilderSourceStore,
@@ -132,11 +135,49 @@ _VALID_BUNDLE = {
     "summary": "Built.",
     "files": {
         "src/App.tsx": "export default function App() { return <main>Native build</main>; }\n",
-        "src/main.tsx": "import App from './App';\nexport default App;\n",
+        "src/main.tsx": (
+            "import React from 'react';\n"
+            "import ReactDOM from 'react-dom/client';\n"
+            "import App from './App';\n"
+            "ReactDOM.createRoot(document.getElementById('root')!).render(\n"
+            "  <React.StrictMode>\n"
+            "    <App />\n"
+            "  </React.StrictMode>,\n"
+            ");\n"
+        ),
         "src/styles.css": "body { margin: 0; }\n",
     },
     "checks": ["renders"],
 }
+
+
+@pytest.fixture(autouse=True)
+def _skip_npm_typecheck_unless_typecheck_test(request: pytest.FixtureRequest, monkeypatch) -> None:
+    """Keep native Hermes tests fast; typecheck-named tests exercise the real gate."""
+    if "typecheck" in request.node.name:
+        return
+
+    def _passthrough(files: dict[str, str]):
+        from src.ham.builder_preview_typecheck import (
+            PreviewTypecheckResult,
+            ensure_preview_tsconfig,
+            ensure_tailwind_config_for_preview,
+        )
+
+        prepared = ensure_tailwind_config_for_preview(ensure_preview_tsconfig(dict(files)))
+        return PreviewTypecheckResult(
+            ok=True,
+            files=prepared,
+            repair_summary=None,
+            user_message="",
+            compiler_output="",
+            deterministic_repair_attempted=False,
+        )
+
+    monkeypatch.setattr(
+        "src.ham.builder_native_hermes.validate_preview_app_files",
+        _passthrough,
+    )
 
 
 def _native_env(tmp_path, monkeypatch) -> None:
@@ -569,3 +610,164 @@ def test_native_build_fails_clearly_when_builder_model_unconfigured(tmp_path, mo
     assert result["ham_native_builder"] == {"status": "unavailable", "failure_reason": "unconfigured"}
     msg = ham_native_builder_user_message(result["ham_native_builder"])
     assert msg.startswith("HAM Native Builder is still being configured.")
+
+
+_TEAM_MISMATCH_BUNDLE = {
+    "status": "success",
+    "summary": "Built.",
+    "files": {
+        "src/App.tsx": (
+            "export default function App() {\n"
+            "  const TEAM = [{ id: 1, name: 'A' }];\n"
+            "  return <div>{team.map((t) => t.id)}</div>;\n"
+            "}\n"
+        ),
+        "src/main.tsx": _VALID_BUNDLE["files"]["src/main.tsx"],
+        "src/styles.css": _VALID_BUNDLE["files"]["src/styles.css"],
+        "package.json": json.dumps(
+            {
+                "name": "team-mismatch",
+                "private": True,
+                "type": "module",
+                "scripts": {"dev": "vite", "build": "vite build", "preview": "vite preview"},
+                "dependencies": {"react": "^18.3.1", "react-dom": "^18.3.1"},
+                "devDependencies": {
+                    "@vitejs/plugin-react": "^4.3.4",
+                    "typescript": "^5.6.3",
+                    "vite": "^5.4.11",
+                    "tailwindcss": "^3.4.0",
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        "postcss.config.js": (
+            "export default { plugins: { tailwindcss: {}, autoprefixer: {} } };\n"
+        ),
+    },
+    "checks": ["renders"],
+}
+
+
+def test_hermes_native_build_fails_typecheck_without_marking_preview_ready(
+    tmp_path, monkeypatch
+) -> None:
+    """A TEAM/team mismatch must fail the build and must not enqueue cloud preview."""
+    _native_env(tmp_path, monkeypatch)
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    preview_calls: list[str] = []
+
+    def _no_preview(**kwargs: object) -> dict[str, object]:
+        preview_calls.append(str(kwargs.get("source_snapshot_id")))
+        return {"cloud_runtime_job_id": "should-not-run"}
+
+    monkeypatch.setattr(
+        "src.ham.builder_native_hermes.maybe_enqueue_chat_scaffold_cloud_runtime_job",
+        _no_preview,
+    )
+    monkeypatch.setattr(
+        "src.ham.builder_preview_typecheck.try_repair_identifier_case_mismatch",
+        lambda _files, _output: None,
+    )
+    try:
+        result = run_hermes_native_build(
+            workspace_id="ws_native",
+            project_id="proj_native",
+            session_id="sess_native",
+            user_prompt="build a dashboard",
+            created_by="user_native",
+            complete_turn=lambda _messages: json.dumps(_TEAM_MISMATCH_BUNDLE),
+        )
+    finally:
+        set_builder_source_store_for_tests(None)
+
+    assert result["scaffolded"] is False
+    assert result["ham_native_builder"]["status"] == "failed"
+    assert preview_calls == []
+    jobs = store.list_import_jobs(workspace_id="ws_native", project_id="proj_native")
+    assert jobs[0].status == "failed"
+    assert "cloud_runtime_job_id" not in result
+
+
+def test_hermes_native_build_typecheck_failure_user_message_is_safe(
+    tmp_path, monkeypatch
+) -> None:
+    _native_env(tmp_path, monkeypatch)
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+
+    def _always_fail_typecheck(files: dict[str, str]):
+        from src.ham.builder_preview_typecheck import PreviewTypecheckResult
+
+        return PreviewTypecheckResult(
+            ok=False,
+            files=files,
+            repair_summary="Compiler summary:\nerror TS2304: Cannot find name 'team'.",
+            user_message=user_safe_typecheck_failure_message(),
+            compiler_output="error TS2304: Cannot find name 'team'.",
+            deterministic_repair_attempted=False,
+        )
+
+    monkeypatch.setattr(
+        "src.ham.builder_native_hermes.validate_preview_app_files",
+        _always_fail_typecheck,
+    )
+    try:
+        result = run_hermes_native_build(
+            workspace_id="ws_native",
+            project_id="proj_native",
+            session_id="sess_native",
+            user_prompt="build a small native app",
+            created_by="user_native",
+            complete_turn=lambda _messages: json.dumps(_VALID_BUNDLE),
+        )
+    finally:
+        set_builder_source_store_for_tests(None)
+
+    assert result["scaffolded"] is False
+    msg = ham_native_builder_user_message(result["ham_native_builder"])
+    haystack = (msg + json.dumps(result, default=str)).lower()
+    for token in ("ts2304", "team", "stack", "traceback", "inline_files"):
+        assert token not in haystack
+    assert "could not prepare" in haystack
+
+
+def test_hermes_native_build_repairs_typecheck_via_second_hermes_turn(
+    tmp_path, monkeypatch
+) -> None:
+    """When deterministic repair is insufficient, a repair turn can fix the bundle."""
+    _native_env(tmp_path, monkeypatch)
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    calls: list[int] = []
+
+    def _turn(messages: list[dict[str, object]]) -> str:
+        calls.append(1)
+        if len(calls) == 1:
+            return json.dumps(_TEAM_MISMATCH_BUNDLE)
+        fixed = dict(_TEAM_MISMATCH_BUNDLE)
+        fixed["files"] = dict(_TEAM_MISMATCH_BUNDLE["files"])
+        fixed["files"]["src/App.tsx"] = (
+            "export default function App() {\n"
+            "  const TEAM = [{ id: 1, name: 'A' }];\n"
+            "  return <div>{TEAM.map((t) => t.id)}</div>;\n"
+            "}\n"
+        )
+        return json.dumps(fixed)
+
+    try:
+        result = run_hermes_native_build(
+            workspace_id="ws_native",
+            project_id="proj_native",
+            session_id="sess_native",
+            user_prompt="build a dashboard",
+            created_by="user_native",
+            complete_turn=_turn,
+        )
+    finally:
+        set_builder_source_store_for_tests(None)
+
+    assert len(calls) == 1
+    assert result["scaffolded"] is True
+    assert result["ham_native_builder"]["status"] == "succeeded"

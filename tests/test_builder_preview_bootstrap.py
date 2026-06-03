@@ -167,6 +167,27 @@ def test_normalize_esm_config_unchanged_when_package_json_invalid() -> None:
     assert out == files
 
 
+def test_ensure_preview_bootstrap_adds_tailwind_config_when_tailwind_present() -> None:
+    pkg = json.dumps(
+        {
+            "name": "demo",
+            "private": True,
+            "type": "module",
+            "devDependencies": {"tailwindcss": "^3.4.0"},
+        }
+    )
+    files = {
+        "package.json": pkg + "\n",
+        "postcss.config.js": "export default { plugins: { tailwindcss: {}, autoprefixer: {} } };\n",
+        "src/App.tsx": "export default function App() { return null; }\n",
+    }
+    out = ensure_preview_bootstrap_files(files, project_name="Tailwind App")
+    assert "tailwind.config.js" in out
+    assert "./index.html" in out["tailwind.config.js"]
+    assert "./src/**/*.{js,ts,jsx,tsx}" in out["tailwind.config.js"]
+    assert out["postcss.config.js"] == files["postcss.config.js"]
+
+
 def test_ensure_preview_bootstrap_renames_commonjs_tailwind_config() -> None:
     cjs_tailwind = "module.exports = { content: ['./src/**/*.{js,ts,jsx,tsx}'] };\n"
     files = {
