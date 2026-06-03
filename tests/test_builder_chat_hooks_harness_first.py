@@ -202,7 +202,10 @@ def test_no_selection_no_default_routes_to_native_unavailable_and_blocks_scaffol
                 "builder_intent": "build_or_create",
                 "builder_operation": "build_or_create",
                 "scaffolded": False,
-                "ham_native_builder": {"status": "unavailable"},
+                "ham_native_builder": {
+                    "status": "unavailable",
+                    "failure_reason": "workspace_not_configured",
+                },
             },
         ) as native_mock,
         patch(
@@ -215,7 +218,7 @@ def test_no_selection_no_default_routes_to_native_unavailable_and_blocks_scaffol
     native_mock.assert_called_once()
     assert meta.get("selected_builder_state") == "native"
     assert meta.get("ham_native_builder", {}).get("status") == "unavailable"
-    assert prefix == "HAM Native Builder is not ready yet.\n\n"
+    assert prefix.startswith("Native Hermes workspace execution is not configured yet.")
 
 
 def test_no_selection_starts_native_build_and_returns_started_copy(_empty_store) -> None:
@@ -278,7 +281,10 @@ def test_selected_hermes_agent_legacy_value_is_treated_as_native_mode(_empty_sto
                 "builder_intent": "build_or_create",
                 "builder_operation": "build_or_create",
                 "scaffolded": False,
-                "ham_native_builder": {"status": "unavailable"},
+                "ham_native_builder": {
+                    "status": "unavailable",
+                    "failure_reason": "workspace_not_configured",
+                },
             },
         ),
         patch(
@@ -289,7 +295,7 @@ def test_selected_hermes_agent_legacy_value_is_treated_as_native_mode(_empty_sto
         prefix, meta = _run("build me a tetris game")
     scaffold_mock.assert_not_called()
     assert meta.get("selected_builder_state") == "native"
-    assert prefix == "HAM Native Builder is not ready yet.\n\n"
+    assert prefix.startswith("Native Hermes workspace execution is not configured yet.")
 
 
 def test_explicit_quick_preview_uses_native_or_honest_unavailable_not_scaffold(_empty_store) -> None:
@@ -301,7 +307,10 @@ def test_explicit_quick_preview_uses_native_or_honest_unavailable_not_scaffold(_
                 "builder_intent": "build_or_create",
                 "builder_operation": "build_or_create",
                 "scaffolded": False,
-                "ham_native_builder": {"status": "unavailable"},
+                "ham_native_builder": {
+                    "status": "unavailable",
+                    "failure_reason": "workspace_not_configured",
+                },
             },
         ) as native_mock,
         patch(
@@ -314,7 +323,7 @@ def test_explicit_quick_preview_uses_native_or_honest_unavailable_not_scaffold(_
     scaffold_mock.assert_not_called()
     assert meta.get("builder_quick_preview") is True
     assert meta.get("selected_builder_state") == "native"
-    assert prefix == "HAM Native Builder is not ready yet.\n\n"
+    assert prefix.startswith("Native Hermes workspace execution is not configured yet.")
 
 
 def test_explicit_quick_preview_dev_flag_allows_old_scaffold(_empty_store, monkeypatch) -> None:
@@ -353,7 +362,10 @@ def test_selected_builder_responses_expose_no_internals(_empty_store) -> None:
                     "builder_intent": "build_or_create",
                     "builder_operation": "build_or_create",
                     "scaffolded": False,
-                    "ham_native_builder": {"status": "unavailable"},
+                    "ham_native_builder": {
+                    "status": "unavailable",
+                    "failure_reason": "workspace_not_configured",
+                },
                 },
             ),
             patch(

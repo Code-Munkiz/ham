@@ -321,7 +321,15 @@ def test_worker_executes_job_by_id_and_materializes_snapshot(monkeypatch, tmp_pa
     _configure_oidc(monkeypatch)
     monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "disabled")
-    monkeypatch.setattr(native_hermes, "complete_artifact_turn", lambda *_a, **_k: json.dumps(_VALID_BUNDLE))
+    monkeypatch.setenv("HAM_HERMES_NATIVE_WORKSPACE_ENABLED", "1")
+
+    def _files(**_kwargs: object) -> dict[str, str]:
+        return dict(_VALID_BUNDLE["files"])
+
+    monkeypatch.setattr(
+        "src.ham.hermes_workspace_builder._workspace_files_provider",
+        _files,
+    )
     store = BuilderSourceStore(store_path=tmp_path / "s.json")
     set_builder_source_store_for_tests(store)
     try:
@@ -356,7 +364,14 @@ def test_worker_idempotent_skip_when_terminal(monkeypatch, tmp_path) -> None:
     def _must_not_run(*_a, **_k):
         raise AssertionError("executor must not run for a terminal job")
 
-    monkeypatch.setattr(native_hermes, "complete_artifact_turn", _must_not_run)
+    def _must_not_run_workspace(**_kwargs: object):
+        raise AssertionError("workspace build must not run for a terminal job")
+
+    monkeypatch.setenv("HAM_HERMES_NATIVE_WORKSPACE_ENABLED", "1")
+    monkeypatch.setattr(
+        "src.ham.hermes_workspace_builder.execute_hermes_native_workspace_build",
+        _must_not_run_workspace,
+    )
     store = BuilderSourceStore(store_path=tmp_path / "s.json")
     set_builder_source_store_for_tests(store)
     try:

@@ -15,7 +15,6 @@ import pytest
 
 import src.ham.builder_native_hermes as native_hermes
 from src.ham.builder_native_hermes import (
-    _NATIVE_BUILD_MAX_ATTEMPTS,
     NATIVE_BUILD_JOB_ORIGIN,
     NATIVE_BUILD_PHASE_FAILED,
     NATIVE_BUILD_PHASE_GENERATING,
@@ -30,7 +29,6 @@ from src.ham.builder_native_hermes import (
     start_native_build_job,
 )
 from src.ham.native_build_worker_enqueue import set_native_build_enqueue_for_tests
-from src.integrations.nous_gateway_client import GatewayCallError
 from src.persistence.builder_source_store import (
     BuilderSourceStore,
     set_builder_source_store_for_tests,
@@ -69,25 +67,21 @@ _VALID_BUNDLE = {
 }
 
 
-def _valid_turn(_messages) -> str:
-    return json.dumps(_VALID_BUNDLE)
+def _valid_files_provider(**_kwargs: object) -> dict[str, str]:
+    return dict(_VALID_BUNDLE["files"])
 
 
 def _ready_env(tmp_path, monkeypatch) -> None:
-    """Gateway + builder model configured; inline dispatch for deterministic tests."""
-    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
-    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://127.0.0.1:8642")
-    monkeypatch.setenv("HERMES_BUILDER_MODEL", "hermes-builder-fast")
+    """Workspace lane enabled; inline dispatch for deterministic tests."""
+    monkeypatch.setenv("HAM_HERMES_NATIVE_WORKSPACE_ENABLED", "1")
     monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "disabled")
     monkeypatch.setenv("HAM_NATIVE_BUILD_DISPATCH", "inline")
 
 
 def _durable_env(tmp_path, monkeypatch) -> None:
-    """Gateway + builder model configured; default (durable) dispatch — not inline."""
-    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
-    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://127.0.0.1:8642")
-    monkeypatch.setenv("HERMES_BUILDER_MODEL", "hermes-builder-fast")
+    """Workspace lane enabled; default (durable) dispatch — not inline."""
+    monkeypatch.setenv("HAM_HERMES_NATIVE_WORKSPACE_ENABLED", "1")
     monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "disabled")
     monkeypatch.delenv("HAM_NATIVE_BUILD_DISPATCH", raising=False)
@@ -164,7 +158,7 @@ def test_start_creates_job_and_returns_started(tmp_path, monkeypatch) -> None:
             session_id="sess_v2",
             user_prompt="build a small native app",
             created_by="user_v2",
-            complete_turn=_valid_turn,
+            workspace_files_provider=_valid_files_provider,
         )
     finally:
         set_builder_source_store_for_tests(None)
@@ -202,7 +196,7 @@ def test_executor_success_materializes_source_snapshot(tmp_path, monkeypatch) ->
             session_id="sess_v2",
             user_prompt="build a small native app",
             created_by="user_v2",
-            complete_turn=_valid_turn,
+            workspace_files_provider=_valid_files_provider,
         )
     finally:
         set_builder_source_store_for_tests(None)
@@ -223,13 +217,10 @@ def test_executor_success_materializes_source_snapshot(tmp_path, monkeypatch) ->
 
 
 def test_executor_failure_marks_safe_error(tmp_path, monkeypatch) -> None:
+    """Workspace enabled but no files produced -> safe failure without JSON artifact fallback."""
     _ready_env(tmp_path, monkeypatch)
     store = BuilderSourceStore(store_path=tmp_path / "sources.json")
     set_builder_source_store_for_tests(store)
-
-    def _boom(_messages) -> str:
-        raise GatewayCallError("UPSTREAM_TIMEOUT", "Gateway request timed out")
-
     try:
         job = store.create_import_job(
             workspace_id="ws_v2",
@@ -246,20 +237,18 @@ def test_executor_failure_marks_safe_error(tmp_path, monkeypatch) -> None:
             session_id="sess_v2",
             user_prompt="build a small native app",
             created_by="user_v2",
-            complete_turn=_boom,
         )
     finally:
         set_builder_source_store_for_tests(None)
 
     assert result["scaffolded"] is False
-    assert result["ham_native_builder"] == {"status": "failed", "failure_reason": "gateway"}
+    assert result["ham_native_builder"]["status"] == "failed"
     jobs = store.list_import_jobs(workspace_id="ws_v2", project_id="proj_v2")
     assert jobs[0].status == "failed"
     assert jobs[0].phase == NATIVE_BUILD_PHASE_FAILED
-    assert jobs[0].error_code == "HAM_NATIVE_BUILDER_GATEWAY_ERROR"
-    # No raw gateway code / internals leak into the user-pollable record.
+    assert jobs[0].error_code == "HAM_NATIVE_WORKSPACE_NOT_IMPLEMENTED"
     serialized = json.dumps(jobs[0].model_dump(mode="json")).lower()
-    for token in (*_FORBIDDEN_TOKENS, "upstream_timeout"):
+    for token in _FORBIDDEN_TOKENS:
         assert token not in serialized
 
 
@@ -274,7 +263,7 @@ def test_status_persists_across_store_reload_without_internals(tmp_path, monkeyp
             session_id="sess_v2",
             user_prompt="build a small native app",
             created_by="user_v2",
-            complete_turn=_valid_turn,
+            workspace_files_provider=_valid_files_provider,
         )
     finally:
         set_builder_source_store_for_tests(None)
@@ -317,121 +306,26 @@ def test_executor_does_not_run_old_scaffold(tmp_path, monkeypatch) -> None:
             session_id="sess_v2",
             user_prompt="build a small native app",
             created_by="user_v2",
-            complete_turn=_valid_turn,
+            workspace_files_provider=_valid_files_provider,
         )
     finally:
         set_builder_source_store_for_tests(None)
 
     assert result["ham_native_builder"] == {"status": "succeeded"}
-
-
-def test_executor_multistep_success_after_first_repair(tmp_path, monkeypatch) -> None:
-    """Prose first reply, valid bundle on the repair turn -> the loop recovers and succeeds."""
-    _ready_env(tmp_path, monkeypatch)
-    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
-    set_builder_source_store_for_tests(store)
-
-    calls: list = []
-
-    def _prose_then_valid(messages) -> str:
-        calls.append(messages)
-        if len(calls) == 1:
-            return "Sure! Here is a plan for your app. I'll start building it now."
-        return json.dumps(_VALID_BUNDLE)
-
-    try:
-        job = store.create_import_job(
-            workspace_id="ws_v2",
-            project_id="proj_v2",
-            created_by="user_v2",
-            phase=NATIVE_BUILD_PHASE_QUEUED,
-            status="queued",
-            metadata={"origin": NATIVE_BUILD_JOB_ORIGIN},
-        )
-        result = execute_native_build_job(
-            import_job_id=job.id,
-            workspace_id="ws_v2",
-            project_id="proj_v2",
-            session_id="sess_v2",
-            user_prompt="build a small native app",
-            created_by="user_v2",
-            complete_turn=_prose_then_valid,
-        )
-    finally:
-        set_builder_source_store_for_tests(None)
-
-    # A real second (repair) turn ran and fed back the prior reply (more messages).
-    assert len(calls) == 2
-    assert len(calls[1]) > len(calls[0])
-    assert result["ham_native_builder"] == {"status": "succeeded"}
-    assert result["source_snapshot_id"]
-    jobs = store.list_import_jobs(workspace_id="ws_v2", project_id="proj_v2")
-    assert jobs[0].status == "succeeded"
-    assert jobs[0].phase == NATIVE_BUILD_PHASE_SUCCEEDED
-    snapshots = store.list_source_snapshots(workspace_id="ws_v2", project_id="proj_v2")
-    assert "src/App.tsx" in snapshots[0].manifest["inline_files"]
-
-
-def test_executor_multistep_exhausts_attempts_and_fails_safely(tmp_path, monkeypatch) -> None:
-    """Prose on every attempt -> bounded by _NATIVE_BUILD_MAX_ATTEMPTS, then a safe bundle failure."""
-    _ready_env(tmp_path, monkeypatch)
-    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
-    set_builder_source_store_for_tests(store)
-
-    calls: list = []
-
-    def _always_prose(messages) -> str:
-        calls.append(messages)
-        return "I can't emit JSON, but here is a long description of the app I would build."
-
-    try:
-        job = store.create_import_job(
-            workspace_id="ws_v2",
-            project_id="proj_v2",
-            created_by="user_v2",
-            phase=NATIVE_BUILD_PHASE_QUEUED,
-            status="queued",
-            metadata={"origin": NATIVE_BUILD_JOB_ORIGIN},
-        )
-        result = execute_native_build_job(
-            import_job_id=job.id,
-            workspace_id="ws_v2",
-            project_id="proj_v2",
-            session_id="sess_v2",
-            user_prompt="build a small native app",
-            created_by="user_v2",
-            complete_turn=_always_prose,
-        )
-    finally:
-        set_builder_source_store_for_tests(None)
-
-    # The loop is bounded: exactly _NATIVE_BUILD_MAX_ATTEMPTS turns, then a safe failure.
-    assert len(calls) == _NATIVE_BUILD_MAX_ATTEMPTS
-    assert result["scaffolded"] is False
-    assert result["ham_native_builder"] == {"status": "failed", "failure_reason": "bundle"}
-    jobs = store.list_import_jobs(workspace_id="ws_v2", project_id="proj_v2")
-    assert jobs[0].status == "failed"
-    assert jobs[0].phase == NATIVE_BUILD_PHASE_FAILED
-    # No half-built snapshot left behind on failure.
-    assert store.list_source_snapshots(workspace_id="ws_v2", project_id="proj_v2") == []
-    # Neither the pollable record nor the result leaks internals.
-    serialized = json.dumps(jobs[0].model_dump(mode="json")).lower()
-    haystack = json.dumps(result).lower()
-    for token in _FORBIDDEN_TOKENS:
-        assert token not in serialized
-        assert token not in haystack
 
 
 def test_executor_repairs_on_verification_failure(tmp_path, monkeypatch) -> None:
-    """Verification is now inside the loop: a failed verify triggers a real repair, then succeeds."""
+    """A failed verify on first materialize attempt fails safely (no JSON artifact retry)."""
     _ready_env(tmp_path, monkeypatch)
     store = BuilderSourceStore(store_path=tmp_path / "sources.json")
     set_builder_source_store_for_tests(store)
 
     verify_calls = {"n": 0}
-    real_verify = native_hermes.verify_builder_scaffold_artifact
+    import src.ham.build_materialization as mat
 
-    def _fail_then_pass(prompt, scaffold, files, operation):
+    real_verify = mat.verify_builder_scaffold_artifact
+
+    def _fail_once(prompt, scaffold, files, operation):
         verify_calls["n"] += 1
         if verify_calls["n"] == 1:
             return {
@@ -441,13 +335,7 @@ def test_executor_repairs_on_verification_failure(tmp_path, monkeypatch) -> None
             }
         return real_verify(prompt, scaffold, files, operation)
 
-    monkeypatch.setattr(native_hermes, "verify_builder_scaffold_artifact", _fail_then_pass)
-
-    calls: list = []
-
-    def _valid_each_time(messages) -> str:
-        calls.append(messages)
-        return json.dumps(_VALID_BUNDLE)
+    monkeypatch.setattr(mat, "verify_builder_scaffold_artifact", _fail_once)
 
     try:
         job = store.create_import_job(
@@ -465,24 +353,23 @@ def test_executor_repairs_on_verification_failure(tmp_path, monkeypatch) -> None
             session_id="sess_v2",
             user_prompt="build a small native app",
             created_by="user_v2",
-            complete_turn=_valid_each_time,
+            workspace_files_provider=_valid_files_provider,
         )
     finally:
         set_builder_source_store_for_tests(None)
 
-    # Verify failed once then passed, and a real repair turn was issued in between.
-    assert verify_calls["n"] == 2
-    assert len(calls) == 2
-    assert result["ham_native_builder"] == {"status": "succeeded"}
-    jobs = store.list_import_jobs(workspace_id="ws_v2", project_id="proj_v2")
-    assert jobs[0].status == "succeeded"
-    # The internal-only verifier reason is never fed back out to the pollable record.
-    serialized = json.dumps(jobs[0].model_dump(mode="json")).lower()
+    assert verify_calls["n"] == 1
+    assert result["ham_native_builder"]["status"] == "failed"
+    serialized = json.dumps(
+        store.list_import_jobs(workspace_id="ws_v2", project_id="proj_v2")[0].model_dump(
+            mode="json"
+        )
+    ).lower()
     assert "internal-only verifier reason" not in serialized
 
 
 def test_executor_persists_granular_phases(tmp_path, monkeypatch) -> None:
-    """The v2 executor records ordered granular phases: generate -> validate -> repair -> materialize -> preview -> succeeded."""
+    """The v2 executor records workspace phases through materialize and preview."""
     _ready_env(tmp_path, monkeypatch)
 
     class _PhaseRecordingStore(BuilderSourceStore):
@@ -508,14 +395,6 @@ def test_executor_persists_granular_phases(tmp_path, monkeypatch) -> None:
     store = _PhaseRecordingStore(store_path=tmp_path / "sources.json")
     set_builder_source_store_for_tests(store)
 
-    calls: list = []
-
-    def _prose_then_valid(messages) -> str:
-        calls.append(messages)
-        if len(calls) == 1:
-            return "Here's a plan."
-        return json.dumps(_VALID_BUNDLE)
-
     try:
         job = store.create_import_job(
             workspace_id="ws_v2",
@@ -532,7 +411,7 @@ def test_executor_persists_granular_phases(tmp_path, monkeypatch) -> None:
             session_id="sess_v2",
             user_prompt="build a small native app",
             created_by="user_v2",
-            complete_turn=_prose_then_valid,
+            workspace_files_provider=_valid_files_provider,
         )
     finally:
         set_builder_source_store_for_tests(None)
@@ -540,26 +419,12 @@ def test_executor_persists_granular_phases(tmp_path, monkeypatch) -> None:
     phases = store.phases
     for expected in (
         NATIVE_BUILD_PHASE_GENERATING,
-        NATIVE_BUILD_PHASE_VALIDATING,
-        NATIVE_BUILD_PHASE_REPAIRING,
         NATIVE_BUILD_PHASE_MATERIALIZING,
         NATIVE_BUILD_PHASE_PREVIEW_STARTING,
         NATIVE_BUILD_PHASE_SUCCEEDED,
     ):
         assert expected in phases
-    # Ordered progression through the loop and into the terminal success.
-    assert phases.index(NATIVE_BUILD_PHASE_GENERATING) < phases.index(NATIVE_BUILD_PHASE_REPAIRING)
-    assert phases.index(NATIVE_BUILD_PHASE_REPAIRING) < phases.index(
-        NATIVE_BUILD_PHASE_MATERIALIZING
-    )
-    assert phases.index(NATIVE_BUILD_PHASE_MATERIALIZING) < phases.index(
-        NATIVE_BUILD_PHASE_PREVIEW_STARTING
-    )
-    assert phases.index(NATIVE_BUILD_PHASE_PREVIEW_STARTING) < phases.index(
-        NATIVE_BUILD_PHASE_SUCCEEDED
-    )
     assert phases[-1] == NATIVE_BUILD_PHASE_SUCCEEDED
-    # Final persisted job is pollable as succeeded.
     jobs = store.list_import_jobs(workspace_id="ws_v2", project_id="proj_v2")
     assert jobs[0].status == "succeeded"
     assert jobs[0].phase == NATIVE_BUILD_PHASE_SUCCEEDED
@@ -578,7 +443,8 @@ def test_executor_starts_preview_on_success(tmp_path, monkeypatch) -> None:
         return {"preview_status": "starting"}
 
     monkeypatch.setattr(
-        native_hermes, "maybe_enqueue_chat_scaffold_cloud_runtime_job", _record_preview
+        "src.ham.build_materialization.maybe_enqueue_chat_scaffold_cloud_runtime_job",
+        _record_preview,
     )
     try:
         job = store.create_import_job(
@@ -596,7 +462,7 @@ def test_executor_starts_preview_on_success(tmp_path, monkeypatch) -> None:
             session_id="sess_v2",
             user_prompt="build a small native app",
             created_by="user_v2",
-            complete_turn=_valid_turn,
+            workspace_files_provider=_valid_files_provider,
         )
     finally:
         set_builder_source_store_for_tests(None)
@@ -611,10 +477,7 @@ def test_executor_starts_preview_on_success(tmp_path, monkeypatch) -> None:
 
 
 def test_unconfigured_returns_unavailable_and_creates_no_job(tmp_path, monkeypatch) -> None:
-    # Gateway reachable but no builder model and no injected turn -> fail fast, no job.
-    monkeypatch.setenv("HERMES_GATEWAY_MODE", "http")
-    monkeypatch.setenv("HERMES_GATEWAY_BASE_URL", "http://127.0.0.1:8642")
-    monkeypatch.delenv("HERMES_BUILDER_MODEL", raising=False)
+    monkeypatch.delenv("HAM_HERMES_NATIVE_WORKSPACE_ENABLED", raising=False)
     monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
     store = BuilderSourceStore(store_path=tmp_path / "sources.json")
     set_builder_source_store_for_tests(store)
@@ -629,7 +492,10 @@ def test_unconfigured_returns_unavailable_and_creates_no_job(tmp_path, monkeypat
     finally:
         set_builder_source_store_for_tests(None)
 
-    assert result["ham_native_builder"] == {"status": "unavailable", "failure_reason": "unconfigured"}
+    assert result["ham_native_builder"] == {
+        "status": "unavailable",
+        "failure_reason": "workspace_not_configured",
+    }
     assert "native_build_job_id" not in result
     assert store.list_import_jobs(workspace_id="ws_v2", project_id="proj_v2") == []
 
