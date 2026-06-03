@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 import os
-import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -16,6 +15,11 @@ from typing import Any
 from src.ham.build_materialization import (
     BuildMaterializationResult,
     materialize_files_to_snapshot,
+)
+from src.ham.hermes_workspace_execution import (
+    WorkspaceExecutionOutcome,
+    collect_workspace_files,
+    run_hermes_cli_workspace_build,
 )
 
 _LOG = logging.getLogger(__name__)
@@ -27,12 +31,14 @@ _WORKSPACE_ROOT_ENV = "HAM_HERMES_NATIVE_WORKSPACE_ROOT"
 _workspace_files_provider: Callable[..., dict[str, str] | None] | None = None
 
 _USER_MESSAGE_NOT_CONFIGURED = "Native Hermes workspace execution is not configured yet.\n\n"
-_USER_MESSAGE_NOT_IMPLEMENTED = (
-    "Native Hermes workspace execution is enabled but not available on this host yet.\n\n"
+_USER_MESSAGE_CLI_UNAVAILABLE = (
+    "Native Hermes workspace execution is not available on this host yet.\n\n"
 )
 _ERROR_CODE_NOT_CONFIGURED = "HAM_NATIVE_WORKSPACE_NOT_CONFIGURED"
-_ERROR_CODE_NOT_IMPLEMENTED = "HAM_NATIVE_WORKSPACE_NOT_IMPLEMENTED"
-_ERROR_CODE_EMPTY_WORKSPACE = "HAM_NATIVE_WORKSPACE_EMPTY"
+_ERROR_CODE_CLI_UNAVAILABLE = "HERMES_CLI_UNAVAILABLE"
+_ERROR_CODE_CLI_EMPTY = "HERMES_CLI_EMPTY_WORKSPACE"
+_ERROR_CODE_CLI_TIMEOUT = "HERMES_CLI_TIMEOUT"
+_ERROR_CODE_CLI_FAILED = "HERMES_CLI_FAILED"
 
 
 def _truthy_env(name: str) -> bool:
@@ -73,23 +79,13 @@ def _isolated_workspace_dir(*, workspace_id: str, project_id: str, import_job_id
     return path
 
 
-def _collect_files_from_workspace_tree(workspace_dir: Path) -> dict[str, str]:
-    """Read text files from an isolated workspace tree (posix-relative paths)."""
-    if not workspace_dir.is_dir():
-        return {}
-    out: dict[str, str] = {}
-    for file_path in sorted(workspace_dir.rglob("*")):
-        if not file_path.is_file():
-            continue
-        rel = file_path.relative_to(workspace_dir).as_posix()
-        if ".." in rel.split("/"):
-            continue
-        try:
-            text = file_path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            continue
-        out[rel] = text
-    return out
+def _outcome_to_user_message(outcome: WorkspaceExecutionOutcome) -> str:
+    code = (outcome.error_code or "").strip()
+    if code in {_ERROR_CODE_CLI_UNAVAILABLE, _ERROR_CODE_CLI_TIMEOUT, _ERROR_CODE_CLI_FAILED}:
+        return _USER_MESSAGE_CLI_UNAVAILABLE
+    if code == _ERROR_CODE_CLI_EMPTY:
+        return _USER_MESSAGE_CLI_UNAVAILABLE
+    return _USER_MESSAGE_CLI_UNAVAILABLE
 
 
 def _resolve_workspace_files(
@@ -100,8 +96,8 @@ def _resolve_workspace_files(
     user_prompt: str,
     workspace_dir: Path,
     files_provider: Callable[..., dict[str, str] | None] | None,
-) -> dict[str, str] | None:
-    """Collect generated files from the workspace harness (provider seam or on-disk tree)."""
+) -> tuple[dict[str, str] | None, WorkspaceExecutionOutcome | None]:
+    """Collect generated files from the workspace harness (provider seam or Hermes CLI)."""
     provider = files_provider or _workspace_files_provider
     if provider is not None:
         collected = provider(
@@ -112,11 +108,21 @@ def _resolve_workspace_files(
             workspace_dir=workspace_dir,
         )
         if isinstance(collected, dict) and collected:
-            return collected
-        return None
+            return collected, None
+        return None, WorkspaceExecutionOutcome(
+            ok=False,
+            error_code=_ERROR_CODE_CLI_EMPTY,
+            error_summary="Test workspace provider returned no files.",
+        )
 
-    # Skeleton: Hermes CLI iterative execution is not wired yet on this host.
-    return None
+    outcome = run_hermes_cli_workspace_build(
+        workspace_dir=workspace_dir,
+        user_prompt=user_prompt,
+        import_job_id=import_job_id,
+    )
+    if not outcome.ok:
+        return None, outcome
+    return outcome.files or collect_workspace_files(workspace_dir) or None, outcome
 
 
 def execute_hermes_native_workspace_build(
@@ -132,8 +138,9 @@ def execute_hermes_native_workspace_build(
     """Run the native Hermes workspace build lane (never JSON artifact mode).
 
     When ``HAM_HERMES_NATIVE_WORKSPACE_ENABLED`` is unset, returns ``not_configured``
-    with safe user copy. When enabled but no files are produced, fails clearly without
-    falling back to :func:`complete_artifact_turn` or legacy scaffold.
+    with safe user copy. When enabled but Hermes CLI is unavailable or produces no
+    files, fails clearly without falling back to :func:`complete_artifact_turn` or
+    legacy scaffold.
     """
     if not hermes_native_workspace_configured():
         return BuildMaterializationResult(
@@ -160,7 +167,7 @@ def execute_hermes_native_workspace_build(
         len(enriched_prompt),
     )
 
-    files = _resolve_workspace_files(
+    files, exec_outcome = _resolve_workspace_files(
         workspace_id=workspace_id,
         project_id=project_id,
         import_job_id=import_job_id,
@@ -168,18 +175,25 @@ def execute_hermes_native_workspace_build(
         workspace_dir=workspace_dir,
         files_provider=files_provider,
     )
-    if files is None:
-        on_disk = _collect_files_from_workspace_tree(workspace_dir)
-        files = on_disk if on_disk else None
 
     if not files:
+        outcome = exec_outcome or WorkspaceExecutionOutcome(
+            ok=False,
+            error_code=_ERROR_CODE_CLI_EMPTY,
+            error_summary="Workspace build produced no files.",
+        )
+        reason = "hermes_cli_unavailable"
+        if outcome.error_code == _ERROR_CODE_CLI_TIMEOUT:
+            reason = "hermes_cli_timeout"
+        elif outcome.error_code == _ERROR_CODE_CLI_EMPTY:
+            reason = "hermes_cli_empty"
         return BuildMaterializationResult(
             status="failed",
-            summary="Workspace build produced no files.",
+            summary=outcome.error_summary or "Workspace build failed.",
             import_job_id=import_job_id,
-            failure_reason="workspace_not_implemented",
-            user_message=_USER_MESSAGE_NOT_IMPLEMENTED,
-            error_code=_ERROR_CODE_NOT_IMPLEMENTED,
+            failure_reason=reason,
+            user_message=_outcome_to_user_message(outcome),
+            error_code=outcome.error_code or _ERROR_CODE_CLI_FAILED,
         )
 
     return materialize_files_to_snapshot(

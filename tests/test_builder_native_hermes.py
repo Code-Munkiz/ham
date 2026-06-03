@@ -163,8 +163,12 @@ def test_workspace_build_materializes_snapshot(tmp_path, monkeypatch) -> None:
     assert "package.json" in snapshots[0].manifest["inline_files"]
 
 
-def test_workspace_enabled_without_files_fails_safely(tmp_path, monkeypatch) -> None:
+def test_workspace_enabled_cli_unavailable_fails_safely(tmp_path, monkeypatch) -> None:
     _workspace_env(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        "src.ham.hermes_workspace_execution.resolve_hermes_cli_binary",
+        lambda: None,
+    )
     store = BuilderSourceStore(store_path=tmp_path / "sources.json")
     set_builder_source_store_for_tests(store)
     try:
@@ -180,8 +184,116 @@ def test_workspace_enabled_without_files_fails_safely(tmp_path, monkeypatch) -> 
 
     assert result["scaffolded"] is False
     assert result["ham_native_builder"]["status"] == "failed"
+    assert result["ham_native_builder"]["failure_reason"] == "hermes_cli_unavailable"
     jobs = store.list_import_jobs(workspace_id="ws_native", project_id="proj_native")
     assert jobs[0].status == "failed"
+    assert jobs[0].error_code == "HERMES_CLI_UNAVAILABLE"
+
+
+def test_workspace_provider_broken_ts_typecheck_fails_before_preview(tmp_path, monkeypatch) -> None:
+    _workspace_env(tmp_path, monkeypatch)
+
+    def _broken_ts_files(**_kwargs: object) -> dict[str, str]:
+        return {
+            "package.json": (
+                '{"name":"broken","private":true,"type":"module",'
+                '"scripts":{"dev":"vite"},"dependencies":{"react":"^18.3.1","react-dom":"^18.3.1"},'
+                '"devDependencies":{"typescript":"^5.6.3","vite":"^5.4.11","@vitejs/plugin-react":"^4.3.4"}}'
+            ),
+            "index.html": '<!doctype html><html><body><div id="root"></div>'
+            '<script type="module" src="/src/main.tsx"></script></body></html>\n',
+            "vite.config.ts": 'import { defineConfig } from "vite";\nexport default defineConfig({});\n',
+            "src/main.tsx": 'import App from "./App";\nconsole.log(TEAM);\n',
+            "src/App.tsx": "export default function App() { return null; }\n",
+        }
+
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    preview_calls: list[dict[str, object]] = []
+
+    def _no_preview(**kwargs: object) -> dict[str, object]:
+        preview_calls.append(kwargs)
+        return {"cloud_runtime_job_id": "should-not-run"}
+
+    monkeypatch.setattr(
+        "src.ham.build_materialization.maybe_enqueue_chat_scaffold_cloud_runtime_job",
+        _no_preview,
+    )
+    try:
+        result = run_hermes_native_build(
+            workspace_id="ws_native",
+            project_id="proj_native",
+            session_id="sess_native",
+            user_prompt="build a dashboard",
+            created_by="user_native",
+            workspace_files_provider=_broken_ts_files,
+        )
+    finally:
+        set_builder_source_store_for_tests(None)
+
+    assert result["scaffolded"] is False
+    assert preview_calls == []
+    jobs = store.list_import_jobs(workspace_id="ws_native", project_id="proj_native")
+    assert jobs[0].status == "failed"
+
+
+def test_workspace_valid_app_reaches_preview_enqueue(tmp_path, monkeypatch) -> None:
+    _workspace_env(tmp_path, monkeypatch)
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    preview_calls: list[dict[str, object]] = []
+
+    def _record_preview(**kwargs: object) -> dict[str, object]:
+        preview_calls.append(kwargs)
+        return {"preview_status": "starting"}
+
+    monkeypatch.setattr(
+        "src.ham.build_materialization.maybe_enqueue_chat_scaffold_cloud_runtime_job",
+        _record_preview,
+    )
+    try:
+        result = run_hermes_native_build(
+            workspace_id="ws_native",
+            project_id="proj_native",
+            session_id="sess_native",
+            user_prompt="build a small native app",
+            created_by="user_native",
+            workspace_files_provider=_valid_files_provider,
+        )
+    finally:
+        set_builder_source_store_for_tests(None)
+
+    assert result["scaffolded"] is True
+    assert len(preview_calls) == 1
+    assert preview_calls[0]["source_snapshot_id"] == result["source_snapshot_id"]
+
+
+def test_legacy_scaffold_never_called_on_native_build(tmp_path, monkeypatch) -> None:
+    _workspace_env(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        "src.ham.hermes_workspace_execution.resolve_hermes_cli_binary",
+        lambda: None,
+    )
+
+    def _raise_scaffold(**_kw: object) -> object:
+        raise AssertionError("legacy scaffold must not run")
+
+    monkeypatch.setattr(
+        "src.ham.builder_chat_scaffold.maybe_chat_scaffold_for_turn",
+        _raise_scaffold,
+    )
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    try:
+        run_hermes_native_build(
+            workspace_id="ws_native",
+            project_id="proj_native",
+            session_id="sess_native",
+            user_prompt="build app",
+            created_by="user_native",
+        )
+    finally:
+        set_builder_source_store_for_tests(None)
 
 
 def test_build_registry_context_reaches_workspace_adapter(tmp_path, monkeypatch) -> None:
