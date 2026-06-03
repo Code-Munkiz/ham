@@ -44,6 +44,7 @@ from src.api.dependencies.workspace import get_workspace_store
 from src.api.droid_build import _require_build_approver, _require_build_lane_project
 from src.ham.build_registry.intent import enrich_plan_metadata_with_registry_v2
 from src.ham.build_registry.scaffold_context import resolve_scaffold_context
+from src.ham.build_registry.user_copy_sanitize import sanitize_normal_user_copy
 from src.ham.builder_kit_router import select_kit_for_prompt
 from src.ham.clerk_auth import HamActor
 from src.ham.coding_router.opencode_provider import (
@@ -85,25 +86,6 @@ _OPENCODE_ALLOW_DELETIONS_ENV = "HAM_OPENCODE_ALLOW_DELETIONS"
 _SUMMARY_FALLBACK = "OpenCode mission finished."
 _ERROR_SUMMARY_FALLBACK = "OpenCode mission failed."
 
-# Keep Build Registry v2 routing internals out of normal launch payload copy.
-_BUILD_REGISTRY_V2_FORBIDDEN_TOKENS = (
-    "registry_v2_app_type",
-    "pack.site",
-    "pack.game",
-    "site.landing-page-core",
-    "site.dashboard-ui-core",
-    "build registry v2",
-    "fallback_reason",
-    "gate review",
-    "scaffold_quality",
-    "recipe id",
-    "pack id",
-    "yaml",
-    "render length",
-    "render budget",
-    "playbook context",
-)
-
 # Default managed-workspace launch budget must finish below hosted Cloud Run's
 # HTTP deadline (300s by default) so HAM can persist ControlPlaneRun + JSON.
 _OPENCODE_LAUNCH_DEADLINE_ENV = "HAM_OPENCODE_LAUNCH_DEADLINE_S"
@@ -123,19 +105,6 @@ def effective_opencode_launch_deadline_s() -> float:
         except ValueError:
             pass
     return _DEFAULT_MANAGED_WORKSPACE_LAUNCH_DEADLINE_S
-
-
-def _contains_build_registry_v2_forbidden_token(text: str) -> bool:
-    lower = text.lower()
-    return any(token in lower for token in _BUILD_REGISTRY_V2_FORBIDDEN_TOKENS)
-
-
-def _sanitize_normal_user_copy(text: str | None, *, fallback: str | None) -> str | None:
-    if not text:
-        return text
-    if _contains_build_registry_v2_forbidden_token(text):
-        return fallback
-    return text
 
 
 def _enrich_internal_launch_prompt(user_prompt: str) -> tuple[str, str | None]:
@@ -873,7 +842,7 @@ def _run_opencode_launch_core(
         log_context=log_context,
         deadline_s=deadline_s,
     )
-    safe_assistant_summary = _sanitize_normal_user_copy(
+    safe_assistant_summary = sanitize_normal_user_copy(
         run_result.assistant_summary,
         fallback=_SUMMARY_FALLBACK,
     )
@@ -939,7 +908,7 @@ def _run_opencode_launch_core(
                 f"opencode run finished with status={run_result.status}",
                 cap=2000,
             )
-        error_summary = _sanitize_normal_user_copy(
+        error_summary = sanitize_normal_user_copy(
             error_summary,
             fallback=_ERROR_SUMMARY_FALLBACK,
         )

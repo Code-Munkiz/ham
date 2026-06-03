@@ -26,6 +26,7 @@ from src.ham.managed_mission_truth import (
     managed_mission_correlation,
     managed_mission_truth_table,
 )
+from src.ham.build_registry.user_copy_sanitize import sanitize_normal_user_copy
 from src.ham.managed_mission_wiring import (
     get_managed_mission_store,
     observe_mission_from_cursor_payload,
@@ -67,45 +68,6 @@ _MAX_MISSION_REVIEW_CONTEXT_CHARS = 6_000
 _MISSION_HERMES_STALE_SECONDS_DEFAULT = 900
 
 _store = ManagedMissionStore()
-_BUILD_REGISTRY_V2_FORBIDDEN_TOKENS = (
-    "registry_v2_app_type",
-    "pack.site",
-    "pack.game",
-    "site.landing-page-core",
-    "site.dashboard-ui-core",
-    "game.",
-    "build registry v2",
-    "registry route",
-    "route matched",
-    "fallback_reason",
-    "gate report",
-    "gate review",
-    "scaffold_quality",
-    "dashboard_",
-    "city_",
-    "tactics_",
-    "landing_",
-    "recipe id",
-    "pack id",
-    "yaml",
-    "render length",
-    "render budget",
-    "playbook context",
-    "build registry v2 playbook context:",
-)
-
-
-def _contains_build_registry_v2_forbidden_token(text: str) -> bool:
-    lower = text.lower()
-    return any(token in lower for token in _BUILD_REGISTRY_V2_FORBIDDEN_TOKENS)
-
-
-def _sanitize_normal_user_copy(text: str | None, *, fallback: str | None) -> str | None:
-    if not text:
-        return text
-    if _contains_build_registry_v2_forbidden_token(text):
-        return fallback
-    return text
 
 
 def set_control_plane_run_store_for_tests(store: object | None) -> None:
@@ -242,7 +204,7 @@ def _mission_feed_row_from_event(e: MissionFeedEvent) -> dict[str, Any]:
         "time": e.observed_at,
         "kind": e.kind,
         "source": e.source,
-        "message": _sanitize_normal_user_copy(
+        "message": sanitize_normal_user_copy(
             e.message,
             fallback="Provider event redacted.",
         ),
@@ -285,13 +247,13 @@ def _mission_feed_events(m: ManagedMission) -> list[dict[str, Any]]:
 
 def _sanitize_public_feed_event_row(row: dict[str, Any]) -> dict[str, Any]:
     out = dict(row)
-    out["message"] = _sanitize_normal_user_copy(
+    out["message"] = sanitize_normal_user_copy(
         str(row.get("message") or ""),
         fallback="Provider event redacted.",
     )
     reason = row.get("reason_code")
     if isinstance(reason, str):
-        out["reason_code"] = _sanitize_normal_user_copy(reason, fallback=None)
+        out["reason_code"] = sanitize_normal_user_copy(reason, fallback=None)
     return out
 
 
@@ -431,7 +393,7 @@ def _public_mission(m: ManagedMission) -> dict[str, Any]:
         or (f"Cloud Agent mission for {m.repository_observed}" if m.repository_observed else "Cloud Agent mission")
     )
     task_summary = (
-        _sanitize_normal_user_copy(
+        sanitize_normal_user_copy(
             task_summary_raw,
             fallback="Cloud Agent mission",
         )
@@ -444,20 +406,20 @@ def _public_mission(m: ManagedMission) -> dict[str, Any]:
             or m.status_reason_last_observed
             or "Mission failed."
         )
-        error_summary = _sanitize_normal_user_copy(
+        error_summary = sanitize_normal_user_copy(
             error_summary,
             fallback="Mission failed.",
         )
     d = m.model_dump(mode="json", exclude_none=False)
-    d["status_reason_last_observed"] = _sanitize_normal_user_copy(
+    d["status_reason_last_observed"] = sanitize_normal_user_copy(
         m.status_reason_last_observed,
         fallback="status update unavailable",
     )
-    d["last_post_deploy_reason_code"] = _sanitize_normal_user_copy(
+    d["last_post_deploy_reason_code"] = sanitize_normal_user_copy(
         m.last_post_deploy_reason_code,
         fallback=None,
     )
-    d["last_review_headline"] = _sanitize_normal_user_copy(
+    d["last_review_headline"] = sanitize_normal_user_copy(
         m.last_review_headline,
         fallback=None,
     )
@@ -480,7 +442,7 @@ def _public_mission(m: ManagedMission) -> dict[str, Any]:
     d["checkpoint_events"] = [
         {
             **e.model_dump(mode="json", exclude_none=False),
-            "reason": _sanitize_normal_user_copy(e.reason, fallback=None),
+            "reason": sanitize_normal_user_copy(e.reason, fallback=None),
         }
         for e in m.mission_checkpoint_events
     ]
@@ -500,11 +462,11 @@ def _control_plane_public_subset(ham_run_id: str) -> dict[str, Any] | None:
         "status": r.status,
         "status_reason": r.status_reason,
         "external_id": r.external_id,
-        "summary": _sanitize_normal_user_copy(
+        "summary": sanitize_normal_user_copy(
             r.summary,
             fallback="Cursor mission in progress.",
         ),
-        "error_summary": _sanitize_normal_user_copy(
+        "error_summary": sanitize_normal_user_copy(
             r.error_summary,
             fallback="Cursor mission failed.",
         ),
