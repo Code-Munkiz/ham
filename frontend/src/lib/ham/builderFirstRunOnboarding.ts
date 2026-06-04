@@ -8,8 +8,7 @@ export const BUILDER_FIRST_RUN_PREVIEW_NOTE = "HAM will create a preview you can
 
 export const BUILDER_WORKBENCH_EMPTY_TITLE = "Tell HAM what to build.";
 
-export const BUILDER_WORKBENCH_EMPTY_SUBTITLE =
-  "Describe an app, website, dashboard, or tool. Your preview will appear here once HAM creates the first project files.";
+export const BUILDER_WORKBENCH_EMPTY_SUBTITLE = "Your preview will appear here.";
 
 export type BuilderExamplePrompt = {
   label: string;

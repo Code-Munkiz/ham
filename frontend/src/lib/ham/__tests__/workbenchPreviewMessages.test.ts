@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  PREVIEW_BUILDING_TITLE,
+  PREVIEW_FAILURE_TITLE,
   buildPreviewPrimaryState,
   previewPhaseUserLabel,
   previewUserCopyLooksSafe,
@@ -16,10 +18,10 @@ describe("workbenchPreviewMessages", () => {
     expect(previewPhaseUserLabel("error")).toBe("Needs attention");
   });
 
-  it("builds preparing and almost-ready primary copy", () => {
+  it("builds simplified building and empty primary copy", () => {
     expect(buildPreviewPrimaryState("preparing", { hasBackendSource: false })).toEqual({
-      title: "HAM is preparing your preview.",
-      subtitle: "Hang tight while HAM sets up your project files.",
+      title: PREVIEW_BUILDING_TITLE,
+      subtitle: "",
     });
     expect(
       buildPreviewPrimaryState("starting", {
@@ -28,13 +30,12 @@ describe("workbenchPreviewMessages", () => {
         cloudPreviewDisconnected: false,
       }),
     ).toEqual({
-      title: "Preview is almost ready.",
-      subtitle:
-        "Your project files are ready. The hosted preview will appear here when the environment finishes starting.",
+      title: PREVIEW_BUILDING_TITLE,
+      subtitle: "",
     });
   });
 
-  it("builds error primary copy without leaking raw API messages", () => {
+  it("builds simplified error primary copy without leaking raw API messages", () => {
     expect(
       buildPreviewPrimaryState("error", {
         hasBackendSource: true,
@@ -42,9 +43,8 @@ describe("workbenchPreviewMessages", () => {
         previewMessage: "builder-artifact://secret/path",
       }),
     ).toEqual({
-      title: "Preview could not start.",
-      subtitle:
-        "Your project files are saved in the Code tab. Try again or open details for setup help.",
+      title: PREVIEW_FAILURE_TITLE,
+      subtitle: "",
     });
   });
 
@@ -67,7 +67,7 @@ describe("workbenchPreviewMessages", () => {
   });
 
   it("flags forbidden internal strings in user copy", () => {
-    expect(previewUserCopyLooksSafe("Preview is almost ready.")).toBe(true);
+    expect(previewUserCopyLooksSafe("HAM is building your preview…")).toBe(true);
     expect(previewUserCopyLooksSafe("preview_proxy upstream")).toBe(false);
     expect(previewUserCopyLooksSafe("ControlPlaneRun failed")).toBe(false);
   });

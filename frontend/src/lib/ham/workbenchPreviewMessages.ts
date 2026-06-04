@@ -30,10 +30,13 @@ export type PreviewPrimaryStateContext = {
   rawError?: string | null;
 };
 
+export const PREVIEW_BUILDING_TITLE = "HAM is building your preview…";
+export const PREVIEW_FAILURE_TITLE = "HAM couldn't finish this preview.";
+
 export const FORBIDDEN_USER_COPY_PATTERN =
   /safe_edit_low|ham_droid_exec_token|droid exec|\bargv\b|runner url|preview_proxy|builder-artifact|gcs|kubernetes|\bpod\b|controlplanerun|stack trace|authorization:|bearer /i;
 
-/** Normie-friendly status pill label (never raw phase ids). */
+/** Normie-friendly status pill label (never raw phase ids). Operator UI only. */
 export function previewPhaseUserLabel(phase: WorkbenchPreviewPhase): string {
   switch (phase) {
     case "no_project":
@@ -88,7 +91,7 @@ export function sanitizePreviewFetchError(message: string | null | undefined): s
   return raw;
 }
 
-/** User-facing error line under the primary preview title. */
+/** User-facing error line under the primary preview title (operator diagnostics only). */
 export function sanitizePreviewStateError(
   rawError: string | null | undefined,
   previewMessage?: string | null,
@@ -117,56 +120,17 @@ export function buildPreviewPrimaryState(
     };
   }
 
-  if (phase === "preparing") {
+  if (phase === "preparing" || phase === "source_ready" || phase === "starting") {
     return {
-      title: "HAM is preparing your preview.",
-      subtitle: "Hang tight while HAM sets up your project files.",
-    };
-  }
-
-  if (phase === "source_ready" || phase === "starting") {
-    if (ctx.authSessionRefreshing) {
-      return {
-        title: "Preview is almost ready.",
-        subtitle: "Your session is refreshing. HAM will retry automatically.",
-      };
-    }
-    if (ctx.iframeProxyWarmupPaused || ctx.iframeProxyError === "PREVIEW_PROXY_WARMUP") {
-      return {
-        title: "Preview is almost ready.",
-        subtitle:
-          "Preview is still warming up. Use Try again, or wait a few seconds while HAM retries.",
-      };
-    }
-    if (ctx.previewMode === "cloud") {
-      return {
-        title: "Preview is almost ready.",
-        subtitle: ctx.cloudPreviewDisconnected
-          ? "Cloud preview is not available in this environment yet. Your code is still in the Code tab."
-          : "Your project files are ready. The hosted preview will appear here when the environment finishes starting.",
-      };
-    }
-    return {
-      title: "Preview is almost ready.",
-      subtitle: ctx.cloudPreviewDisconnected
-        ? "Connect a local dev server URL in Open details, or keep building in chat."
-        : "Connect a local preview URL when your dev server is running, or open details for setup help.",
+      title: PREVIEW_BUILDING_TITLE,
+      subtitle: "",
     };
   }
 
   if (phase === "error") {
-    if (ctx.iframeProxyError === "PREVIEW_PROXY_FAILED") {
-      return {
-        title: "Preview could not start.",
-        subtitle:
-          "The preview environment finished building but the app did not load. Try again or make a small edit in chat.",
-      };
-    }
     return {
-      title: "Preview could not start.",
-      subtitle: ctx.hasBackendSource
-        ? "Your project files are saved in the Code tab. Try again or open details for setup help."
-        : sanitizePreviewStateError(ctx.rawError, ctx.previewMessage),
+      title: PREVIEW_FAILURE_TITLE,
+      subtitle: "",
     };
   }
 

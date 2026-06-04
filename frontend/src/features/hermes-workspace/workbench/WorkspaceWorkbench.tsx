@@ -10,11 +10,13 @@ import {
   Eye,
   FileCode,
   FolderOpen,
+  Monitor,
   MoreHorizontal,
   Plus,
   Send,
   Settings2,
   Share2,
+  Smartphone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -64,10 +66,13 @@ import {
 import {
   buildPreviewPrimaryState,
   previewPhaseUserLabel,
+  PREVIEW_BUILDING_TITLE,
   sanitizePreviewDetailsStatus,
   sanitizePreviewFetchError,
   sanitizePreviewStateError,
 } from "@/lib/ham/workbenchPreviewMessages";
+import { dispatchAskHamFixPreview } from "@/lib/ham/workbenchPreviewActions";
+import { isWorkbenchOperatorUiEnabled } from "@/lib/ham/workbenchOperatorUi";
 import { workspaceProjectScope } from "@/lib/ham/workspaceProjectScope";
 import { detectPreviewIframeProxySignals } from "@/features/hermes-workspace/workbench/previewProxyIframeSignals";
 import { cn } from "@/lib/utils";
@@ -174,6 +179,7 @@ export function WorkspaceWorkbench({
     snapshotId: string;
     nonce: number;
   } | null>(null);
+  const [previewViewport, setPreviewViewport] = React.useState<"desktop" | "mobile">("desktop");
 
   const ws = workspaceId?.trim() || "";
   const pid = projectId?.trim() || "";
@@ -335,6 +341,43 @@ export function WorkspaceWorkbench({
           })}
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          {activeTab === "preview" ? (
+            <div
+              className="mr-1 flex items-center overflow-hidden rounded-md border border-white/[0.12] bg-black/30"
+              data-testid="hww-preview-viewport-toggle"
+            >
+              <button
+                type="button"
+                data-testid="hww-preview-viewport-desktop"
+                aria-label="Desktop preview"
+                title="Desktop preview"
+                onClick={() => setPreviewViewport("desktop")}
+                className={cn(
+                  "inline-flex h-8 w-8 items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/30",
+                  previewViewport === "desktop"
+                    ? "bg-emerald-500/20 text-emerald-100"
+                    : "text-white/50 hover:bg-white/[0.06]",
+                )}
+              >
+                <Monitor className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden />
+              </button>
+              <button
+                type="button"
+                data-testid="hww-preview-viewport-mobile"
+                aria-label="Mobile preview"
+                title="Mobile preview"
+                onClick={() => setPreviewViewport("mobile")}
+                className={cn(
+                  "inline-flex h-8 w-8 items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/30",
+                  previewViewport === "mobile"
+                    ? "bg-emerald-500/20 text-emerald-100"
+                    : "text-white/50 hover:bg-white/[0.06]",
+                )}
+              >
+                <Smartphone className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden />
+              </button>
+            </div>
+          ) : null}
           {downloadError ? (
             <p
               className="max-w-[12rem] truncate text-[10px] text-amber-200/90"
@@ -460,6 +503,7 @@ export function WorkspaceWorkbench({
             onStaleBuilderProject={onStaleBuilderProject}
             managedBuildStatus={managedBuildStatus}
             buildGenerationStatus={buildGenerationStatus}
+            previewViewport={previewViewport}
           />
         ) : null}
         {activeTab === "code" ? (
@@ -562,6 +606,7 @@ function WorkbenchPreviewPanel({
   onStaleBuilderProject,
   managedBuildStatus = null,
   buildGenerationStatus = null,
+  previewViewport = "desktop",
 }: {
   workspaceId?: string | null;
   projectId?: string | null;
@@ -572,7 +617,9 @@ function WorkbenchPreviewPanel({
   managedBuildStatus?: WorkbenchBuildStatusValue | null;
   /** When a Builder Happy Path scaffold is generating, overrides idle status + empty copy. */
   buildGenerationStatus?: WorkbenchBuildStatusValue | null;
+  previewViewport?: "desktop" | "mobile";
 }) {
+  const showOperatorPreviewUi = isWorkbenchOperatorUiEnabled();
   const PREVIEW_AUTOPOLL_MS = 2500;
   /** Bound iframe document reloads while preview-proxy serves warmup JSON (avoids hammering nginx with 502s). */
   const IFRAME_PROXY_WARMUP_MAX_ATTEMPTS = 8;
@@ -637,7 +684,6 @@ function WorkbenchPreviewPanel({
     expected_preview_url: "",
   });
   const [snapshots, setSnapshots] = React.useState<BuilderSourceSnapshotRecord[]>([]);
-  const [previewViewport, setPreviewViewport] = React.useState<"desktop" | "mobile">("desktop");
   const [mobilePreset] = React.useState(DEFAULT_DEVICE_PRESET);
   const [iframeProxyError, setIframeProxyError] = React.useState<string | null>(null);
   /** True after warmup retries exhausted; cleared on Refresh or preview identity changes. */
@@ -1264,159 +1310,149 @@ function WorkbenchPreviewPanel({
   const effectivePrimaryState =
     generationInProgress && (previewPhase === "no_project" || previewPhase === "no_source")
       ? {
-          title: "Generating your dashboard…",
-          subtitle: "HAM is creating the first version. It'll appear here shortly.",
+          title: PREVIEW_BUILDING_TITLE,
+          subtitle: "",
         }
       : primaryState;
   const previewStateError =
     previewPhase === "error" ? sanitizePreviewStateError(error, preview?.message) : null;
   const showPreviewRetry =
     previewPhase === "error" ||
-    previewPhase === "starting" ||
     (previewPhase === "source_ready" &&
       (iframeProxyWarmupPaused || iframeProxyError === "PREVIEW_PROXY_WARMUP"));
+  const showAskHamFix = previewPhase === "error";
   const showPreviewOpenDetails =
-    previewPhase !== "no_project" && previewPhase !== "no_source" && previewPhase !== "ready";
+    showOperatorPreviewUi &&
+    previewPhase !== "no_project" &&
+    previewPhase !== "no_source" &&
+    previewPhase !== "ready";
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden text-[12px] leading-relaxed text-white/70">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          className="text-[11px]"
-          data-testid="hww-preview-refresh"
-          onClick={() => {
-            void refresh();
-          }}
-          disabled={loading}
-        >
-          {loading ? "Refreshing…" : "Refresh status"}
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          className="text-[11px]"
-          data-testid="hww-preview-open-new-tab"
-          disabled={!previewUrl}
-          onClick={() => {
-            if (previewUrl) window.open(previewUrl, "_blank", "noopener,noreferrer");
-          }}
-        >
-          Open in new tab
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          className="text-[11px]"
-          data-testid="hww-preview-disconnect"
-          disabled={!ws || !pid || !preview || preview.status === "not_connected" || disconnectBusy}
-          onClick={() => {
-            if (!ws || !pid) return;
-            setDisconnectBusy(true);
-            setError(null);
-            void deleteBuilderLocalPreview(ws, pid)
-              .then((res) => {
-                setPreview(res.preview_status);
-                void refreshActivity();
-              })
-              .catch((e) => {
-                setError(e instanceof Error ? e.message : String(e));
-              })
-              .finally(() => {
-                setDisconnectBusy(false);
-              });
-          }}
-        >
-          {disconnectBusy ? "Disconnecting…" : "Disconnect preview"}
-        </Button>
-        <input
-          type="text"
-          readOnly
-          value={previewUrl || ""}
-          placeholder="Preview path / URL"
-          title="Preview URL when connected"
-          data-testid="hww-preview-path-bar"
-          className="min-w-[10rem] flex-[1_1_8rem] rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/80 placeholder:text-white/35"
-        />
-        <div className="flex items-center overflow-hidden rounded-md border border-white/[0.12] bg-black/30">
-          <button
+      {showOperatorPreviewUi ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
             type="button"
-            data-testid="hww-preview-viewport-desktop"
-            onClick={() => setPreviewViewport("desktop")}
-            className={cn(
-              "px-2 py-1.5 text-[10px] font-medium uppercase tracking-wide outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/30",
-              previewViewport === "desktop"
-                ? "bg-emerald-500/20 text-emerald-100"
-                : "text-white/50 hover:bg-white/[0.06]",
-            )}
+            size="sm"
+            variant="secondary"
+            className="text-[11px]"
+            data-testid="hww-preview-refresh"
+            onClick={() => {
+              void refresh();
+            }}
+            disabled={loading}
           >
-            Desktop
-          </button>
-          <button
+            {loading ? "Refreshing…" : "Refresh status"}
+          </Button>
+          <Button
             type="button"
-            data-testid="hww-preview-viewport-mobile"
-            onClick={() => setPreviewViewport("mobile")}
-            className={cn(
-              "px-2 py-1.5 text-[10px] font-medium uppercase tracking-wide outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/30",
-              previewViewport === "mobile"
-                ? "bg-emerald-500/20 text-emerald-100"
-                : "text-white/50 hover:bg-white/[0.06]",
-            )}
+            size="sm"
+            variant="secondary"
+            className="text-[11px]"
+            data-testid="hww-preview-open-new-tab"
+            disabled={!previewUrl}
+            onClick={() => {
+              if (previewUrl) window.open(previewUrl, "_blank", "noopener,noreferrer");
+            }}
           >
-            Mobile
-          </button>
-        </div>
-        <Button
-          type="button"
-          size="sm"
-          variant={visualEditModeActive ? "default" : "secondary"}
-          className="text-[11px]"
-          data-testid="hww-visual-edit-toggle"
-          disabled={!visualEditReady}
-          title={
-            visualEditReady ? "Capture a visual target from preview." : "Preview must be ready."
-          }
-          onClick={() => {
-            if (!visualEditReady) return;
-            setVisualEditNotice(null);
-            setVisualEditError(null);
-            setVisualEditModeActive((prev) => !prev);
-            setVisualEditTarget(null);
-          }}
-        >
-          {visualEditModeActive ? "Exit edit mode" : "Edit"}
-        </Button>
-      </div>
-      <WorkbenchBuildStatusPanel
-        status={
-          managedBuildStatus ?? buildGenerationStatus ?? buildStatusFromPreviewPhase(previewPhase)
-        }
-      />
-      {previewPhase !== "ready" ? (
-        <div className="flex flex-wrap items-center gap-1.5" data-testid="hww-preview-status-pills">
-          <span className="rounded-full border border-white/[0.12] bg-black/35 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/60">
-            {previewPhaseUserLabel(previewPhase)}
-          </span>
+            Open in new tab
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="text-[11px]"
+            data-testid="hww-preview-disconnect"
+            disabled={
+              !ws || !pid || !preview || preview.status === "not_connected" || disconnectBusy
+            }
+            onClick={() => {
+              if (!ws || !pid) return;
+              setDisconnectBusy(true);
+              setError(null);
+              void deleteBuilderLocalPreview(ws, pid)
+                .then((res) => {
+                  setPreview(res.preview_status);
+                  void refreshActivity();
+                })
+                .catch((e) => {
+                  setError(e instanceof Error ? e.message : String(e));
+                })
+                .finally(() => {
+                  setDisconnectBusy(false);
+                });
+            }}
+          >
+            {disconnectBusy ? "Disconnecting…" : "Disconnect preview"}
+          </Button>
+          <input
+            type="text"
+            readOnly
+            value={previewUrl || ""}
+            placeholder="Preview path / URL"
+            title="Preview URL when connected"
+            data-testid="hww-preview-path-bar"
+            className="min-w-[10rem] flex-[1_1_8rem] rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/80 placeholder:text-white/35"
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant={visualEditModeActive ? "default" : "secondary"}
+            className="text-[11px]"
+            data-testid="hww-visual-edit-toggle"
+            disabled={!visualEditReady}
+            title={
+              visualEditReady ? "Capture a visual target from preview." : "Preview must be ready."
+            }
+            onClick={() => {
+              if (!visualEditReady) return;
+              setVisualEditNotice(null);
+              setVisualEditError(null);
+              setVisualEditModeActive((prev) => !prev);
+              setVisualEditTarget(null);
+            }}
+          >
+            {visualEditModeActive ? "Exit edit mode" : "Edit"}
+          </Button>
         </div>
       ) : null}
-      {activity.length > 0 && previewPhase !== "ready" ? (
-        <div
-          data-testid="hww-preview-activity-compact"
-          className="space-y-1.5 rounded-md border border-white/[0.08] bg-black/20 px-2 py-1.5"
-        >
-          {activity.slice(0, 2).map((item) => (
+      {showOperatorPreviewUi ? (
+        <>
+          <WorkbenchBuildStatusPanel
+            status={
+              managedBuildStatus ??
+              buildGenerationStatus ??
+              buildStatusFromPreviewPhase(previewPhase)
+            }
+          />
+          {previewPhase !== "ready" ? (
             <div
-              key={item.id}
-              className="flex items-center justify-between gap-2 text-[11px] text-white/80"
+              className="flex flex-wrap items-center gap-1.5"
+              data-testid="hww-preview-status-pills"
             >
-              <span className="min-w-0 truncate">{item.title}</span>
-              <span className="shrink-0 text-[10px] uppercase text-white/45">{item.status}</span>
+              <span className="rounded-full border border-white/[0.12] bg-black/35 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/60">
+                {previewPhaseUserLabel(previewPhase)}
+              </span>
             </div>
-          ))}
-        </div>
+          ) : null}
+          {activity.length > 0 && previewPhase !== "ready" ? (
+            <div
+              data-testid="hww-preview-activity-compact"
+              className="space-y-1.5 rounded-md border border-white/[0.08] bg-black/20 px-2 py-1.5"
+            >
+              {activity.slice(0, 2).map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between gap-2 text-[11px] text-white/80"
+                >
+                  <span className="min-w-0 truncate">{item.title}</span>
+                  <span className="shrink-0 text-[10px] uppercase text-white/45">
+                    {item.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </>
       ) : null}
       <div
         data-testid="hww-preview-canvas"
@@ -1574,7 +1610,10 @@ function WorkbenchPreviewPanel({
                 {effectivePrimaryState.subtitle}
               </p>
             ) : null}
-            {previewPhase === "ready" && preview?.mode === "cloud" && previewProxySessionMinting ? (
+            {showOperatorPreviewUi &&
+            previewPhase === "ready" &&
+            preview?.mode === "cloud" &&
+            previewProxySessionMinting ? (
               <p
                 className="max-w-md text-[12px] text-white/60"
                 data-testid="hww-preview-auth-pending"
@@ -1582,7 +1621,10 @@ function WorkbenchPreviewPanel({
                 Preview authentication in progress…
               </p>
             ) : null}
-            {previewPhase === "ready" && preview?.mode === "cloud" && previewProxySessionError ? (
+            {showOperatorPreviewUi &&
+            previewPhase === "ready" &&
+            preview?.mode === "cloud" &&
+            previewProxySessionError ? (
               <p
                 className="max-w-md text-[12px] text-amber-200/90"
                 data-testid="hww-preview-auth-error"
@@ -1590,7 +1632,7 @@ function WorkbenchPreviewPanel({
                 Preview authentication failed. Refresh status and try again.
               </p>
             ) : null}
-            {previewStateError ? (
+            {showOperatorPreviewUi && previewStateError ? (
               <p
                 className="max-w-md text-[12px] text-amber-200/90"
                 data-testid="hww-preview-state-error"
@@ -1599,17 +1641,31 @@ function WorkbenchPreviewPanel({
               </p>
             ) : null}
             {showPreviewRetry ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                className="text-[11px]"
-                data-testid="hww-preview-retry"
-                onClick={() => void refresh()}
-                disabled={loading}
-              >
-                Try again
-              </Button>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="text-[11px]"
+                  data-testid="hww-preview-retry"
+                  onClick={() => void refresh()}
+                  disabled={loading}
+                >
+                  Try again
+                </Button>
+                {showAskHamFix ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="text-[11px] text-white/70"
+                    data-testid="hww-preview-ask-ham-fix"
+                    onClick={() => dispatchAskHamFixPreview()}
+                  >
+                    Ask HAM to fix it
+                  </Button>
+                ) : null}
+              </div>
             ) : null}
             {showPreviewOpenDetails ? (
               <Button
@@ -1626,740 +1682,760 @@ function WorkbenchPreviewPanel({
           </div>
         )}
       </div>
-      <details
-        ref={previewAdvancedRef}
-        className="shrink-0 rounded-md border border-white/[0.08] bg-black/15 p-2"
-        data-testid="hww-preview-advanced"
-      >
-        <summary className="cursor-pointer select-none text-[11px] text-white/60">
-          Advanced / Diagnostics
-        </summary>
-        <div className="mt-3 space-y-3">
-          {preview ? (
-            <p className="text-[10px] text-white/45" data-testid="hww-preview-api-message">
-              Status: {sanitizePreviewDetailsStatus(preview.message)}
-              {preview.source_snapshot_id && preview.status !== "ready" ? (
-                <span> · project files linked</span>
-              ) : null}
-            </p>
-          ) : null}
-          {preview?.logs_hint ? (
-            <p className="text-[10px] text-white/45" data-testid="hww-preview-logs-hint">
-              Runtime note: {sanitizePreviewDetailsStatus(preview.logs_hint)}
-            </p>
-          ) : null}
-          {previewUrl ? (
-            <p className="text-[10px] text-white/45">
-              Preview URL:{" "}
-              <span data-testid="hww-preview-url-value" className="text-white/60">
-                {previewUrl}
-              </span>
-            </p>
-          ) : null}
-          {showConnectForm ? (
-            <form
-              className="space-y-2 rounded-lg border border-white/[0.08] bg-black/25 p-3"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!ws || !pid) return;
-                setSubmitBusy(true);
-                setError(null);
-                void postBuilderLocalPreview(ws, pid, {
-                  preview_url: previewUrlInput,
-                  source_snapshot_id: preview?.source_snapshot_id || null,
-                })
-                  .then((res) => {
-                    setPreview(res.preview_status);
-                    void refreshActivity();
-                  })
-                  .catch((err) => {
-                    setError(err instanceof Error ? err.message : String(err));
-                  })
-                  .finally(() => {
-                    setSubmitBusy(false);
-                  });
-              }}
-              data-testid="hww-preview-connect-form"
-            >
-              <p className="text-[11px] text-white/60">
-                Start your app locally, then paste the local preview URL.
+      {showOperatorPreviewUi ? (
+        <details
+          ref={previewAdvancedRef}
+          className="shrink-0 rounded-md border border-white/[0.08] bg-black/15 p-2"
+          data-testid="hww-preview-advanced"
+        >
+          <summary className="cursor-pointer select-none text-[11px] text-white/60">
+            Advanced / Diagnostics
+          </summary>
+          <div className="mt-3 space-y-3">
+            {preview ? (
+              <p className="text-[10px] text-white/45" data-testid="hww-preview-api-message">
+                Status: {sanitizePreviewDetailsStatus(preview.message)}
+                {preview.source_snapshot_id && preview.status !== "ready" ? (
+                  <span> · project files linked</span>
+                ) : null}
               </p>
-              <input
-                type="url"
-                value={previewUrlInput}
-                onChange={(e) => setPreviewUrlInput(e.target.value)}
-                placeholder="http://localhost:3000 (local dev only)"
-                className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
-                data-testid="hww-preview-url-input"
-              />
-              <Button
-                type="submit"
-                size="sm"
-                variant="secondary"
-                className="text-[11px]"
-                data-testid="hww-preview-connect-submit"
-                disabled={submitBusy}
+            ) : null}
+            {preview?.logs_hint ? (
+              <p className="text-[10px] text-white/45" data-testid="hww-preview-logs-hint">
+                Runtime note: {sanitizePreviewDetailsStatus(preview.logs_hint)}
+              </p>
+            ) : null}
+            {previewUrl ? (
+              <p className="text-[10px] text-white/45">
+                Preview URL:{" "}
+                <span data-testid="hww-preview-url-value" className="text-white/60">
+                  {previewUrl}
+                </span>
+              </p>
+            ) : null}
+            {showConnectForm ? (
+              <form
+                className="space-y-2 rounded-lg border border-white/[0.08] bg-black/25 p-3"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!ws || !pid) return;
+                  setSubmitBusy(true);
+                  setError(null);
+                  void postBuilderLocalPreview(ws, pid, {
+                    preview_url: previewUrlInput,
+                    source_snapshot_id: preview?.source_snapshot_id || null,
+                  })
+                    .then((res) => {
+                      setPreview(res.preview_status);
+                      void refreshActivity();
+                    })
+                    .catch((err) => {
+                      setError(err instanceof Error ? err.message : String(err));
+                    })
+                    .finally(() => {
+                      setSubmitBusy(false);
+                    });
+                }}
+                data-testid="hww-preview-connect-form"
               >
-                {submitBusy ? "Connecting…" : "Connect local preview"}
-              </Button>
-            </form>
-          ) : null}
-          <div
-            className="space-y-2 rounded-lg border border-white/[0.08] bg-black/25 p-3"
-            data-testid="hww-local-run-profile-section"
-          >
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
-              Local run profile
-            </p>
-            <p className="text-[11px] text-white/60">
-              This saves local run instructions only. HAM will not execute commands in this step.
-            </p>
-            <p className="text-[11px] text-white/55">
-              Start the app yourself for now, then connect its local preview URL.
-            </p>
-            <p className="text-[11px] text-white/65" data-testid="hww-local-run-profile-status">
-              Status:{" "}
-              {runProfile?.status === "configured"
-                ? "Configured"
-                : runProfile?.status === "disabled"
-                  ? "Disabled"
-                  : "Not configured"}
-            </p>
-            {runProfile?.profile ? (
-              <p className="text-[11px] text-white/55" data-testid="hww-local-run-profile-summary">
-                {runProfile.profile.display_name}: {runProfile.profile.working_directory} ·{" "}
-                {(runProfile.profile.dev_command_argv || []).join(" ")}
-              </p>
-            ) : null}
-            {runProfileError ? (
-              <p className="text-amber-200/90" data-testid="hww-local-run-profile-error">
-                Could not load local run profile: {runProfileError}
-              </p>
-            ) : null}
-            <form
-              className="grid gap-2 md:grid-cols-2"
-              data-testid="hww-local-run-profile-form"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!ws || !pid) return;
-                setRunProfileBusy(true);
-                setRunProfileError(null);
-                const payload: LocalRunProfilePayload = {
-                  display_name: runProfileForm.display_name || "Local run profile",
-                  working_directory: runProfileForm.working_directory || ".",
-                  dev_command: runProfileForm.dev_command || "",
-                  install_command: runProfileForm.install_command || "",
-                  build_command: runProfileForm.build_command || "",
-                  test_command: runProfileForm.test_command || "",
-                  expected_preview_url: runProfileForm.expected_preview_url || "",
-                  source_snapshot_id: runProfileForm.source_snapshot_id || null,
-                  status: "configured",
-                  metadata: runProfileForm.metadata || {},
-                };
-                void saveBuilderLocalRunProfile(ws, pid, payload)
-                  .then((saved) => {
-                    setRunProfile(saved);
-                    void refreshActivity();
-                  })
-                  .catch((err) => {
-                    setRunProfileError(err instanceof Error ? err.message : String(err));
-                  })
-                  .finally(() => {
-                    setRunProfileBusy(false);
-                  });
-              }}
-            >
-              <input
-                type="text"
-                value={runProfileForm.display_name}
-                onChange={(e) =>
-                  setRunProfileForm((prev) => ({ ...prev, display_name: e.target.value }))
-                }
-                placeholder="Local run profile"
-                className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
-                data-testid="hww-local-run-profile-display-name"
-              />
-              <input
-                type="text"
-                value={runProfileForm.working_directory}
-                onChange={(e) =>
-                  setRunProfileForm((prev) => ({ ...prev, working_directory: e.target.value }))
-                }
-                placeholder="."
-                className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
-                data-testid="hww-local-run-profile-working-directory"
-              />
-              <input
-                type="text"
-                value={runProfileForm.dev_command}
-                onChange={(e) =>
-                  setRunProfileForm((prev) => ({ ...prev, dev_command: e.target.value }))
-                }
-                placeholder="npm run dev"
-                className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
-                data-testid="hww-local-run-profile-dev-command"
-              />
-              <input
-                type="text"
-                value={runProfileForm.install_command || ""}
-                onChange={(e) =>
-                  setRunProfileForm((prev) => ({ ...prev, install_command: e.target.value }))
-                }
-                placeholder="npm install (optional)"
-                className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
-                data-testid="hww-local-run-profile-install-command"
-              />
-              <input
-                type="text"
-                value={runProfileForm.build_command || ""}
-                onChange={(e) =>
-                  setRunProfileForm((prev) => ({ ...prev, build_command: e.target.value }))
-                }
-                placeholder="npm run build (optional)"
-                className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
-                data-testid="hww-local-run-profile-build-command"
-              />
-              <input
-                type="text"
-                value={runProfileForm.test_command || ""}
-                onChange={(e) =>
-                  setRunProfileForm((prev) => ({ ...prev, test_command: e.target.value }))
-                }
-                placeholder="npm test (optional)"
-                className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
-                data-testid="hww-local-run-profile-test-command"
-              />
-              <input
-                type="url"
-                value={runProfileForm.expected_preview_url || ""}
-                onChange={(e) =>
-                  setRunProfileForm((prev) => ({ ...prev, expected_preview_url: e.target.value }))
-                }
-                placeholder="http://localhost:5173 (optional)"
-                className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90 md:col-span-2"
-                data-testid="hww-local-run-profile-expected-preview-url"
-              />
-              <div className="flex flex-wrap items-center gap-2 md:col-span-2">
+                <p className="text-[11px] text-white/60">
+                  Start your app locally, then paste the local preview URL.
+                </p>
+                <input
+                  type="url"
+                  value={previewUrlInput}
+                  onChange={(e) => setPreviewUrlInput(e.target.value)}
+                  placeholder="http://localhost:3000 (local dev only)"
+                  className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
+                  data-testid="hww-preview-url-input"
+                />
                 <Button
                   type="submit"
                   size="sm"
                   variant="secondary"
                   className="text-[11px]"
-                  data-testid="hww-local-run-profile-save"
-                  disabled={runProfileBusy || !ws || !pid}
+                  data-testid="hww-preview-connect-submit"
+                  disabled={submitBusy}
                 >
-                  {runProfileBusy ? "Saving…" : "Save local run profile"}
+                  {submitBusy ? "Connecting…" : "Connect local preview"}
                 </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  className="text-[11px]"
-                  data-testid="hww-local-run-profile-clear"
-                  disabled={runProfileBusy || !ws || !pid || !runProfile?.profile}
-                  onClick={() => {
-                    if (!ws || !pid) return;
-                    setRunProfileBusy(true);
-                    setRunProfileError(null);
-                    void deleteBuilderLocalRunProfile(ws, pid)
-                      .then((payload) => {
-                        setRunProfile(payload);
-                        void refreshActivity();
-                      })
-                      .catch((err) => {
-                        setRunProfileError(err instanceof Error ? err.message : String(err));
-                      })
-                      .finally(() => {
-                        setRunProfileBusy(false);
-                      });
-                  }}
+              </form>
+            ) : null}
+            <div
+              className="space-y-2 rounded-lg border border-white/[0.08] bg-black/25 p-3"
+              data-testid="hww-local-run-profile-section"
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
+                Local run profile
+              </p>
+              <p className="text-[11px] text-white/60">
+                This saves local run instructions only. HAM will not execute commands in this step.
+              </p>
+              <p className="text-[11px] text-white/55">
+                Start the app yourself for now, then connect its local preview URL.
+              </p>
+              <p className="text-[11px] text-white/65" data-testid="hww-local-run-profile-status">
+                Status:{" "}
+                {runProfile?.status === "configured"
+                  ? "Configured"
+                  : runProfile?.status === "disabled"
+                    ? "Disabled"
+                    : "Not configured"}
+              </p>
+              {runProfile?.profile ? (
+                <p
+                  className="text-[11px] text-white/55"
+                  data-testid="hww-local-run-profile-summary"
                 >
-                  Clear profile
-                </Button>
-                {runProfile?.profile?.expected_preview_url ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    className="text-[11px]"
-                    data-testid="hww-local-run-profile-use-preview-url"
-                    onClick={() => {
-                      setPreviewUrlInput(
-                        runProfile.profile?.expected_preview_url || "http://localhost:3000",
-                      );
-                    }}
-                  >
-                    Use as preview URL
-                  </Button>
-                ) : null}
-              </div>
-            </form>
-          </div>
-          <div
-            className="space-y-2 rounded-lg border border-white/[0.08] bg-black/25 p-3"
-            data-testid="hww-cloud-runtime-section"
-          >
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
-              Cloud preview runtime
-            </p>
-            <p className="text-[11px] text-white/60">{cloudRuntimePrimaryCopy}</p>
-            <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-refresh-copy">
-              {cloudRuntimeSecondaryCopy}
-            </p>
-            <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-status">
-              Status: {cloudRuntimeState}
-            </p>
-            <p
-              className="text-[11px] text-white/55"
-              data-testid="hww-cloud-runtime-provider-status"
-            >
-              Provider: {cloudRuntimeProviderStatus.replace("_", " ")}
-            </p>
-            <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-provider-copy">
-              {cloudRuntimeProviderCopy}
-            </p>
-            {(cloudRuntimeState === "experiment_not_enabled" ||
-              cloudRuntimeState === "disabled") && (
-              <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-setup-copy">
-                Enable HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED or configure cloud_run_poc
-                provider.
-              </p>
-            )}
-            {cloudRuntime?.message ? (
-              <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-message">
-                {cloudRuntime.message}
-              </p>
-            ) : null}
-            {cloudRuntimeLatestJob ? (
-              <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-latest-job">
-                Latest job: {cloudRuntimeLatestJob.status} / {cloudRuntimeLatestJob.phase}
-              </p>
-            ) : null}
-            {cloudRuntimeLifecycle ? (
-              <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-lifecycle">
-                Lifecycle: {cloudRuntimeLifecycle.phase}
-                {cloudRuntimeLifecycle.provider_status
-                  ? ` · ${cloudRuntimeLifecycle.provider_status}`
-                  : ""}
-                {cloudRuntimeLifecycle.logs_summary
-                  ? ` · ${cloudRuntimeLifecycle.logs_summary}`
-                  : ""}
-              </p>
-            ) : null}
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              className="text-[11px]"
-              data-testid="hww-cloud-runtime-refresh-status"
-              disabled={!ws || !pid || !cloudRuntimeLatestJob?.id || loading}
-              onClick={() => {
-                if (!ws || !pid || !cloudRuntimeLatestJob?.id) return;
-                setCloudRuntimeError(null);
-                void getBuilderCloudRuntimeJobStatus(ws, pid, cloudRuntimeLatestJob.id)
-                  .then((payload) => {
-                    setCloudRuntimeLifecycle(payload.lifecycle);
-                    setPreview(payload.preview_status);
-                  })
-                  .catch((err) => {
-                    setCloudRuntimeError(err instanceof Error ? err.message : String(err));
-                  });
-              }}
-            >
-              Refresh cloud runtime status
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              className="text-[11px]"
-              data-testid="hww-cloud-runtime-request-poc"
-              disabled={
-                !ws || !pid || !cloudRetryEnabled || cloudRuntimeJobBusy || !activeSourceSnapshotId
-              }
-              onClick={() => {
-                if (!ws || !pid || !cloudRetryEnabled || !activeSourceSnapshotId) return;
-                setCloudRuntimeJobBusy(true);
-                setCloudRuntimeJobError(null);
-                setCloudRuntimeJobNotice(null);
-                setCloudRuntimeLifecycle({
-                  phase: "queued",
-                  message: "Retry requested. Provisioning a fresh cloud preview run.",
-                  updated_at: new Date().toISOString(),
-                  provider_status: null,
-                  logs_summary: null,
-                });
-                void requestBuilderCloudRuntime(ws, pid, {
-                  source_snapshot_id: activeSourceSnapshotId,
-                  force_new: true,
-                  metadata: { request_source: "workbench_preview_retry" },
-                })
-                  .then((payload) => {
-                    setCloudRuntime(payload.cloud_runtime);
-                    setPreview((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            mode: "cloud",
-                            status: "building",
-                            health: "unknown",
-                            message: "Retry requested. Provisioning cloud preview.",
-                            source_snapshot_id: activeSourceSnapshotId,
-                          }
-                        : prev,
-                    );
-                    setCloudRuntimeJobNotice(
-                      "Retry started. HAM is provisioning a fresh cloud runtime preview.",
-                    );
-                    void refresh();
-                    void refreshActivity();
-                    void refreshWorkers();
-                  })
-                  .catch((err) => {
-                    setCloudRuntimeJobError(err instanceof Error ? err.message : String(err));
-                  })
-                  .finally(() => {
-                    setCloudRuntimeJobBusy(false);
-                  });
-              }}
-            >
-              {cloudRuntimeJobBusy ? "Retrying…" : "Retry preview"}
-            </Button>
-            {!activeSourceSnapshotId ? (
-              <p
-                className="text-[11px] text-white/55"
-                data-testid="hww-cloud-runtime-source-required-copy"
-              >
-                Add a project source ZIP or folder before retrying cloud preview.
-              </p>
-            ) : null}
-            {cloudPreviewHealthy ? (
-              <p
-                className="text-[11px] text-white/55"
-                data-testid="hww-cloud-runtime-retry-healthy-copy"
-              >
-                Preview is already healthy. Use Refresh status for polling-only checks.
-              </p>
-            ) : null}
-            {!cloudRuntimeRequestEnabled ? (
-              <p
-                className="text-[11px] text-white/55"
-                data-testid="hww-cloud-runtime-disabled-copy"
-              >
-                {cloudRuntimeState === "experiment_not_enabled"
-                  ? "Cloud runtime experiments are not enabled in this environment."
-                  : cloudRuntimeState === "config_missing"
-                    ? "Cloud runtime provider needs configuration before it can run."
-                    : "Cloud runtime experiments are not enabled."}
-              </p>
-            ) : null}
-            {cloudRuntimeJobError ? (
-              <p className="text-amber-200/90" data-testid="hww-cloud-runtime-job-error">
-                Could not retry cloud preview: {cloudRuntimeJobError}
-              </p>
-            ) : null}
-            {cloudRuntimeJobNotice ? (
-              <p className="text-emerald-200/90" data-testid="hww-cloud-runtime-job-notice">
-                {cloudRuntimeJobNotice}
-              </p>
-            ) : null}
-            {cloudRuntimeError ? (
-              <p className="text-amber-200/90" data-testid="hww-cloud-runtime-error">
-                {sanitizePreviewStateError(cloudRuntimeError, null)}
-              </p>
-            ) : null}
-          </div>
-          <div
-            className="space-y-2 rounded-lg border border-white/[0.08] bg-black/25 p-3"
-            data-testid="hww-worker-capability-section"
-          >
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
-              Optional coding workers
-            </p>
-            <p className="text-[11px] text-white/60">{optionalWorkerIntroCopy}</p>
-            {workersError ? (
-              <p className="text-amber-200/90" data-testid="hww-worker-capability-error">
-                Could not load worker capabilities: {workersError}
-              </p>
-            ) : null}
-            {!workersError && workers.length === 0 ? (
-              <p className="text-white/55" data-testid="hww-worker-capability-empty">
-                No worker capability records available yet.
-              </p>
-            ) : null}
-            {!workersError && workers.length > 0 ? (
-              <ul className="space-y-1.5" data-testid="hww-worker-capability-list">
-                {workers.map((worker) => {
-                  const statusTone =
-                    worker.status === "available"
-                      ? "text-emerald-300 border-emerald-500/30 bg-emerald-500/10"
-                      : worker.status === "available_mock" || worker.status === "available_poc"
-                        ? "text-sky-200 border-sky-400/30 bg-sky-500/10"
-                        : worker.status === "needs_connection"
-                          ? "text-amber-200 border-amber-400/30 bg-amber-500/10"
-                          : worker.status === "disabled"
-                            ? "text-white/60 border-white/[0.16] bg-white/[0.06]"
-                            : "text-rose-200 border-rose-400/30 bg-rose-500/10";
-                  const workerDetailCopy =
-                    worker.worker_kind === "cursor_local_sdk" && worker.status === "disabled"
-                      ? "Off — only needed for local Cursor execution."
-                      : worker.worker_kind === "claude_agent" &&
-                          worker.status === "needs_connection"
-                        ? "Not connected — optional external worker."
-                        : worker.environment_fit;
-                  return (
-                    <li
-                      key={worker.worker_kind}
-                      className="rounded-md border border-white/[0.08] bg-black/20 px-2 py-1.5"
-                      data-testid="hww-worker-capability-item"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="truncate text-[11px] text-white/85">{worker.display_name}</p>
-                        <span
-                          className={cn(
-                            "rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide",
-                            statusTone,
-                          )}
-                        >
-                          {worker.status.replace("_", " ")}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-[11px] text-white/50">{workerDetailCopy}</p>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : null}
-          </div>
-          <div
-            className="space-y-2 rounded-lg border border-white/[0.08] bg-black/25 p-3"
-            data-testid="hww-visual-edit-section"
-          >
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
-              Edit mode
-            </p>
-            <p className="text-[11px] text-white/60">
-              Capture-only flow. This saves a visual edit request contract and does not execute
-              edits.
-            </p>
-            {!visualEditReady ? (
-              <p className="text-[11px] text-white/55" data-testid="hww-visual-edit-disabled-copy">
-                Preview must be ready before entering Edit Mode.
-              </p>
-            ) : (
-              <p className="text-[11px] text-white/55" data-testid="hww-visual-edit-ready-copy">
-                Click `Edit`, then click a target in preview to open the request panel.
-              </p>
-            )}
-            {visualEditModeActive ? (
-              <p
-                className="text-[11px] text-emerald-200/90"
-                data-testid="hww-visual-edit-mode-active-copy"
-              >
-                Edit Mode active. Click the preview to capture a target.
-              </p>
-            ) : null}
-            {visualEditTarget ? (
+                  {runProfile.profile.display_name}: {runProfile.profile.working_directory} ·{" "}
+                  {(runProfile.profile.dev_command_argv || []).join(" ")}
+                </p>
+              ) : null}
+              {runProfileError ? (
+                <p className="text-amber-200/90" data-testid="hww-local-run-profile-error">
+                  Could not load local run profile: {runProfileError}
+                </p>
+              ) : null}
               <form
-                className="space-y-2 rounded-md border border-white/[0.1] bg-black/30 p-2"
-                data-testid="hww-visual-edit-form"
+                className="grid gap-2 md:grid-cols-2"
+                data-testid="hww-local-run-profile-form"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  if (!visualEditReady || !ws || !pid || !visualEditTarget) {
-                    return;
-                  }
-                  setVisualEditBusy(true);
-                  setVisualEditError(null);
-                  setVisualEditNotice(null);
-                  const payload: CreateBuilderVisualEditRequestPayload = {
-                    instruction: visualEditInstruction,
-                    route: visualEditRoute || null,
-                    preview_url_kind: previewUrlKind,
-                    target: visualEditTarget,
-                    selector_hints: visualEditSelectorHints
-                      .split(",")
-                      .map((value) => value.trim())
-                      .filter((value) => value.length > 0),
-                    bbox: {
-                      x: visualEditTarget.x,
-                      y: visualEditTarget.y,
-                      width: visualEditTarget.width,
-                      height: visualEditTarget.height,
-                    },
-                    runtime_session_id: preview?.runtime_session_id || null,
-                    preview_endpoint_id: preview?.preview_endpoint_id || null,
-                    source_snapshot_id: preview?.source_snapshot_id || null,
-                    status: "queued",
+                  if (!ws || !pid) return;
+                  setRunProfileBusy(true);
+                  setRunProfileError(null);
+                  const payload: LocalRunProfilePayload = {
+                    display_name: runProfileForm.display_name || "Local run profile",
+                    working_directory: runProfileForm.working_directory || ".",
+                    dev_command: runProfileForm.dev_command || "",
+                    install_command: runProfileForm.install_command || "",
+                    build_command: runProfileForm.build_command || "",
+                    test_command: runProfileForm.test_command || "",
+                    expected_preview_url: runProfileForm.expected_preview_url || "",
+                    source_snapshot_id: runProfileForm.source_snapshot_id || null,
+                    status: "configured",
+                    metadata: runProfileForm.metadata || {},
                   };
-                  void createBuilderVisualEditRequest(ws, pid, payload)
-                    .then(() => {
-                      setVisualEditInstruction("");
-                      setVisualEditSelectorHints("");
-                      setVisualEditTarget(null);
-                      setVisualEditNotice(
-                        "Edit request saved. Agent execution is not connected yet.",
-                      );
-                      void refreshVisualEditRequests();
+                  void saveBuilderLocalRunProfile(ws, pid, payload)
+                    .then((saved) => {
+                      setRunProfile(saved);
                       void refreshActivity();
                     })
                     .catch((err) => {
-                      setVisualEditError(err instanceof Error ? err.message : String(err));
+                      setRunProfileError(err instanceof Error ? err.message : String(err));
                     })
                     .finally(() => {
-                      setVisualEditBusy(false);
+                      setRunProfileBusy(false);
                     });
                 }}
               >
-                <p className="text-[11px] text-white/60">What should HAM change here?</p>
-                <p
-                  className="text-[11px] text-white/55"
-                  data-testid="hww-visual-edit-target-summary"
-                >
-                  Target: x {visualEditTarget.x}, y {visualEditTarget.y}, viewport{" "}
-                  {visualEditTarget.viewport_width} x {visualEditTarget.viewport_height},{" "}
-                  {visualEditTarget.device_mode}
-                </p>
-                <textarea
-                  value={visualEditInstruction}
-                  onChange={(e) => setVisualEditInstruction(e.target.value)}
-                  rows={3}
-                  placeholder="Describe the visual change you want."
+                <input
+                  type="text"
+                  value={runProfileForm.display_name}
+                  onChange={(e) =>
+                    setRunProfileForm((prev) => ({ ...prev, display_name: e.target.value }))
+                  }
+                  placeholder="Local run profile"
                   className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
-                  data-testid="hww-visual-edit-instruction"
+                  data-testid="hww-local-run-profile-display-name"
                 />
-                <div className="grid gap-2 md:grid-cols-2">
-                  <input
-                    type="text"
-                    value={visualEditRoute}
-                    onChange={(e) => setVisualEditRoute(e.target.value)}
-                    placeholder="/"
-                    className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
-                    data-testid="hww-visual-edit-route"
-                  />
-                  <input
-                    type="text"
-                    value={visualEditSelectorHints}
-                    onChange={(e) => setVisualEditSelectorHints(e.target.value)}
-                    placeholder="Selector hints (optional, comma-separated)"
-                    className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
-                    data-testid="hww-visual-edit-selector-hints"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    className="text-[11px]"
-                    data-testid="hww-visual-edit-cancel"
-                    onClick={() => {
-                      setVisualEditTarget(null);
-                      setVisualEditInstruction("");
-                      setVisualEditModeActive(false);
-                    }}
-                  >
-                    Cancel
-                  </Button>
+                <input
+                  type="text"
+                  value={runProfileForm.working_directory}
+                  onChange={(e) =>
+                    setRunProfileForm((prev) => ({ ...prev, working_directory: e.target.value }))
+                  }
+                  placeholder="."
+                  className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
+                  data-testid="hww-local-run-profile-working-directory"
+                />
+                <input
+                  type="text"
+                  value={runProfileForm.dev_command}
+                  onChange={(e) =>
+                    setRunProfileForm((prev) => ({ ...prev, dev_command: e.target.value }))
+                  }
+                  placeholder="npm run dev"
+                  className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
+                  data-testid="hww-local-run-profile-dev-command"
+                />
+                <input
+                  type="text"
+                  value={runProfileForm.install_command || ""}
+                  onChange={(e) =>
+                    setRunProfileForm((prev) => ({ ...prev, install_command: e.target.value }))
+                  }
+                  placeholder="npm install (optional)"
+                  className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
+                  data-testid="hww-local-run-profile-install-command"
+                />
+                <input
+                  type="text"
+                  value={runProfileForm.build_command || ""}
+                  onChange={(e) =>
+                    setRunProfileForm((prev) => ({ ...prev, build_command: e.target.value }))
+                  }
+                  placeholder="npm run build (optional)"
+                  className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
+                  data-testid="hww-local-run-profile-build-command"
+                />
+                <input
+                  type="text"
+                  value={runProfileForm.test_command || ""}
+                  onChange={(e) =>
+                    setRunProfileForm((prev) => ({ ...prev, test_command: e.target.value }))
+                  }
+                  placeholder="npm test (optional)"
+                  className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
+                  data-testid="hww-local-run-profile-test-command"
+                />
+                <input
+                  type="url"
+                  value={runProfileForm.expected_preview_url || ""}
+                  onChange={(e) =>
+                    setRunProfileForm((prev) => ({ ...prev, expected_preview_url: e.target.value }))
+                  }
+                  placeholder="http://localhost:5173 (optional)"
+                  className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90 md:col-span-2"
+                  data-testid="hww-local-run-profile-expected-preview-url"
+                />
+                <div className="flex flex-wrap items-center gap-2 md:col-span-2">
                   <Button
                     type="submit"
                     size="sm"
                     variant="secondary"
                     className="text-[11px]"
-                    data-testid="hww-visual-edit-submit"
-                    disabled={visualEditBusy || !visualEditInstruction.trim()}
+                    data-testid="hww-local-run-profile-save"
+                    disabled={runProfileBusy || !ws || !pid}
                   >
-                    {visualEditBusy ? "Saving request…" : "Save edit request"}
+                    {runProfileBusy ? "Saving…" : "Save local run profile"}
                   </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="text-[11px]"
+                    data-testid="hww-local-run-profile-clear"
+                    disabled={runProfileBusy || !ws || !pid || !runProfile?.profile}
+                    onClick={() => {
+                      if (!ws || !pid) return;
+                      setRunProfileBusy(true);
+                      setRunProfileError(null);
+                      void deleteBuilderLocalRunProfile(ws, pid)
+                        .then((payload) => {
+                          setRunProfile(payload);
+                          void refreshActivity();
+                        })
+                        .catch((err) => {
+                          setRunProfileError(err instanceof Error ? err.message : String(err));
+                        })
+                        .finally(() => {
+                          setRunProfileBusy(false);
+                        });
+                    }}
+                  >
+                    Clear profile
+                  </Button>
+                  {runProfile?.profile?.expected_preview_url ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="text-[11px]"
+                      data-testid="hww-local-run-profile-use-preview-url"
+                      onClick={() => {
+                        setPreviewUrlInput(
+                          runProfile.profile?.expected_preview_url || "http://localhost:3000",
+                        );
+                      }}
+                    >
+                      Use as preview URL
+                    </Button>
+                  ) : null}
                 </div>
               </form>
-            ) : (
-              <p className="text-[11px] text-white/50" data-testid="hww-visual-edit-target-empty">
-                No target selected yet.
-              </p>
-            )}
-            {visualEditError ? (
-              <p className="text-amber-200/90" data-testid="hww-visual-edit-error">
-                Could not save visual edit request: {visualEditError}
-              </p>
-            ) : null}
-            {visualEditNotice ? (
-              <p className="text-emerald-200/90" data-testid="hww-visual-edit-success">
-                {visualEditNotice}
-              </p>
-            ) : null}
-            <p className="text-[11px] text-white/45" data-testid="hww-visual-edit-count">
-              Saved requests: {visualEditRequests.length}
-            </p>
-          </div>
-          <div
-            className="space-y-2 rounded-lg border border-white/[0.08] bg-black/25 p-3"
-            data-testid="hww-preview-activity-section"
-          >
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
-              Builder activity
-            </p>
-            <p className="text-[11px] text-white/55" data-testid="hww-preview-activity-stream-copy">
-              Activity updates live when connected. Build log streaming is not connected yet.
-            </p>
-            <p
-              className="text-[11px] text-white/55"
-              data-testid="hww-preview-activity-stream-state"
+            </div>
+            <div
+              className="space-y-2 rounded-lg border border-white/[0.08] bg-black/25 p-3"
+              data-testid="hww-cloud-runtime-section"
             >
-              Live status:{" "}
-              {activityStreamState === "live"
-                ? "Live"
-                : activityStreamState === "reconnecting"
-                  ? "Reconnecting"
-                  : "Offline / refresh manually"}
-            </p>
-            {activityError ? (
-              <p className="text-amber-200/90" data-testid="hww-preview-activity-error">
-                Could not load activity: {sanitizeWorkbenchProjectAccessMessage(activityError)}
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
+                Cloud preview runtime
               </p>
-            ) : null}
-            {!activityError && activity.length === 0 ? (
-              <p className="text-white/55" data-testid="hww-preview-activity-empty">
-                No builder activity yet. Source imports and preview changes will appear here.
+              <p className="text-[11px] text-white/60">{cloudRuntimePrimaryCopy}</p>
+              <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-refresh-copy">
+                {cloudRuntimeSecondaryCopy}
               </p>
-            ) : null}
-            {!activityError && activity.length > 0 ? (
-              <ul className="space-y-2" data-testid="hww-preview-activity-list">
-                {activity.map((item) => (
-                  <li
-                    key={item.id}
-                    className="rounded-md border border-white/[0.07] bg-black/20 px-2 py-1.5"
-                    data-testid="hww-preview-activity-item"
+              <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-status">
+                Status: {cloudRuntimeState}
+              </p>
+              <p
+                className="text-[11px] text-white/55"
+                data-testid="hww-cloud-runtime-provider-status"
+              >
+                Provider: {cloudRuntimeProviderStatus.replace("_", " ")}
+              </p>
+              <p
+                className="text-[11px] text-white/55"
+                data-testid="hww-cloud-runtime-provider-copy"
+              >
+                {cloudRuntimeProviderCopy}
+              </p>
+              {(cloudRuntimeState === "experiment_not_enabled" ||
+                cloudRuntimeState === "disabled") && (
+                <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-setup-copy">
+                  Enable HAM_BUILDER_CLOUD_RUNTIME_EXPERIMENTS_ENABLED or configure cloud_run_poc
+                  provider.
+                </p>
+              )}
+              {cloudRuntime?.message ? (
+                <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-message">
+                  {cloudRuntime.message}
+                </p>
+              ) : null}
+              {cloudRuntimeLatestJob ? (
+                <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-latest-job">
+                  Latest job: {cloudRuntimeLatestJob.status} / {cloudRuntimeLatestJob.phase}
+                </p>
+              ) : null}
+              {cloudRuntimeLifecycle ? (
+                <p className="text-[11px] text-white/55" data-testid="hww-cloud-runtime-lifecycle">
+                  Lifecycle: {cloudRuntimeLifecycle.phase}
+                  {cloudRuntimeLifecycle.provider_status
+                    ? ` · ${cloudRuntimeLifecycle.provider_status}`
+                    : ""}
+                  {cloudRuntimeLifecycle.logs_summary
+                    ? ` · ${cloudRuntimeLifecycle.logs_summary}`
+                    : ""}
+                </p>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="text-[11px]"
+                data-testid="hww-cloud-runtime-refresh-status"
+                disabled={!ws || !pid || !cloudRuntimeLatestJob?.id || loading}
+                onClick={() => {
+                  if (!ws || !pid || !cloudRuntimeLatestJob?.id) return;
+                  setCloudRuntimeError(null);
+                  void getBuilderCloudRuntimeJobStatus(ws, pid, cloudRuntimeLatestJob.id)
+                    .then((payload) => {
+                      setCloudRuntimeLifecycle(payload.lifecycle);
+                      setPreview(payload.preview_status);
+                    })
+                    .catch((err) => {
+                      setCloudRuntimeError(err instanceof Error ? err.message : String(err));
+                    });
+                }}
+              >
+                Refresh cloud runtime status
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="text-[11px]"
+                data-testid="hww-cloud-runtime-request-poc"
+                disabled={
+                  !ws ||
+                  !pid ||
+                  !cloudRetryEnabled ||
+                  cloudRuntimeJobBusy ||
+                  !activeSourceSnapshotId
+                }
+                onClick={() => {
+                  if (!ws || !pid || !cloudRetryEnabled || !activeSourceSnapshotId) return;
+                  setCloudRuntimeJobBusy(true);
+                  setCloudRuntimeJobError(null);
+                  setCloudRuntimeJobNotice(null);
+                  setCloudRuntimeLifecycle({
+                    phase: "queued",
+                    message: "Retry requested. Provisioning a fresh cloud preview run.",
+                    updated_at: new Date().toISOString(),
+                    provider_status: null,
+                    logs_summary: null,
+                  });
+                  void requestBuilderCloudRuntime(ws, pid, {
+                    source_snapshot_id: activeSourceSnapshotId,
+                    force_new: true,
+                    metadata: { request_source: "workbench_preview_retry" },
+                  })
+                    .then((payload) => {
+                      setCloudRuntime(payload.cloud_runtime);
+                      setPreview((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              mode: "cloud",
+                              status: "building",
+                              health: "unknown",
+                              message: "Retry requested. Provisioning cloud preview.",
+                              source_snapshot_id: activeSourceSnapshotId,
+                            }
+                          : prev,
+                      );
+                      setCloudRuntimeJobNotice(
+                        "Retry started. HAM is provisioning a fresh cloud runtime preview.",
+                      );
+                      void refresh();
+                      void refreshActivity();
+                      void refreshWorkers();
+                    })
+                    .catch((err) => {
+                      setCloudRuntimeJobError(err instanceof Error ? err.message : String(err));
+                    })
+                    .finally(() => {
+                      setCloudRuntimeJobBusy(false);
+                    });
+                }}
+              >
+                {cloudRuntimeJobBusy ? "Retrying…" : "Retry preview"}
+              </Button>
+              {!activeSourceSnapshotId ? (
+                <p
+                  className="text-[11px] text-white/55"
+                  data-testid="hww-cloud-runtime-source-required-copy"
+                >
+                  Add a project source ZIP or folder before retrying cloud preview.
+                </p>
+              ) : null}
+              {cloudPreviewHealthy ? (
+                <p
+                  className="text-[11px] text-white/55"
+                  data-testid="hww-cloud-runtime-retry-healthy-copy"
+                >
+                  Preview is already healthy. Use Refresh status for polling-only checks.
+                </p>
+              ) : null}
+              {!cloudRuntimeRequestEnabled ? (
+                <p
+                  className="text-[11px] text-white/55"
+                  data-testid="hww-cloud-runtime-disabled-copy"
+                >
+                  {cloudRuntimeState === "experiment_not_enabled"
+                    ? "Cloud runtime experiments are not enabled in this environment."
+                    : cloudRuntimeState === "config_missing"
+                      ? "Cloud runtime provider needs configuration before it can run."
+                      : "Cloud runtime experiments are not enabled."}
+                </p>
+              ) : null}
+              {cloudRuntimeJobError ? (
+                <p className="text-amber-200/90" data-testid="hww-cloud-runtime-job-error">
+                  Could not retry cloud preview: {cloudRuntimeJobError}
+                </p>
+              ) : null}
+              {cloudRuntimeJobNotice ? (
+                <p className="text-emerald-200/90" data-testid="hww-cloud-runtime-job-notice">
+                  {cloudRuntimeJobNotice}
+                </p>
+              ) : null}
+              {cloudRuntimeError ? (
+                <p className="text-amber-200/90" data-testid="hww-cloud-runtime-error">
+                  {sanitizePreviewStateError(cloudRuntimeError, null)}
+                </p>
+              ) : null}
+            </div>
+            <div
+              className="space-y-2 rounded-lg border border-white/[0.08] bg-black/25 p-3"
+              data-testid="hww-worker-capability-section"
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
+                Optional coding workers
+              </p>
+              <p className="text-[11px] text-white/60">{optionalWorkerIntroCopy}</p>
+              {workersError ? (
+                <p className="text-amber-200/90" data-testid="hww-worker-capability-error">
+                  Could not load worker capabilities: {workersError}
+                </p>
+              ) : null}
+              {!workersError && workers.length === 0 ? (
+                <p className="text-white/55" data-testid="hww-worker-capability-empty">
+                  No worker capability records available yet.
+                </p>
+              ) : null}
+              {!workersError && workers.length > 0 ? (
+                <ul className="space-y-1.5" data-testid="hww-worker-capability-list">
+                  {workers.map((worker) => {
+                    const statusTone =
+                      worker.status === "available"
+                        ? "text-emerald-300 border-emerald-500/30 bg-emerald-500/10"
+                        : worker.status === "available_mock" || worker.status === "available_poc"
+                          ? "text-sky-200 border-sky-400/30 bg-sky-500/10"
+                          : worker.status === "needs_connection"
+                            ? "text-amber-200 border-amber-400/30 bg-amber-500/10"
+                            : worker.status === "disabled"
+                              ? "text-white/60 border-white/[0.16] bg-white/[0.06]"
+                              : "text-rose-200 border-rose-400/30 bg-rose-500/10";
+                    const workerDetailCopy =
+                      worker.worker_kind === "cursor_local_sdk" && worker.status === "disabled"
+                        ? "Off — only needed for local Cursor execution."
+                        : worker.worker_kind === "claude_agent" &&
+                            worker.status === "needs_connection"
+                          ? "Not connected — optional external worker."
+                          : worker.environment_fit;
+                    return (
+                      <li
+                        key={worker.worker_kind}
+                        className="rounded-md border border-white/[0.08] bg-black/20 px-2 py-1.5"
+                        data-testid="hww-worker-capability-item"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-[11px] text-white/85">
+                            {worker.display_name}
+                          </p>
+                          <span
+                            className={cn(
+                              "rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide",
+                              statusTone,
+                            )}
+                          >
+                            {worker.status.replace("_", " ")}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-[11px] text-white/50">{workerDetailCopy}</p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+            </div>
+            <div
+              className="space-y-2 rounded-lg border border-white/[0.08] bg-black/25 p-3"
+              data-testid="hww-visual-edit-section"
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
+                Edit mode
+              </p>
+              <p className="text-[11px] text-white/60">
+                Capture-only flow. This saves a visual edit request contract and does not execute
+                edits.
+              </p>
+              {!visualEditReady ? (
+                <p
+                  className="text-[11px] text-white/55"
+                  data-testid="hww-visual-edit-disabled-copy"
+                >
+                  Preview must be ready before entering Edit Mode.
+                </p>
+              ) : (
+                <p className="text-[11px] text-white/55" data-testid="hww-visual-edit-ready-copy">
+                  Click `Edit`, then click a target in preview to open the request panel.
+                </p>
+              )}
+              {visualEditModeActive ? (
+                <p
+                  className="text-[11px] text-emerald-200/90"
+                  data-testid="hww-visual-edit-mode-active-copy"
+                >
+                  Edit Mode active. Click the preview to capture a target.
+                </p>
+              ) : null}
+              {visualEditTarget ? (
+                <form
+                  className="space-y-2 rounded-md border border-white/[0.1] bg-black/30 p-2"
+                  data-testid="hww-visual-edit-form"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!visualEditReady || !ws || !pid || !visualEditTarget) {
+                      return;
+                    }
+                    setVisualEditBusy(true);
+                    setVisualEditError(null);
+                    setVisualEditNotice(null);
+                    const payload: CreateBuilderVisualEditRequestPayload = {
+                      instruction: visualEditInstruction,
+                      route: visualEditRoute || null,
+                      preview_url_kind: previewUrlKind,
+                      target: visualEditTarget,
+                      selector_hints: visualEditSelectorHints
+                        .split(",")
+                        .map((value) => value.trim())
+                        .filter((value) => value.length > 0),
+                      bbox: {
+                        x: visualEditTarget.x,
+                        y: visualEditTarget.y,
+                        width: visualEditTarget.width,
+                        height: visualEditTarget.height,
+                      },
+                      runtime_session_id: preview?.runtime_session_id || null,
+                      preview_endpoint_id: preview?.preview_endpoint_id || null,
+                      source_snapshot_id: preview?.source_snapshot_id || null,
+                      status: "queued",
+                    };
+                    void createBuilderVisualEditRequest(ws, pid, payload)
+                      .then(() => {
+                        setVisualEditInstruction("");
+                        setVisualEditSelectorHints("");
+                        setVisualEditTarget(null);
+                        setVisualEditNotice(
+                          "Edit request saved. Agent execution is not connected yet.",
+                        );
+                        void refreshVisualEditRequests();
+                        void refreshActivity();
+                      })
+                      .catch((err) => {
+                        setVisualEditError(err instanceof Error ? err.message : String(err));
+                      })
+                      .finally(() => {
+                        setVisualEditBusy(false);
+                      });
+                  }}
+                >
+                  <p className="text-[11px] text-white/60">What should HAM change here?</p>
+                  <p
+                    className="text-[11px] text-white/55"
+                    data-testid="hww-visual-edit-target-summary"
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span
-                          className={cn(
-                            "h-2 w-2 shrink-0 rounded-full",
-                            item.status === "failed" || item.status === "error"
-                              ? "bg-rose-400"
-                              : item.status === "ready" || item.status === "succeeded"
-                                ? "bg-emerald-400"
-                                : "bg-amber-300",
-                          )}
-                        />
-                        <span className="truncate text-[11px] text-white/85">{item.title}</span>
+                    Target: x {visualEditTarget.x}, y {visualEditTarget.y}, viewport{" "}
+                    {visualEditTarget.viewport_width} x {visualEditTarget.viewport_height},{" "}
+                    {visualEditTarget.device_mode}
+                  </p>
+                  <textarea
+                    value={visualEditInstruction}
+                    onChange={(e) => setVisualEditInstruction(e.target.value)}
+                    rows={3}
+                    placeholder="Describe the visual change you want."
+                    className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
+                    data-testid="hww-visual-edit-instruction"
+                  />
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <input
+                      type="text"
+                      value={visualEditRoute}
+                      onChange={(e) => setVisualEditRoute(e.target.value)}
+                      placeholder="/"
+                      className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
+                      data-testid="hww-visual-edit-route"
+                    />
+                    <input
+                      type="text"
+                      value={visualEditSelectorHints}
+                      onChange={(e) => setVisualEditSelectorHints(e.target.value)}
+                      placeholder="Selector hints (optional, comma-separated)"
+                      className="w-full rounded-md border border-white/[0.12] bg-black/40 px-2 py-1.5 text-[11px] text-white/90"
+                      data-testid="hww-visual-edit-selector-hints"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="text-[11px]"
+                      data-testid="hww-visual-edit-cancel"
+                      onClick={() => {
+                        setVisualEditTarget(null);
+                        setVisualEditInstruction("");
+                        setVisualEditModeActive(false);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      variant="secondary"
+                      className="text-[11px]"
+                      data-testid="hww-visual-edit-submit"
+                      disabled={visualEditBusy || !visualEditInstruction.trim()}
+                    >
+                      {visualEditBusy ? "Saving request…" : "Save edit request"}
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <p className="text-[11px] text-white/50" data-testid="hww-visual-edit-target-empty">
+                  No target selected yet.
+                </p>
+              )}
+              {visualEditError ? (
+                <p className="text-amber-200/90" data-testid="hww-visual-edit-error">
+                  Could not save visual edit request: {visualEditError}
+                </p>
+              ) : null}
+              {visualEditNotice ? (
+                <p className="text-emerald-200/90" data-testid="hww-visual-edit-success">
+                  {visualEditNotice}
+                </p>
+              ) : null}
+              <p className="text-[11px] text-white/45" data-testid="hww-visual-edit-count">
+                Saved requests: {visualEditRequests.length}
+              </p>
+            </div>
+            <div
+              className="space-y-2 rounded-lg border border-white/[0.08] bg-black/25 p-3"
+              data-testid="hww-preview-activity-section"
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
+                Builder activity
+              </p>
+              <p
+                className="text-[11px] text-white/55"
+                data-testid="hww-preview-activity-stream-copy"
+              >
+                Activity updates live when connected. Build log streaming is not connected yet.
+              </p>
+              <p
+                className="text-[11px] text-white/55"
+                data-testid="hww-preview-activity-stream-state"
+              >
+                Live status:{" "}
+                {activityStreamState === "live"
+                  ? "Live"
+                  : activityStreamState === "reconnecting"
+                    ? "Reconnecting"
+                    : "Offline / refresh manually"}
+              </p>
+              {activityError ? (
+                <p className="text-amber-200/90" data-testid="hww-preview-activity-error">
+                  Could not load activity: {sanitizeWorkbenchProjectAccessMessage(activityError)}
+                </p>
+              ) : null}
+              {!activityError && activity.length === 0 ? (
+                <p className="text-white/55" data-testid="hww-preview-activity-empty">
+                  No builder activity yet. Source imports and preview changes will appear here.
+                </p>
+              ) : null}
+              {!activityError && activity.length > 0 ? (
+                <ul className="space-y-2" data-testid="hww-preview-activity-list">
+                  {activity.map((item) => (
+                    <li
+                      key={item.id}
+                      className="rounded-md border border-white/[0.07] bg-black/20 px-2 py-1.5"
+                      data-testid="hww-preview-activity-item"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span
+                            className={cn(
+                              "h-2 w-2 shrink-0 rounded-full",
+                              item.status === "failed" || item.status === "error"
+                                ? "bg-rose-400"
+                                : item.status === "ready" || item.status === "succeeded"
+                                  ? "bg-emerald-400"
+                                  : "bg-amber-300",
+                            )}
+                          />
+                          <span className="truncate text-[11px] text-white/85">{item.title}</span>
+                        </div>
+                        <span className="rounded border border-white/[0.12] px-1.5 py-0.5 text-[10px] uppercase text-white/65">
+                          {item.status}
+                        </span>
                       </div>
-                      <span className="rounded border border-white/[0.12] px-1.5 py-0.5 text-[10px] uppercase text-white/65">
-                        {item.status}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[11px] text-white/55">{item.message}</p>
-                    <p className="mt-1 text-[10px] text-white/40">
-                      {item.timestamp}
-                      {item.snapshot_id ? ` · snapshot ${item.snapshot_id}` : ""}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
+                      <p className="mt-1 text-[11px] text-white/55">{item.message}</p>
+                      <p className="mt-1 text-[10px] text-white/40">
+                        {item.timestamp}
+                        {item.snapshot_id ? ` · snapshot ${item.snapshot_id}` : ""}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
           </div>
-        </div>
-      </details>
+        </details>
+      ) : null}
     </div>
   );
 }

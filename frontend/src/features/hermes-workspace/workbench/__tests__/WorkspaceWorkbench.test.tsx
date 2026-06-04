@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 const {
   fetchWorkspaceToolsMock,
   isLocalRuntimeConfiguredMock,
+  isWorkbenchOperatorUiEnabledMock,
   listBuilderProjectSourcesMock,
   listBuilderSourceSnapshotsMock,
   listBuilderImportJobsMock,
@@ -31,6 +32,7 @@ const {
 } = vi.hoisted(() => ({
   fetchWorkspaceToolsMock: vi.fn(),
   isLocalRuntimeConfiguredMock: vi.fn(() => false),
+  isWorkbenchOperatorUiEnabledMock: vi.fn(() => false),
   listBuilderProjectSourcesMock: vi.fn(),
   listBuilderSourceSnapshotsMock: vi.fn(),
   listBuilderImportJobsMock: vi.fn(),
@@ -97,7 +99,15 @@ vi.mock("../../adapters/localRuntime", () => ({
   isLocalRuntimeConfigured: () => isLocalRuntimeConfiguredMock(),
 }));
 
+vi.mock("@/lib/ham/workbenchOperatorUi", () => ({
+  isWorkbenchOperatorUiEnabled: () => isWorkbenchOperatorUiEnabledMock(),
+}));
+
 import { WorkspaceWorkbench } from "../WorkspaceWorkbench";
+
+function enableOperatorPreviewUi() {
+  isWorkbenchOperatorUiEnabledMock.mockReturnValue(true);
+}
 
 function toolsOk() {
   return new Response(
@@ -208,6 +218,7 @@ function mockProjectWithActiveSnapshot() {
 
 describe("WorkspaceWorkbench", () => {
   beforeEach(() => {
+    isWorkbenchOperatorUiEnabledMock.mockReturnValue(true);
     fetchWorkspaceToolsMock.mockResolvedValue(toolsOk());
     isLocalRuntimeConfiguredMock.mockReturnValue(false);
     downloadBuilderProjectZipMock.mockResolvedValue(undefined);
@@ -675,6 +686,7 @@ describe("WorkspaceWorkbench", () => {
   });
 
   it("Preview shows not-connected state and no iframe", async () => {
+    isWorkbenchOperatorUiEnabledMock.mockReturnValue(false);
     render(
       <MemoryRouter>
         <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
@@ -684,7 +696,20 @@ describe("WorkspaceWorkbench", () => {
       expect(screen.getByTestId("hww-preview-tell-ham")).toBeInTheDocument();
     });
     expect(screen.queryByTestId("hww-preview-iframe")).toBeNull();
-    expect(screen.getByTestId("hww-preview-open-new-tab")).toBeDisabled();
+    expect(screen.queryByTestId("hww-preview-open-new-tab")).toBeNull();
+    expect(screen.queryByTestId("hww-preview-refresh")).toBeNull();
+    expect(screen.getByTestId("hww-preview-viewport-toggle")).toBeInTheDocument();
+  });
+
+  it("operator preview diagnostics exposes connect form and activity", async () => {
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-tell-ham")).toBeInTheDocument();
+    });
     openPreviewDiagnostics();
     await waitFor(() => {
       expect(screen.getByTestId("hww-preview-connect-form")).toBeInTheDocument();
@@ -698,7 +723,8 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.queryByText(/build stream/i)).toBeNull();
   });
 
-  it("VAL-GEN-001: build generation in progress shows Building… and replaces the empty preview copy", async () => {
+  it("VAL-GEN-001: build generation in progress shows building copy and replaces the empty preview copy", async () => {
+    isWorkbenchOperatorUiEnabledMock.mockReturnValue(false);
     render(
       <MemoryRouter>
         <WorkspaceWorkbench
@@ -709,17 +735,16 @@ describe("WorkspaceWorkbench", () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByTestId("hww-build-status-shell")).toHaveTextContent("Building…");
+      expect(screen.getByTestId("hww-preview-tell-ham")).toHaveTextContent(
+        "HAM is building your preview…",
+      );
     });
-    // Right pane must NOT read idle/"Ready to build" while generation is underway.
-    expect(screen.getByTestId("hww-build-status-shell")).not.toHaveTextContent("Ready to build");
-    // The empty "Tell HAM what to build." copy is replaced by an in-progress placeholder.
     const emptyCopy = screen.getByTestId("hww-preview-tell-ham");
-    expect(emptyCopy).toHaveTextContent("Generating your dashboard…");
     expect(emptyCopy).not.toHaveTextContent("Tell HAM what to build");
+    expect(screen.queryByTestId("hww-build-status-shell")).toBeNull();
   });
 
-  it("VAL-GEN-002: an interrupted build shows a recoverable Checking… status, not a failure", async () => {
+  it("VAL-GEN-002: operator UI shows recoverable status during interrupted build", async () => {
     render(
       <MemoryRouter>
         <WorkspaceWorkbench
@@ -2082,9 +2107,10 @@ describe("WorkspaceWorkbench", () => {
     });
 
     expect(screen.queryByTestId("hww-preview-iframe")).toBeNull();
-    expect(screen.getByTestId("hww-preview-primary-subtitle")).toHaveTextContent(
-      /Preview is still warming up/i,
+    expect(screen.getByTestId("hww-preview-primary-title")).toHaveTextContent(
+      "HAM is building your preview…",
     );
+    expect(screen.queryByTestId("hww-preview-primary-subtitle")).toBeNull();
 
     vi.useFakeTimers();
     await act(async () => {
@@ -2499,7 +2525,20 @@ describe("WorkspaceWorkbench", () => {
     );
   });
 
-  it("Preview-first Part Z: diagnostics hidden until Advanced is opened", async () => {
+  it("Preview-first Part Z: diagnostics hidden for normal users", async () => {
+    isWorkbenchOperatorUiEnabledMock.mockReturnValue(false);
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-tell-ham")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("hww-preview-advanced")).toBeNull();
+  });
+
+  it("operator preview diagnostics stay collapsed until Advanced is opened", async () => {
     render(
       <MemoryRouter>
         <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
@@ -2528,7 +2567,7 @@ describe("WorkspaceWorkbench", () => {
     );
     await waitFor(() => {
       expect(screen.getByTestId("hww-preview-primary-title")).toHaveTextContent(
-        "Preview could not start.",
+        "HAM couldn't finish this preview.",
       );
     });
     const err = screen.getByTestId("hww-preview-state-error").textContent || "";
@@ -2679,16 +2718,14 @@ describe("WorkspaceWorkbench", () => {
     );
     await waitFor(() => {
       expect(screen.getByTestId("hww-preview-primary-title")).toHaveTextContent(
-        "HAM is preparing your preview.",
+        "HAM is building your preview…",
       );
     });
-    expect(screen.getByTestId("hww-preview-primary-subtitle")).toHaveTextContent(
-      /sets up your project files/i,
-    );
+    expect(screen.queryByTestId("hww-preview-primary-subtitle")).toBeNull();
     expect(screen.getByTestId("hww-preview-status-pills")).toHaveTextContent("Preparing");
   });
 
-  it("Almost-ready state shows friendly copy when source exists but preview is waiting", async () => {
+  it("Almost-ready state shows simplified building copy when source exists but preview is waiting", async () => {
     mockProjectWithActiveSnapshot();
     getBuilderPreviewStatusMock.mockResolvedValue({
       project_id: "proj_abc",
@@ -2711,7 +2748,7 @@ describe("WorkspaceWorkbench", () => {
     );
     await waitFor(() => {
       expect(screen.getByTestId("hww-preview-primary-title")).toHaveTextContent(
-        "Preview is almost ready.",
+        "HAM is building your preview…",
       );
     });
     expect(screen.getByTestId("hww-preview-status-pills")).toHaveTextContent("Almost ready");
@@ -2724,7 +2761,27 @@ describe("WorkspaceWorkbench", () => {
     expect(previewText).not.toMatch(/\bpod\b/i);
   });
 
-  it("Starting preview state exposes Try again retry action", async () => {
+  it("Preview failure state exposes Try again and Ask HAM actions for normal users", async () => {
+    isWorkbenchOperatorUiEnabledMock.mockReturnValue(false);
+    getBuilderPreviewStatusMock.mockRejectedValue(new Error("HTTP 500"));
+    render(
+      <MemoryRouter>
+        <WorkspaceWorkbench projectId="proj_abc" workspaceId="ws_abc" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("hww-preview-primary-title")).toHaveTextContent(
+        "HAM couldn't finish this preview.",
+      );
+    });
+    expect(screen.getByTestId("hww-preview-retry")).toBeInTheDocument();
+    expect(screen.getByTestId("hww-preview-ask-ham-fix")).toBeInTheDocument();
+    expect(screen.queryByTestId("hww-preview-state-error")).toBeNull();
+    expect(screen.queryByTestId("hww-preview-iframe")).toBeNull();
+  });
+
+  it("Starting preview state does not expose Try again for normal users", async () => {
+    isWorkbenchOperatorUiEnabledMock.mockReturnValue(false);
     mockProjectWithActiveSnapshot();
     getBuilderPreviewStatusMock.mockResolvedValue({
       project_id: "proj_abc",
@@ -2746,13 +2803,11 @@ describe("WorkspaceWorkbench", () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByTestId("hww-preview-retry")).toBeInTheDocument();
+      expect(screen.getByTestId("hww-preview-primary-title")).toHaveTextContent(
+        "HAM is building your preview…",
+      );
     });
-    const before = getBuilderPreviewStatusMock.mock.calls.length;
-    fireEvent.click(screen.getByTestId("hww-preview-retry"));
-    await waitFor(() => {
-      expect(getBuilderPreviewStatusMock.mock.calls.length).toBeGreaterThan(before);
-    });
+    expect(screen.queryByTestId("hww-preview-retry")).toBeNull();
   });
 
   it("Open details expands diagnostics without leaking raw API tokens", async () => {
@@ -2804,7 +2859,7 @@ describe("WorkspaceWorkbench", () => {
       expect(screen.getByTestId("hww-preview-state-error")).toBeInTheDocument();
     });
     expect(screen.getByTestId("hww-preview-primary-title")).toHaveTextContent(
-      "Preview could not start.",
+      "HAM couldn't finish this preview.",
     );
     const dom =
       screen.getByTestId("hww-preview-canvas").textContent || document.body.textContent || "";
@@ -2848,7 +2903,7 @@ describe("WorkspaceWorkbench", () => {
     expectNoBuildRegistryLeakage(visibleCopy);
   });
 
-  it("renders a single build-status shell in the right pane", async () => {
+  it("renders a single build-status shell in the right pane when operator UI is enabled", async () => {
     mockProjectWithActiveSnapshot();
     render(
       <MemoryRouter>
@@ -2861,7 +2916,7 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getAllByTestId("hww-build-status-shell")).toHaveLength(1);
   });
 
-  it("renders the build-status shell above the preview status pills in DOM order", async () => {
+  it("renders the build-status shell above the preview status pills in DOM order when operator UI is enabled", async () => {
     mockProjectWithActiveSnapshot();
     render(
       <MemoryRouter>
@@ -2876,7 +2931,7 @@ describe("WorkspaceWorkbench", () => {
     expect(shell.compareDocumentPosition(pills) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("keeps the preview status pills with their phase label alongside the shell", async () => {
+  it("keeps the preview status pills with their phase label alongside the shell when operator UI is enabled", async () => {
     mockProjectWithActiveSnapshot();
     render(
       <MemoryRouter>
@@ -2890,7 +2945,7 @@ describe("WorkspaceWorkbench", () => {
     expect(screen.getByTestId("hww-build-status-shell")).toBeInTheDocument();
   });
 
-  it("renders the shell as presentational with no approval controls or panel roots", async () => {
+  it("renders the shell as presentational with no approval controls or panel roots when operator UI is enabled", async () => {
     mockProjectWithActiveSnapshot();
     render(
       <MemoryRouter>

@@ -116,6 +116,10 @@ import {
 import { useWorkspaceHamProject } from "../../WorkspaceHamProjectContext";
 import { WorkspaceWorkbench } from "../../workbench/WorkspaceWorkbench";
 import {
+  WORKBENCH_ASK_HAM_FIX_PREVIEW_EVENT,
+  WORKBENCH_ASK_HAM_FIX_PREVIEW_MESSAGE,
+} from "@/lib/ham/workbenchPreviewActions";
+import {
   appendInspectorEvent,
   patchInspectorEventsSessionId,
   safeInspectorErrorMessage,
@@ -696,6 +700,15 @@ export function WorkspaceChatScreen(props: WorkspaceChatScreenProps = {}) {
       composerTextareaRef.current?.focus();
     });
   }, []);
+  React.useEffect(() => {
+    const onAskHamFixPreview = () => {
+      fillComposerPrompt(WORKBENCH_ASK_HAM_FIX_PREVIEW_MESSAGE);
+    };
+    window.addEventListener(WORKBENCH_ASK_HAM_FIX_PREVIEW_EVENT, onAskHamFixPreview);
+    return () => {
+      window.removeEventListener(WORKBENCH_ASK_HAM_FIX_PREVIEW_EVENT, onAskHamFixPreview);
+    };
+  }, [fillComposerPrompt]);
   const [attachments, setAttachments] = React.useState<WorkspaceComposerAttachment[]>([]);
   const attachmentsRef = React.useRef(attachments);
   React.useEffect(() => {
