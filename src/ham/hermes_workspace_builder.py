@@ -187,6 +187,8 @@ def execute_hermes_native_workspace_build(
             reason = "hermes_cli_timeout"
         elif outcome.error_code == _ERROR_CODE_CLI_EMPTY:
             reason = "hermes_cli_empty"
+        elif outcome.error_code == _ERROR_CODE_CLI_FAILED:
+            reason = "hermes_cli_failed"
         return BuildMaterializationResult(
             status="failed",
             summary=outcome.error_summary or "Workspace build failed.",

@@ -81,6 +81,61 @@ def test_build_hermes_cli_chat_argv_omits_provider_and_model_when_unset(
     assert "-m" not in argv
 
 
+def test_cli_nonzero_exit_with_seeded_workspace_fails_not_materialize(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from unittest.mock import MagicMock
+
+    import src.ham.hermes_workspace_execution as ws_exec
+
+    monkeypatch.setattr(ws_exec, "resolve_hermes_cli_binary", lambda: "/usr/local/bin/hermes")
+
+    def _failed_run(*_args, **_kwargs):
+        m = MagicMock()
+        m.returncode = 1
+        m.stdout = "Error: provider auth failed\n"
+        m.stderr = ""
+        return m
+
+    monkeypatch.setattr(ws_exec.subprocess, "run", _failed_run)
+    ws_exec.seed_minimal_vite_workspace(tmp_path, user_prompt="build app")
+    outcome = ws_exec.HermesCliWorkspaceProvider().execute(
+        workspace_dir=tmp_path,
+        user_prompt="build app",
+        import_job_id="ijob_cli_fail_seeded",
+    )
+    assert outcome.ok is False
+    assert outcome.error_code == "HERMES_CLI_FAILED"
+    assert outcome.files is None
+
+
+def test_cli_zero_exit_seed_only_workspace_fails_safely(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from unittest.mock import MagicMock
+
+    import src.ham.hermes_workspace_execution as ws_exec
+
+    monkeypatch.setattr(ws_exec, "resolve_hermes_cli_binary", lambda: "/usr/local/bin/hermes")
+    ws_exec.seed_minimal_vite_workspace(tmp_path, user_prompt="build app")
+
+    def _noop_run(*_args, **_kwargs):
+        m = MagicMock()
+        m.returncode = 0
+        m.stdout = ""
+        m.stderr = ""
+        return m
+
+    monkeypatch.setattr(ws_exec.subprocess, "run", _noop_run)
+    outcome = ws_exec.HermesCliWorkspaceProvider().execute(
+        workspace_dir=tmp_path,
+        user_prompt="build app",
+        import_job_id="ijob_cli_seed_only",
+    )
+    assert outcome.ok is False
+    assert outcome.error_code == "HERMES_CLI_EMPTY_WORKSPACE"
+
+
 def test_cli_nonzero_exit_empty_workspace_fails_safely(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

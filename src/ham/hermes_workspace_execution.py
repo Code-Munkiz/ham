@@ -59,6 +59,8 @@ _SKIP_DIR_NAMES = frozenset(
     }
 )
 _SKIP_FILE_NAMES = frozenset({".env", ".env.local", ".env.production"})
+# Marker in seed_minimal_vite_workspace App.tsx — must not ship as a successful build.
+_BOOTSTRAP_APP_MARKER = "HAM preview scaffold — enhance this app to match the user goal."
 
 
 @dataclass(frozen=True)
@@ -202,6 +204,12 @@ def _should_skip_path(rel: str) -> bool:
     return False
 
 
+def _workspace_still_seed_scaffold(files: dict[str, str]) -> bool:
+    """True when Hermes left only the pre-run bootstrap placeholder app."""
+    app_src = files.get("src/App.tsx") or ""
+    return _BOOTSTRAP_APP_MARKER in app_src
+
+
 def collect_workspace_files(workspace_dir: Path) -> dict[str, str]:
     """Collect text files from workspace tree with size caps (no secrets in logs)."""
     if not workspace_dir.is_dir():
@@ -328,12 +336,32 @@ class HermesCliWorkspaceProvider:
             )
 
         if proc.returncode != 0:
-            # Non-zero exit but files exist — still attempt materialization (Hermes may warn on exit).
             _LOG.warning(
                 "ham_native_workspace_cli_nonzero_exit import_job_id=%s exit_code=%s file_count=%d",
                 import_job_id,
                 proc.returncode,
                 len(files),
+            )
+            return WorkspaceExecutionOutcome(
+                ok=False,
+                error_code="HERMES_CLI_FAILED",
+                error_summary="Hermes CLI workspace build failed.",
+                session_id=session_id,
+                exit_code=proc.returncode,
+            )
+
+        if _workspace_still_seed_scaffold(files):
+            _LOG.warning(
+                "ham_native_workspace_cli_seed_only import_job_id=%s file_count=%d",
+                import_job_id,
+                len(files),
+            )
+            return WorkspaceExecutionOutcome(
+                ok=False,
+                error_code="HERMES_CLI_EMPTY_WORKSPACE",
+                error_summary="Hermes CLI did not produce project changes beyond the bootstrap.",
+                session_id=session_id,
+                exit_code=proc.returncode,
             )
 
         return WorkspaceExecutionOutcome(
