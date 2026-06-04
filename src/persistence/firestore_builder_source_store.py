@@ -281,12 +281,18 @@ class FirestoreBuilderSourceStore:
         phase: str,
         error_code: str,
         error_message: str,
+        stats: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> ImportJob:
         record = self._require_import_job(import_job_id)
         record.phase = phase
         record.status = "failed"
         record.error_code = str(error_code or "ZIP_INVALID")
         record.error_message = str(error_message or "Import failed.")
+        if stats:
+            record.stats = {**record.stats, **stats}
+        if metadata:
+            record.metadata = {**record.metadata, **metadata}
         record.updated_at = _utc_now_iso()
         return self.upsert_import_job(record)
 

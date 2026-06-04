@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 import uuid
 import zipfile
 from dataclasses import dataclass, field
@@ -22,6 +23,10 @@ from src.ham.builder_preview_bootstrap import ensure_preview_bootstrap_files
 from src.ham.builder_preview_typecheck import (
     user_safe_typecheck_failure_message,
     validate_preview_app_files,
+)
+from src.ham.workspace_typecheck_diagnostics import (
+    build_typecheck_diagnostic_summary,
+    capture_failed_workspace_artifact,
 )
 from src.persistence.builder_source_store import (
     ProjectSource,
@@ -51,6 +56,8 @@ class BuildMaterializationResult:
     error_code: str | None = None
     scaffolded: bool = False
     artifact_verification: dict[str, Any] | None = None
+    operator_stats: dict[str, Any] | None = None
+    operator_metadata: dict[str, Any] | None = None
 
     def to_native_build_dict(self) -> dict[str, Any]:
         """Shape consumed by chat hooks and legacy native builder callers."""
@@ -114,22 +121,49 @@ def materialize_files_to_snapshot(
     files: dict[str, str],
     store: Any | None = None,
     template_label: str = "hermes_workspace",
+    materialization_started_at: float | None = None,
 ) -> BuildMaterializationResult:
     """Validate, bootstrap, typecheck, verify, and persist a Workbench source snapshot."""
+    started = materialization_started_at if materialization_started_at is not None else time.monotonic()
     source_store = store or get_builder_source_store()
     candidate_files = ensure_preview_bootstrap_files(files, project_name=user_prompt)
     typecheck = validate_preview_app_files(candidate_files)
     candidate_files = typecheck.files
     if not typecheck.ok:
+        error_code = "HAM_NATIVE_BUILDER_TYPECHECK_FAILED"
+        artifact_capture = capture_failed_workspace_artifact(
+            files=candidate_files,
+            workspace_id=workspace_id,
+            project_id=project_id,
+            import_job_id=import_job_id,
+        )
+        op_stats, op_meta = build_typecheck_diagnostic_summary(
+            files=candidate_files,
+            error_code=error_code,
+            compiler_output=typecheck.compiler_output,
+            artifact_capture=artifact_capture,
+        )
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+        _LOG.warning(
+            "hermes_native_workspace_typecheck_failed import_job_id=%s project_id=%s "
+            "file_count=%d error_code=%s elapsed_ms=%d",
+            import_job_id,
+            project_id,
+            len(candidate_files),
+            error_code,
+            elapsed_ms,
+        )
         return BuildMaterializationResult(
             status="failed",
             summary="Typecheck failed.",
             import_job_id=import_job_id,
             failure_reason="bundle",
             user_message=typecheck.user_message or user_safe_typecheck_failure_message(),
-            error_code="HAM_NATIVE_BUILDER_TYPECHECK_FAILED",
+            error_code=error_code,
             scaffolded=False,
             validation_report={"typecheck": "failed"},
+            operator_stats=op_stats,
+            operator_metadata=op_meta,
         )
 
     verification = verify_builder_scaffold_artifact(

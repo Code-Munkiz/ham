@@ -24,12 +24,13 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from src.ham.builder_preview_bootstrap import build_vite_bootstrap_files, safe_npm_package_name
-from src.ham.hermes_runtime_inventory import redact_paths, redact_secrets, resolve_hermes_cli_binary
+from src.ham.hermes_runtime_inventory import resolve_hermes_cli_binary
 
 _LOG = logging.getLogger(__name__)
 
@@ -263,9 +264,10 @@ class HermesCliWorkspaceProvider:
         instruction = _build_instruction_prompt(user_prompt)
         argv = build_hermes_cli_chat_argv(binary=binary, instruction=instruction)
         env = os.environ.copy()
+        cli_started = time.monotonic()
         # Hermes inherits provider credentials from the operator home; never log env.
-        _LOG.info(
-            "ham_native_workspace_cli_start import_job_id=%s provider_set=%s model_set=%s",
+        _LOG.warning(
+            "hermes_native_workspace_cli_start import_job_id=%s provider_set=%s model_set=%s",
             import_job_id,
             bool(_workspace_provider()),
             bool(_workspace_model()),
@@ -304,20 +306,19 @@ class HermesCliWorkspaceProvider:
             )
 
         combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
-        safe_tail = redact_paths(redact_secrets(combined), str(Path.home()))
-        if len(safe_tail) > 2000:
-            safe_tail = safe_tail[-2000:]
         session_id = _parse_session_id_from_output(combined)
-        _LOG.info(
-            "ham_native_workspace_cli_finished import_job_id=%s exit_code=%s "
-            "session_id_present=%s output_tail_chars=%d",
+        cli_elapsed_ms = int((time.monotonic() - cli_started) * 1000)
+        files = collect_workspace_files(workspace_dir)
+        _LOG.warning(
+            "hermes_native_workspace_cli_finished import_job_id=%s exit_code=%s "
+            "file_count=%d session_id_present=%s elapsed_ms=%d",
             import_job_id,
             proc.returncode,
+            len(files),
             bool(session_id),
-            len(safe_tail),
+            cli_elapsed_ms,
         )
 
-        files = collect_workspace_files(workspace_dir)
         if not files:
             return WorkspaceExecutionOutcome(
                 ok=False,

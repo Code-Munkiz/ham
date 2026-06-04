@@ -136,12 +136,16 @@ def _fail_native_build(
     error_message: str,
     failure_reason: str,
     extra: dict[str, Any] | None = None,
+    stats: dict[str, Any] | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     store.mark_import_job_failed(
         import_job_id=import_job_id,
         phase=phase,
         error_code=error_code,
         error_message=error_message,
+        stats=stats,
+        metadata=metadata,
     )
     return _native_result(
         status="failed",
@@ -253,18 +257,21 @@ def _execute_native_build_core(
 
     if result.status != "succeeded":
         _advance(validating_phase)
+        user_message = result.user_message or result.summary
         return _fail_native_build(
             store,
             import_job_id=import_job_id,
             phase=failure_phase,
             error_code=result.error_code or "HAM_NATIVE_WORKSPACE_FAILED",
-            error_message=result.summary,
+            error_message=user_message,
             failure_reason=result.failure_reason or "workspace",
             extra={
                 k: v
                 for k, v in {"artifact_verification": result.artifact_verification}.items()
                 if v is not None
             },
+            stats=result.operator_stats,
+            metadata=result.operator_metadata,
         )
 
     _advance(materializing_phase)

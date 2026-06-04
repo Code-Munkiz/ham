@@ -41,6 +41,7 @@ from src.ham.clerk_email_access import require_ham_clerk_email_allowed
 from src.ham.harness_capabilities import HARNESS_CAPABILITIES
 from src.ham.worker_adapters.claude_agent_adapter import check_claude_agent_readiness
 from src.ham.worker_adapters.cursor_adapter import check_cursor_readiness
+from src.ham.workspace_typecheck_diagnostics import strip_operator_fields_from_import_job_payload
 from src.ham.workspace_models import WorkspaceContext
 from src.ham.workspace_perms import PERM_WORKSPACE_READ, PERM_WORKSPACE_WRITE
 from src.ham.workspace_resolver import (
@@ -3055,7 +3056,10 @@ async def list_import_jobs(
     return {
         "project_id": project_id,
         "workspace_id": ctx.workspace_id,
-        "import_jobs": [r.model_dump(mode="json") for r in rows],
+        "import_jobs": [
+            strip_operator_fields_from_import_job_payload(r.model_dump(mode="json"))
+            for r in rows
+        ],
     }
 
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -160,10 +161,11 @@ def execute_hermes_native_workspace_build(
         project_id=project_id,
         import_job_id=import_job_id,
     )
-    _LOG.info(
-        "ham_native_workspace_build_start import_job_id=%s workspace_dir=%s prompt_chars=%d",
+    build_started = time.monotonic()
+    _LOG.warning(
+        "hermes_native_workspace_start import_job_id=%s project_id=%s prompt_chars=%d",
         import_job_id,
-        workspace_dir,
+        project_id,
         len(enriched_prompt),
     )
 
@@ -196,6 +198,15 @@ def execute_hermes_native_workspace_build(
             error_code=outcome.error_code or _ERROR_CODE_CLI_FAILED,
         )
 
+    elapsed_ms = int((time.monotonic() - build_started) * 1000)
+    _LOG.warning(
+        "hermes_native_workspace_files_collected import_job_id=%s project_id=%s file_count=%d elapsed_ms=%d",
+        import_job_id,
+        project_id,
+        len(files),
+        elapsed_ms,
+    )
+
     return materialize_files_to_snapshot(
         import_job_id=import_job_id,
         workspace_id=workspace_id,
@@ -205,6 +216,7 @@ def execute_hermes_native_workspace_build(
         created_by=created_by,
         files=files,
         template_label="hermes_workspace",
+        materialization_started_at=build_started,
     )
 
 
