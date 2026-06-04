@@ -40,6 +40,8 @@ Set on **both** `ham-api` (preflight) and the **native-build worker** (execution
 | `HAM_HERMES_CLI_PATH` | No if `hermes` on `PATH` | Override only for non-default binary location |
 | `HERMES_NATIVE_WORKSPACE_MAX_TURNS` | No | Default `40`; CLI `--max-turns` cap |
 | `HERMES_NATIVE_WORKSPACE_TIMEOUT_SEC` | No | Default `600`; subprocess budget — **Cloud Run request timeout must exceed this** |
+| `HERMES_NATIVE_WORKSPACE_PROVIDER` | **Recommended for OpenRouter** | Passed as `hermes chat --provider` (e.g. `openrouter`) |
+| `HERMES_NATIVE_WORKSPACE_MODEL` | **Recommended for OpenRouter** | Passed as `hermes chat -m` (e.g. `anthropic/claude-3.5-haiku`; OpenRouter has no default model) |
 | `HAM_HERMES_NATIVE_WORKSPACE_ROOT` | No | Default `~/.ham/native-workspaces/{ws}/{proj}/{job}` (ephemeral container disk) |
 
 Durable builder stores (already required for multi-instance staging):
@@ -65,6 +67,8 @@ Mount existing Secret Manager bindings already used by Ham:
 | `OPENROUTER_API_KEY` | OpenRouter provider when set |
 
 Hermes reads standard provider env vars; no `~/.hermes` login required for headless `hermes chat -Q --yolo`.
+
+**Staging OpenRouter smoke (2026-06):** `OPENROUTER_API_KEY` + `--provider openrouter -m anthropic/claude-3.5-haiku` returned `HAM_HERMES_CLI_SMOKE_OK`. Without `-m`, Hermes failed with `No models provided`. Set `HERMES_NATIVE_WORKSPACE_PROVIDER` and `HERMES_NATIVE_WORKSPACE_MODEL` on the worker before enabling workspace mode.
 
 **Operator smoke** (on a built image, with keys injected, **not** in CI logs):
 

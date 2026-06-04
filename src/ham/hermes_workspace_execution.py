@@ -11,6 +11,8 @@ Required operator configuration (host / worker):
 - ``HERMES_NATIVE_WORKSPACE_MAX_TURNS`` (optional) — ``--max-turns`` cap (default 40).
 - ``HERMES_NATIVE_WORKSPACE_TIMEOUT_SEC`` (optional) — subprocess budget (default 600).
 - ``HAM_HERMES_NATIVE_WORKSPACE_ROOT`` (optional) — parent dir for isolated workspaces.
+- ``HERMES_NATIVE_WORKSPACE_PROVIDER`` (optional) — ``hermes chat --provider`` (e.g. ``openrouter``).
+- ``HERMES_NATIVE_WORKSPACE_MODEL`` (optional) — ``hermes chat -m`` (required for OpenRouter without a default model).
 - Provider auth via env (``ANTHROPIC_API_KEY``, ``OPENROUTER_API_KEY``) or ``HERMES_HOME`` — see ``docs/NATIVE_HERMES_WORKSPACE_CLOUD_RUN.md``.
 
 Cloud Run / Docker: ``hermes-agent`` is installed in the ``ham-api`` image (PyPI pin in ``Dockerfile``).
@@ -33,6 +35,8 @@ _LOG = logging.getLogger(__name__)
 
 _MAX_TURNS_ENV = "HERMES_NATIVE_WORKSPACE_MAX_TURNS"
 _TIMEOUT_ENV = "HERMES_NATIVE_WORKSPACE_TIMEOUT_SEC"
+_PROVIDER_ENV = "HERMES_NATIVE_WORKSPACE_PROVIDER"
+_MODEL_ENV = "HERMES_NATIVE_WORKSPACE_MODEL"
 _SOURCE_TAG = "ham_native_builder"
 
 _DEFAULT_MAX_TURNS = 40
@@ -104,6 +108,39 @@ def _timeout_sec() -> float:
         return max(30.0, min(3600.0, float(raw)))
     except ValueError:
         return _DEFAULT_TIMEOUT_SEC
+
+
+def _workspace_provider() -> str | None:
+    raw = (os.environ.get(_PROVIDER_ENV) or "").strip()
+    return raw or None
+
+
+def _workspace_model() -> str | None:
+    raw = (os.environ.get(_MODEL_ENV) or "").strip()
+    return raw or None
+
+
+def build_hermes_cli_chat_argv(*, binary: str, instruction: str) -> list[str]:
+    """Build ``hermes chat`` argv for native workspace execution (testable seam)."""
+    argv: list[str] = [
+        binary,
+        "chat",
+        "-q",
+        instruction,
+        "-Q",
+        "--yolo",
+        "--max-turns",
+        str(_max_turns()),
+        "--source",
+        _SOURCE_TAG,
+    ]
+    provider = _workspace_provider()
+    if provider:
+        argv.extend(["--provider", provider])
+    model = _workspace_model()
+    if model:
+        argv.extend(["-m", model])
+    return argv
 
 
 def _build_instruction_prompt(enriched_user_prompt: str) -> str:
@@ -224,20 +261,15 @@ class HermesCliWorkspaceProvider:
 
         seed_minimal_vite_workspace(workspace_dir, user_prompt=user_prompt)
         instruction = _build_instruction_prompt(user_prompt)
-        argv = [
-            binary,
-            "chat",
-            "-q",
-            instruction,
-            "-Q",
-            "--yolo",
-            "--max-turns",
-            str(_max_turns()),
-            "--source",
-            _SOURCE_TAG,
-        ]
+        argv = build_hermes_cli_chat_argv(binary=binary, instruction=instruction)
         env = os.environ.copy()
         # Hermes inherits provider credentials from the operator home; never log env.
+        _LOG.info(
+            "ham_native_workspace_cli_start import_job_id=%s provider_set=%s model_set=%s",
+            import_job_id,
+            bool(_workspace_provider()),
+            bool(_workspace_model()),
+        )
         try:
             proc = subprocess.run(
                 argv,
@@ -339,6 +371,7 @@ __all__ = [
     "HermesCliWorkspaceProvider",
     "HermesWorkspaceExecutionProvider",
     "WorkspaceExecutionOutcome",
+    "build_hermes_cli_chat_argv",
     "collect_workspace_files",
     "get_default_workspace_execution_provider",
     "run_hermes_cli_workspace_build",
