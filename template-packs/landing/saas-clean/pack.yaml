@@ -1,0 +1,37 @@
+id: landing/saas-clean
+name: SaaS Clean Landing
+app_types:
+  - landing
+prompt_signals:
+  - saas
+  - startup
+  - b2b
+source_libraries:
+  - react
+  - tailwindcss
+license:
+  id: ham-authored-internal
+  name: HAM Authored Internal Starter
+  commercial_use_allowed: true
+  redistribution_allowed: true
+  attribution_required: false
+dependencies:
+  react: ^18.3.1
+  react-dom: ^18.3.1
+dev_dependencies:
+  "@vitejs/plugin-react": ^4.3.4
+  tailwindcss: ^3.4.15
+  typescript: ^5.6.3
+  vite: ^5.4.11
+required_files:
+  - package.json
+  - src/main.tsx
+  - src/index.css
+  - src/App.tsx
+quality_gates:
+  required_sections:
+    - hero
+    - services
+    - cta
+  min_tailwind_class_tokens: 10
+ai_directive: remix_moderately

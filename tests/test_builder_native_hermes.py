@@ -17,16 +17,14 @@ from src.persistence.builder_source_store import (
     set_builder_source_store_for_tests,
 )
 
-_VALID_FILES = {
-    "src/App.tsx": "export default function App() { return <main>Native build</main>; }\n",
-    "src/main.tsx": (
-        "import React from 'react';\n"
-        "import ReactDOM from 'react-dom/client';\n"
-        "import App from './App';\n"
-        "ReactDOM.createRoot(document.getElementById('root')!).render(<App />);\n"
-    ),
-    "src/styles.css": "body { margin: 0; }\n",
-}
+def _valid_polished_files() -> dict[str, str]:
+    from src.ham.template_packs.registry import default_template_packs_root, load_template_pack
+
+    pack = load_template_pack(default_template_packs_root() / "landing" / "agency-modern")
+    return dict(pack.files)
+
+
+_VALID_FILES = _valid_polished_files()
 
 
 def _valid_files_provider(**_kwargs: object) -> dict[str, str]:

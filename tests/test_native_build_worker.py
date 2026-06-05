@@ -50,19 +50,18 @@ _FORBIDDEN_TOKENS = (
 _VALID_SA = "cloud-tasks@my-project.iam.gserviceaccount.com"
 _VALID_AUD = "https://ham-api.example.com"
 
+def _valid_polished_bundle_files() -> dict[str, str]:
+    from src.ham.template_packs.registry import default_template_packs_root, load_template_pack
+
+    return dict(
+        load_template_pack(default_template_packs_root() / "landing" / "agency-modern").files
+    )
+
+
 _VALID_BUNDLE = {
     "status": "success",
     "summary": "Built.",
-    "files": {
-        "src/App.tsx": "export default function App() { return <main>Native build</main>; }\n",
-        "src/main.tsx": (
-            "import React from 'react';\n"
-            "import ReactDOM from 'react-dom/client';\n"
-            "import App from './App';\n"
-            "ReactDOM.createRoot(document.getElementById('root')!).render(<App />);\n"
-        ),
-        "src/styles.css": "body { margin: 0; }\n",
-    },
+    "files": _valid_polished_bundle_files(),
     "checks": ["renders"],
 }
 

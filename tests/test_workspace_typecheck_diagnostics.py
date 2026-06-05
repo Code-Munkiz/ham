@@ -25,18 +25,17 @@ from src.persistence.builder_source_store import (
 
 
 def _broken_ts_files(**_kwargs: object) -> dict[str, str]:
-    return {
-        "package.json": (
-            '{"name":"broken","private":true,"type":"module",'
-            '"scripts":{"dev":"vite"},"dependencies":{"react":"^18.3.1","react-dom":"^18.3.1"},'
-            '"devDependencies":{"typescript":"^5.6.3","vite":"^5.4.11","@vitejs/plugin-react":"^4.3.4"}}'
-        ),
-        "index.html": '<!doctype html><html><body><div id="root"></div>'
-        '<script type="module" src="/src/main.tsx"></script></body></html>\n',
-        "vite.config.ts": 'import { defineConfig } from "vite";\nexport default defineConfig({});\n',
-        "src/main.tsx": 'import App from "./App";\nconsole.log(TEAM);\n',
-        "src/App.tsx": "export default function App() { return null; }\n",
-    }
+    from src.ham.template_packs.registry import default_template_packs_root, load_template_pack
+
+    files = dict(
+        load_template_pack(
+            default_template_packs_root() / "dashboard" / "project-management"
+        ).files
+    )
+    files["src/main.tsx"] = (
+        files["src/main.tsx"].rstrip() + "\nconsole.log(TEAM);\n"
+    )
+    return files
 
 
 def _workspace_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -144,7 +143,7 @@ def test_user_facing_failure_does_not_expose_operator_internals(
             workspace_id="ws_pub",
             project_id="proj_pub",
             session_id="sess_pub",
-            user_prompt="build app",
+            user_prompt="build a project management dashboard",
             created_by="user_pub",
             workspace_files_provider=_broken_ts_files,
         )
@@ -182,7 +181,7 @@ def test_warning_logs_include_counts_not_bodies(
             workspace_id="ws_log",
             project_id="proj_log",
             session_id="sess_log",
-            user_prompt="build app",
+            user_prompt="build a project management dashboard",
             created_by="user_log",
             workspace_files_provider=_broken_ts_files,
         )

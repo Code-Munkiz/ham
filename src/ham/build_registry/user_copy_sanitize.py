@@ -25,6 +25,14 @@ _LITERAL_FORBIDDEN_SUBSTRINGS: tuple[str, ...] = (
     "render budget",
     "playbook context",
     "build registry v2 playbook context:",
+    "template pack",
+    "template-pack",
+    "ham template pack baseline",
+    "landing/agency-modern",
+    "landing/saas-clean",
+    "dashboard/project-management",
+    "dashboard/analytics",
+    "ham-authored-internal",
 )
 
 # Registry module ids use dotted segments with hyphens (game.idle-incremental), not filenames (game.js).

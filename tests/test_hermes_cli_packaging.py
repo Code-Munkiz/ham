@@ -91,7 +91,7 @@ def test_cli_nonzero_exit_empty_workspace_fails_safely(
     monkeypatch.setattr(ws_exec, "resolve_hermes_cli_binary", lambda: "/usr/local/bin/hermes")
     monkeypatch.setattr(
         ws_exec,
-        "seed_minimal_vite_workspace",
+        "seed_template_pack_workspace",
         lambda *_a, **_k: None,
     )
 

@@ -1,0 +1,56 @@
+id: landing/agency-modern
+name: Agency Modern Landing
+app_types:
+  - landing
+prompt_signals:
+  - agency
+  - consultant
+  - marketing
+  - landing page
+  - automation
+source_libraries:
+  - react
+  - tailwindcss
+license:
+  id: ham-authored-internal
+  name: HAM Authored Internal Starter
+  license_url: https://github.com/Code-Munkiz/ham
+  commercial_use_allowed: true
+  redistribution_allowed: true
+  attribution_required: false
+dependencies:
+  react: ^18.3.1
+  react-dom: ^18.3.1
+dev_dependencies:
+  "@types/react": ^18.3.12
+  "@types/react-dom": ^18.3.1
+  "@vitejs/plugin-react": ^4.3.4
+  autoprefixer: ^10.4.20
+  postcss: ^8.4.49
+  tailwindcss: ^3.4.15
+  typescript: ^5.6.3
+  vite: ^5.4.11
+required_files:
+  - package.json
+  - index.html
+  - vite.config.ts
+  - tailwind.config.js
+  - postcss.config.js
+  - src/main.tsx
+  - src/index.css
+  - src/App.tsx
+design_tokens:
+  background: slate-950
+  accent: sky-400
+  surface: slate-900
+quality_gates:
+  required_sections:
+    - hero
+    - services
+    - process
+    - testimonial
+    - cta
+  min_tailwind_class_tokens: 12
+  require_responsive_classes: true
+  require_explicit_background: true
+ai_directive: remix_moderately

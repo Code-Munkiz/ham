@@ -1,0 +1,34 @@
+id: dashboard/analytics
+name: Analytics Dashboard
+app_types:
+  - dashboard
+prompt_signals:
+  - analytics
+  - metrics
+  - kpi
+source_libraries:
+  - react
+  - tailwindcss
+license:
+  id: ham-authored-internal
+  name: HAM Authored Internal Starter
+  commercial_use_allowed: true
+  redistribution_allowed: true
+  attribution_required: false
+dependencies:
+  react: ^18.3.1
+  react-dom: ^18.3.1
+dev_dependencies:
+  tailwindcss: ^3.4.15
+  vite: ^5.4.11
+required_files:
+  - package.json
+  - src/main.tsx
+  - src/index.css
+  - src/App.tsx
+quality_gates:
+  required_sections:
+    - overview
+    - table
+  min_tailwind_class_tokens: 10
+ai_directive: remix_moderately

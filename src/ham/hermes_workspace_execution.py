@@ -31,6 +31,12 @@ from typing import Protocol, runtime_checkable
 
 from src.ham.builder_preview_bootstrap import build_vite_bootstrap_files, safe_npm_package_name
 from src.ham.hermes_runtime_inventory import resolve_hermes_cli_binary
+from src.ham.template_packs.renderer import (
+    seed_template_pack_workspace,
+    template_pack_hermes_instruction,
+)
+from src.ham.template_packs.schema import TemplatePack
+from src.ham.template_packs.selector import select_template_pack
 
 _LOG = logging.getLogger(__name__)
 
@@ -144,16 +150,20 @@ def build_hermes_cli_chat_argv(*, binary: str, instruction: str) -> list[str]:
     return argv
 
 
-def _build_instruction_prompt(enriched_user_prompt: str) -> str:
-    return (
-        "You are HAM Native Builder. Build a small runnable Vite + React + TypeScript web app "
-        "in the CURRENT WORKING DIRECTORY only.\n\n"
+def _build_instruction_prompt(enriched_user_prompt: str, *, pack: TemplatePack | None = None) -> str:
+    baseline = (
+        "You are HAM Native Builder. Customize the starter project in the CURRENT WORKING DIRECTORY.\n\n"
         "User goal:\n"
         f"{enriched_user_prompt.strip()}\n\n"
+    )
+    if pack is not None:
+        baseline += f"{template_pack_hermes_instruction(pack)}\n\n"
+    return (
+        f"{baseline}"
         "Requirements:\n"
-        "- Use your file and shell tools to create and edit files here (not JSON file bundles).\n"
-        "- Include package.json, index.html, vite.config.ts, src/main.tsx, and at least one app component.\n"
-        "- Keep the first version compact (about 6–12 source files).\n"
+        "- Use your file and shell tools to edit files here (not JSON file bundles).\n"
+        "- Keep package.json, index.html, vite config, src/main.tsx, global CSS, and polished UI.\n"
+        "- Preserve responsive Tailwind layout quality (cards, spacing, contrast, hierarchy).\n"
         "- Do not print secrets, env values, registry ids, proposal digests, or base revisions.\n"
         "- When finished, ensure the project can pass TypeScript check (consistent identifiers).\n"
     )
@@ -251,6 +261,8 @@ class HermesCliWorkspaceProvider:
         workspace_dir: Path,
         user_prompt: str,
         import_job_id: str,
+        template_pack: TemplatePack | None = None,
+        skip_seed: bool = False,
     ) -> WorkspaceExecutionOutcome:
         binary = resolve_hermes_cli_binary()
         if not binary:
@@ -260,8 +272,10 @@ class HermesCliWorkspaceProvider:
                 error_summary="Hermes CLI binary not found on PATH.",
             )
 
-        seed_minimal_vite_workspace(workspace_dir, user_prompt=user_prompt)
-        instruction = _build_instruction_prompt(user_prompt)
+        pack = template_pack or select_template_pack(user_prompt)
+        if not skip_seed:
+            seed_template_pack_workspace(workspace_dir, pack=pack, user_prompt=user_prompt)
+        instruction = _build_instruction_prompt(user_prompt, pack=pack)
         argv = build_hermes_cli_chat_argv(binary=binary, instruction=instruction)
         env = os.environ.copy()
         cli_started = time.monotonic()
@@ -358,6 +372,8 @@ def run_hermes_cli_workspace_build(
     user_prompt: str,
     import_job_id: str,
     provider: HermesWorkspaceExecutionProvider | None = None,
+    template_pack: TemplatePack | None = None,
+    skip_seed: bool = False,
 ) -> WorkspaceExecutionOutcome:
     """Execute the default Hermes CLI workspace provider."""
     impl = provider or get_default_workspace_execution_provider()
@@ -365,6 +381,8 @@ def run_hermes_cli_workspace_build(
         workspace_dir=workspace_dir,
         user_prompt=user_prompt,
         import_job_id=import_job_id,
+        template_pack=template_pack,
+        skip_seed=skip_seed,
     )
 
 

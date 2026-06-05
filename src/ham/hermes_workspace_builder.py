@@ -11,7 +11,10 @@ import os
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.ham.template_packs.schema import TemplatePack
 
 from src.ham.build_materialization import (
     BuildMaterializationResult,
@@ -22,6 +25,13 @@ from src.ham.hermes_workspace_execution import (
     collect_workspace_files,
     run_hermes_cli_workspace_build,
 )
+from src.ham.template_packs.quality import (
+    evaluate_workspace_visual_quality,
+    user_message_for_quality_failure,
+)
+from src.ham.template_packs.renderer import append_template_pack_context
+from src.ham.template_packs.repair import attempt_visual_quality_repair
+from src.ham.template_packs.selector import select_template_pack
 
 _LOG = logging.getLogger(__name__)
 
@@ -40,6 +50,8 @@ _ERROR_CODE_CLI_UNAVAILABLE = "HERMES_CLI_UNAVAILABLE"
 _ERROR_CODE_CLI_EMPTY = "HERMES_CLI_EMPTY_WORKSPACE"
 _ERROR_CODE_CLI_TIMEOUT = "HERMES_CLI_TIMEOUT"
 _ERROR_CODE_CLI_FAILED = "HERMES_CLI_FAILED"
+_ERROR_CODE_VISUAL_QUALITY = "HAM_NATIVE_VISUAL_QUALITY_FAILED"
+_PREVIEW_QUALITY_USER_MESSAGE = user_message_for_quality_failure()
 
 
 def _truthy_env(name: str) -> bool:
@@ -97,6 +109,8 @@ def _resolve_workspace_files(
     user_prompt: str,
     workspace_dir: Path,
     files_provider: Callable[..., dict[str, str] | None] | None,
+    template_pack: TemplatePack | None = None,
+    selection_prompt: str | None = None,
 ) -> tuple[dict[str, str] | None, WorkspaceExecutionOutcome | None]:
     """Collect generated files from the workspace harness (provider seam or Hermes CLI)."""
     provider = files_provider or _workspace_files_provider
@@ -116,10 +130,12 @@ def _resolve_workspace_files(
             error_summary="Test workspace provider returned no files.",
         )
 
+    pack = template_pack or select_template_pack(selection_prompt or user_prompt)
     outcome = run_hermes_cli_workspace_build(
         workspace_dir=workspace_dir,
         user_prompt=user_prompt,
         import_job_id=import_job_id,
+        template_pack=pack,
     )
     if not outcome.ok:
         return None, outcome
@@ -153,9 +169,11 @@ def execute_hermes_native_workspace_build(
             error_code=_ERROR_CODE_NOT_CONFIGURED,
         )
 
+    pack = select_template_pack(user_prompt)
     enriched_prompt = append_build_registry_context(
         user_prompt, originated_from="ham_native_workspace_builder"
     )
+    enriched_prompt = append_template_pack_context(enriched_prompt, pack)
     workspace_dir = _isolated_workspace_dir(
         workspace_id=workspace_id,
         project_id=project_id,
@@ -176,7 +194,33 @@ def execute_hermes_native_workspace_build(
         user_prompt=enriched_prompt,
         workspace_dir=workspace_dir,
         files_provider=files_provider,
+        template_pack=pack,
+        selection_prompt=user_prompt,
     )
+
+    if files:
+        quality = evaluate_workspace_visual_quality(files, pack=pack)
+        if not quality.ok:
+            repaired = attempt_visual_quality_repair(
+                workspace_dir=workspace_dir,
+                user_prompt=enriched_prompt,
+                import_job_id=import_job_id,
+                pack=pack,
+                files_provider=files_provider,
+            )
+            if repaired:
+                files = repaired
+                quality = evaluate_workspace_visual_quality(files, pack=pack)
+        if not quality.ok:
+            return BuildMaterializationResult(
+                status="failed",
+                summary="Visual quality gate failed.",
+                import_job_id=import_job_id,
+                failure_reason="visual_quality",
+                user_message=_PREVIEW_QUALITY_USER_MESSAGE,
+                error_code=_ERROR_CODE_VISUAL_QUALITY,
+                operator_metadata=quality.to_operator_metadata(),
+            )
 
     if not files:
         outcome = exec_outcome or WorkspaceExecutionOutcome(
