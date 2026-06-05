@@ -6,6 +6,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from src.ham.template_packs.sources import (
+    SourceAuditStatus,
+    TemplatePackSourceConfigError,
+    parse_source_metadata_fields,
+    validate_pack_source_metadata,
+)
+
 AiDirective = Literal["preserve_structure", "remix_moderately", "remix_heavily"]
 PACK_MANIFEST_NAME = "pack.yaml"
 
@@ -42,6 +49,12 @@ class TemplatePackManifest:
     design_tokens: dict[str, str] = field(default_factory=dict)
     quality_gates: TemplatePackQualityGate | None = None
     ai_directive: AiDirective = "remix_moderately"
+    source_strategy: str = ""
+    source_audit_status: SourceAuditStatus = "unknown"
+    third_party_code_included: bool = False
+    copy_paste_safe: bool = False
+    license_notes: str = ""
+    approved_ui_sources: tuple[str, ...] = ()
     pack_root: Path | None = None
     files_dir: Path | None = None
 
@@ -143,6 +156,15 @@ def parse_pack_manifest(data: dict[str, Any], *, pack_root: Path) -> TemplatePac
     if directive not in ("preserve_structure", "remix_moderately", "remix_heavily"):
         raise TemplatePackConfigError("pack.yaml: invalid ai_directive")
 
+    try:
+        validate_pack_source_metadata(data, pack_id=pack_id.strip())
+    except TemplatePackSourceConfigError as exc:
+        raise TemplatePackConfigError(str(exc)) from exc
+    try:
+        source_meta = parse_source_metadata_fields(data)
+    except TemplatePackSourceConfigError as exc:
+        raise TemplatePackConfigError(str(exc)) from exc
+
     files_dir = pack_root / "files"
     return TemplatePackManifest(
         id=pack_id.strip(),
@@ -159,6 +181,12 @@ def parse_pack_manifest(data: dict[str, Any], *, pack_root: Path) -> TemplatePac
         design_tokens=_as_str_dict(data.get("design_tokens"), field_name="design_tokens"),
         quality_gates=quality_gates,
         ai_directive=directive,
+        source_strategy=source_meta["source_strategy"],
+        source_audit_status=source_meta["source_audit_status"],
+        third_party_code_included=source_meta["third_party_code_included"],
+        copy_paste_safe=source_meta["copy_paste_safe"],
+        license_notes=source_meta["license_notes"],
+        approved_ui_sources=source_meta["approved_ui_sources"],
         pack_root=pack_root,
         files_dir=files_dir,
     )

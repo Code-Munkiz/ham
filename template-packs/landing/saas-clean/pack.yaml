@@ -9,6 +9,12 @@ prompt_signals:
 source_libraries:
   - react
   - tailwindcss
+source_strategy: HAM-authored starter inspired by approved copy-paste UI patterns
+source_audit_status: ham_authored
+third_party_code_included: false
+copy_paste_safe: true
+license_notes: >-
+  Original HAM-authored SaaS landing starter. No third-party template code included.
 license:
   id: ham-authored-internal
   name: HAM Authored Internal Starter

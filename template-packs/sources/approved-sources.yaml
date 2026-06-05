@@ -1,0 +1,97 @@
+# HAM Template Pack — approved external UI source catalog (governance only).
+# Do not copy third-party code into template-packs/ until individually verified.
+version: "1"
+
+approved:
+  - id: shadcn/ui
+    name: shadcn/ui
+    purpose: Base app UI primitives and accessible components
+    license: MIT
+    usage: Copy-paste/reference; future curated import into HAM-authored packs
+    copy_paste_safe: true
+
+  - id: hyperui
+    name: HyperUI
+    purpose: Landing and marketing page sections
+    license: MIT
+    usage: Copy-paste/reference; future curated import for landing packs
+    copy_paste_safe: true
+
+  - id: tremor
+    name: Tremor / Tremor Blocks
+    purpose: Dashboard and analytics UI blocks
+    license: Apache-2.0
+    license_note: Verify exact package/source before import; Tremor OSS is Apache-2.0
+    usage: Curated dashboard blocks only after per-block license review
+    copy_paste_safe: true
+
+  - id: tabler-icons
+    name: Tabler Icons
+    purpose: Iconography
+    license: MIT
+    usage: npm dependency or inline SVG; attribution per package terms
+    copy_paste_safe: true
+
+  - id: magic-ui-core
+    name: Magic UI (core OSS only)
+    purpose: High-polish AI/animated landing accents
+    license: MIT
+    license_note: Core OSS components only — no Magic UI Pro templates
+    usage: Later, carefully; curated snippets after license review
+    copy_paste_safe: true
+
+blocked:
+  - id: tailwind-ui
+    name: Tailwind UI
+    reason: Commercial Tailwind Labs product; not redistributable as pack source
+
+  - id: tailwind-plus
+    name: Tailwind Plus
+    reason: Commercial Tailwind Labs product
+
+  - id: untitled-ui
+    name: Untitled UI
+    reason: Commercial UI kit; licensing incompatible with generated user projects
+
+  - id: cruip
+    name: Cruip
+    reason: Commercial template marketplace
+
+  - id: creative-tim
+    name: Creative Tim
+    reason: Commercial template marketplace
+
+  - id: float-ui
+    name: Float UI
+    reason: Commercial/pro template catalog
+
+  - id: preline
+    name: Preline
+    reason: Commercial template/UI kit with restricted redistribution
+
+  - id: aceternity-pro
+    name: Aceternity Pro
+    reason: Paid template tier; not approved for pack ingestion
+
+  - id: htmlrev
+    name: HTMLRev
+    reason: Aggregator/commercial template catalog
+
+  - id: aggregator-templates
+    name: Aggregator templates
+    reason: Do not ingest unverified third-party template aggregators
+
+team_suggested_build_tooling:
+  # React library scaffolding — NOT UI template sources. See docs/template-pack-source-audit.md
+  - id: startbase-dev/tsup-template
+    classification: tooling_only
+  - id: react18-tools/turborepo-template
+    classification: tooling_only
+  - id: flaviodelgrosso/react-library-builder
+    classification: tooling_only
+  - id: mndlx/create-library
+    classification: tooling_only
+  - id: remahmoud/create-react-ts-lib
+    classification: tooling_only
+  - id: janryWang/doc-scripts
+    classification: tooling_only

@@ -11,6 +11,14 @@ prompt_signals:
 source_libraries:
   - react
   - tailwindcss
+source_strategy: HAM-authored starter inspired by approved copy-paste UI patterns
+source_audit_status: ham_authored
+third_party_code_included: false
+copy_paste_safe: true
+license_notes: >-
+  Original HAM-authored JSX and Tailwind layout. No third-party UI kit code is
+  vendored in this pack. Visual patterns are informed by open MIT references
+  (HyperUI-style sections, shadcn-style spacing/hierarchy) without copying source.
 license:
   id: ham-authored-internal
   name: HAM Authored Internal Starter
