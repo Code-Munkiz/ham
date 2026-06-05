@@ -50,19 +50,18 @@ _FORBIDDEN_TOKENS = (
     "openrouter",
 )
 
+def _valid_polished_bundle_files() -> dict[str, str]:
+    from src.ham.template_packs.registry import default_template_packs_root, load_template_pack
+
+    return dict(
+        load_template_pack(default_template_packs_root() / "landing" / "agency-modern").files
+    )
+
+
 _VALID_BUNDLE = {
     "status": "success",
     "summary": "Built.",
-    "files": {
-        "src/App.tsx": "export default function App() { return <main>Native build</main>; }\n",
-        "src/main.tsx": (
-            "import React from 'react';\n"
-            "import ReactDOM from 'react-dom/client';\n"
-            "import App from './App';\n"
-            "ReactDOM.createRoot(document.getElementById('root')!).render(<App />);\n"
-        ),
-        "src/styles.css": "body { margin: 0; }\n",
-    },
+    "files": _valid_polished_bundle_files(),
     "checks": ["renders"],
 }
 
@@ -85,6 +84,34 @@ def _durable_env(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("HAM_BUILDER_SOURCE_ARTIFACT_DIR", str(tmp_path / "artifacts"))
     monkeypatch.setenv("HAM_BUILDER_CLOUD_RUNTIME_PROVIDER", "disabled")
     monkeypatch.delenv("HAM_NATIVE_BUILD_DISPATCH", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _skip_npm_typecheck_unless_typecheck_test(request: pytest.FixtureRequest, monkeypatch) -> None:
+    if "typecheck" in request.node.name:
+        return
+
+    def _passthrough(files: dict[str, str]):
+        from src.ham.builder_preview_typecheck import (
+            PreviewTypecheckResult,
+            ensure_preview_tsconfig,
+            ensure_tailwind_config_for_preview,
+        )
+
+        prepared = ensure_tailwind_config_for_preview(ensure_preview_tsconfig(dict(files)))
+        return PreviewTypecheckResult(
+            ok=True,
+            files=prepared,
+            repair_summary=None,
+            user_message="",
+            compiler_output="",
+            deterministic_repair_attempted=False,
+        )
+
+    monkeypatch.setattr(
+        "src.ham.build_materialization.validate_preview_app_files",
+        _passthrough,
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -219,6 +246,10 @@ def test_executor_success_materializes_source_snapshot(tmp_path, monkeypatch) ->
 def test_executor_failure_marks_safe_error(tmp_path, monkeypatch) -> None:
     """Workspace enabled but no files produced -> safe failure without JSON artifact fallback."""
     _ready_env(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        "src.ham.hermes_workspace_execution.resolve_hermes_cli_binary",
+        lambda: None,
+    )
     store = BuilderSourceStore(store_path=tmp_path / "sources.json")
     set_builder_source_store_for_tests(store)
     try:
@@ -246,7 +277,7 @@ def test_executor_failure_marks_safe_error(tmp_path, monkeypatch) -> None:
     jobs = store.list_import_jobs(workspace_id="ws_v2", project_id="proj_v2")
     assert jobs[0].status == "failed"
     assert jobs[0].phase == NATIVE_BUILD_PHASE_FAILED
-    assert jobs[0].error_code == "HAM_NATIVE_WORKSPACE_NOT_IMPLEMENTED"
+    assert jobs[0].error_code == "HERMES_CLI_UNAVAILABLE"
     serialized = json.dumps(jobs[0].model_dump(mode="json")).lower()
     for token in _FORBIDDEN_TOKENS:
         assert token not in serialized
