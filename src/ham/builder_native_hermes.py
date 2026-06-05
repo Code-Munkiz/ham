@@ -72,6 +72,7 @@ def ham_native_builder_user_message(ham_native: dict[str, Any] | None) -> str:
             "hermes_cli_unavailable",
             "hermes_cli_timeout",
             "hermes_cli_empty",
+            "hermes_cli_failed",
         }:
             return _NATIVE_WORKSPACE_NOT_CONFIGURED_MESSAGE
         return _NATIVE_WORKSPACE_FAILED_MESSAGE
