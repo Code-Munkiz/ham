@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import re
 
-from src.ham.template_packs.registry import load_template_pack_registry
+from src.ham.template_packs.registry import (
+    TemplatePackRegistryEmptyError,
+    load_template_pack_registry,
+    require_non_empty_template_pack_registry,
+)
 from src.ham.template_packs.schema import TemplatePack
 
 _DEFAULT_LANDING = "landing/agency-modern"
@@ -27,7 +31,9 @@ def select_template_pack(
     registry: dict[str, TemplatePack] | None = None,
 ) -> TemplatePack:
     """Pick the best template pack for a native build prompt (deterministic)."""
-    packs = registry if registry is not None else load_template_pack_registry()
+    packs = require_non_empty_template_pack_registry(
+        registry if registry is not None else load_template_pack_registry()
+    )
     text = _normalize_prompt(user_prompt)
 
     def _get(pack_id: str, *, fallback: str) -> TemplatePack:
@@ -35,8 +41,11 @@ def select_template_pack(
             return packs[pack_id]
         if fallback in packs:
             return packs[fallback]
-        # Last resort: first pack in registry (tests with single pack).
-        return next(iter(packs.values()))
+        # Last resort: first pack in registry (single-pack test fixtures).
+        first = next(iter(packs.values()), None)
+        if first is None:
+            raise TemplatePackRegistryEmptyError()
+        return first
 
     if _prompt_has_any(
         text,

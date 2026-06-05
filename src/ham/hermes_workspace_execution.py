@@ -36,6 +36,10 @@ from src.ham.template_packs.renderer import (
     template_pack_hermes_instruction,
 )
 from src.ham.template_packs.schema import TemplatePack
+from src.ham.template_packs.registry import (
+    TEMPLATE_PACK_REGISTRY_EMPTY_INTERNAL,
+    TemplatePackRegistryEmptyError,
+)
 from src.ham.template_packs.selector import select_template_pack
 
 _LOG = logging.getLogger(__name__)
@@ -272,7 +276,18 @@ class HermesCliWorkspaceProvider:
                 error_summary="Hermes CLI binary not found on PATH.",
             )
 
-        pack = template_pack or select_template_pack(user_prompt)
+        try:
+            pack = template_pack or select_template_pack(user_prompt)
+        except TemplatePackRegistryEmptyError:
+            _LOG.warning(
+                "template_pack_registry_empty import_job_id=%s",
+                import_job_id,
+            )
+            return WorkspaceExecutionOutcome(
+                ok=False,
+                error_code="HAM_TEMPLATE_PACK_REGISTRY_EMPTY",
+                error_summary=TEMPLATE_PACK_REGISTRY_EMPTY_INTERNAL,
+            )
         if not skip_seed:
             seed_template_pack_workspace(workspace_dir, pack=pack, user_prompt=user_prompt)
         instruction = _build_instruction_prompt(user_prompt, pack=pack)

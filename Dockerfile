@@ -70,6 +70,14 @@ COPY models/ models/
 
 COPY src/ src/
 
+# Native Hermes workspace starters (backstage only; not exposed in product UI).
+COPY template-packs/ template-packs/
+RUN test -d template-packs \
+    && count="$(find template-packs -name pack.yaml | wc -l | tr -d ' ')" \
+    && test "${count}" -gt 0 \
+    && echo "template_pack_manifest_count=${count}" \
+    && find template-packs -name pack.yaml | sort
+
 # Repo instruction files optional but improve context-engine text if present in image.
 COPY AGENTS.md SWARM.md VISION.md ./
 

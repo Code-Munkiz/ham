@@ -188,3 +188,66 @@ def test_artifact_turn_unreachable_on_native_path(tmp_path: Path, monkeypatch: p
     finally:
         set_builder_source_store_for_tests(None)
     assert calls == []
+
+
+def test_dockerfile_includes_template_packs_copy() -> None:
+    dockerfile = (Path(__file__).resolve().parents[1] / "Dockerfile").read_text(encoding="utf-8")
+    assert "COPY template-packs/ template-packs/" in dockerfile
+    assert "pack.yaml" in dockerfile
+
+
+def test_registry_loads_four_packs_for_image_smoke() -> None:
+    registry = load_template_pack_registry()
+    assert len(registry) == 4
+    assert sorted(registry.keys()) == [
+        "dashboard/analytics",
+        "dashboard/project-management",
+        "landing/agency-modern",
+        "landing/saas-clean",
+    ]
+
+
+def test_empty_registry_does_not_raise_stop_iteration() -> None:
+    from src.ham.template_packs.registry import TemplatePackRegistryEmptyError
+
+    with pytest.raises(TemplatePackRegistryEmptyError) as exc:
+        select_template_pack("build a landing page", registry={})
+    assert "Template packs are not available" in str(exc.value)
+    with pytest.raises(TemplatePackRegistryEmptyError):
+        select_template_pack("build app", registry={})
+
+
+def test_native_workspace_fails_safely_when_registry_empty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from src.ham.builder_native_hermes import ham_native_builder_user_message, run_hermes_native_build
+    from src.ham.template_packs.registry import TemplatePackRegistryEmptyError
+    from src.persistence.builder_source_store import (
+        BuilderSourceStore,
+        set_builder_source_store_for_tests,
+    )
+
+    monkeypatch.setenv("HAM_HERMES_NATIVE_WORKSPACE_ENABLED", "1")
+    monkeypatch.setattr(
+        "src.ham.hermes_workspace_builder.select_template_pack",
+        lambda *_a, **_k: (_ for _ in ()).throw(TemplatePackRegistryEmptyError()),
+    )
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    try:
+        result = run_hermes_native_build(
+            workspace_id="ws_empty",
+            project_id="proj_empty",
+            session_id="sess_empty",
+            user_prompt="build a landing page",
+            created_by="user_empty",
+        )
+    finally:
+        set_builder_source_store_for_tests(None)
+
+    assert result["ham_native_builder"]["status"] == "failed"
+    assert result["ham_native_builder"]["failure_reason"] == "template_packs_unavailable"
+    msg = ham_native_builder_user_message(result["ham_native_builder"])
+    assert "HAM couldn't finish this preview." in msg
+    assert "template pack" not in msg.lower()
+    assert "landing/agency-modern" not in msg

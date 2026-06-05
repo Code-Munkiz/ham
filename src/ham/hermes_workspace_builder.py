@@ -31,6 +31,10 @@ from src.ham.template_packs.quality import (
 )
 from src.ham.template_packs.renderer import append_template_pack_context
 from src.ham.template_packs.repair import attempt_visual_quality_repair
+from src.ham.template_packs.registry import (
+    TEMPLATE_PACK_REGISTRY_EMPTY_INTERNAL,
+    TemplatePackRegistryEmptyError,
+)
 from src.ham.template_packs.selector import select_template_pack
 
 _LOG = logging.getLogger(__name__)
@@ -51,7 +55,21 @@ _ERROR_CODE_CLI_EMPTY = "HERMES_CLI_EMPTY_WORKSPACE"
 _ERROR_CODE_CLI_TIMEOUT = "HERMES_CLI_TIMEOUT"
 _ERROR_CODE_CLI_FAILED = "HERMES_CLI_FAILED"
 _ERROR_CODE_VISUAL_QUALITY = "HAM_NATIVE_VISUAL_QUALITY_FAILED"
+_ERROR_CODE_TEMPLATE_PACKS_EMPTY = "HAM_TEMPLATE_PACK_REGISTRY_EMPTY"
 _PREVIEW_QUALITY_USER_MESSAGE = user_message_for_quality_failure()
+
+
+def _template_pack_registry_unavailable_result(
+    *, import_job_id: str
+) -> BuildMaterializationResult:
+    return BuildMaterializationResult(
+        status="failed",
+        summary=TEMPLATE_PACK_REGISTRY_EMPTY_INTERNAL,
+        import_job_id=import_job_id,
+        failure_reason="template_packs_unavailable",
+        user_message=_PREVIEW_QUALITY_USER_MESSAGE,
+        error_code=_ERROR_CODE_TEMPLATE_PACKS_EMPTY,
+    )
 
 
 def _truthy_env(name: str) -> bool:
@@ -130,7 +148,18 @@ def _resolve_workspace_files(
             error_summary="Test workspace provider returned no files.",
         )
 
-    pack = template_pack or select_template_pack(selection_prompt or user_prompt)
+    try:
+        pack = template_pack or select_template_pack(selection_prompt or user_prompt)
+    except TemplatePackRegistryEmptyError:
+        _LOG.warning(
+            "template_pack_registry_empty import_job_id=%s",
+            import_job_id,
+        )
+        return None, WorkspaceExecutionOutcome(
+            ok=False,
+            error_code=_ERROR_CODE_TEMPLATE_PACKS_EMPTY,
+            error_summary=TEMPLATE_PACK_REGISTRY_EMPTY_INTERNAL,
+        )
     outcome = run_hermes_cli_workspace_build(
         workspace_dir=workspace_dir,
         user_prompt=user_prompt,
@@ -169,7 +198,16 @@ def execute_hermes_native_workspace_build(
             error_code=_ERROR_CODE_NOT_CONFIGURED,
         )
 
-    pack = select_template_pack(user_prompt)
+    try:
+        pack = select_template_pack(user_prompt)
+    except TemplatePackRegistryEmptyError:
+        _LOG.warning(
+            "template_pack_registry_empty import_job_id=%s project_id=%s",
+            import_job_id,
+            project_id,
+        )
+        return _template_pack_registry_unavailable_result(import_job_id=import_job_id)
+
     enriched_prompt = append_build_registry_context(
         user_prompt, originated_from="ham_native_workspace_builder"
     )
@@ -228,6 +266,13 @@ def execute_hermes_native_workspace_build(
             error_code=_ERROR_CODE_CLI_EMPTY,
             error_summary="Workspace build produced no files.",
         )
+        if outcome.error_code == _ERROR_CODE_TEMPLATE_PACKS_EMPTY:
+            _LOG.warning(
+                "template_pack_registry_empty import_job_id=%s project_id=%s",
+                import_job_id,
+                project_id,
+            )
+            return _template_pack_registry_unavailable_result(import_job_id=import_job_id)
         reason = "hermes_cli_unavailable"
         if outcome.error_code == _ERROR_CODE_CLI_TIMEOUT:
             reason = "hermes_cli_timeout"

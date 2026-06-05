@@ -64,7 +64,7 @@ def ham_native_builder_user_message(ham_native: dict[str, Any] | None) -> str:
             return _NATIVE_GATEWAY_MESSAGE
         if reason in {"bundle", "verification"}:
             return _NATIVE_BUNDLE_MESSAGE
-        if reason == "visual_quality":
+        if reason in {"visual_quality", "template_packs_unavailable"}:
             return "HAM couldn't finish this preview.\n\n"
         if reason in {
             "workspace_not_implemented",

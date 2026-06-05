@@ -6,7 +6,10 @@ from src.ham.template_packs.quality import (
     user_message_for_quality_failure,
     visual_quality_repair_instruction,
 )
-from src.ham.template_packs.registry import load_template_pack_registry
+from src.ham.template_packs.registry import (
+    TemplatePackRegistryEmptyError,
+    load_template_pack_registry,
+)
 from src.ham.template_packs.renderer import (
     append_template_pack_context,
     seed_template_pack_workspace,
@@ -18,6 +21,7 @@ __all__ = [
     "TemplatePack",
     "TemplatePackManifest",
     "TemplatePackQualityResult",
+    "TemplatePackRegistryEmptyError",
     "append_template_pack_context",
     "evaluate_workspace_visual_quality",
     "load_template_pack_registry",

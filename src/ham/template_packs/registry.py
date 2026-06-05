@@ -14,6 +14,14 @@ from src.ham.template_packs.schema import (
     parse_pack_manifest,
 )
 
+TEMPLATE_PACK_REGISTRY_EMPTY_INTERNAL = (
+    "Template packs are not available in this runtime."
+)
+
+
+class TemplatePackRegistryEmptyError(RuntimeError):
+    """Raised when ``template-packs/`` is missing or has no manifests in the image."""
+
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_PACKS_ROOT = _REPO_ROOT / "template-packs"
 
@@ -82,9 +90,22 @@ def load_template_pack_registry(packs_root: Path | None = None) -> dict[str, Tem
     return packs
 
 
+def require_non_empty_template_pack_registry(
+    packs: dict[str, TemplatePack] | None = None,
+) -> dict[str, TemplatePack]:
+    """Return *packs* when non-empty; otherwise raise :class:`TemplatePackRegistryEmptyError`."""
+    loaded = packs if packs is not None else load_template_pack_registry()
+    if not loaded:
+        raise TemplatePackRegistryEmptyError(TEMPLATE_PACK_REGISTRY_EMPTY_INTERNAL)
+    return loaded
+
+
 __all__ = [
+    "TEMPLATE_PACK_REGISTRY_EMPTY_INTERNAL",
+    "TemplatePackRegistryEmptyError",
     "default_template_packs_root",
     "discover_pack_roots",
     "load_template_pack",
     "load_template_pack_registry",
+    "require_non_empty_template_pack_registry",
 ]
