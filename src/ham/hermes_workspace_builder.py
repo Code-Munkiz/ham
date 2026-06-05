@@ -31,6 +31,7 @@ from src.ham.template_packs.quality import (
 )
 from src.ham.template_packs.renderer import append_template_pack_context
 from src.ham.template_packs.repair import attempt_visual_quality_repair
+from src.ham.template_packs.restore import restore_missing_pack_sections
 from src.ham.template_packs.registry import (
     TEMPLATE_PACK_REGISTRY_EMPTY_INTERNAL,
     TemplatePackRegistryEmptyError,
@@ -238,18 +239,46 @@ def execute_hermes_native_workspace_build(
 
     if files:
         quality = evaluate_workspace_visual_quality(files, pack=pack)
+        restored_section_ids: tuple[str, ...] = ()
+        if not quality.ok:
+            restored = restore_missing_pack_sections(files, pack=pack, issues=quality.issues)
+            if restored is not None:
+                files, restored_section_ids = restored
+                quality = evaluate_workspace_visual_quality(files, pack=pack)
+                _LOG.warning(
+                    "template_pack_sections_restored import_job_id=%s sections=%s",
+                    import_job_id,
+                    list(restored_section_ids),
+                )
         if not quality.ok:
             repaired = attempt_visual_quality_repair(
                 workspace_dir=workspace_dir,
                 user_prompt=enriched_prompt,
                 import_job_id=import_job_id,
                 pack=pack,
+                quality_issues=quality.issues,
                 files_provider=files_provider,
             )
             if repaired:
                 files = repaired
                 quality = evaluate_workspace_visual_quality(files, pack=pack)
+                restored = restore_missing_pack_sections(files, pack=pack, issues=quality.issues)
+                if restored is not None:
+                    files, post_repair_ids = restored
+                    restored_section_ids = restored_section_ids + post_repair_ids
+                    quality = evaluate_workspace_visual_quality(files, pack=pack)
+                    _LOG.warning(
+                        "template_pack_sections_restored_after_repair import_job_id=%s sections=%s",
+                        import_job_id,
+                        list(post_repair_ids),
+                    )
         if not quality.ok:
+            operator_metadata = quality.to_operator_metadata()
+            if restored_section_ids:
+                operator_metadata = {
+                    **operator_metadata,
+                    "sections_restored": list(restored_section_ids),
+                }
             return BuildMaterializationResult(
                 status="failed",
                 summary="Visual quality gate failed.",
@@ -257,7 +286,7 @@ def execute_hermes_native_workspace_build(
                 failure_reason="visual_quality",
                 user_message=_PREVIEW_QUALITY_USER_MESSAGE,
                 error_code=_ERROR_CODE_VISUAL_QUALITY,
-                operator_metadata=quality.to_operator_metadata(),
+                operator_metadata=operator_metadata,
             )
 
     if not files:

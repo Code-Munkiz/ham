@@ -11,7 +11,10 @@ from src.ham.hermes_workspace_execution import (
     WorkspaceExecutionOutcome,
     run_hermes_cli_workspace_build,
 )
-from src.ham.template_packs.quality import visual_quality_repair_instruction
+from src.ham.template_packs.quality import (
+    TemplatePackQualityIssue,
+    visual_quality_repair_instruction,
+)
 from src.ham.template_packs.schema import TemplatePack
 
 _LOG = logging.getLogger(__name__)
@@ -31,6 +34,7 @@ def attempt_visual_quality_repair(
     user_prompt: str,
     import_job_id: str,
     pack: TemplatePack,
+    quality_issues: tuple[TemplatePackQualityIssue, ...] = (),
     files_provider: Callable[..., dict[str, str] | None] | None = None,
 ) -> dict[str, str] | None:
     """Run at most one repair pass; returns updated files or None."""
@@ -38,7 +42,8 @@ def attempt_visual_quality_repair(
         return None
 
     repair_prompt = (
-        f"{user_prompt.strip()}\n\n{visual_quality_repair_instruction()}\n"
+        f"{user_prompt.strip()}\n\n"
+        f"{visual_quality_repair_instruction(issues=quality_issues)}\n"
         f"Template pack baseline id (internal): {pack.id}"
     )
     _LOG.warning(

@@ -12,13 +12,28 @@ _TEMPLATE_PACK_INTERNAL_HEADER = "HAM template pack baseline (internal — do no
 
 def template_pack_hermes_instruction(pack: TemplatePack) -> str:
     """Short internal instruction appended to the Hermes workspace prompt."""
-    directive = pack.manifest.ai_directive.replace("_", " ")
-    return (
-        "Use this starter pack as the design baseline. Customize it to the user request. "
-        "Preserve the polished layout quality, spacing, typography, cards, and responsive styling. "
-        f"Customization mode: {directive}. "
+    directive = pack.manifest.ai_directive
+    parts = [
+        "Use this starter pack as the design baseline. Customize it to the user request.",
+        "Preserve polished layout quality, spacing, typography, cards, and responsive styling.",
+    ]
+    if directive == "preserve_structure":
+        parts.append(
+            "Customization mode: preserve structure — keep every existing section block and "
+            "data-ham-section marker; change copy, colors, and imagery only."
+        )
+    elif directive == "remix_moderately":
+        parts.append(
+            "Customization mode: remix moderately — keep every data-ham-section marker on its "
+            "section element; you may restyle sections but must not delete required sections."
+        )
+    else:
+        parts.append(f"Customization mode: {directive.replace('_', ' ')}.")
+    parts.append(
+        "Never remove or rename data-ham-section attributes on section elements. "
         "Do not reduce the UI to unstyled/default HTML."
     )
+    return " ".join(parts)
 
 
 def append_template_pack_context(user_prompt: str, pack: TemplatePack) -> str:

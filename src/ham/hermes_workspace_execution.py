@@ -167,6 +167,7 @@ def _build_instruction_prompt(enriched_user_prompt: str, *, pack: TemplatePack |
         "Requirements:\n"
         "- Use your file and shell tools to edit files here (not JSON file bundles).\n"
         "- Keep package.json, index.html, vite config, src/main.tsx, global CSS, and polished UI.\n"
+        "- Preserve every data-ham-section=\"...\" marker on section elements; do not remove or rename them.\n"
         "- Preserve responsive Tailwind layout quality (cards, spacing, contrast, hierarchy).\n"
         "- Do not print secrets, env values, registry ids, proposal digests, or base revisions.\n"
         "- When finished, ensure the project can pass TypeScript check (consistent identifiers).\n"

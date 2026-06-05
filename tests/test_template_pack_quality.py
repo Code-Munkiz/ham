@@ -8,9 +8,13 @@ from src.ham.build_materialization import materialize_files_to_snapshot
 from src.ham.builder_native_hermes import ham_native_builder_user_message
 from src.ham.hermes_workspace_builder import execute_hermes_native_workspace_build
 from src.ham.template_packs.quality import (
+    TemplatePackQualityIssue,
     evaluate_workspace_visual_quality,
     user_message_for_quality_failure,
+    visual_quality_repair_instruction,
 )
+from src.ham.template_packs.renderer import template_pack_hermes_instruction
+from src.ham.template_packs.restore import restore_missing_pack_sections
 from src.ham.template_packs.registry import default_template_packs_root, load_template_pack
 from src.persistence.builder_source_store import (
     BuilderSourceStore,
@@ -129,3 +133,52 @@ def test_materialize_not_called_when_quality_fails_before_snapshot(
         set_builder_source_store_for_tests(None)
     assert result.status == "failed"
     assert result.source_snapshot_id is None
+
+
+def test_repair_instruction_lists_exact_missing_sections() -> None:
+    issues = (
+        TemplatePackQualityIssue("missing_section", "Required section not found: cta"),
+        TemplatePackQualityIssue("low_contrast", "Possible low-contrast class combination"),
+    )
+    instruction = visual_quality_repair_instruction(issues=issues)
+    assert "Restore these required sections" in instruction
+    assert "cta" in instruction
+    assert "data-ham-section" in instruction
+    assert "low_contrast" in instruction
+
+
+def test_restore_missing_cta_section_from_pack_template() -> None:
+    pack = load_template_pack(default_template_packs_root() / "landing" / "agency-modern")
+    files = _agency_files()
+    app = files["src/App.tsx"]
+    cta_start = app.index('<section\n          data-ham-section="cta"')
+    main_close = app.rfind("</main>")
+    files["src/App.tsx"] = app[:cta_start] + app[main_close:]
+
+    before = evaluate_workspace_visual_quality(files, pack=pack)
+    assert before.ok is False
+    assert any(i.code == "missing_section" and "cta" in i.detail for i in before.issues)
+
+    restored = restore_missing_pack_sections(files, pack=pack, issues=before.issues)
+    assert restored is not None
+    updated_files, restored_ids = restored
+    assert "cta" in restored_ids
+    assert 'data-ham-section="cta"' in updated_files["src/App.tsx"]
+
+    after = evaluate_workspace_visual_quality(updated_files, pack=pack)
+    assert not any(i.code == "missing_section" and "cta" in i.detail for i in after.issues)
+
+
+def test_agency_pack_uses_preserve_structure_directive() -> None:
+    pack = load_template_pack(default_template_packs_root() / "landing" / "agency-modern")
+    assert pack.manifest.ai_directive == "preserve_structure"
+    instruction = template_pack_hermes_instruction(pack)
+    assert "preserve structure" in instruction.lower()
+    assert "data-ham-section" in instruction
+
+
+def test_saas_pack_uses_remix_moderately_directive() -> None:
+    pack = load_template_pack(default_template_packs_root() / "landing" / "saas-clean")
+    assert pack.manifest.ai_directive == "remix_moderately"
+    instruction = template_pack_hermes_instruction(pack)
+    assert "remix moderately" in instruction.lower()

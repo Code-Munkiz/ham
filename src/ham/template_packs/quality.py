@@ -39,10 +39,14 @@ _LOW_CONTRAST_RE = re.compile(
 )
 
 _PREVIEW_FAILURE_USER_MESSAGE = "HAM couldn't finish this preview.\n\n"
-_REPAIR_INSTRUCTION = (
+_REPAIR_INSTRUCTION_BASE = (
     "The current workspace is valid but visually underdesigned. Improve layout, spacing, "
     "contrast, typography, section hierarchy, cards, and responsive styling while preserving "
     "the user request."
+)
+_SECTION_MARKER_RULE = (
+    "Keep every data-ham-section=\"...\" marker on its section element. "
+    "Do not remove, rename, or relocate those attributes."
 )
 
 
@@ -70,8 +74,33 @@ def user_message_for_quality_failure() -> str:
     return _PREVIEW_FAILURE_USER_MESSAGE
 
 
-def visual_quality_repair_instruction() -> str:
-    return _REPAIR_INSTRUCTION
+def _section_id_from_missing_issue(detail: str) -> str | None:
+    prefix = "Required section not found: "
+    if detail.startswith(prefix):
+        return detail[len(prefix) :].strip()
+    return None
+
+
+def visual_quality_repair_instruction(
+    *,
+    issues: tuple[TemplatePackQualityIssue, ...] = (),
+) -> str:
+    parts = [_REPAIR_INSTRUCTION_BASE, _SECTION_MARKER_RULE]
+    missing_sections = [
+        sid
+        for issue in issues
+        if issue.code == "missing_section"
+        and (sid := _section_id_from_missing_issue(issue.detail)) is not None
+    ]
+    if missing_sections:
+        names = ", ".join(missing_sections)
+        parts.append(
+            f"Restore these required sections with polished Tailwind layout: {names}."
+        )
+    other_codes = sorted({issue.code for issue in issues if issue.code != "missing_section"})
+    if other_codes:
+        parts.append(f"Also fix quality issues: {', '.join(other_codes)}.")
+    return " ".join(parts)
 
 
 def _file(files: dict[str, str], path: str) -> str:
