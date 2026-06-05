@@ -33,6 +33,41 @@ def test_quality_gate_passes_polished_tailwind_starter() -> None:
     assert result.issues == ()
 
 
+def test_agency_modern_has_all_required_section_markers() -> None:
+    app = _agency_files()["src/App.tsx"]
+    for section in ("hero", "services", "process", "testimonial", "cta"):
+        assert f'data-ham-section="{section}"' in app
+
+
+def test_agency_modern_passes_enhanced_landing_gates() -> None:
+    pack = load_template_pack(default_template_packs_root() / "landing" / "agency-modern")
+    gates = pack.manifest.quality_gates
+    assert gates is not None
+    assert gates.min_service_cards == 3
+    assert gates.require_hero_richness is True
+    assert gates.require_cta_action is True
+    result = evaluate_workspace_visual_quality(_agency_files(), pack=pack)
+    assert result.ok is True
+
+
+def test_agency_modern_rejects_sparse_services_section() -> None:
+    pack = load_template_pack(default_template_packs_root() / "landing" / "agency-modern")
+    files = _agency_files()
+    app = files["src/App.tsx"]
+    files["src/App.tsx"] = app.replace(
+        "  },\n  {\n    title: \"Custom Agents\",",
+        "  },",
+        1,
+    ).replace(
+        "  },\n  {\n    title: \"Integration Layer\",",
+        "  },",
+        1,
+    )
+    result = evaluate_workspace_visual_quality(files, pack=pack)
+    assert result.ok is False
+    assert any(issue.code == "insufficient_service_cards" for issue in result.issues)
+
+
 def test_quality_gate_rejects_sparse_unstyled_app() -> None:
     pack = load_template_pack(default_template_packs_root() / "landing" / "agency-modern")
     files = {

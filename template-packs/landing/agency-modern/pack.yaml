@@ -51,6 +51,7 @@ design_tokens:
   background: slate-950
   accent: sky-400
   surface: slate-900
+  glow: sky-500/20
 quality_gates:
   required_sections:
     - hero
@@ -58,7 +59,10 @@ quality_gates:
     - process
     - testimonial
     - cta
-  min_tailwind_class_tokens: 12
+  min_tailwind_class_tokens: 20
   require_responsive_classes: true
   require_explicit_background: true
+  min_service_cards: 3
+  require_hero_richness: true
+  require_cta_action: true
 ai_directive: preserve_structure

@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  @apply bg-slate-950 text-slate-100 antialiased;
+@layer base {
+  body {
+    @apply bg-slate-950 text-slate-100 antialiased;
+  }
+
+  ::selection {
+    @apply bg-sky-400/30 text-white;
+  }
+}
+
+@layer utilities {
+  .ham-text-balance {
+    text-wrap: balance;
+  }
 }

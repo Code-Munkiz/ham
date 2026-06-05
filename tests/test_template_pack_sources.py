@@ -7,7 +7,11 @@ from pathlib import Path
 import pytest
 import yaml
 
-from src.ham.template_packs.registry import load_template_pack, load_template_pack_registry
+from src.ham.template_packs.registry import (
+    default_template_packs_root,
+    load_template_pack,
+    load_template_pack_registry,
+)
 from src.ham.template_packs.schema import TemplatePackConfigError, parse_pack_manifest
 from src.ham.template_packs.sources import (
     TemplatePackSourceConfigError,
@@ -51,6 +55,21 @@ def test_shipped_ham_authored_packs_pass_source_validation() -> None:
         assert pack.manifest.third_party_code_included is False
         assert pack.manifest.source_strategy
         assert isinstance(pack.manifest.license_notes, str)
+        assert "tailwind ui" not in pack.manifest.license_notes.lower()
+
+
+def test_agency_modern_manifest_has_no_blocked_sources() -> None:
+    pack = load_template_pack(default_template_packs_root() / "landing" / "agency-modern")
+    combined = " ".join(
+        [
+            pack.manifest.license_notes,
+            pack.manifest.source_strategy,
+            " ".join(pack.manifest.source_libraries),
+        ]
+    ).lower()
+    assert "tailwind ui" not in combined
+    assert "untitled ui" not in combined
+    assert "cruip" not in combined
 
 
 def test_missing_source_metadata_fails_validation() -> None:

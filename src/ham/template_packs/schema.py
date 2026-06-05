@@ -33,6 +33,9 @@ class TemplatePackQualityGate:
     min_tailwind_class_tokens: int = 8
     require_responsive_classes: bool = True
     require_explicit_background: bool = True
+    min_service_cards: int | None = None
+    require_hero_richness: bool = False
+    require_cta_action: bool = False
 
 
 @dataclass(frozen=True)
@@ -103,6 +106,18 @@ def _as_str_dict(value: Any, *, field_name: str) -> dict[str, str]:
     return out
 
 
+def _optional_positive_int(value: Any, *, field_name: str) -> int | None:
+    if value is None:
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise TemplatePackConfigError(f"pack.yaml: {field_name} must be int") from exc
+    if parsed < 1:
+        raise TemplatePackConfigError(f"pack.yaml: {field_name} must be >= 1")
+    return parsed
+
+
 def parse_pack_manifest(data: dict[str, Any], *, pack_root: Path) -> TemplatePackManifest:
     pack_id = data.get("id")
     if not isinstance(pack_id, str) or not pack_id.strip():
@@ -150,6 +165,11 @@ def parse_pack_manifest(data: dict[str, Any], *, pack_root: Path) -> TemplatePac
             min_tailwind_class_tokens=max(1, min_tw_int),
             require_responsive_classes=bool(qg_raw.get("require_responsive_classes", True)),
             require_explicit_background=bool(qg_raw.get("require_explicit_background", True)),
+            min_service_cards=_optional_positive_int(
+                qg_raw.get("min_service_cards"), field_name="quality_gates.min_service_cards"
+            ),
+            require_hero_richness=bool(qg_raw.get("require_hero_richness", False)),
+            require_cta_action=bool(qg_raw.get("require_cta_action", False)),
         )
 
     directive = data.get("ai_directive", "remix_moderately")

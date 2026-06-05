@@ -5,24 +5,16 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from src.ham.template_packs.schema import TemplatePack
+from src.ham.template_packs.schema import TemplatePack, TemplatePackQualityGate
 
 _TAILWIND_CLASS_RE = re.compile(
     r"\b(?:bg|text|border|ring|shadow|rounded|p[xytblr]?-|m[xytblr]?-|gap-|grid|flex|"
     r"sm:|md:|lg:|xl:|2xl:|min-h-|max-w-|font-|leading-|tracking-|from-|to-|via-)"
 )
 _RESPONSIVE_RE = re.compile(r"\b(?:sm:|md:|lg:|xl:|2xl:)")
-_SECTION_MARKERS = (
-    "data-ham-section",
-    "{/* hero",
-    "{/* services",
-    "{/* process",
-    "{/* testimonial",
-    "{/* cta",
-    "{/* overview",
-    "{/* activity",
-    "{/* workload",
-    "{/* table",
+_SECTION_BLOCK_RE = re.compile(
+    r'<section\b[^>]*\bdata-ham-section=["\']([^"\']+)["\'][^>]*>.*?</section>',
+    re.DOTALL | re.IGNORECASE,
 )
 _SPARSE_APP_RE = re.compile(
     r"export\s+default\s+function\s+App\s*\([^)]*\)\s*\{\s*return\s*<main[^>]*>\s*[^<]{0,40}</main>",
@@ -109,6 +101,80 @@ def _file(files: dict[str, str], path: str) -> str:
 
 def _count_tailwind_tokens(*parts: str) -> int:
     return sum(len(_TAILWIND_CLASS_RE.findall(part)) for part in parts if part)
+
+
+def _section_block(app_tsx: str, section_id: str) -> str:
+    pattern = (
+        rf'<section\b[^>]*\bdata-ham-section=["\']{re.escape(section_id)}["\'][^>]*>.*?</section>'
+    )
+    match = re.search(pattern, app_tsx, re.DOTALL | re.IGNORECASE)
+    return match.group(0) if match else ""
+
+
+def _count_service_cards(app_tsx: str) -> int:
+    services = _section_block(app_tsx, "services")
+    article_count = len(re.findall(r"<article\b", services, re.I))
+    if article_count >= 3:
+        return article_count
+    inline_titles = len(re.findall(r'\btitle:\s*"', services))
+    if inline_titles >= 3:
+        return inline_titles
+    if article_count >= 1 and re.search(r"\bservices\.map\b", services):
+        array_match = re.search(r"const\s+services\s*=\s*\[(.*?)\];", app_tsx, re.DOTALL)
+        if array_match:
+            array_titles = len(re.findall(r'\btitle:\s*"', array_match.group(1)))
+            if array_titles:
+                return array_titles
+    return max(article_count, inline_titles)
+
+
+def _evaluate_pack_specific_gates(
+    app_tsx: str,
+    gates: TemplatePackQualityGate,
+    issues: list[TemplatePackQualityIssue],
+) -> None:
+    if gates.require_hero_richness:
+        hero = _section_block(app_tsx, "hero")
+        hero_rich = bool(
+            hero
+            and re.search(r"<h1\b", hero, re.I)
+            and re.search(r"\b(?:from-|bg-gradient|blur-|rounded-full|shadow-)", hero, re.I)
+        )
+        if not hero_rich:
+            issues.append(
+                TemplatePackQualityIssue(
+                    "weak_hero",
+                    "Hero section lacks expected visual richness (headline + accent styling)",
+                )
+            )
+
+    if gates.min_service_cards is not None:
+        card_count = _count_service_cards(app_tsx)
+        if card_count < gates.min_service_cards:
+            issues.append(
+                TemplatePackQualityIssue(
+                    "insufficient_service_cards",
+                    f"Services section has {card_count} cards; need >= {gates.min_service_cards}",
+                )
+            )
+
+    if gates.require_cta_action:
+        cta = _section_block(app_tsx, "cta")
+        has_action = bool(
+            cta
+            and re.search(
+                r"<(?:button|a)\b[^>]*className=",
+                cta,
+                re.I,
+            )
+        )
+        if not has_action:
+            issues.append(
+                TemplatePackQualityIssue(
+                    "missing_cta_action",
+                    "CTA section missing visible button or link action",
+                )
+            )
 
 
 def evaluate_workspace_visual_quality(
@@ -201,6 +267,9 @@ def evaluate_workspace_visual_quality(
                         f"Required section not found: {section}",
                     )
                 )
+
+    if gates:
+        _evaluate_pack_specific_gates(app_tsx, gates, issues)
 
     return TemplatePackQualityResult(
         ok=not issues,
