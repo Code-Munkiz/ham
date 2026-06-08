@@ -28,7 +28,7 @@ playwright
 PyJWT>=2.8.0
 cryptography>=42.0.0
 # Claude Agent SDK — Cloud Run image installs this for readiness + gated smoke only (no broad execution).
-claude-agent-sdk>=0.1.70,<0.2.0
+claude-agent-sdk>=0.2.93,<0.3.0
 # Hermes Agent CLI (Native Builder workspace lane; also HTTP gateway is separate):
 #   Docker/Cloud Run: pinned in Dockerfile as hermes-agent==0.15.2 → /usr/local/bin/hermes
 #   Local dev: pip install hermes-agent  OR  bash <(curl -fsSL …/hermes-agent/main/scripts/install.sh)
