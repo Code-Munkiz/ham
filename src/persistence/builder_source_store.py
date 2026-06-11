@@ -321,6 +321,21 @@ _STORE_SINGLETON: list[BuilderSourceStoreProtocol | None] = [None]
 
 _BACKEND_ENV = "HAM_BUILDER_SOURCE_STORE_BACKEND"
 _NATIVE_CONTEXT_BACKEND_ENV = "HAM_NATIVE_BUILD_CONTEXT_STORE_BACKEND"
+_RUNTIME_BACKEND_ENV = "HAM_BUILDER_RUNTIME_STORE_BACKEND"
+_RUNTIME_JOB_BACKEND_ENV = "HAM_BUILDER_RUNTIME_JOB_STORE_BACKEND"
+
+
+def _coupled_builder_source_backend() -> str:
+    """Return ``firestore`` when any related builder store is Firestore-backed."""
+    for env_name in (
+        _BACKEND_ENV,
+        _NATIVE_CONTEXT_BACKEND_ENV,
+        _RUNTIME_BACKEND_ENV,
+        _RUNTIME_JOB_BACKEND_ENV,
+    ):
+        if (os.environ.get(env_name) or "").strip().lower() == "firestore":
+            return "firestore"
+    return ""
 
 
 def build_builder_source_store() -> BuilderSourceStoreProtocol:
@@ -329,15 +344,14 @@ def build_builder_source_store() -> BuilderSourceStoreProtocol:
     Defaults to the file-backed implementation. ``HAM_BUILDER_SOURCE_STORE_BACKEND
     =firestore`` selects :class:`FirestoreBuilderSourceStore` (lazy import).
 
-    When only the native build *context* store is set to Firestore, import jobs
-    must share that backend too (otherwise the worker loads context on instance B
-    but cannot find the job row and silently skips the build).
+    When only a related builder store is set to Firestore (native build context,
+    runtime sessions, or cloud runtime jobs), import jobs must share that backend
+    too (otherwise the worker loads context on instance B but cannot find the job
+    row and silently skips the build).
     """
     backend = (os.environ.get(_BACKEND_ENV) or "").strip().lower()
     if not backend:
-        ctx_backend = (os.environ.get(_NATIVE_CONTEXT_BACKEND_ENV) or "").strip().lower()
-        if ctx_backend == "firestore":
-            backend = "firestore"
+        backend = _coupled_builder_source_backend()
     if backend == "firestore":
         from src.persistence.firestore_builder_source_store import (  # noqa: PLC0415
             FirestoreBuilderSourceStore,
