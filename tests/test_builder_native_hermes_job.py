@@ -134,6 +134,11 @@ class _RecordingEnqueue:
         self.calls.append(envelope)
 
 
+class _FailingEnqueue:
+    def enqueue(self, envelope) -> None:
+        raise RuntimeError("cloud tasks unavailable")
+
+
 def test_durable_dispatch_persists_context_and_enqueues_without_inline_build(
     tmp_path, monkeypatch
 ) -> None:
@@ -172,6 +177,38 @@ def test_durable_dispatch_persists_context_and_enqueues_without_inline_build(
     assert ctx.session_id == "sess_v2"
     assert ctx.user_prompt == "build a small native app"
     assert ctx.created_by == "user_v2"
+
+
+def test_enqueue_failure_marks_job_failed_and_returns_failed_status(
+    tmp_path, monkeypatch
+) -> None:
+    _durable_env(tmp_path, monkeypatch)
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    set_native_build_enqueue_for_tests(_FailingEnqueue())
+    try:
+        result = start_native_build_job(
+            workspace_id="ws_v2",
+            project_id="proj_v2",
+            session_id="sess_v2",
+            user_prompt="build a small native app",
+            created_by="user_v2",
+        )
+    finally:
+        set_native_build_enqueue_for_tests(None)
+        set_builder_source_store_for_tests(None)
+
+    assert result["ham_native_builder"]["status"] == "failed"
+    assert result["ham_native_builder"]["failure_reason"] == "enqueue"
+    assert (
+        ham_native_builder_user_message(result["ham_native_builder"])
+        == "HAM could not queue the native build for processing.\n\n"
+    )
+    jobs = store.list_import_jobs(workspace_id="ws_v2", project_id="proj_v2")
+    assert len(jobs) == 1
+    assert jobs[0].status == "failed"
+    assert jobs[0].phase == NATIVE_BUILD_PHASE_FAILED
+    assert jobs[0].error_code == "HAM_NATIVE_BUILDER_ENQUEUE_FAILED"
 
 
 def test_start_creates_job_and_returns_started(tmp_path, monkeypatch) -> None:
