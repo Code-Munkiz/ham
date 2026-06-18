@@ -217,3 +217,62 @@ def test_saas_pack_uses_remix_moderately_directive() -> None:
     assert pack.manifest.ai_directive == "remix_moderately"
     instruction = template_pack_hermes_instruction(pack)
     assert "remix moderately" in instruction.lower()
+
+
+def test_comment_stub_does_not_satisfy_required_section_gate() -> None:
+    """JSX comment placeholders must not bypass missing-section quality gates."""
+    import re
+
+    pack = load_template_pack(default_template_packs_root() / "landing" / "saas-clean")
+    files = dict(pack.files)
+    app = files["src/App.tsx"]
+    gates = pack.manifest.quality_gates
+    assert gates is not None
+    for section in gates.required_sections:
+        marker = section.lower().replace("_", "-")
+        pattern = (
+            rf'<section[^>]*\bdata-ham-section=["\']{marker}["\'][^>]*>.*?</section>'
+        )
+        app = re.sub(
+            pattern,
+            f"{{/* {marker} */}}",
+            app,
+            count=1,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+    files["src/App.tsx"] = app
+    result = evaluate_workspace_visual_quality(files, pack=pack)
+    assert result.ok is False
+    assert any(issue.code == "missing_section" for issue in result.issues)
+
+
+def test_restore_runs_when_only_comment_stubs_remain() -> None:
+    import re
+
+    pack = load_template_pack(default_template_packs_root() / "landing" / "saas-clean")
+    files = dict(pack.files)
+    app = files["src/App.tsx"]
+    gates = pack.manifest.quality_gates
+    assert gates is not None
+    for section in gates.required_sections:
+        marker = section.lower().replace("_", "-")
+        pattern = (
+            rf'<section[^>]*\bdata-ham-section=["\']{marker}["\'][^>]*>.*?</section>'
+        )
+        app = re.sub(
+            pattern,
+            f"{{/* {marker} */}}",
+            app,
+            count=1,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+    files["src/App.tsx"] = app
+
+    before = evaluate_workspace_visual_quality(files, pack=pack)
+    restored = restore_missing_pack_sections(files, pack=pack, issues=before.issues)
+    assert restored is not None
+    updated_files, restored_ids = restored
+    assert restored_ids
+    for section in gates.required_sections:
+        marker = section.lower().replace("_", "-")
+        assert f'data-ham-section="{marker}"' in updated_files["src/App.tsx"]
