@@ -15,6 +15,7 @@ from typing import Any, Callable
 
 from src.ham.build_materialization import BuildMaterializationResult
 from src.ham.builder_artifact_verifier import verify_builder_scaffold_artifact
+from src.ham.builder_error_codes import GATE_ENQUEUE_FAILED
 from src.ham.builder_chat_cloud_runtime import maybe_enqueue_chat_scaffold_cloud_runtime_job
 from src.ham.builder_preview_typecheck import validate_preview_app_files
 from src.ham.hermes_workspace_builder import (
@@ -314,6 +315,8 @@ NATIVE_BUILD_JOB_ORIGIN = "ham_native_builder_v2"
 _EXECUTOR_ERROR_CODE = "HAM_NATIVE_BUILDER_V2_EXECUTOR_ERROR"
 _EXECUTOR_ERROR_MESSAGE = "HAM Native Builder could not complete the native build."
 
+_ENQUEUE_ERROR_MESSAGE = "HAM Native Builder could not queue the build for execution."
+
 _DISPATCH_ENV = "HAM_NATIVE_BUILD_DISPATCH"
 
 
@@ -363,7 +366,7 @@ def start_native_build_job(
         _native_build_dispatch_mode(),
         str(hermes_native_workspace_configured()).lower(),
     )
-    _dispatch_native_build_job(
+    if not _dispatch_native_build_job(
         import_job_id=job.id,
         workspace_id=workspace_id,
         project_id=project_id,
@@ -371,7 +374,13 @@ def start_native_build_job(
         user_prompt=user_prompt,
         created_by=created_by,
         workspace_files_provider=workspace_files_provider,
-    )
+    ):
+        return _native_result(
+            status="failed",
+            failure_reason="enqueue_failed",
+            import_job_id=job.id,
+            extra={"native_build_job_id": job.id},
+        )
     return _native_result(
         status="started",
         scaffolded=False,
@@ -380,11 +389,11 @@ def start_native_build_job(
     )
 
 
-def _dispatch_native_build_job(**kwargs: Any) -> None:
+def _dispatch_native_build_job(**kwargs: Any) -> bool:
     mode = _native_build_dispatch_mode()
     if mode == "inline":
         _run_native_build_executor_guarded(**kwargs)
-        return
+        return True
     if mode == "thread":
         threading.Thread(
             target=_run_native_build_executor_guarded,
@@ -392,8 +401,8 @@ def _dispatch_native_build_job(**kwargs: Any) -> None:
             name=f"ham-native-build-{kwargs.get('import_job_id')}",
             daemon=True,
         ).start()
-        return
-    _enqueue_native_build_job_guarded(
+        return True
+    return _enqueue_native_build_job_guarded(
         import_job_id=str(kwargs.get("import_job_id") or ""),
         workspace_id=str(kwargs.get("workspace_id") or ""),
         project_id=str(kwargs.get("project_id") or ""),
@@ -402,7 +411,7 @@ def _dispatch_native_build_job(**kwargs: Any) -> None:
 
 def _enqueue_native_build_job_guarded(
     *, import_job_id: str, workspace_id: str, project_id: str
-) -> None:
+) -> bool:
     from src.ham.native_build_worker_enqueue import (  # noqa: PLC0415
         NativeBuildExecuteEnvelope,
         get_native_build_enqueue,
@@ -420,6 +429,20 @@ def _enqueue_native_build_job_guarded(
         logger.exception(
             "ham_native_builder_v2_enqueue_failed import_job_id=%s", import_job_id
         )
+        try:
+            get_builder_source_store().mark_import_job_failed(
+                import_job_id=import_job_id,
+                phase=NATIVE_BUILD_PHASE_FAILED,
+                error_code=GATE_ENQUEUE_FAILED,
+                error_message=_ENQUEUE_ERROR_MESSAGE,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "ham_native_builder_v2_mark_enqueue_failed import_job_id=%s",
+                import_job_id,
+            )
+        return False
+    return True
 
 
 def _run_native_build_executor_guarded(**kwargs: Any) -> None:
