@@ -247,6 +247,46 @@ class FirestoreBuilderSourceStore:
             )
             return None
 
+    def claim_import_job_if_queued(self, *, import_job_id: str, phase: str) -> ImportJob | None:
+        """Atomically transition ``queued`` -> ``running`` when still queued."""
+        jid = (import_job_id or "").strip()
+        if not jid:
+            return None
+        db = self._db()
+        doc_ref = self._coll(self._import_jobs_coll).document(jid)
+        try:
+            from google.cloud.firestore import transactional  # noqa: PLC0415
+        except ImportError as exc:  # pragma: no cover
+            raise FirestoreBuilderSourceStoreError(
+                "google-cloud-firestore is required when "
+                "HAM_BUILDER_SOURCE_STORE_BACKEND=firestore."
+            ) from exc
+
+        @transactional
+        def _claim(transaction: Any) -> ImportJob | None:
+            snap = doc_ref.get(transaction=transaction)
+            if not getattr(snap, "exists", False):
+                return None
+            data = snap.to_dict() or {}
+            try:
+                record = ImportJob.model_validate(data)
+            except ValidationError:
+                return None
+            if record.status != "queued":
+                return None
+            record.phase = phase
+            record.status = "running"
+            record.error_code = None
+            record.error_message = None
+            record.updated_at = _utc_now_iso()
+            transaction.set(doc_ref, record.model_dump(mode="json"))
+            return record
+
+        try:
+            return _claim(db.transaction())
+        except Exception as exc:  # noqa: BLE001
+            raise self._wrap("claim_import_job_if_queued", exc) from exc
+
     def mark_import_job_running(self, *, import_job_id: str, phase: str) -> ImportJob:
         record = self._require_import_job(import_job_id)
         record.phase = phase

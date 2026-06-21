@@ -99,6 +99,7 @@ class BuilderSourceStoreProtocol(Protocol):
         project_source_id: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> ImportJob: ...
+    def claim_import_job_if_queued(self, *, import_job_id: str, phase: str) -> ImportJob | None: ...
     def mark_import_job_running(self, *, import_job_id: str, phase: str) -> ImportJob: ...
     def mark_import_job_succeeded(
         self,
@@ -234,6 +235,33 @@ class BuilderSourceStore:
                 continue
             if rec.id == jid:
                 return rec
+        return None
+
+    def claim_import_job_if_queued(self, *, import_job_id: str, phase: str) -> ImportJob | None:
+        """Transition ``queued`` -> ``running`` only when the job is still queued."""
+        jid = (import_job_id or "").strip()
+        if not jid:
+            return None
+        raw = self._load_raw()
+        for item in raw.get("import_jobs", []):
+            if str(item.get("id") or "") != jid:
+                continue
+            try:
+                record = ImportJob.model_validate(item)
+            except ValidationError:
+                return None
+            if record.status != "queued":
+                return None
+            record.phase = phase
+            record.status = "running"
+            record.error_code = None
+            record.error_message = None
+            record.updated_at = _utc_now_iso()
+            rows = [r for r in raw.get("import_jobs", []) if str(r.get("id") or "") != jid]
+            rows.append(record.model_dump(mode="json"))
+            raw["import_jobs"] = rows
+            self._save_raw(raw)
+            return record
         return None
 
     def mark_import_job_running(self, *, import_job_id: str, phase: str) -> ImportJob:

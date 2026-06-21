@@ -136,3 +136,25 @@ def test_get_import_job_returns_none_for_unknown(tmp_path: Path) -> None:
     store = BuilderSourceStore(store_path=tmp_path / "builder_sources.json")
     assert store.get_import_job(import_job_id="ijob_missing") is None
     assert store.get_import_job(import_job_id="") is None
+
+
+def test_claim_import_job_if_queued_transitions_only_from_queued(tmp_path: Path) -> None:
+    store = BuilderSourceStore(store_path=tmp_path / "builder_sources.json")
+    created = store.create_import_job(
+        workspace_id="ws_a",
+        project_id="project.a",
+        created_by="user_a",
+        phase="native_build_queued",
+        status="queued",
+    )
+    claimed = store.claim_import_job_if_queued(
+        import_job_id=created.id,
+        phase="native_build_running",
+    )
+    assert claimed is not None
+    assert claimed.status == "running"
+    assert claimed.phase == "native_build_running"
+    assert store.claim_import_job_if_queued(
+        import_job_id=created.id,
+        phase="native_build_running",
+    ) is None

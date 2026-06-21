@@ -32,6 +32,7 @@ from pydantic import ValidationError
 from src.api.internal_dispatcher import _validate_oidc_token
 from src.ham.builder_native_hermes import (
     NATIVE_BUILD_PHASE_FAILED,
+    NATIVE_BUILD_PHASE_RUNNING,
     execute_native_build_job,
 )
 from src.ham.native_build_worker_enqueue import NativeBuildExecuteEnvelope
@@ -43,6 +44,7 @@ _LOG = logging.getLogger(__name__)
 router = APIRouter(tags=["internal"])
 
 _TERMINAL_STATUSES = frozenset({"succeeded", "failed"})
+_IN_FLIGHT_STATUSES = frozenset({"running"})
 
 _WORKER_ERROR_CODE = "HAM_NATIVE_BUILDER_V2_EXECUTOR_ERROR"
 _WORKER_ERROR_MESSAGE = "HAM Native Builder could not complete the native build."
@@ -113,6 +115,38 @@ async def execute_native_build(
             "ok": True,
             "import_job_id": context.import_job_id,
             "status": job.status,
+            "skipped": True,
+        }
+
+    if job.status in _IN_FLIGHT_STATUSES:
+        _LOG.info(
+            "native-build worker: import_job_id=%s already in flight (%s) — idempotent skip",
+            context.import_job_id,
+            job.status,
+        )
+        return {
+            "ok": True,
+            "import_job_id": context.import_job_id,
+            "status": job.status,
+            "skipped": True,
+        }
+
+    claimed = store.claim_import_job_if_queued(
+        import_job_id=context.import_job_id,
+        phase=NATIVE_BUILD_PHASE_RUNNING,
+    )
+    if claimed is None:
+        latest = store.get_import_job(import_job_id=context.import_job_id)
+        latest_status = str(getattr(latest, "status", "") or "")
+        _LOG.info(
+            "native-build worker: import_job_id=%s claim lost (status=%s) — idempotent skip",
+            context.import_job_id,
+            latest_status or "missing",
+        )
+        return {
+            "ok": True,
+            "import_job_id": context.import_job_id,
+            "status": latest_status or None,
             "skipped": True,
         }
 
