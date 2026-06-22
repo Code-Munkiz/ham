@@ -274,6 +274,8 @@ class BuilderSourceStore:
         metadata: dict[str, Any] | None = None,
     ) -> ImportJob:
         record = self._require_import_job(import_job_id)
+        if record.status == "succeeded":
+            return record
         record.phase = phase
         record.status = "failed"
         record.error_code = str(error_code or "ZIP_INVALID")

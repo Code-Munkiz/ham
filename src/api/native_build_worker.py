@@ -116,6 +116,18 @@ async def execute_native_build(
             "skipped": True,
         }
 
+    if job.status == "running":
+        _LOG.info(
+            "native-build worker: import_job_id=%s already running — idempotent skip",
+            context.import_job_id,
+        )
+        return {
+            "ok": True,
+            "import_job_id": context.import_job_id,
+            "status": job.status,
+            "skipped": True,
+        }
+
     try:
         result = execute_native_build_job(
             import_job_id=context.import_job_id,
