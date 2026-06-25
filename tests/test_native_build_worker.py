@@ -288,6 +288,35 @@ def test_worker_skips_when_no_context(monkeypatch, tmp_path) -> None:
     assert res.json()["skipped"] is True
 
 
+def test_worker_marks_orphan_queued_job_failed_when_context_missing(monkeypatch, tmp_path) -> None:
+    _configure_oidc(monkeypatch)
+    store = BuilderSourceStore(store_path=tmp_path / "s.json")
+    set_builder_source_store_for_tests(store)
+    try:
+        job = store.create_import_job(
+            workspace_id="ws",
+            project_id="proj",
+            created_by="user",
+            phase=native_hermes.NATIVE_BUILD_PHASE_QUEUED,
+            status="queued",
+            metadata={"origin": native_hermes.NATIVE_BUILD_JOB_ORIGIN},
+        )
+        client = TestClient(_build_app(), raise_server_exceptions=False)
+        res = client.post(
+            "/api/internal/native-build/execute",
+            json={"import_job_id": job.id, "workspace_id": "ws", "project_id": "proj"},
+            headers={"Authorization": f"Bearer {_valid_token()}"},
+        )
+        assert res.status_code == 200
+        assert res.json()["skipped"] is True
+        updated = store.get_import_job(import_job_id=job.id)
+        assert updated is not None
+        assert updated.status == "failed"
+        assert updated.phase == native_hermes.NATIVE_BUILD_PHASE_FAILED
+    finally:
+        set_builder_source_store_for_tests(None)
+
+
 def test_worker_skips_when_context_exists_but_import_job_missing(monkeypatch, tmp_path) -> None:
     _configure_oidc(monkeypatch)
     set_builder_source_store_for_tests(BuilderSourceStore(store_path=tmp_path / "s.json"))
