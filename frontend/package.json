@@ -62,7 +62,7 @@
     "autoprefixer": "^10.4.21",
     "jscpd": "^4.2.4",
     "jsdom": "^25.0.1",
-    "knip": "^5.62.0",
+    "knip": "^6.23.0",
     "msw": "^2.14.6",
     "prettier": "^3.3.3",
     "tailwindcss": "^4.1.14",
