@@ -217,3 +217,32 @@ def test_saas_pack_uses_remix_moderately_directive() -> None:
     assert pack.manifest.ai_directive == "remix_moderately"
     instruction = template_pack_hermes_instruction(pack)
     assert "remix moderately" in instruction.lower()
+
+
+def test_jsx_comment_stubs_do_not_satisfy_required_sections() -> None:
+    """JSX comment placeholders must not bypass the data-ham-section quality gate."""
+    pack = load_template_pack(default_template_packs_root() / "landing" / "saas-clean")
+    files = dict(pack.files)
+    files["src/App.tsx"] = (
+        "export default function App() {\n"
+        "  return (\n"
+        '    <main className="min-h-screen bg-slate-950 text-slate-100">\n'
+        "      {/* hero */}\n"
+        "      {/* services */}\n"
+        "      {/* process */}\n"
+        "      {/* testimonial */}\n"
+        "      {/* cta */}\n"
+        '      <div className="p-8 text-center">\n'
+        '        <h1 className="text-4xl font-bold sm:text-5xl md:text-6xl">Welcome</h1>\n'
+        '        <p className="mt-4 text-slate-300 sm:text-lg md:text-xl">Some text</p>\n'
+        '        <button className="mt-8 rounded-lg bg-blue-600 px-6 py-3 shadow-lg">Go</button>\n'
+        "      </div>\n"
+        "    </main>\n"
+        "  );\n"
+        "}\n"
+    )
+    result = evaluate_workspace_visual_quality(files, pack=pack)
+    assert result.ok is False
+    missing = [i for i in result.issues if i.code == "missing_section"]
+    assert len(missing) == len(pack.manifest.quality_gates.required_sections)
+    assert "data-ham-section" not in files["src/App.tsx"]
