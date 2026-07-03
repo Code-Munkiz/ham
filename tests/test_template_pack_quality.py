@@ -217,3 +217,33 @@ def test_saas_pack_uses_remix_moderately_directive() -> None:
     assert pack.manifest.ai_directive == "remix_moderately"
     instruction = template_pack_hermes_instruction(pack)
     assert "remix moderately" in instruction.lower()
+
+
+def test_quality_gate_rejects_jsx_comment_section_stubs() -> None:
+    """JSX comment placeholders must not satisfy required-section gates."""
+    pack = load_template_pack(default_template_packs_root() / "landing" / "saas-clean")
+    files = {
+        "src/main.tsx": "import './index.css';\nimport App from './App';\n",
+        "src/index.css": (
+            "@tailwind base; @tailwind components; @tailwind utilities; "
+            ".bg-gradient { background: linear-gradient(1deg, #000, #111); }"
+        ),
+        "src/App.tsx": (
+            'export default function App() {\n'
+            "  return (\n"
+            '    <main className="min-h-screen bg-slate-950 text-white p-8 sm:p-12 md:p-16">\n'
+            "      {/* hero */}\n"
+            "      {/* services */}\n"
+            "      {/* cta */}\n"
+            '      <h1 className="text-4xl font-bold rounded shadow border">Welcome</h1>\n'
+            '      <button className="rounded shadow border btn">Get Started</button>\n'
+            "    </main>\n"
+            "  );\n"
+            "}\n"
+        ),
+    }
+    result = evaluate_workspace_visual_quality(files, pack=pack)
+    assert result.ok is False
+    missing = [i for i in result.issues if i.code == "missing_section"]
+    assert len(missing) == 3
+    assert {i.detail.split(": ", 1)[1] for i in missing} == {"hero", "services", "cta"}
