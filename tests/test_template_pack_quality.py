@@ -217,3 +217,39 @@ def test_saas_pack_uses_remix_moderately_directive() -> None:
     assert pack.manifest.ai_directive == "remix_moderately"
     instruction = template_pack_hermes_instruction(pack)
     assert "remix moderately" in instruction.lower()
+
+
+def test_quality_gate_rejects_jsx_comment_section_stubs() -> None:
+    """JSX comment placeholders must not satisfy required-section markers."""
+    pack = load_template_pack(default_template_packs_root() / "landing" / "saas-clean")
+    files = {
+        "src/main.tsx": "import './index.css'; import App from './App';",
+        "src/index.css": (
+            "@tailwind base; @tailwind components; @tailwind utilities; "
+            "body { @apply bg-slate-950 text-white min-h-screen; }"
+        ),
+        "src/App.tsx": """
+export default function App() {
+  return (
+    <main className="min-h-screen bg-slate-950 text-white p-8 sm:p-12 md:p-16">
+      {/* hero */}
+      {/* services */}
+      {/* process */}
+      {/* testimonial */}
+      {/* cta */}
+      <h1 className="text-4xl font-bold rounded shadow border p-4 m-2 gap-4 flex grid sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl 2xl:text-9xl bg-gradient-to-r from-blue-500 to-purple-500">Hello</h1>
+      <button className="rounded shadow border btn button card p-4 m-2">Click</button>
+    </main>
+  );
+}
+""",
+    }
+    result = evaluate_workspace_visual_quality(files, pack=pack)
+    assert result.ok is False
+    missing = {
+        issue.detail
+        for issue in result.issues
+        if issue.code == "missing_section"
+    }
+    assert any("hero" in detail for detail in missing)
+    assert any("cta" in detail for detail in missing)
