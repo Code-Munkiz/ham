@@ -217,3 +217,66 @@ def test_saas_pack_uses_remix_moderately_directive() -> None:
     assert pack.manifest.ai_directive == "remix_moderately"
     instruction = template_pack_hermes_instruction(pack)
     assert "remix moderately" in instruction.lower()
+
+
+def test_quality_gate_rejects_jsx_comment_section_stubs_without_markers() -> None:
+    """JSX comment placeholders like {/* hero */} must not satisfy required sections."""
+    pack = load_template_pack(default_template_packs_root() / "landing" / "saas-clean")
+    files = {
+        "src/main.tsx": "import './index.css'\nimport App from './App'\n",
+        "src/index.css": "@tailwind base;\n@tailwind components;\n@tailwind utilities;\n",
+        "src/App.tsx": """
+export default function App() {
+  return (
+    <main className="min-h-screen bg-slate-950 text-white p-8 sm:p-12 md:p-16">
+      {/* hero */}
+      <section className="rounded-lg shadow-lg border p-6 bg-gradient-to-r from-blue-500 to-purple-600">
+        <h1 className="text-4xl font-bold">Hello</h1>
+        <button className="rounded px-4 py-2 bg-white text-black">Go</button>
+      </section>
+      {/* services */}
+      <section className="grid gap-4 sm:grid-cols-3 mt-8">
+        <article className="rounded shadow border p-4"><h2>One</h2></article>
+        <article className="rounded shadow border p-4"><h2>Two</h2></article>
+        <article className="rounded shadow border p-4"><h2>Three</h2></article>
+      </section>
+      {/* process */}
+      <section className="mt-8 rounded border p-6">Process</section>
+      {/* testimonial */}
+      <section className="mt-8 rounded border p-6">Testimonial</section>
+      {/* cta */}
+      <section className="mt-8 rounded border p-6">
+        <a className="rounded px-4 py-2 bg-blue-500" href="#">CTA</a>
+      </section>
+    </main>
+  );
+}
+""",
+    }
+    result = evaluate_workspace_visual_quality(files, pack=pack)
+    assert result.ok is False
+    missing = {i.detail for i in result.issues if i.code == "missing_section"}
+    assert "Required section not found: hero" in missing
+    assert "Required section not found: cta" in missing
+
+
+def test_restore_does_not_skip_sections_with_only_comment_stubs() -> None:
+    pack = load_template_pack(default_template_packs_root() / "landing" / "saas-clean")
+    files = {
+        "src/App.tsx": """
+export default function App() {
+  return (
+    <main className="min-h-screen bg-slate-950 text-white p-8">
+      {/* hero */}
+      <section><h1>Placeholder</h1></section>
+    </main>
+  );
+}
+""",
+    }
+    issues = evaluate_workspace_visual_quality(files, pack=pack).issues
+    restored = restore_missing_pack_sections(files, pack=pack, issues=issues)
+    assert restored is not None
+    updated_files, restored_ids = restored
+    assert "hero" in restored_ids
+    assert 'data-ham-section="hero"' in updated_files["src/App.tsx"]
