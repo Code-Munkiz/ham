@@ -212,6 +212,39 @@ def test_agency_pack_uses_preserve_structure_directive() -> None:
     assert "data-ham-section" in instruction
 
 
+def test_quality_gate_rejects_jsx_comment_section_stubs() -> None:
+    """JSX comment placeholders like {/* hero */} must not satisfy required sections."""
+    pack = load_template_pack(default_template_packs_root() / "landing" / "saas-clean")
+    files = {
+        "src/main.tsx": "import './index.css';\nimport App from './App';\n",
+        "src/index.css": "@tailwind base; @tailwind components; @tailwind utilities;",
+        "src/App.tsx": """
+export default function App() {
+  return (
+    <main className="min-h-screen bg-slate-950 text-white p-8 sm:p-12">
+      {/* hero */}
+      {/* services */}
+      {/* process */}
+      {/* testimonial */}
+      {/* cta */}
+      <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-500">Hello</h1>
+      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+        <article className="rounded-lg border p-4 shadow">Card 1</article>
+        <article className="rounded-lg border p-4 shadow">Card 2</article>
+        <article className="rounded-lg border p-4 shadow">Card 3</article>
+      </div>
+      <button className="rounded bg-blue-600 px-4 py-2">Click</button>
+    </main>
+  );
+}
+""",
+    }
+    result = evaluate_workspace_visual_quality(files, pack=pack)
+    assert result.ok is False
+    assert any(issue.code == "missing_section" for issue in result.issues)
+    assert "data-ham-section" not in files["src/App.tsx"]
+
+
 def test_saas_pack_uses_remix_moderately_directive() -> None:
     pack = load_template_pack(default_template_packs_root() / "landing" / "saas-clean")
     assert pack.manifest.ai_directive == "remix_moderately"
