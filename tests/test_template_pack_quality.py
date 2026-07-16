@@ -212,6 +212,52 @@ def test_agency_pack_uses_preserve_structure_directive() -> None:
     assert "data-ham-section" in instruction
 
 
+def test_quality_gate_rejects_jsx_comment_section_stubs() -> None:
+    """JSX comment placeholders must not satisfy required section markers."""
+    pack = load_template_pack(default_template_packs_root() / "landing" / "saas-clean")
+    files = dict(pack.files)
+    app = files["src/App.tsx"]
+    import re
+
+    app = re.sub(
+        r"<section[^>]*data-ham-section[^>]*>.*?</section>",
+        "",
+        app,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    app = app.replace(
+        "</main>",
+        "{/* hero */}\n{/* services */}\n{/* process */}\n{/* testimonial */}\n{/* cta */}\n</main>",
+    )
+    files["src/App.tsx"] = app
+    assert "data-ham-section" not in app
+
+    result = evaluate_workspace_visual_quality(files, pack=pack)
+    assert result.ok is False
+    assert any(issue.code == "missing_section" for issue in result.issues)
+
+
+def test_restore_missing_sections_ignores_jsx_comment_stubs() -> None:
+    pack = load_template_pack(default_template_packs_root() / "landing" / "agency-modern")
+    files = _agency_files()
+    app = files["src/App.tsx"]
+    cta_start = app.index('<section\n          data-ham-section="cta"')
+    main_close = app.rfind("</main>")
+    files["src/App.tsx"] = (
+        app[:cta_start] + "\n        {/* cta */}\n      " + app[main_close:]
+    )
+
+    before = evaluate_workspace_visual_quality(files, pack=pack)
+    assert before.ok is False
+    assert any(i.code == "missing_section" and "cta" in i.detail for i in before.issues)
+
+    restored = restore_missing_pack_sections(files, pack=pack, issues=before.issues)
+    assert restored is not None
+    updated_files, restored_ids = restored
+    assert "cta" in restored_ids
+    assert 'data-ham-section="cta"' in updated_files["src/App.tsx"]
+
+
 def test_saas_pack_uses_remix_moderately_directive() -> None:
     pack = load_template_pack(default_template_packs_root() / "landing" / "saas-clean")
     assert pack.manifest.ai_directive == "remix_moderately"
