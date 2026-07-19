@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from src.ham.build_materialization import materialize_files_to_snapshot
@@ -204,6 +206,26 @@ def test_restore_missing_cta_section_from_pack_template() -> None:
     assert not any(i.code == "missing_section" and "cta" in i.detail for i in after.issues)
 
 
+def test_restore_ignores_jsx_comment_section_stubs() -> None:
+    pack = load_template_pack(default_template_packs_root() / "landing" / "saas-clean")
+    files = dict(pack.files)
+    app = files["src/App.tsx"]
+    cta_start = app.index('data-ham-section="cta"')
+    main_close = app.rfind("</main>")
+    stubbed = app[:cta_start] + "{/* cta */}\n" + app[main_close:]
+    files["src/App.tsx"] = stubbed
+
+    before = evaluate_workspace_visual_quality(files, pack=pack)
+    assert before.ok is False
+    assert any(i.code == "missing_section" and "cta" in i.detail for i in before.issues)
+
+    restored = restore_missing_pack_sections(files, pack=pack, issues=before.issues)
+    assert restored is not None
+    updated_files, restored_ids = restored
+    assert "cta" in restored_ids
+    assert 'data-ham-section="cta"' in updated_files["src/App.tsx"]
+
+
 def test_agency_pack_uses_preserve_structure_directive() -> None:
     pack = load_template_pack(default_template_packs_root() / "landing" / "agency-modern")
     assert pack.manifest.ai_directive == "preserve_structure"
@@ -217,3 +239,18 @@ def test_saas_pack_uses_remix_moderately_directive() -> None:
     assert pack.manifest.ai_directive == "remix_moderately"
     instruction = template_pack_hermes_instruction(pack)
     assert "remix moderately" in instruction.lower()
+
+
+def test_quality_gate_rejects_jsx_comment_section_stubs() -> None:
+    """JSX comments must not satisfy required_sections (only data-ham-section counts)."""
+    pack = load_template_pack(default_template_packs_root() / "landing" / "saas-clean")
+    files = dict(pack.files)
+    app = files["src/App.tsx"]
+    app = re.sub(r'\s*data-ham-section=["\'][^"\']+["\']', "", app)
+    for section in ("hero", "services", "cta"):
+        app = app.replace("<section", f"{{/* {section} */}}\n        <section", 1)
+    files["src/App.tsx"] = app
+
+    result = evaluate_workspace_visual_quality(files, pack=pack)
+    assert result.ok is False
+    assert any(issue.code == "missing_section" for issue in result.issues)
