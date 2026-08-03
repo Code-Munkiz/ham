@@ -217,6 +217,19 @@ class FirestoreBuilderRuntimeStore:
             raise self._wrap("upsert_preview_endpoint", exc) from exc
         return record
 
+    def _get_active_local_runtime_session(
+        self,
+        *,
+        workspace_id: str,
+        project_id: str,
+    ) -> RuntimeSession | None:
+        for row in self.list_runtime_sessions(workspace_id=workspace_id, project_id=project_id):
+            if row.status in {"stopped", "expired"}:
+                continue
+            if row.mode == "local":
+                return row
+        return None
+
     def upsert_local_runtime_session(
         self,
         *,
@@ -225,7 +238,9 @@ class FirestoreBuilderRuntimeStore:
         source_snapshot_id: str | None,
         message: str | None = None,
     ) -> RuntimeSession:
-        existing = self.get_active_runtime_session(workspace_id=workspace_id, project_id=project_id)
+        existing = self._get_active_local_runtime_session(
+            workspace_id=workspace_id, project_id=project_id
+        )
         if existing is None:
             existing = RuntimeSession(
                 workspace_id=workspace_id,
@@ -294,7 +309,9 @@ class FirestoreBuilderRuntimeStore:
         workspace_id: str,
         project_id: str,
     ) -> tuple[RuntimeSession | None, PreviewEndpoint | None]:
-        runtime = self.get_active_runtime_session(workspace_id=workspace_id, project_id=project_id)
+        runtime = self._get_active_local_runtime_session(
+            workspace_id=workspace_id, project_id=project_id
+        )
         endpoint: PreviewEndpoint | None = None
         if runtime is not None:
             endpoint = self.get_active_preview_endpoint(
