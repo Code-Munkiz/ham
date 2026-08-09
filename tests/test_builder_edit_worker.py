@@ -757,3 +757,83 @@ def test_tetris_advice_does_not_invoke_worker(monkeypatch: pytest.MonkeyPatch, t
         )
     assert called == []
     assert prefix is None
+
+
+def test_edit_followup_targets_newest_active_source_not_stale_chat_scaffold(tmp_path) -> None:
+    """Preview uses newest source; edits must target the same snapshot."""
+    from datetime import datetime, timedelta, timezone
+
+    def _iso(seconds_ago: int) -> str:
+        return (
+            datetime.now(timezone.utc) - timedelta(seconds=seconds_ago)
+        ).isoformat().replace("+00:00", "Z")
+
+    store = BuilderSourceStore(store_path=tmp_path / "dual_source.json")
+    set_builder_source_store_for_tests(store)
+    ws, pid = "wdual", "pdual"
+    baseline = _sample_calc_snapshot_files()
+
+    scaffold = ProjectSource(
+        workspace_id=ws,
+        project_id=pid,
+        kind="chat_scaffold",
+        active_snapshot_id="snap_scaffold",
+        updated_at=_iso(120),
+        created_at=_iso(120),
+    )
+    store.upsert_project_source(scaffold)
+    store.upsert_source_snapshot(
+        SourceSnapshot(
+            id="snap_scaffold",
+            workspace_id=ws,
+            project_id=pid,
+            project_source_id=scaffold.id,
+            manifest={"kind": "inline_text_bundle", "entries": [], "inline_files": baseline},
+        ),
+    )
+
+    native = ProjectSource(
+        workspace_id=ws,
+        project_id=pid,
+        kind="ham_native_builder",
+        active_snapshot_id="snap_native",
+        updated_at=_iso(0),
+        created_at=_iso(0),
+    )
+    store.upsert_project_source(native)
+    store.upsert_source_snapshot(
+        SourceSnapshot(
+            id="snap_native",
+            workspace_id=ws,
+            project_id=pid,
+            project_source_id=native.id,
+            manifest={"kind": "inline_text_bundle", "entries": [], "inline_files": baseline},
+        ),
+    )
+
+    captured: dict[str, object] = {}
+
+    def _capture_edit(**kwargs: object) -> dict[str, object]:
+        captured["preferred_source"] = kwargs.get("preferred_source")
+        snap = kwargs.get("active_snapshot")
+        return {
+            "builder_edit_worker": {"applied": True},
+            "scaffolded": True,
+            "source_snapshot_id": getattr(snap, "id", ""),
+        }
+
+    with patch("src.ham.builder_edit_worker.run_builder_edit_worker_maybe", side_effect=_capture_edit):
+        prefix, meta = run_builder_happy_path_hook(
+            workspace_id=ws,
+            project_id=pid,
+            session_id="sess_dual",
+            last_user_plain="change the header color to blue",
+            ham_actor=_actor(),
+        )
+
+    preferred = captured.get("preferred_source")
+    assert preferred is not None
+    assert getattr(preferred, "kind", None) == "ham_native_builder"
+    assert getattr(preferred, "active_snapshot_id", None) == "snap_native"
+    assert meta.get("scaffolded") is True
+    assert prefix is not None

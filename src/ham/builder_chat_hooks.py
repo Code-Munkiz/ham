@@ -39,6 +39,14 @@ from src.ham.builder_mutation_router import classify_builder_project_action, res
 _LOG = logging.getLogger(__name__)
 
 
+def _preferred_active_project_source(source_rows: list[Any]) -> Any | None:
+    """Match preview/status: newest source with an active snapshot wins."""
+    for row in source_rows:
+        if str(getattr(row, "active_snapshot_id", "") or "").strip():
+            return row
+    return source_rows[0] if source_rows else None
+
+
 def _looks_like_followup_edit(last_user_plain: str) -> bool:
     text = (last_user_plain or "").strip().lower()
     if not text:
@@ -745,10 +753,7 @@ def run_builder_happy_path_hook(
 
     store = get_builder_source_store()
     source_rows = store.list_project_sources(workspace_id=ws, project_id=pid)
-    preferred_for_directive = next(
-        (row for row in source_rows if str(row.kind or "").strip().lower() == "chat_scaffold"),
-        source_rows[0] if source_rows else None,
-    )
+    preferred_for_directive = _preferred_active_project_source(source_rows)
     directive = apply_builder_worker_chat_directives(
         last_user_plain=last_user_plain,
         project_source=preferred_for_directive,
@@ -760,10 +765,7 @@ def run_builder_happy_path_hook(
     has_active_snapshot = any(bool(row.active_snapshot_id) for row in source_rows)
     active_template: str | None = None
     if has_active_snapshot:
-        _pref = next(
-            (row for row in source_rows if str(row.kind or "").strip().lower() == "chat_scaffold"),
-            source_rows[0] if source_rows else None,
-        )
+        _pref = _preferred_active_project_source(source_rows)
         _aid = str(getattr(_pref, "active_snapshot_id", "") or "").strip() if _pref else ""
         if _aid:
             for _sn in store.list_source_snapshots(workspace_id=ws, project_id=pid):
@@ -910,10 +912,7 @@ def run_builder_happy_path_hook(
         return None, meta
 
     if operation == "update_existing_project" and has_active_snapshot:
-        preferred = next(
-            (row for row in source_rows if str(row.kind or "").strip().lower() == "chat_scaffold"),
-            source_rows[0] if source_rows else None,
-        )
+        preferred = _preferred_active_project_source(source_rows)
         active_id = str(getattr(preferred, "active_snapshot_id", "") or "").strip() if preferred else ""
         if preferred and active_id:
             active_snap = next(
