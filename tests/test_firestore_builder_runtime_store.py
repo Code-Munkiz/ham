@@ -326,3 +326,58 @@ def test_preview_status_ready_when_firestore_runtime_written_by_worker(tmp_path:
     set_project_store_for_tests(None)
     set_builder_source_store_for_tests(None)
     set_builder_runtime_store_for_tests(None)
+
+
+def test_local_preview_does_not_mutate_active_cloud_runtime_session() -> None:
+    client = _FakeFirestoreClient()
+    store = _runtime_store(client)
+    cloud = store.request_cloud_runtime_session(
+        workspace_id="ws_local",
+        project_id="proj_local",
+        source_snapshot_id="ssnp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        requested_by="worker",
+        metadata={"cloud_runtime_job_id": "crjob_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+    )
+    cloud.status = "running"
+    cloud.health = "healthy"
+    store.upsert_runtime_session(cloud)
+    store.upsert_preview_endpoint(
+        PreviewEndpoint(
+            workspace_id="ws_local",
+            project_id="proj_local",
+            runtime_session_id=cloud.id,
+            access_mode="proxy",
+            status="ready",
+            url="http://10.105.129.73:3000/",
+        )
+    )
+
+    local = store.upsert_local_runtime_session(
+        workspace_id="ws_local",
+        project_id="proj_local",
+        source_snapshot_id="ssnp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        message="Local preview connected.",
+    )
+    assert local.id != cloud.id
+    assert local.mode == "local"
+
+    reloaded_cloud = store.get_active_runtime_session(
+        workspace_id="ws_local", project_id="proj_local"
+    )
+    assert reloaded_cloud is not None
+    assert reloaded_cloud.id == cloud.id
+    assert reloaded_cloud.mode == "cloud"
+    assert reloaded_cloud.status == "running"
+
+    stopped, _endpoint = store.clear_local_preview(workspace_id="ws_local", project_id="proj_local")
+    assert stopped is not None
+    assert stopped.id == local.id
+    assert stopped.status == "stopped"
+
+    reloaded_cloud = store.get_active_runtime_session(
+        workspace_id="ws_local", project_id="proj_local"
+    )
+    assert reloaded_cloud is not None
+    assert reloaded_cloud.id == cloud.id
+    assert reloaded_cloud.mode == "cloud"
+    assert reloaded_cloud.status == "running"

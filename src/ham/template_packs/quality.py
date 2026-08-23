@@ -258,7 +258,6 @@ def evaluate_workspace_visual_quality(
             has_marker = (
                 f'data-ham-section="{marker}"' in combined
                 or f"data-ham-section='{marker}'" in combined
-                or f"{{/* {marker}" in combined.lower()
             )
             if not has_marker:
                 issues.append(
