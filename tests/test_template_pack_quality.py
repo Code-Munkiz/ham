@@ -217,3 +217,31 @@ def test_saas_pack_uses_remix_moderately_directive() -> None:
     assert pack.manifest.ai_directive == "remix_moderately"
     instruction = template_pack_hermes_instruction(pack)
     assert "remix moderately" in instruction.lower()
+
+
+def test_quality_gate_rejects_jsx_comment_section_stubs() -> None:
+    """JSX comments like {/* hero */} must not satisfy required section markers."""
+    pack = load_template_pack(default_template_packs_root() / "landing" / "saas-clean")
+    files = {
+        "src/main.tsx": "import './index.css';\nimport App from './App';\n",
+        "src/index.css": "@tailwind base; @tailwind components; @tailwind utilities;\n",
+        "src/App.tsx": (
+            "export default function App() {\n"
+            "  return (\n"
+            '    <main className="min-h-screen bg-slate-950 text-white p-8 sm:p-12 md:p-16">\n'
+            "      {/* hero */}\n"
+            "      {/* services */}\n"
+            "      {/* process */}\n"
+            "      {/* testimonial */}\n"
+            "      {/* cta */}\n"
+            '      <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 '
+            'rounded-full shadow-lg p-4">Hello</h1>\n'
+            '      <section className="rounded shadow border p-4">'
+            '<button className="btn">Go</button></section>\n'
+            "    </main>\n"
+            "  );\n"
+            "}\n"
+        ),
+    }
+    result = evaluate_workspace_visual_quality(files, pack=pack)
+    assert result.ok is False
