@@ -520,6 +520,52 @@ def test_clear_local_preview_returns_not_connected(tmp_path: Path) -> None:
     set_builder_runtime_store_for_tests(None)
 
 
+def test_local_preview_does_not_mutate_active_cloud_runtime_session(tmp_path: Path) -> None:
+    ws_store, ws_id, _, project_id = _seed_project_context(tmp_path)
+    runtime_store = BuilderRuntimeStore(store_path=tmp_path / "builder_runtime.json")
+    set_builder_runtime_store_for_tests(runtime_store)
+    cloud_runtime = runtime_store.upsert_runtime_session(
+        RuntimeSession(
+            workspace_id=ws_id,
+            project_id=project_id,
+            mode="cloud",
+            status="running",
+            health="unknown",
+            message="Cloud sandbox running",
+        )
+    )
+    client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
+    res = client.post(
+        f"/api/workspaces/{ws_id}/projects/{project_id}/builder/local-preview",
+        json={"preview_url": "http://localhost:3000"},
+    )
+    assert res.status_code == 200, res.text
+    reloaded_cloud = runtime_store.get_active_runtime_session(
+        workspace_id=ws_id,
+        project_id=project_id,
+    )
+    assert reloaded_cloud is not None
+    assert reloaded_cloud.id == cloud_runtime.id
+    assert reloaded_cloud.mode == "cloud"
+    assert reloaded_cloud.status == "running"
+    assert reloaded_cloud.message == "Cloud sandbox running"
+
+    clear = client.delete(f"/api/workspaces/{ws_id}/projects/{project_id}/builder/local-preview")
+    assert clear.status_code == 200, clear.text
+    after_clear_cloud = runtime_store.get_active_runtime_session(
+        workspace_id=ws_id,
+        project_id=project_id,
+    )
+    assert after_clear_cloud is not None
+    assert after_clear_cloud.id == cloud_runtime.id
+    assert after_clear_cloud.mode == "cloud"
+    assert after_clear_cloud.status == "running"
+
+    set_project_store_for_tests(None)
+    set_builder_source_store_for_tests(None)
+    set_builder_runtime_store_for_tests(None)
+
+
 def test_preview_status_ready_after_registration(tmp_path: Path) -> None:
     ws_store, ws_id, _, project_id = _seed_project_context(tmp_path)
     client = TestClient(_build_app(actor=_actor("user_a", org_id="org_a"), ws_store=ws_store))
