@@ -49,6 +49,10 @@ _SA_ENV = "HAM_CLOUD_TASKS_SERVICE_ACCOUNT"
 _WORKER_URL_ENV = "HAM_NATIVE_BUILD_WORKER_URL"
 _AUDIENCE_ENV = "HAM_DISPATCHER_AUDIENCE"
 
+# Cloud Tasks HTTP default dispatch deadline is 10 minutes. Native Hermes builds can
+# exceed that, which triggers a retry while the first worker is still running.
+_NATIVE_BUILD_DISPATCH_DEADLINE_SECONDS = 30 * 60
+
 
 class NativeBuildExecuteEnvelope(BaseModel):
     """Body pushed to the native-build worker endpoint (no build-kit internals)."""
@@ -159,8 +163,17 @@ class NativeBuildEnqueueCloudTasks:
     def enqueue(self, envelope: NativeBuildExecuteEnvelope) -> None:
         self._ensure_config()
         queue_path = self._queue_path()
+        try:
+            from google.protobuf import duration_pb2  # noqa: PLC0415
+        except ImportError as exc:  # pragma: no cover
+            raise NativeBuildEnqueueError(
+                "protobuf is required when HAM_NATIVE_BUILD_DISPATCH=cloud_tasks."
+            ) from exc
         task: dict[str, Any] = {
             "name": f"{queue_path}/tasks/{envelope.import_job_id}",
+            "dispatch_deadline": duration_pb2.Duration(
+                seconds=_NATIVE_BUILD_DISPATCH_DEADLINE_SECONDS
+            ),
             "http_request": {
                 "http_method": "POST",
                 "url": self._worker_url,
