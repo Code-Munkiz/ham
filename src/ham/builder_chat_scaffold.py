@@ -30,6 +30,7 @@ from typing import Any
 
 from src.ham.builder_artifact_verifier import verify_builder_scaffold_artifact
 from src.ham.builder_chat_intent import classify_builder_chat_intent, looks_like_explicit_no_build
+from src.ham.builder_mutation_router import resolve_preferred_project_source_for_edit
 from src.ham.clerk_auth import HamActor
 from src.persistence.builder_source_store import (
     ImportJob,
@@ -1780,10 +1781,7 @@ def maybe_chat_scaffold_for_turn(
     previous_calculator_meta: dict[str, Any] = {}
     active_snapshot_id_for_verification: str | None = None
     if operation == "update_existing_project":
-        preferred_source = next(
-            (row for row in source_rows_existing if str(row.kind or "").strip().lower() == "chat_scaffold"),
-            source_rows_existing[0] if source_rows_existing else None,
-        )
+        preferred_source = resolve_preferred_project_source_for_edit(source_rows_existing)
         active_snapshot_id = str(getattr(preferred_source, "active_snapshot_id", "") or "").strip()
         if active_snapshot_id:
             active_snapshot_id_for_verification = active_snapshot_id

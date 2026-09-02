@@ -238,3 +238,16 @@ def builder_edit_worker_eligible(
         checks = list_calculator_scaffold_verification_checks(user_plain)
         return len(checks) == 0
     return True
+
+
+def resolve_preferred_project_source_for_edit(source_rows: list[Any]) -> Any | None:
+    """Pick the project source follow-up edits should target.
+
+    ``source_rows`` is expected newest-first (``list_project_sources`` order).
+    Prefer the newest row with an active snapshot so native builds supersede
+    legacy chat scaffolds without applying edits to a stale snapshot.
+    """
+    for row in source_rows:
+        if str(getattr(row, "active_snapshot_id", "") or "").strip():
+            return row
+    return source_rows[0] if source_rows else None
