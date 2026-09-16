@@ -56,6 +56,7 @@ SDK bridge attaches to existing `bc-*` agents; **`HAM_CURSOR_SDK_BRIDGE_ENABLED`
 | [BRANCH_PROTECTION_SETUP.md](BRANCH_PROTECTION_SETUP.md) | GitHub branch protection / ruleset checklist for `main` (owner action; complements CI guardrails) |
 | [HAM_CLOUD_AGENT_ROUTING_SMOKE.md](HAM_CLOUD_AGENT_ROUTING_SMOKE.md) | Routing / smoke notes for Cloud Agent paths |
 | [RUNBOOK_HAM_MODEL_RECOVERY.md](RUNBOOK_HAM_MODEL_RECOVERY.md) | Model / gateway recovery runbook |
+| [STAGING_PARK_HERMES_OPENROUTER.md](STAGING_PARK_HERMES_OPENROUTER.md) | **Parked (2026-09-16):** stop staging Hermes/OpenRouter spend; restore checklist |
 | [api/README.md](api/README.md) | Committed FastAPI OpenAPI snapshot (`docs/api/openapi.json`) + regen script |
 
 **HAM operator CLI** (diagnostics and packaging helpers, not chat/missions): `python -m src.ham_cli` or `./scripts/ham` — module tree `src/ham_cli/`; see [`AGENTS.md`](../AGENTS.md).
