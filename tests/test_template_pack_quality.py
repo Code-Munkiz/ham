@@ -217,3 +217,70 @@ def test_saas_pack_uses_remix_moderately_directive() -> None:
     assert pack.manifest.ai_directive == "remix_moderately"
     instruction = template_pack_hermes_instruction(pack)
     assert "remix moderately" in instruction.lower()
+
+
+def _comment_stub_app_tsx() -> str:
+    """App styled enough to pass heuristics but with JSX comment stubs instead of markers."""
+    return """
+export default function App() {
+  return (
+    <main className="min-h-screen bg-slate-950 text-white p-8">
+      {/* hero */}
+      <section className="rounded-lg shadow-lg border p-6 bg-gradient-to-r from-blue-500 to-purple-600">
+        <h1 className="text-4xl font-bold md:text-5xl lg:text-6xl">Welcome</h1>
+        <p className="text-gray-200 mt-4">Tagline here with enough text for length</p>
+        <button className="mt-4 rounded shadow border px-4 py-2">Get Started</button>
+      </section>
+      {/* services */}
+      <section className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <article className="rounded shadow border p-4"><h2>Service 1</h2></article>
+        <article className="rounded shadow border p-4"><h2>Service 2</h2></article>
+        <article className="rounded shadow border p-4"><h2>Service 3</h2></article>
+      </section>
+      {/* process */}
+      <section className="mt-8 rounded shadow border p-6 bg-slate-900">
+        <h2 className="text-2xl font-semibold">Process</h2>
+      </section>
+      {/* testimonial */}
+      <section className="mt-8 rounded shadow border p-6">
+        <blockquote>Great product</blockquote>
+      </section>
+      {/* cta */}
+      <section className="mt-8 rounded shadow border p-6">
+        <a href="#" className="rounded shadow border px-4 py-2">Sign up</a>
+      </section>
+    </main>
+  );
+}
+"""
+
+
+def test_quality_gate_rejects_jsx_comment_stub_sections() -> None:
+    pack = load_template_pack(default_template_packs_root() / "landing" / "saas-clean")
+    files = {
+        "src/main.tsx": "import './index.css'; import App from './App';",
+        "src/index.css": "@tailwind base; @tailwind components; @tailwind utilities;",
+        "src/App.tsx": _comment_stub_app_tsx(),
+    }
+    assert "data-ham-section" not in files["src/App.tsx"]
+    result = evaluate_workspace_visual_quality(files, pack=pack)
+    assert result.ok is False
+    missing = [i for i in result.issues if i.code == "missing_section"]
+    assert len(missing) >= 3
+
+
+def test_restore_missing_sections_ignores_jsx_comment_stubs() -> None:
+    pack = load_template_pack(default_template_packs_root() / "landing" / "agency-modern")
+    files = {
+        "src/main.tsx": "import './index.css'; import App from './App';",
+        "src/index.css": "@tailwind base; @tailwind components; @tailwind utilities;",
+        "src/App.tsx": _comment_stub_app_tsx(),
+    }
+    before = evaluate_workspace_visual_quality(files, pack=pack)
+    assert before.ok is False
+
+    restored = restore_missing_pack_sections(files, pack=pack, issues=before.issues)
+    assert restored is not None
+    updated_files, restored_ids = restored
+    assert "hero" in restored_ids
+    assert 'data-ham-section="hero"' in updated_files["src/App.tsx"]
