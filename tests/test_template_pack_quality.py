@@ -217,3 +217,26 @@ def test_saas_pack_uses_remix_moderately_directive() -> None:
     assert pack.manifest.ai_directive == "remix_moderately"
     instruction = template_pack_hermes_instruction(pack)
     assert "remix moderately" in instruction.lower()
+
+
+def test_quality_gate_rejects_jsx_comment_section_stubs() -> None:
+    """JSX comments like {/* hero */} must not satisfy required section markers."""
+    import re
+
+    pack = load_template_pack(default_template_packs_root() / "landing" / "saas-clean")
+    files = dict(pack.files)
+    app = files["src/App.tsx"]
+    stubbed = re.sub(
+        r'<section[^>]*\bdata-ham-section=["\'][^"\']+["\'][^>]*>.*?</section>',
+        lambda m: "{/* "
+        + re.search(r'data-ham-section=["\']([^"\']+)["\']', m.group(0)).group(1)
+        + " */}",
+        app,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    files["src/App.tsx"] = stubbed
+    assert "data-ham-section" not in stubbed
+
+    result = evaluate_workspace_visual_quality(files, pack=pack)
+    assert result.ok is False
+    assert any(issue.code == "missing_section" for issue in result.issues)
