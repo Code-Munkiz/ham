@@ -217,3 +217,36 @@ def test_saas_pack_uses_remix_moderately_directive() -> None:
     assert pack.manifest.ai_directive == "remix_moderately"
     instruction = template_pack_hermes_instruction(pack)
     assert "remix moderately" in instruction.lower()
+
+
+def test_quality_gate_rejects_jsx_comment_section_stubs() -> None:
+    """JSX comment placeholders must not satisfy required-section markers."""
+    pack = load_template_pack(default_template_packs_root() / "landing" / "saas-clean")
+    files = {
+        "src/main.tsx": "import './index.css';\n",
+        "src/index.css": "@tailwind base;\n",
+        "src/App.tsx": (
+            "export default function App() {\n"
+            "  return (\n"
+            '    <main className="min-h-screen bg-slate-950 text-white sm:p-4">\n'
+            "      {/* hero */}\n"
+            "      {/* services */}\n"
+            "      {/* process */}\n"
+            "      {/* testimonial */}\n"
+            "      {/* cta */}\n"
+            '      <h1 className="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-blue-500">Hi</h1>\n'
+            '      <section className="rounded-lg border p-4 shadow-md bg-gradient-to-r from-blue-500">\n'
+            '        <article className="card"><h2>One</h2></article>\n'
+            '        <article className="card"><h2>Two</h2></article>\n'
+            '        <article className="card"><h2>Three</h2></article>\n'
+            '        <button className="btn rounded shadow">Click</button>\n'
+            "      </section>\n"
+            "    </main>\n"
+            "  );\n"
+            "}\n"
+        ),
+    }
+    result = evaluate_workspace_visual_quality(files, pack=pack)
+    assert result.ok is False
+    missing = [i for i in result.issues if i.code == "missing_section"]
+    assert len(missing) == len(pack.manifest.quality_gates.required_sections)
