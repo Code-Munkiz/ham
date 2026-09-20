@@ -182,13 +182,41 @@ def test_repair_instruction_lists_exact_missing_sections() -> None:
     assert "low_contrast" in instruction
 
 
-def test_restore_missing_cta_section_from_pack_template() -> None:
+def test_quality_gate_rejects_jsx_comment_section_stubs() -> None:
+    pack = load_template_pack(default_template_packs_root() / "landing" / "saas-clean")
+    files = {
+        "src/main.tsx": "import './index.css';\nimport App from './App';\n",
+        "src/index.css": "@tailwind base;\n@tailwind components;\n@tailwind utilities;\n",
+        "src/App.tsx": (
+            "export default function App() {\n"
+            "  return (\n"
+            '    <div className="min-h-screen bg-slate-950 text-slate-100">\n'
+            "      <main>\n"
+            "        {/* hero */}\n"
+            "        {/* services */}\n"
+            '        <section className="rounded border p-6 shadow-lg">\n'
+            '          <button className="rounded bg-sky-400 px-4 py-2">Get started</button>\n'
+            "        </section>\n"
+            "        {/* cta */}\n"
+            "      </main>\n"
+            "    </div>\n"
+            "  );\n"
+            "}\n"
+        ),
+    }
+    result = evaluate_workspace_visual_quality(files, pack=pack)
+    assert result.ok is False
+    assert any(issue.code == "missing_section" for issue in result.issues)
+    assert "data-ham-section" not in files["src/App.tsx"]
+
+
+def test_restore_ignores_jsx_comment_stub_when_section_missing() -> None:
     pack = load_template_pack(default_template_packs_root() / "landing" / "agency-modern")
     files = _agency_files()
     app = files["src/App.tsx"]
     cta_start = app.index('<section\n          data-ham-section="cta"')
     main_close = app.rfind("</main>")
-    files["src/App.tsx"] = app[:cta_start] + app[main_close:]
+    files["src/App.tsx"] = app[:cta_start] + "\n        {/* cta */}\n" + app[main_close:]
 
     before = evaluate_workspace_visual_quality(files, pack=pack)
     assert before.ok is False
