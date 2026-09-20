@@ -229,6 +229,68 @@ def test_plan_mode_true_affirmation_continues_into_selected_builder(
     assert prefix is not None
 
 
+def test_plan_mode_true_affirmation_preserves_native_build_context(
+    empty_source_store: BuilderSourceStore,
+    plan_store: BuilderPlanStore,
+) -> None:
+    """Approving a pending plan must pass session/user context into native builds."""
+    ws, pid = "ws_ctx", "proj_ctx"
+    plan = Plan(
+        workspace_id=ws,
+        project_id=pid,
+        user_message="build me a calculator",
+        steps=[Step(title="Scaffold", description="Create files.")],
+        destructive=False,
+        planner_confidence="high",
+        metadata={CHAT_PLAN_MODE_META_KEY: True},
+    )
+    plan_store.upsert_plan(plan)
+    plan_store.upsert_approval_record(PlanApprovalRecord(plan_id=plan.plan_id, state="proposed"))
+    captured: dict[str, str] = {}
+
+    def _capture_start(**kwargs: object) -> dict[str, object]:
+        captured["session_id"] = str(kwargs.get("session_id") or "")
+        captured["user_prompt"] = str(kwargs.get("user_prompt") or "")
+        captured["created_by"] = str(kwargs.get("created_by") or "")
+        return {
+            "builder_intent": "build_or_create",
+            "builder_operation": "build_or_create",
+            "scaffolded": False,
+            "ham_native_builder": {"status": "started"},
+            "native_build_job_id": "ijob_ctx",
+        }
+
+    with (
+        patch("src.ham.builder_chat_hooks._selected_builder_for_workspace", return_value=None),
+        patch("src.ham.builder_chat_hooks.configured_default_builder", return_value=None),
+        patch(
+            "src.ham.builder_native_hermes.start_native_build_job",
+            side_effect=_capture_start,
+        ),
+        patch(
+            "src.ham.builder_chat_scaffold.maybe_chat_scaffold_for_turn",
+            side_effect=_raise_if_scaffold,
+        ),
+    ):
+        prefix, meta = run_builder_happy_path_hook(
+            workspace_id=ws,
+            project_id=pid,
+            session_id="sess_ctx",
+            last_user_plain="build it",
+            ham_actor=_actor("user_ctx"),
+            plan_mode=True,
+        )
+
+    assert meta.get("builder_plan_continuation") is True
+    assert captured["user_prompt"] == "build me a calculator"
+    assert captured["session_id"] == "sess_ctx"
+    assert captured["created_by"] == "user_ctx"
+    assert meta.get("session_id") == "sess_ctx"
+    assert meta.get("effective_plain") == "build me a calculator"
+    assert meta.get("created_by") == "user_ctx"
+    assert prefix is not None
+
+
 def test_plan_mode_true_yes_without_pending_plan_does_not_scaffold(
     empty_source_store: BuilderSourceStore,
     plan_store: BuilderPlanStore,
