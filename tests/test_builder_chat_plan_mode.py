@@ -178,6 +178,56 @@ def test_plan_mode_true_edit_intent_returns_plan_not_scaffold(
     assert pending.user_message == "change the header color to blue"
 
 
+def test_plan_mode_true_affirmation_preserves_native_build_context(
+    empty_source_store: BuilderSourceStore,
+    plan_store: BuilderPlanStore,
+) -> None:
+    ws, pid = "ws_ctx", "proj_ctx"
+    plan = Plan(
+        workspace_id=ws,
+        project_id=pid,
+        user_message="build me a calculator",
+        steps=[Step(title="Scaffold", description="Create files.")],
+        destructive=False,
+        planner_confidence="high",
+        metadata={CHAT_PLAN_MODE_META_KEY: True},
+    )
+    plan_store.upsert_plan(plan)
+    plan_store.upsert_approval_record(PlanApprovalRecord(plan_id=plan.plan_id, state="proposed"))
+    with (
+        patch("src.ham.builder_chat_hooks._selected_builder_for_workspace", return_value=None),
+        patch("src.ham.builder_chat_hooks.configured_default_builder", return_value=None),
+        patch(
+            "src.ham.builder_native_hermes.start_native_build_job",
+            return_value={
+                "builder_intent": "build_or_create",
+                "builder_operation": "build_or_create",
+                "scaffolded": False,
+                "ham_native_builder": {"status": "started"},
+            },
+        ) as native_start,
+        patch(
+            "src.ham.builder_chat_scaffold.maybe_chat_scaffold_for_turn",
+            side_effect=_raise_if_scaffold,
+        ),
+    ):
+        prefix, meta = run_builder_happy_path_hook(
+            workspace_id=ws,
+            project_id=pid,
+            session_id="sess_ctx",
+            last_user_plain="build it",
+            ham_actor=_actor("user_ctx"),
+            plan_mode=True,
+        )
+    native_start.assert_called_once()
+    call_kwargs = native_start.call_args.kwargs
+    assert call_kwargs["session_id"] == "sess_ctx"
+    assert call_kwargs["user_prompt"] == "build me a calculator"
+    assert call_kwargs["created_by"] == "user_ctx"
+    assert meta.get("builder_plan_continuation") is True
+    assert prefix is not None
+
+
 def test_plan_mode_true_affirmation_continues_into_selected_builder(
     empty_source_store: BuilderSourceStore,
     plan_store: BuilderPlanStore,
