@@ -19,7 +19,7 @@
     "format:check": "prettier --check \"**/*.{cjs,js,json,md}\""
   },
   "dependencies": {
-    "ws": "^8.21.0"
+    "ws": "^8.21.1"
   },
   "build": {
     "appId": "io.github.codemunkiz.ham-desktop",
@@ -81,7 +81,7 @@
   "devDependencies": {
     "electron": "^34.2.0",
     "electron-builder": "^25.1.8",
-    "prettier": "^3.3.3",
+    "prettier": "^3.9.6",
     "puppeteer-core": "^24.0.0"
   },
   "engines": {
