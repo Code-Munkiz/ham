@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -35,7 +36,7 @@ from src.ham.builder_native_hermes import (
     execute_native_build_job,
 )
 from src.ham.native_build_worker_enqueue import NativeBuildExecuteEnvelope
-from src.persistence.builder_source_store import get_builder_source_store
+from src.persistence.builder_source_store import ImportJob, get_builder_source_store
 from src.persistence.native_build_context_store import get_native_build_context_store
 
 _LOG = logging.getLogger(__name__)
@@ -43,9 +44,34 @@ _LOG = logging.getLogger(__name__)
 router = APIRouter(tags=["internal"])
 
 _TERMINAL_STATUSES = frozenset({"succeeded", "failed"})
+_RUNNING_RECLAIM_AFTER = timedelta(minutes=20)
 
 _WORKER_ERROR_CODE = "HAM_NATIVE_BUILDER_V2_EXECUTOR_ERROR"
 _WORKER_ERROR_MESSAGE = "HAM Native Builder could not complete the native build."
+
+
+def _parse_utc_iso(value: str) -> datetime | None:
+    raw = (value or "").strip()
+    if not raw:
+        return None
+    try:
+        if raw.endswith("Z"):
+            raw = raw[:-1] + "+00:00"
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def _import_job_actively_running(job: ImportJob) -> bool:
+    """True when another worker likely still owns this import job."""
+    if job.status != "running":
+        return False
+    updated = _parse_utc_iso(job.updated_at)
+    if updated is None:
+        return True
+    if updated.tzinfo is None:
+        updated = updated.replace(tzinfo=UTC)
+    return datetime.now(UTC) - updated < _RUNNING_RECLAIM_AFTER
 
 
 @router.post("/api/internal/native-build/execute")
@@ -108,6 +134,18 @@ async def execute_native_build(
             "native-build worker: import_job_id=%s already terminal (%s) — idempotent skip",
             context.import_job_id,
             job.status,
+        )
+        return {
+            "ok": True,
+            "import_job_id": context.import_job_id,
+            "status": job.status,
+            "skipped": True,
+        }
+
+    if _import_job_actively_running(job):
+        _LOG.info(
+            "native-build worker: import_job_id=%s already running — idempotent skip",
+            context.import_job_id,
         )
         return {
             "ok": True,
