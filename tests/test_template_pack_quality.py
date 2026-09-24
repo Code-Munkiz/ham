@@ -170,6 +170,20 @@ def test_materialize_not_called_when_quality_fails_before_snapshot(
     assert result.source_snapshot_id is None
 
 
+def test_quality_gate_rejects_jsx_comment_section_stubs() -> None:
+    pack = load_template_pack(default_template_packs_root() / "landing" / "agency-modern")
+    files = _agency_files()
+    app = files["src/App.tsx"]
+    cta_start = app.index('<section\n          data-ham-section="cta"')
+    main_close = app.rfind("</main>")
+    stub = "{/* cta section */}\n"
+    files["src/App.tsx"] = app[:cta_start] + stub + app[main_close:]
+
+    result = evaluate_workspace_visual_quality(files, pack=pack)
+    assert result.ok is False
+    assert any(i.code == "missing_section" and "cta" in i.detail for i in result.issues)
+
+
 def test_repair_instruction_lists_exact_missing_sections() -> None:
     issues = (
         TemplatePackQualityIssue("missing_section", "Required section not found: cta"),
