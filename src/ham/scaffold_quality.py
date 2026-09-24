@@ -4643,6 +4643,21 @@ def _merge_repair_file_changes(
     return merged
 
 
+def _parse_repair_overlay(
+    raw: Any,
+    *,
+    base_file_changes: list[tuple[str, str]],
+    parse_result: Any,
+) -> Any:
+    """Parse a repair LLM response and merge onto *base_file_changes* without dropping paths."""
+    parsed = parse_result(raw)
+    parsed.file_changes = _merge_repair_file_changes(
+        list(base_file_changes),
+        list(parsed.file_changes),
+    )
+    return parsed
+
+
 def maybe_repair_generated_scaffold(
     result: Any,
     *,
@@ -4723,7 +4738,11 @@ def maybe_repair_generated_scaffold(
                 api_key_override=api_key,
                 timeout_sec=scaffold_timeout,
             )
-            repaired = parse_result(raw)
+            repaired = _parse_repair_overlay(
+                raw,
+                base_file_changes=list(repaired.file_changes),
+                parse_result=parse_result,
+            )
             remaining = inspect_generated_scaffold_quality(repaired.file_changes, plan=plan)
 
         # Deterministic SaaS fallback to guarantee gate-critical static semantics.
@@ -4768,7 +4787,11 @@ def maybe_repair_generated_scaffold(
                 api_key_override=api_key,
                 timeout_sec=scaffold_timeout,
             )
-            repaired = parse_result(raw)
+            repaired = _parse_repair_overlay(
+                raw,
+                base_file_changes=list(repaired.file_changes),
+                parse_result=parse_result,
+            )
             remaining = inspect_generated_scaffold_quality(repaired.file_changes, plan=plan)
 
         # Deterministic admin fallback to guarantee gate-critical static semantics.
@@ -4814,7 +4837,11 @@ def maybe_repair_generated_scaffold(
                 api_key_override=api_key,
                 timeout_sec=scaffold_timeout,
             )
-            repaired = parse_result(raw)
+            repaired = _parse_repair_overlay(
+                raw,
+                base_file_changes=list(repaired.file_changes),
+                parse_result=parse_result,
+            )
             remaining = inspect_generated_scaffold_quality(repaired.file_changes, plan=plan)
 
         # Deterministic Sales Ops fallback to guarantee gate-critical static semantics.
