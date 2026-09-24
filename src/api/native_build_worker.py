@@ -43,6 +43,8 @@ _LOG = logging.getLogger(__name__)
 router = APIRouter(tags=["internal"])
 
 _TERMINAL_STATUSES = frozenset({"succeeded", "failed"})
+# Cloud Tasks may retry after a timeout while the first worker is still executing.
+_IN_PROGRESS_STATUSES = frozenset({"running"})
 
 _WORKER_ERROR_CODE = "HAM_NATIVE_BUILDER_V2_EXECUTOR_ERROR"
 _WORKER_ERROR_MESSAGE = "HAM Native Builder could not complete the native build."
@@ -114,6 +116,20 @@ async def execute_native_build(
             "import_job_id": context.import_job_id,
             "status": job.status,
             "skipped": True,
+        }
+
+    if job.status in _IN_PROGRESS_STATUSES:
+        _LOG.info(
+            "native-build worker: import_job_id=%s already in progress (%s) — idempotent skip",
+            context.import_job_id,
+            job.status,
+        )
+        return {
+            "ok": True,
+            "import_job_id": context.import_job_id,
+            "status": job.status,
+            "skipped": True,
+            "in_progress": True,
         }
 
     try:
