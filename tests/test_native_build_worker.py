@@ -357,6 +357,33 @@ def test_worker_executes_job_by_id_and_materializes_snapshot(monkeypatch, tmp_pa
         set_builder_source_store_for_tests(None)
 
 
+def test_worker_idempotent_skip_when_running(monkeypatch, tmp_path) -> None:
+    _configure_oidc(monkeypatch)
+
+    def _must_not_run(**_kwargs: object):
+        raise AssertionError("executor must not run for a running job")
+
+    monkeypatch.setattr("src.ham.builder_native_hermes.execute_native_build_job", _must_not_run)
+    store = BuilderSourceStore(store_path=tmp_path / "s.json")
+    set_builder_source_store_for_tests(store)
+    try:
+        job_id = _seed_context(store, job_id="seed")
+        store.mark_import_job_running(
+            import_job_id=job_id,
+            phase=native_hermes.NATIVE_BUILD_PHASE_RUNNING,
+        )
+        client = TestClient(_build_app(), raise_server_exceptions=False)
+        res = client.post(
+            "/api/internal/native-build/execute",
+            json={"import_job_id": job_id, "workspace_id": "ws", "project_id": "proj"},
+            headers={"Authorization": f"Bearer {_valid_token()}"},
+        )
+    finally:
+        set_builder_source_store_for_tests(None)
+    assert res.status_code == 200
+    assert res.json()["skipped"] is True
+
+
 def test_worker_idempotent_skip_when_terminal(monkeypatch, tmp_path) -> None:
     _configure_oidc(monkeypatch)
 
