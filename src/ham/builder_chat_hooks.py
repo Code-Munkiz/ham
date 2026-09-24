@@ -34,7 +34,11 @@ from src.ham.builder_chat_intent import (
     is_builder_status_diagnostic_turn,
     looks_like_explicit_no_build,
 )
-from src.ham.builder_mutation_router import classify_builder_project_action, resolve_snapshot_project_template
+from src.ham.builder_mutation_router import (
+    classify_builder_project_action,
+    resolve_preferred_project_source_for_edit,
+    resolve_snapshot_project_template,
+)
 
 _LOG = logging.getLogger(__name__)
 
@@ -745,10 +749,7 @@ def run_builder_happy_path_hook(
 
     store = get_builder_source_store()
     source_rows = store.list_project_sources(workspace_id=ws, project_id=pid)
-    preferred_for_directive = next(
-        (row for row in source_rows if str(row.kind or "").strip().lower() == "chat_scaffold"),
-        source_rows[0] if source_rows else None,
-    )
+    preferred_for_directive = resolve_preferred_project_source_for_edit(source_rows)
     directive = apply_builder_worker_chat_directives(
         last_user_plain=last_user_plain,
         project_source=preferred_for_directive,
@@ -760,10 +761,7 @@ def run_builder_happy_path_hook(
     has_active_snapshot = any(bool(row.active_snapshot_id) for row in source_rows)
     active_template: str | None = None
     if has_active_snapshot:
-        _pref = next(
-            (row for row in source_rows if str(row.kind or "").strip().lower() == "chat_scaffold"),
-            source_rows[0] if source_rows else None,
-        )
+        _pref = resolve_preferred_project_source_for_edit(source_rows)
         _aid = str(getattr(_pref, "active_snapshot_id", "") or "").strip() if _pref else ""
         if _aid:
             for _sn in store.list_source_snapshots(workspace_id=ws, project_id=pid):
@@ -864,8 +862,10 @@ def run_builder_happy_path_hook(
                 active_template=active_template,
             )
             meta = {
+                **meta,
                 "builder_intent": base_intent,
                 "builder_action_decision": action_decision.to_safe_dict(),
+                "effective_plain": effective_plain,
             }
             advice_only = action_decision.kind == "answer_only"
             wants_update = (not advice_only) and (
@@ -910,10 +910,7 @@ def run_builder_happy_path_hook(
         return None, meta
 
     if operation == "update_existing_project" and has_active_snapshot:
-        preferred = next(
-            (row for row in source_rows if str(row.kind or "").strip().lower() == "chat_scaffold"),
-            source_rows[0] if source_rows else None,
-        )
+        preferred = resolve_preferred_project_source_for_edit(source_rows)
         active_id = str(getattr(preferred, "active_snapshot_id", "") or "").strip() if preferred else ""
         if preferred and active_id:
             active_snap = next(

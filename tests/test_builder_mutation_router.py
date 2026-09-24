@@ -5,8 +5,10 @@ import pytest
 from src.ham.builder_mutation_router import (
     builder_edit_worker_eligible,
     classify_builder_project_action,
+    resolve_preferred_project_source_for_edit,
 )
 from src.ham.builder_artifact_verifier import list_calculator_scaffold_verification_checks
+from src.persistence.builder_source_store import ProjectSource
 
 
 @pytest.mark.parametrize(
@@ -174,3 +176,24 @@ def test_direct_delete_still_needs_clarification_or_ambiguous(prompt: str) -> No
     )
     assert d.kind == "ask_clarification"
     assert d.destructive is True
+
+
+def test_preferred_edit_source_prefers_newest_active_snapshot() -> None:
+    scaffold = ProjectSource(
+        workspace_id="w",
+        project_id="p",
+        kind="chat_scaffold",
+        active_snapshot_id="snap_scaffold",
+        updated_at="2026-01-01T00:00:00Z",
+    )
+    native = ProjectSource(
+        workspace_id="w",
+        project_id="p",
+        kind="ham_native_builder",
+        active_snapshot_id="snap_native",
+        updated_at="2026-01-02T00:00:00Z",
+    )
+    picked = resolve_preferred_project_source_for_edit([native, scaffold])
+    assert picked is not None
+    assert picked.kind == "ham_native_builder"
+    assert picked.active_snapshot_id == "snap_native"
