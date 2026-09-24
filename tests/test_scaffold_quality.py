@@ -3281,6 +3281,50 @@ class TestMaybeRepairGeneratedScaffold:
         assert out.file_changes[0][1] == _STUB_REDUCER
         assert out.file_changes[1][1] == _IMPLEMENTED_REDUCER
 
+    def test_escalated_saas_repair_merges_partial_file_response(self):
+        class _Result:
+            file_changes = [
+                ("src/App.tsx", _SAAS_ASYNC_FETCH_APP),
+                ("package.json", '{"name":"keep-me"}'),
+                ("src/main.tsx", "import App from './App';"),
+            ]
+
+        class _Parsed:
+            def __init__(self, file_changes: list[tuple[str, str]]) -> None:
+                self.file_changes = file_changes
+
+        calls = 0
+
+        def _complete_chat(*_a, **_k):
+            nonlocal calls
+            calls += 1
+            return "{}"
+
+        def _parse(_raw):
+            nonlocal calls
+            if calls == 1:
+                return _Parsed([("src/App.tsx", _SAAS_ASYNC_FETCH_APP)])
+            return _Parsed([("src/App.tsx", _SAAS_GOOD_STATES_AND_TABLE_APP)])
+
+        plan = _plan()
+        plan.user_message = _SAAS_GATE_PROMPT
+
+        out = maybe_repair_generated_scaffold(
+            _Result(),
+            plan=plan,
+            api_key="key",
+            model="model",
+            scaffold_timeout=30.0,
+            base_system_prompt="BASE",
+            parse_result=_parse,
+            complete_chat=_complete_chat,
+        )
+        assert calls == 2
+        file_map = dict(out.file_changes)
+        assert file_map["package.json"] == '{"name":"keep-me"}'
+        assert file_map["src/main.tsx"] == "import App from './App';"
+        assert file_map["src/App.tsx"] == _SAAS_GOOD_STATES_AND_TABLE_APP
+
     def test_logs_remaining_issues_after_repair(self, caplog):
         import logging
 
