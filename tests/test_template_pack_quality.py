@@ -217,3 +217,61 @@ def test_saas_pack_uses_remix_moderately_directive() -> None:
     assert pack.manifest.ai_directive == "remix_moderately"
     instruction = template_pack_hermes_instruction(pack)
     assert "remix moderately" in instruction.lower()
+
+
+def _comment_stub_app() -> str:
+    return """
+export default function App() {
+  return (
+    <main className="min-h-screen bg-slate-900 text-white p-4 sm:p-8">
+      {/* hero */}
+      {/* services */}
+      {/* process */}
+      {/* testimonial */}
+      {/* cta */}
+      <h1 className="text-4xl font-bold">Hello</h1>
+      <button className="rounded shadow border btn">Go</button>
+    </main>
+  );
+}
+"""
+
+
+def _comment_stub_files() -> dict[str, str]:
+    return {
+        "src/main.tsx": "import './index.css';\nimport App from './App';\n",
+        "src/index.css": (
+            ".x { @apply bg-slate-900 text-white p-4 m-2 rounded shadow border flex "
+            "sm:flex-row min-h-screen from-blue-500 to-purple-500 gap-4 grid font-bold "
+            "leading-tight tracking-wide }\n"
+        ),
+        "src/App.tsx": _comment_stub_app(),
+    }
+
+
+def test_quality_gate_rejects_jsx_comment_section_stubs_saas_clean() -> None:
+    pack = load_template_pack(default_template_packs_root() / "landing" / "saas-clean")
+    result = evaluate_workspace_visual_quality(_comment_stub_files(), pack=pack)
+    assert result.ok is False
+    missing = [i for i in result.issues if i.code == "missing_section"]
+    assert len(missing) == 3
+
+
+def test_quality_gate_rejects_jsx_comment_section_stubs_agency_modern() -> None:
+    pack = load_template_pack(default_template_packs_root() / "landing" / "agency-modern")
+    result = evaluate_workspace_visual_quality(_comment_stub_files(), pack=pack)
+    assert result.ok is False
+    missing = [i for i in result.issues if i.code == "missing_section"]
+    assert len(missing) >= 5
+
+
+def test_restore_does_not_skip_sections_when_only_jsx_comments_present() -> None:
+    pack = load_template_pack(default_template_packs_root() / "landing" / "agency-modern")
+    files = _comment_stub_files()
+    quality = evaluate_workspace_visual_quality(files, pack=pack)
+    assert quality.ok is False
+    restored = restore_missing_pack_sections(files, pack=pack, issues=quality.issues)
+    assert restored is not None
+    updated_files, restored_ids = restored
+    assert len(restored_ids) >= 5
+    assert 'data-ham-section="hero"' in updated_files["src/App.tsx"]
