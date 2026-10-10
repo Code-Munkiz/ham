@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from src.ham.build_materialization import materialize_files_to_snapshot
@@ -217,3 +219,48 @@ def test_saas_pack_uses_remix_moderately_directive() -> None:
     assert pack.manifest.ai_directive == "remix_moderately"
     instruction = template_pack_hermes_instruction(pack)
     assert "remix moderately" in instruction.lower()
+
+
+def _stub_sections_with_jsx_comments(app_tsx: str) -> str:
+    def _replace(match: re.Match[str]) -> str:
+        section_match = re.search(r'data-ham-section=["\']([^"\']+)', match.group(0))
+        section_id = section_match.group(1) if section_match else "section"
+        return f"{{/* {section_id} */}}"
+
+    return re.sub(
+        r'<section\b[^>]*\bdata-ham-section=["\'][^"\']+["\'][^>]*>.*?</section>',
+        _replace,
+        app_tsx,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+
+
+@pytest.mark.parametrize(
+    "pack_rel",
+    [
+        "landing/saas-clean",
+        "dashboard/analytics",
+        "dashboard/project-management",
+    ],
+)
+def test_jsx_comment_stubs_do_not_satisfy_required_sections(pack_rel: str) -> None:
+    pack = load_template_pack(default_template_packs_root() / pack_rel)
+    files = dict(pack.files)
+    files["src/App.tsx"] = _stub_sections_with_jsx_comments(files["src/App.tsx"])
+    result = evaluate_workspace_visual_quality(files, pack=pack)
+    assert result.ok is False
+    assert any(issue.code == "missing_section" for issue in result.issues)
+
+
+def test_restore_ignores_jsx_comment_stubs_when_sections_missing() -> None:
+    pack = load_template_pack(default_template_packs_root() / "landing" / "saas-clean")
+    files = dict(pack.files)
+    stubbed = _stub_sections_with_jsx_comments(files["src/App.tsx"])
+    files["src/App.tsx"] = stubbed + '\n{/* orphan comment without section */}'
+    before = evaluate_workspace_visual_quality(files, pack=pack)
+    assert before.ok is False
+    restored = restore_missing_pack_sections(files, pack=pack, issues=before.issues)
+    assert restored is not None
+    updated_files, restored_ids = restored
+    assert restored_ids
+    assert 'data-ham-section="hero"' in updated_files["src/App.tsx"]
