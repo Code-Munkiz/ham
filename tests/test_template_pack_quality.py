@@ -217,3 +217,51 @@ def test_saas_pack_uses_remix_moderately_directive() -> None:
     assert pack.manifest.ai_directive == "remix_moderately"
     instruction = template_pack_hermes_instruction(pack)
     assert "remix moderately" in instruction.lower()
+
+
+def _comment_stub_app_with_tailwind_polish() -> str:
+    """Sparse app that fakes required sections via JSX comments only."""
+    return """export default function App() {
+  return (
+    <main className="min-h-screen bg-slate-950 text-white p-8 sm:p-12">
+      {/* hero */}
+      {/* services */}
+      {/* process */}
+      {/* testimonial */}
+      {/* cta */}
+      <h1 className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-sky-400 to-blue-500">
+        Hello
+      </h1>
+      <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 mt-8">
+        <article className="rounded-lg shadow border border-slate-700 p-4">a</article>
+        <article className="rounded-lg shadow border border-slate-700 p-4">b</article>
+        <article className="rounded-lg shadow border border-slate-700 p-4">c</article>
+      </div>
+      <button className="mt-8 px-4 py-2 rounded bg-sky-500 shadow">Go</button>
+    </main>
+  );
+}
+"""
+
+
+def test_quality_gate_rejects_jsx_comment_section_stubs() -> None:
+    """Comment placeholders must not bypass required-section checks."""
+    pack = load_template_pack(default_template_packs_root() / "landing" / "saas-clean")
+    files = dict(pack.files)
+    files["src/App.tsx"] = _comment_stub_app_with_tailwind_polish()
+    result = evaluate_workspace_visual_quality(files, pack=pack)
+    assert result.ok is False
+    missing = [i for i in result.issues if i.code == "missing_section"]
+    assert len(missing) >= 3
+
+
+def test_restore_does_not_skip_sections_hidden_by_comment_stubs() -> None:
+    pack = load_template_pack(default_template_packs_root() / "landing" / "agency-modern")
+    files = dict(pack.files)
+    files["src/App.tsx"] = _comment_stub_app_with_tailwind_polish()
+    issues = evaluate_workspace_visual_quality(files, pack=pack).issues
+    restored = restore_missing_pack_sections(files, pack=pack, issues=issues)
+    assert restored is not None
+    updated_files, restored_ids = restored
+    assert restored_ids
+    assert all(f'data-ham-section="{sid}"' in updated_files["src/App.tsx"] for sid in restored_ids)
