@@ -313,6 +313,8 @@ NATIVE_BUILD_JOB_ORIGIN = "ham_native_builder_v2"
 
 _EXECUTOR_ERROR_CODE = "HAM_NATIVE_BUILDER_V2_EXECUTOR_ERROR"
 _EXECUTOR_ERROR_MESSAGE = "HAM Native Builder could not complete the native build."
+_DISPATCH_ERROR_CODE = "HAM_NATIVE_BUILDER_V2_DISPATCH_ERROR"
+_DISPATCH_ERROR_MESSAGE = "HAM Native Builder could not queue the native build for execution."
 
 _DISPATCH_ENV = "HAM_NATIVE_BUILD_DISPATCH"
 
@@ -363,15 +365,28 @@ def start_native_build_job(
         _native_build_dispatch_mode(),
         str(hermes_native_workspace_configured()).lower(),
     )
-    _dispatch_native_build_job(
-        import_job_id=job.id,
-        workspace_id=workspace_id,
-        project_id=project_id,
-        session_id=session_id,
-        user_prompt=user_prompt,
-        created_by=created_by,
-        workspace_files_provider=workspace_files_provider,
-    )
+    try:
+        _dispatch_native_build_job(
+            import_job_id=job.id,
+            workspace_id=workspace_id,
+            project_id=project_id,
+            session_id=session_id,
+            user_prompt=user_prompt,
+            created_by=created_by,
+            workspace_files_provider=workspace_files_provider,
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "ham_native_builder_v2_dispatch_failed import_job_id=%s", job.id
+        )
+        return _fail_native_build(
+            store,
+            import_job_id=job.id,
+            phase=NATIVE_BUILD_PHASE_FAILED,
+            error_code=_DISPATCH_ERROR_CODE,
+            error_message=_DISPATCH_ERROR_MESSAGE,
+            failure_reason="dispatch",
+        )
     return _native_result(
         status="started",
         scaffolded=False,
@@ -408,18 +423,13 @@ def _enqueue_native_build_job_guarded(
         get_native_build_enqueue,
     )
 
-    try:
-        get_native_build_enqueue().enqueue(
-            NativeBuildExecuteEnvelope(
-                import_job_id=import_job_id,
-                workspace_id=workspace_id,
-                project_id=project_id,
-            )
+    get_native_build_enqueue().enqueue(
+        NativeBuildExecuteEnvelope(
+            import_job_id=import_job_id,
+            workspace_id=workspace_id,
+            project_id=project_id,
         )
-    except Exception:  # noqa: BLE001
-        logger.exception(
-            "ham_native_builder_v2_enqueue_failed import_job_id=%s", import_job_id
-        )
+    )
 
 
 def _run_native_build_executor_guarded(**kwargs: Any) -> None:

@@ -132,6 +132,30 @@ def test_import_job_lifecycle_helpers_update_status_and_links(tmp_path: Path) ->
     assert failed.error_code == "ZIP_INVALID"
 
 
+def test_mark_import_job_failed_does_not_downgrade_succeeded(tmp_path: Path) -> None:
+    store = BuilderSourceStore(store_path=tmp_path / "builder_sources.json")
+    created = store.create_import_job(
+        workspace_id="ws_a",
+        project_id="project.a",
+        created_by="user",
+        phase="materialized",
+        status="queued",
+    )
+    store.mark_import_job_succeeded(
+        import_job_id=created.id,
+        phase="materialized",
+        source_snapshot_id="ssnp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    )
+    failed = store.mark_import_job_failed(
+        import_job_id=created.id,
+        phase="failed",
+        error_code="LATE_FAILURE",
+        error_message="Overlapping worker lost the race.",
+    )
+    assert failed.status == "succeeded"
+    assert failed.source_snapshot_id == "ssnp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+
 def test_get_import_job_returns_none_for_unknown(tmp_path: Path) -> None:
     store = BuilderSourceStore(store_path=tmp_path / "builder_sources.json")
     assert store.get_import_job(import_job_id="ijob_missing") is None
