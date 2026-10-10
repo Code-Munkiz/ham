@@ -46,6 +46,10 @@ _TERMINAL_STATUSES = frozenset({"succeeded", "failed"})
 
 _WORKER_ERROR_CODE = "HAM_NATIVE_BUILDER_V2_EXECUTOR_ERROR"
 _WORKER_ERROR_MESSAGE = "HAM Native Builder could not complete the native build."
+_WORKER_CONTEXT_MISSING_CODE = "HAM_NATIVE_BUILDER_V2_CONTEXT_MISSING"
+_WORKER_CONTEXT_MISSING_MESSAGE = (
+    "HAM Native Builder could not load durable execution context for this job."
+)
 
 
 @router.post("/api/internal/native-build/execute")
@@ -87,7 +91,22 @@ async def execute_native_build(
         import_job_id=envelope.import_job_id
     )
     if context is None:
-        # No durable context (already cleaned up, or never created) — non-retryable.
+        # No durable context — non-retryable. Fail an orphaned queued job so polling
+        # does not spin forever when context and import-job stores diverge.
+        job = store.get_import_job(import_job_id=envelope.import_job_id)
+        if job is not None and job.status not in _TERMINAL_STATUSES:
+            try:
+                store.mark_import_job_failed(
+                    import_job_id=envelope.import_job_id,
+                    phase=NATIVE_BUILD_PHASE_FAILED,
+                    error_code=_WORKER_CONTEXT_MISSING_CODE,
+                    error_message=_WORKER_CONTEXT_MISSING_MESSAGE,
+                )
+            except Exception:  # noqa: BLE001
+                _LOG.exception(
+                    "native-build worker: failed to mark orphaned job failed for import_job_id=%s",
+                    envelope.import_job_id,
+                )
         _LOG.info(
             "native-build worker: no context for import_job_id=%s — idempotent skip",
             envelope.import_job_id,
