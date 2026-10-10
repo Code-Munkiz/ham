@@ -188,6 +188,7 @@ def test_backend_selector_defaults_to_file(monkeypatch) -> None:
     monkeypatch.delenv("HAM_BUILDER_RUNTIME_STORE_BACKEND", raising=False)
     monkeypatch.delenv("HAM_BUILDER_SOURCE_STORE_BACKEND", raising=False)
     monkeypatch.delenv("HAM_BUILDER_RUNTIME_JOB_STORE_BACKEND", raising=False)
+    monkeypatch.delenv("HAM_NATIVE_BUILD_CONTEXT_STORE_BACKEND", raising=False)
     assert isinstance(build_builder_runtime_store(), BuilderRuntimeStore)
     from src.persistence.builder_runtime_job_store import BuilderRuntimeJobStore as FileJobStore
 
@@ -202,6 +203,15 @@ def test_backend_selector_selects_firestore(monkeypatch) -> None:
 def test_backend_selector_follows_source_firestore(monkeypatch) -> None:
     monkeypatch.delenv("HAM_BUILDER_RUNTIME_STORE_BACKEND", raising=False)
     monkeypatch.setenv("HAM_BUILDER_SOURCE_STORE_BACKEND", "firestore")
+    assert isinstance(build_builder_runtime_store(), FirestoreBuilderRuntimeStore)
+    assert isinstance(build_builder_runtime_job_store(), FirestoreBuilderRuntimeJobStore)
+
+
+def test_backend_selector_follows_native_context_firestore(monkeypatch) -> None:
+    monkeypatch.delenv("HAM_BUILDER_RUNTIME_STORE_BACKEND", raising=False)
+    monkeypatch.delenv("HAM_BUILDER_SOURCE_STORE_BACKEND", raising=False)
+    monkeypatch.delenv("HAM_BUILDER_RUNTIME_JOB_STORE_BACKEND", raising=False)
+    monkeypatch.setenv("HAM_NATIVE_BUILD_CONTEXT_STORE_BACKEND", "firestore")
     assert isinstance(build_builder_runtime_store(), FirestoreBuilderRuntimeStore)
     assert isinstance(build_builder_runtime_job_store(), FirestoreBuilderRuntimeJobStore)
 
