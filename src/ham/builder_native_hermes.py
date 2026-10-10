@@ -313,6 +313,8 @@ NATIVE_BUILD_JOB_ORIGIN = "ham_native_builder_v2"
 
 _EXECUTOR_ERROR_CODE = "HAM_NATIVE_BUILDER_V2_EXECUTOR_ERROR"
 _EXECUTOR_ERROR_MESSAGE = "HAM Native Builder could not complete the native build."
+_ENQUEUE_ERROR_CODE = "HAM_NATIVE_BUILDER_V2_ENQUEUE_FAILED"
+_ENQUEUE_ERROR_MESSAGE = "HAM could not enqueue the native build for execution."
 
 _DISPATCH_ENV = "HAM_NATIVE_BUILD_DISPATCH"
 
@@ -420,6 +422,18 @@ def _enqueue_native_build_job_guarded(
         logger.exception(
             "ham_native_builder_v2_enqueue_failed import_job_id=%s", import_job_id
         )
+        try:
+            get_builder_source_store().mark_import_job_failed(
+                import_job_id=import_job_id,
+                phase=NATIVE_BUILD_PHASE_FAILED,
+                error_code=_ENQUEUE_ERROR_CODE,
+                error_message=_ENQUEUE_ERROR_MESSAGE,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "ham_native_builder_v2_mark_enqueue_failed_failed import_job_id=%s",
+                import_job_id,
+            )
 
 
 def _run_native_build_executor_guarded(**kwargs: Any) -> None:
