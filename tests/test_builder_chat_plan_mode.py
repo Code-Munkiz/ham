@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -194,17 +194,20 @@ def test_plan_mode_true_affirmation_continues_into_selected_builder(
     )
     plan_store.upsert_plan(plan)
     plan_store.upsert_approval_record(PlanApprovalRecord(plan_id=plan.plan_id, state="proposed"))
+    native_mock = MagicMock(
+        return_value={
+            "builder_intent": "build_or_create",
+            "builder_operation": "build_or_create",
+            "scaffolded": False,
+            "ham_native_builder": {"status": "unavailable"},
+        }
+    )
     with (
         patch("src.ham.builder_chat_hooks._selected_builder_for_workspace", return_value=None),
         patch("src.ham.builder_chat_hooks.configured_default_builder", return_value=None),
         patch(
             "src.ham.builder_native_hermes.start_native_build_job",
-            return_value={
-                "builder_intent": "build_or_create",
-                "builder_operation": "build_or_create",
-                "scaffolded": False,
-                "ham_native_builder": {"status": "unavailable"},
-            },
+            native_mock,
         ),
         patch(
             "src.ham.builder_chat_scaffold.maybe_chat_scaffold_for_turn",
@@ -222,6 +225,11 @@ def test_plan_mode_true_affirmation_continues_into_selected_builder(
     # Affirmation still continues the pending plan, but a normal build then
     # routes to HAM Native when no external/default builder is selected.
     scaffold_mock.assert_not_called()
+    native_mock.assert_called_once()
+    native_kwargs = native_mock.call_args.kwargs
+    assert native_kwargs["session_id"] == "sess_cont"
+    assert native_kwargs["user_prompt"] == "build me a calculator"
+    assert native_kwargs["created_by"] == "user_plan"
     assert meta.get("builder_plan_continuation") is True
     assert meta.get("builder_plan_id") == plan.plan_id
     assert meta.get("selected_builder_state") == "native"
