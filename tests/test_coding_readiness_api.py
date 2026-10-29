@@ -21,6 +21,7 @@ from fastapi.testclient import TestClient
 
 from src.api.clerk_gate import get_ham_clerk_actor
 from src.api.server import app, fastapi_app
+from tests.conftest import iter_registered_http_routes
 from src.ham.clerk_auth import HamActor
 from src.persistence.project_store import (
     ProjectStore,
@@ -323,9 +324,9 @@ def test_no_launch_endpoint_under_coding_namespace() -> None:
     ``/launch``, ``/dispatch``, or ``/execute`` under the coding namespace.
     """
     routes = {
-        (r.path, tuple(sorted(r.methods or ())))
-        for r in fastapi_app.routes
-        if hasattr(r, "path") and "/api/coding" in getattr(r, "path", "")
+        (path, methods)
+        for path, methods in iter_registered_http_routes(fastapi_app)
+        if "/api/coding" in path
     }
     paths = {p for p, _ in routes}
     assert "/api/coding/readiness" in paths

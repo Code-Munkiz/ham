@@ -6,7 +6,36 @@ process-wide singletons are reset between tests so env-var changes take effect.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 import pytest
+from fastapi import FastAPI
+from starlette.routing import BaseRoute
+
+
+def iter_registered_http_routes(app: FastAPI) -> set[tuple[str, tuple[str, ...]]]:
+    """Return ``(path, methods)`` for routes mounted on ``app``.
+
+    FastAPI 0.162+ wraps included routers in ``_IncludedRouter`` (``path`` is
+    ``None`` at the top level). Tests that lock route inventory must walk
+    ``original_router.routes`` instead of only ``app.routes``.
+    """
+
+    def walk(routes: Iterable[BaseRoute]) -> set[tuple[str, tuple[str, ...]]]:
+        found: set[tuple[str, tuple[str, ...]]] = set()
+        for route in routes:
+            original = getattr(route, "original_router", None)
+            if original is not None:
+                found |= walk(original.routes)
+                continue
+            path = getattr(route, "path", None)
+            if not path:
+                continue
+            methods = tuple(sorted(getattr(route, "methods", None) or ()))
+            found.add((path, methods))
+        return found
+
+    return walk(app.routes)
 
 
 @pytest.fixture(autouse=True)
