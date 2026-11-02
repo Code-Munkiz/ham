@@ -124,6 +124,19 @@ _STORE_SINGLETON: list[NativeBuildContextStoreProtocol | None] = [None]
 
 _BACKEND_ENV = "HAM_NATIVE_BUILD_CONTEXT_STORE_BACKEND"
 _BUILDER_SOURCE_BACKEND_ENV = "HAM_BUILDER_SOURCE_STORE_BACKEND"
+_PEER_FIRESTORE_BACKEND_ENVS = (
+    "HAM_BUILDER_PLAN_STORE_BACKEND",
+    "HAM_BUILDER_RUNTIME_STORE_BACKEND",
+    "HAM_BUILDER_RUNTIME_JOB_STORE_BACKEND",
+    "HAM_BUILDER_RUN_EVENTS_STORE_BACKEND",
+)
+
+
+def _peer_builder_store_firestore_selected() -> bool:
+    for env_name in _PEER_FIRESTORE_BACKEND_ENVS:
+        if (os.environ.get(env_name) or "").strip().lower() == "firestore":
+            return True
+    return False
 
 
 def build_native_build_context_store() -> NativeBuildContextStoreProtocol:
@@ -134,12 +147,17 @@ def build_native_build_context_store() -> NativeBuildContextStoreProtocol:
 
     When only the builder *source* store is set to Firestore, execution context
     must share that backend too (otherwise the worker cannot load context).
+
+    When any other hosted builder store is Firestore, execution context must follow
+    so Cloud Tasks workers on another instance can load the enqueued build args.
     """
     backend = (os.environ.get(_BACKEND_ENV) or "").strip().lower()
     if not backend:
         src_backend = (os.environ.get(_BUILDER_SOURCE_BACKEND_ENV) or "").strip().lower()
         if src_backend == "firestore":
             backend = "firestore"
+    if not backend and _peer_builder_store_firestore_selected():
+        backend = "firestore"
     if backend == "firestore":
         from src.persistence.firestore_native_build_context_store import (  # noqa: PLC0415
             FirestoreNativeBuildContextStore,

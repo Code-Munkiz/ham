@@ -321,6 +321,19 @@ _STORE_SINGLETON: list[BuilderSourceStoreProtocol | None] = [None]
 
 _BACKEND_ENV = "HAM_BUILDER_SOURCE_STORE_BACKEND"
 _NATIVE_CONTEXT_BACKEND_ENV = "HAM_NATIVE_BUILD_CONTEXT_STORE_BACKEND"
+_PEER_FIRESTORE_BACKEND_ENVS = (
+    "HAM_BUILDER_PLAN_STORE_BACKEND",
+    "HAM_BUILDER_RUNTIME_STORE_BACKEND",
+    "HAM_BUILDER_RUNTIME_JOB_STORE_BACKEND",
+    "HAM_BUILDER_RUN_EVENTS_STORE_BACKEND",
+)
+
+
+def _peer_builder_store_firestore_selected() -> bool:
+    for env_name in _PEER_FIRESTORE_BACKEND_ENVS:
+        if (os.environ.get(env_name) or "").strip().lower() == "firestore":
+            return True
+    return False
 
 
 def build_builder_source_store() -> BuilderSourceStoreProtocol:
@@ -332,12 +345,19 @@ def build_builder_source_store() -> BuilderSourceStoreProtocol:
     When only the native build *context* store is set to Firestore, import jobs
     must share that backend too (otherwise the worker loads context on instance B
     but cannot find the job row and silently skips the build).
+
+    When any other hosted builder store (plan, runtime session, runtime job, run
+    events) is Firestore, import jobs and snapshots must share that backend too —
+    Phase 2.5 Cloud Run / GKE worker env sets those flags without always setting
+    ``HAM_BUILDER_SOURCE_STORE_BACKEND`` explicitly.
     """
     backend = (os.environ.get(_BACKEND_ENV) or "").strip().lower()
     if not backend:
         ctx_backend = (os.environ.get(_NATIVE_CONTEXT_BACKEND_ENV) or "").strip().lower()
         if ctx_backend == "firestore":
             backend = "firestore"
+    if not backend and _peer_builder_store_firestore_selected():
+        backend = "firestore"
     if backend == "firestore":
         from src.persistence.firestore_builder_source_store import (  # noqa: PLC0415
             FirestoreBuilderSourceStore,
