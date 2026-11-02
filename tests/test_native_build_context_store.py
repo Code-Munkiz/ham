@@ -201,6 +201,13 @@ def test_backend_selector_follows_builder_source_firestore(monkeypatch) -> None:
     assert isinstance(build_native_build_context_store(), FirestoreNativeBuildContextStore)
 
 
+def test_backend_selector_follows_runtime_job_store_firestore(monkeypatch) -> None:
+    monkeypatch.delenv("HAM_NATIVE_BUILD_CONTEXT_STORE_BACKEND", raising=False)
+    monkeypatch.delenv("HAM_BUILDER_SOURCE_STORE_BACKEND", raising=False)
+    monkeypatch.setenv("HAM_BUILDER_RUNTIME_JOB_STORE_BACKEND", "firestore")
+    assert isinstance(build_native_build_context_store(), FirestoreNativeBuildContextStore)
+
+
 def test_context_payload_carries_no_internals() -> None:
     payload = json.dumps(_ctx().model_dump(mode="json")).lower()
     for token in _FORBIDDEN_TOKENS:
