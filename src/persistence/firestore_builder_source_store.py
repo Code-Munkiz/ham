@@ -34,6 +34,7 @@ from pydantic import ValidationError
 
 from src.persistence.builder_source_store import (
     ImportJob,
+    ImportJobRecordCorruptedError,
     ProjectSource,
     SourceSnapshot,
     _utc_now_iso,
@@ -239,13 +240,13 @@ class FirestoreBuilderSourceStore:
         try:
             return ImportJob.model_validate(data)
         except ValidationError as exc:
-            _LOG.warning(
-                "skipping malformed import job %s (%s): %s",
+            _LOG.error(
+                "import job document %s failed ImportJob validation (%s): %s",
                 jid,
                 type(exc).__name__,
                 exc,
             )
-            return None
+            raise ImportJobRecordCorruptedError(jid, str(exc)) from exc
 
     def mark_import_job_running(self, *, import_job_id: str, phase: str) -> ImportJob:
         record = self._require_import_job(import_job_id)

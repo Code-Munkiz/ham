@@ -2,9 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from src.persistence.builder_source_store import (
     BuilderSourceStore,
     ImportJob,
+    ImportJobRecordCorruptedError,
     ProjectSource,
     SourceSnapshot,
 )
@@ -136,3 +140,17 @@ def test_get_import_job_returns_none_for_unknown(tmp_path: Path) -> None:
     store = BuilderSourceStore(store_path=tmp_path / "builder_sources.json")
     assert store.get_import_job(import_job_id="ijob_missing") is None
     assert store.get_import_job(import_job_id="") is None
+
+
+def test_get_import_job_raises_when_matching_row_is_invalid(tmp_path: Path) -> None:
+    path = tmp_path / "builder_sources.json"
+    path.write_text(
+        '{"import_jobs":[{"id":"ijob_bad","workspace_id":"ws_only"}],'
+        '"project_sources":[],"source_snapshots":[]}',
+        encoding="utf-8",
+    )
+    store = BuilderSourceStore(store_path=path)
+    with pytest.raises(ImportJobRecordCorruptedError) as exc_info:
+        store.get_import_job(import_job_id="ijob_bad")
+    assert exc_info.value.import_job_id == "ijob_bad"
+    assert isinstance(exc_info.value.__cause__, ValidationError)

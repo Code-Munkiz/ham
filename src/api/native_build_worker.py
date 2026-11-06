@@ -35,7 +35,10 @@ from src.ham.builder_native_hermes import (
     execute_native_build_job,
 )
 from src.ham.native_build_worker_enqueue import NativeBuildExecuteEnvelope
-from src.persistence.builder_source_store import get_builder_source_store
+from src.persistence.builder_source_store import (
+    ImportJobRecordCorruptedError,
+    get_builder_source_store,
+)
 from src.persistence.native_build_context_store import get_native_build_context_store
 
 _LOG = logging.getLogger(__name__)
@@ -82,7 +85,6 @@ async def execute_native_build(
             },
         ) from exc
 
-    store = get_builder_source_store()
     context = get_native_build_context_store().get_native_build_context(
         import_job_id=envelope.import_job_id
     )
@@ -94,7 +96,26 @@ async def execute_native_build(
         )
         return {"ok": True, "import_job_id": envelope.import_job_id, "skipped": True}
 
-    job = store.get_import_job(import_job_id=context.import_job_id)
+    store = get_builder_source_store()
+    try:
+        job = store.get_import_job(import_job_id=context.import_job_id)
+    except ImportJobRecordCorruptedError as exc:
+        # Document exists but is invalid — do not return 200 "skipped": Cloud Tasks would
+        # stop retrying while the job remains stuck queued.
+        _LOG.error(
+            "native-build worker: import job record corrupted for import_job_id=%s — %s",
+            context.import_job_id,
+            exc,
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": {
+                    "code": "NATIVE_BUILD_IMPORT_JOB_RECORD_CORRUPTED",
+                    "message": "Import job record exists but is invalid.",
+                }
+            },
+        ) from exc
     if job is None:
         # Context exists but import job row is missing (split store or cleanup) — non-retryable.
         _LOG.info(
