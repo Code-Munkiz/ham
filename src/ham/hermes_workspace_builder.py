@@ -53,6 +53,7 @@ _USER_MESSAGE_CLI_UNAVAILABLE = (
 _ERROR_CODE_NOT_CONFIGURED = "HAM_NATIVE_WORKSPACE_NOT_CONFIGURED"
 _ERROR_CODE_CLI_UNAVAILABLE = "HERMES_CLI_UNAVAILABLE"
 _ERROR_CODE_CLI_EMPTY = "HERMES_CLI_EMPTY_WORKSPACE"
+_ERROR_CODE_COLLECTION_TRUNCATED = "HERMES_CLI_WORKSPACE_COLLECTION_TRUNCATED"
 _ERROR_CODE_CLI_TIMEOUT = "HERMES_CLI_TIMEOUT"
 _ERROR_CODE_CLI_FAILED = "HERMES_CLI_FAILED"
 _ERROR_CODE_VISUAL_QUALITY = "HAM_NATIVE_VISUAL_QUALITY_FAILED"
@@ -169,7 +170,20 @@ def _resolve_workspace_files(
     )
     if not outcome.ok:
         return None, outcome
-    return outcome.files or collect_workspace_files(workspace_dir) or None, outcome
+    files_map = outcome.files
+    if not files_map:
+        collected, truncated = collect_workspace_files(workspace_dir)
+        if truncated:
+            return None, WorkspaceExecutionOutcome(
+                ok=False,
+                error_code=_ERROR_CODE_COLLECTION_TRUNCATED,
+                error_summary=(
+                    "Workspace output exceeded safe collection limits; "
+                    "not all files could be captured."
+                ),
+            )
+        files_map = collected or None
+    return files_map, outcome
 
 
 def execute_hermes_native_workspace_build(
@@ -307,6 +321,8 @@ def execute_hermes_native_workspace_build(
             reason = "hermes_cli_timeout"
         elif outcome.error_code == _ERROR_CODE_CLI_EMPTY:
             reason = "hermes_cli_empty"
+        elif outcome.error_code == _ERROR_CODE_COLLECTION_TRUNCATED:
+            reason = "workspace_collection_truncated"
         return BuildMaterializationResult(
             status="failed",
             summary=outcome.error_summary or "Workspace build failed.",

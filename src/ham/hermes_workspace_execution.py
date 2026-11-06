@@ -218,12 +218,18 @@ def _should_skip_path(rel: str) -> bool:
     return False
 
 
-def collect_workspace_files(workspace_dir: Path) -> dict[str, str]:
-    """Collect text files from workspace tree with size caps (no secrets in logs)."""
+def collect_workspace_files(workspace_dir: Path) -> tuple[dict[str, str], bool]:
+    """Collect text files from workspace tree with size caps (no secrets in logs).
+
+    Returns ``(files, truncated)``. ``truncated`` is True when collection stopped
+    early because a safety cap was hit while more eligible files may remain —
+    callers must not treat this as a complete workspace snapshot.
+    """
     if not workspace_dir.is_dir():
-        return {}
+        return {}, False
     out: dict[str, str] = {}
     total = 0
+    truncated = False
     for file_path in sorted(workspace_dir.rglob("*")):
         if not file_path.is_file():
             continue
@@ -240,13 +246,16 @@ def collect_workspace_files(workspace_dir: Path) -> dict[str, str]:
             text = file_path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        total += len(text.encode("utf-8"))
-        if total > _MAX_TOTAL_BYTES:
+        next_total = total + len(text.encode("utf-8"))
+        if next_total > _MAX_TOTAL_BYTES:
+            truncated = True
             break
+        total = next_total
         out[rel] = text
         if len(out) >= _MAX_FILES:
+            truncated = True
             break
-    return out
+    return out, truncated
 
 
 def _parse_session_id_from_output(text: str) -> str | None:
@@ -338,7 +347,7 @@ class HermesCliWorkspaceProvider:
         combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
         session_id = _parse_session_id_from_output(combined)
         cli_elapsed_ms = int((time.monotonic() - cli_started) * 1000)
-        files = collect_workspace_files(workspace_dir)
+        files, collection_truncated = collect_workspace_files(workspace_dir)
         _LOG.warning(
             "hermes_native_workspace_cli_finished import_job_id=%s exit_code=%s "
             "file_count=%d session_id_present=%s elapsed_ms=%d",
@@ -354,6 +363,23 @@ class HermesCliWorkspaceProvider:
                 ok=False,
                 error_code="HERMES_CLI_EMPTY_WORKSPACE",
                 error_summary="Hermes CLI finished but the workspace has no usable files.",
+                session_id=session_id,
+                exit_code=proc.returncode,
+            )
+
+        if collection_truncated:
+            _LOG.warning(
+                "ham_native_workspace_collection_truncated import_job_id=%s file_count=%s",
+                import_job_id,
+                len(files),
+            )
+            return WorkspaceExecutionOutcome(
+                ok=False,
+                error_code="HERMES_CLI_WORKSPACE_COLLECTION_TRUNCATED",
+                error_summary=(
+                    "Workspace output exceeded safe collection limits; "
+                    "not all files could be captured."
+                ),
                 session_id=session_id,
                 exit_code=proc.returncode,
             )
