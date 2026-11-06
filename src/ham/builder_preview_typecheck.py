@@ -51,6 +51,11 @@ _USER_SAFE_TYPECHECK_MESSAGE = (
     "HAM could not prepare a runnable preview from this build."
 )
 
+_USER_SAFE_INVALID_PATHS_MESSAGE = (
+    "The generated app listing contained invalid file paths. "
+    "HAM could not safely prepare this build."
+)
+
 _REPAIR_TYPECHECK_SUMMARY = (
     "TypeScript reported errors in the generated source (for example undefined "
     "identifiers or type mismatches). Fix every reported symbol so names match "
@@ -62,6 +67,32 @@ def preview_typecheck_enabled(env: dict[str, str] | None = None) -> bool:
     mapping = env if env is not None else os.environ
     raw = (mapping.get("HAM_PREVIEW_TYPECHECK") or "true").strip().lower()
     return raw not in {"0", "false", "no", "off"}
+
+
+def validate_preview_bundle_path_keys(files: dict[str, str]) -> None:
+    """Ensure each key is a relative path with no ``..`` segments (zip-slip / write guard).
+
+    Bundle keys originate from model or harness output; without this check,
+    :func:`_write_project_tree` and zip materialization can target paths outside
+    the temp/artifact directory.
+    """
+    for raw in files:
+        if not isinstance(raw, str):
+            raise ValueError("bundle path keys must be strings")
+        rel = raw.strip()
+        if not rel:
+            raise ValueError("bundle paths must be non-empty")
+        if raw != rel:
+            raise ValueError("bundle paths must not have leading or trailing whitespace")
+        p = Path(rel)
+        if p.is_absolute():
+            raise ValueError("bundle paths must be relative")
+        if ".." in p.parts:
+            raise ValueError("bundle paths must not contain parent directory segments")
+
+
+def user_safe_invalid_paths_message() -> str:
+    return _USER_SAFE_INVALID_PATHS_MESSAGE
 
 
 def _package_json_obj(files: dict[str, str]) -> dict[str, Any] | None:
@@ -219,8 +250,12 @@ def try_repair_identifier_case_mismatch(
 
 
 def _write_project_tree(project_dir: Path, files: dict[str, str]) -> None:
+    root = project_dir.resolve()
+    validate_preview_bundle_path_keys(files)
     for rel_path, content in files.items():
-        dest = project_dir / rel_path
+        dest = (root / rel_path).resolve()
+        if not dest.is_relative_to(root):
+            raise ValueError(f"refused path outside project dir: {rel_path!r}")
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(content, encoding="utf-8")
 
@@ -257,6 +292,7 @@ def run_preview_typecheck(
         return True, ""
 
     prepared = ensure_tailwind_config_for_preview(ensure_preview_tsconfig(dict(files)))
+    validate_preview_bundle_path_keys(prepared)
     owns_dir = project_dir is None
     tmp_ctx: tempfile.TemporaryDirectory[str] | None = None
     if owns_dir:
@@ -318,6 +354,17 @@ class PreviewTypecheckResult:
 
 def validate_preview_app_files(files: dict[str, str]) -> PreviewTypecheckResult:
     """Bootstrap ts/tailwind helpers, optional deterministic repair, then typecheck."""
+    try:
+        validate_preview_bundle_path_keys(files)
+    except ValueError as exc:
+        return PreviewTypecheckResult(
+            ok=False,
+            files=dict(files),
+            repair_summary=f"Invalid bundle paths: {exc}",
+            user_message=user_safe_invalid_paths_message(),
+            compiler_output="",
+            deterministic_repair_attempted=False,
+        )
     prepared = ensure_tailwind_config_for_preview(ensure_preview_tsconfig(dict(files)))
     ok, output = run_preview_typecheck(prepared)
     if ok:

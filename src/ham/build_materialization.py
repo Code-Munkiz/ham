@@ -21,8 +21,10 @@ from src.ham.builder_artifact_verifier import verify_builder_scaffold_artifact
 from src.ham.builder_chat_cloud_runtime import maybe_enqueue_chat_scaffold_cloud_runtime_job
 from src.ham.builder_preview_bootstrap import ensure_preview_bootstrap_files
 from src.ham.builder_preview_typecheck import (
+    user_safe_invalid_paths_message,
     user_safe_typecheck_failure_message,
     validate_preview_app_files,
+    validate_preview_bundle_path_keys,
 )
 from src.ham.workspace_typecheck_diagnostics import (
     build_typecheck_diagnostic_summary,
@@ -101,6 +103,7 @@ def _materialize_inline_files_as_zip_artifact(
     zip_path = target_dir / f"{artifact_id}.zip"
     buf = BytesIO()
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        validate_preview_bundle_path_keys(files)
         for rel, text in sorted(files.items()):
             zf.writestr(rel, text.encode("utf-8"))
     payload = buf.getvalue()
@@ -127,6 +130,19 @@ def materialize_files_to_snapshot(
     started = materialization_started_at if materialization_started_at is not None else time.monotonic()
     source_store = store or get_builder_source_store()
     candidate_files = ensure_preview_bootstrap_files(files, project_name=user_prompt)
+    try:
+        validate_preview_bundle_path_keys(candidate_files)
+    except ValueError:
+        return BuildMaterializationResult(
+            status="failed",
+            summary="Invalid file paths in bundle.",
+            import_job_id=import_job_id,
+            failure_reason="bundle",
+            user_message=user_safe_invalid_paths_message(),
+            error_code="HAM_NATIVE_BUILDER_INVALID_PATHS",
+            scaffolded=False,
+            validation_report={"paths": "invalid"},
+        )
     typecheck = validate_preview_app_files(candidate_files)
     candidate_files = typecheck.files
     if not typecheck.ok:
