@@ -201,6 +201,15 @@ def test_backend_selector_follows_builder_source_firestore(monkeypatch) -> None:
     assert isinstance(build_native_build_context_store(), FirestoreNativeBuildContextStore)
 
 
+def test_backend_selector_couples_when_builder_source_is_firestore_and_native_explicit_file(
+    monkeypatch,
+) -> None:
+    """Mis-set native=context=file while source=firestore must still use Firestore."""
+    monkeypatch.setenv("HAM_NATIVE_BUILD_CONTEXT_STORE_BACKEND", "file")
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_STORE_BACKEND", "firestore")
+    assert isinstance(build_native_build_context_store(), FirestoreNativeBuildContextStore)
+
+
 def test_context_payload_carries_no_internals() -> None:
     payload = json.dumps(_ctx().model_dump(mode="json")).lower()
     for token in _FORBIDDEN_TOKENS:
