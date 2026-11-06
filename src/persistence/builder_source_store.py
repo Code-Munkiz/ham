@@ -58,6 +58,20 @@ class SourceSnapshot(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class ImportJobRecordCorruptedError(RuntimeError):
+    """Firestore/file row exists for ``import_job_id`` but fails :class:`ImportJob` validation.
+
+    Callers that need idempotent "missing job" behavior must distinguish this from a
+    genuinely absent row so durable workers do not ACK Cloud Tasks while the job
+    stays stuck ``queued`` with unmigrated or partially-written data.
+    """
+
+    def __init__(self, import_job_id: str, message: str = "") -> None:
+        self.import_job_id = import_job_id
+        suffix = f": {message}" if message else ""
+        super().__init__(f"import job record corrupted for id {import_job_id!r}{suffix}")
+
+
 class ImportJob(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -228,12 +242,14 @@ class BuilderSourceStore:
         if not jid:
             return None
         for item in self._load_raw().get("import_jobs", []):
-            try:
-                rec = ImportJob.model_validate(item)
-            except ValidationError:
+            if not isinstance(item, dict):
                 continue
-            if rec.id == jid:
-                return rec
+            if (item.get("id") or "").strip() != jid:
+                continue
+            try:
+                return ImportJob.model_validate(item)
+            except ValidationError as exc:
+                raise ImportJobRecordCorruptedError(jid, str(exc)) from exc
         return None
 
     def mark_import_job_running(self, *, import_job_id: str, phase: str) -> ImportJob:

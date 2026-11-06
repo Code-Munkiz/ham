@@ -26,6 +26,7 @@ from src.ham.native_build_worker_enqueue import (
 )
 from src.persistence.builder_source_store import (
     BuilderSourceStore,
+    ImportJobRecordCorruptedError,
     set_builder_source_store_for_tests,
 )
 from src.persistence.native_build_context_store import (
@@ -314,6 +315,39 @@ def test_worker_skips_when_context_exists_but_import_job_missing(monkeypatch, tm
     body = res.json()
     assert body["skipped"] is True
     assert body["import_job_id"] == "ijob_orphan"
+
+
+def test_worker_422_when_import_job_record_corrupted(monkeypatch, tmp_path) -> None:
+    """Malformed job row must not return 200 skipped — that would ACK Cloud Tasks forever."""
+
+    _configure_oidc(monkeypatch)
+
+    class _BadStore(BuilderSourceStore):
+        def get_import_job(self, *, import_job_id: str):
+            raise ImportJobRecordCorruptedError(import_job_id, "test synthetic corruption")
+
+    set_builder_source_store_for_tests(_BadStore(store_path=tmp_path / "s.json"))
+    try:
+        get_native_build_context_store().put_native_build_context(
+            NativeBuildContext(
+                import_job_id="ijob_bad",
+                workspace_id="ws",
+                project_id="proj",
+                session_id="sess",
+                user_prompt="build",
+                created_by="user",
+            )
+        )
+        client = TestClient(_build_app(), raise_server_exceptions=False)
+        res = client.post(
+            "/api/internal/native-build/execute",
+            json={"import_job_id": "ijob_bad", "workspace_id": "ws", "project_id": "proj"},
+            headers={"Authorization": f"Bearer {_valid_token()}"},
+        )
+    finally:
+        set_builder_source_store_for_tests(None)
+    assert res.status_code == 422
+    assert res.json()["detail"]["error"]["code"] == "NATIVE_BUILD_IMPORT_JOB_RECORD_CORRUPTED"
 
 
 def test_worker_executes_job_by_id_and_materializes_snapshot(monkeypatch, tmp_path) -> None:

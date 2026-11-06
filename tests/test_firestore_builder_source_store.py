@@ -9,9 +9,13 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import pytest
+from pydantic import ValidationError
+
 from src.persistence.builder_source_store import (
     BuilderSourceStore,
     ImportJob,
+    ImportJobRecordCorruptedError,
     ProjectSource,
     SourceSnapshot,
     build_builder_source_store,
@@ -114,6 +118,19 @@ def test_firestore_store_create_then_get_by_id() -> None:
     loaded = store.get_import_job(import_job_id=created.id)
     assert loaded is not None
     assert loaded.id == created.id
+
+
+def test_firestore_get_import_job_raises_on_malformed_document() -> None:
+    """A document id match with invalid payload must not read as "missing" (would dead-letter builds)."""
+    client = _FakeFirestoreClient()
+    store = _api_store(client)
+    coll = "builder_import_jobs_test"
+    doc_id = "ijob_bad_doc"
+    client.tree.setdefault(coll, {})[doc_id] = {"id": doc_id, "workspace_id": "ws"}  # missing required fields
+    with pytest.raises(ImportJobRecordCorruptedError) as exc_info:
+        store.get_import_job(import_job_id=doc_id)
+    assert exc_info.value.import_job_id == doc_id
+    assert isinstance(exc_info.value.__cause__, ValidationError)
 
 
 def test_firestore_store_cross_instance_import_job_lifecycle() -> None:
