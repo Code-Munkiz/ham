@@ -2,20 +2,23 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
-from src.ham.build_materialization import materialize_files_to_snapshot
 from src.ham.builder_native_hermes import ham_native_builder_user_message
 from src.ham.hermes_workspace_builder import execute_hermes_native_workspace_build
 from src.ham.template_packs.quality import (
     TemplatePackQualityIssue,
     evaluate_workspace_visual_quality,
+    has_required_section_element,
     user_message_for_quality_failure,
     visual_quality_repair_instruction,
 )
+from src.ham.template_packs.registry import default_template_packs_root, load_template_pack
 from src.ham.template_packs.renderer import template_pack_hermes_instruction
 from src.ham.template_packs.restore import restore_missing_pack_sections
-from src.ham.template_packs.registry import default_template_packs_root, load_template_pack
+from src.ham.template_packs.schema import TemplatePack, TemplatePackQualityGate
 from src.persistence.builder_source_store import (
     BuilderSourceStore,
     set_builder_source_store_for_tests,
@@ -202,6 +205,63 @@ def test_restore_missing_cta_section_from_pack_template() -> None:
 
     after = evaluate_workspace_visual_quality(updated_files, pack=pack)
     assert not any(i.code == "missing_section" and "cta" in i.detail for i in after.issues)
+
+
+def test_section_marker_on_non_section_requires_real_section() -> None:
+    """Avoid treating stray data-ham-section attributes as satisfied required sections."""
+    pack = load_template_pack(default_template_packs_root() / "landing" / "agency-modern")
+    files = _agency_files()
+    app = files["src/App.tsx"]
+    broken = app.replace(
+        '<section\n          data-ham-section="hero"',
+        '<div\n          data-ham-section="hero"',
+        1,
+    )
+    files["src/App.tsx"] = broken
+    assert 'data-ham-section="hero"' in broken
+    assert not has_required_section_element(broken, "hero")
+
+    result = evaluate_workspace_visual_quality(files, pack=pack)
+    assert any(
+        i.code == "missing_section" and "hero" in i.detail for i in result.issues
+    )
+    assert not result.ok
+
+
+def test_restore_does_not_duplicate_when_placeholder_comment_only() -> None:
+    """JSX placeholder comment alone must not block restoring the real <section> block."""
+    pack = load_template_pack(default_template_packs_root() / "landing" / "agency-modern")
+    base_gates = pack.manifest.quality_gates or TemplatePackQualityGate()
+    manifest = replace(
+        pack.manifest,
+        quality_gates=replace(
+            base_gates,
+            required_sections=("cta",),
+            min_tailwind_class_tokens=4,
+            require_responsive_classes=False,
+            require_explicit_background=False,
+            min_service_cards=None,
+            require_hero_richness=False,
+            require_cta_action=False,
+        ),
+    )
+    pack_with_cta_only = TemplatePack(manifest=manifest, files=pack.files)
+
+    files = _agency_files()
+    app = files["src/App.tsx"]
+    cta_start = app.index('<section\n          data-ham-section="cta"')
+    main_close = app.rfind("</main>")
+    files["src/App.tsx"] = app[:cta_start] + "{/* cta */}\n" + app[main_close:]
+
+    before = evaluate_workspace_visual_quality(files, pack=pack_with_cta_only)
+    assert any(i.code == "missing_section" and "cta" in i.detail for i in before.issues)
+
+    restored = restore_missing_pack_sections(files, pack=pack_with_cta_only, issues=before.issues)
+    assert restored is not None
+    updated, restored_ids = restored
+    assert "cta" in restored_ids
+    after = evaluate_workspace_visual_quality(updated, pack=pack_with_cta_only)
+    assert not any(i.code == "missing_section" for i in after.issues)
 
 
 def test_agency_pack_uses_preserve_structure_directive() -> None:

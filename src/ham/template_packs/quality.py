@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from src.ham.template_packs.schema import TemplatePack, TemplatePackQualityGate
 
@@ -109,6 +109,12 @@ def _section_block(app_tsx: str, section_id: str) -> str:
     )
     match = re.search(pattern, app_tsx, re.DOTALL | re.IGNORECASE)
     return match.group(0) if match else ""
+
+
+def has_required_section_element(app_tsx: str, section_id: str) -> bool:
+    """True when a required pack section exists as a <section> with the marker (not on arbitrary nodes)."""
+    marker = section_id.lower().replace("_", "-")
+    return bool(_section_block(app_tsx, marker))
 
 
 def _count_service_cards(app_tsx: str) -> int:
@@ -252,15 +258,8 @@ def evaluate_workspace_visual_quality(
         )
 
     if gates and gates.required_sections:
-        combined = app_tsx
         for section in gates.required_sections:
-            marker = section.lower().replace("_", "-")
-            has_marker = (
-                f'data-ham-section="{marker}"' in combined
-                or f"data-ham-section='{marker}'" in combined
-                or f"{{/* {marker}" in combined.lower()
-            )
-            if not has_marker:
+            if not has_required_section_element(app_tsx, section):
                 issues.append(
                     TemplatePackQualityIssue(
                         "missing_section",
@@ -300,6 +299,7 @@ __all__ = [
     "TemplatePackQualityResult",
     "contains_template_pack_leak",
     "evaluate_workspace_visual_quality",
+    "has_required_section_element",
     "user_message_for_quality_failure",
     "visual_quality_repair_instruction",
 ]

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import re
 
-from src.ham.template_packs.quality import TemplatePackQualityIssue
+from src.ham.template_packs.quality import (
+    TemplatePackQualityIssue,
+    has_required_section_element,
+)
 from src.ham.template_packs.schema import TemplatePack
 
 _APP_PATH = "src/App.tsx"
@@ -31,15 +34,6 @@ def extract_pack_sections(app_tsx: str) -> dict[str, str]:
         if section_id and section_id not in sections:
             sections[section_id] = match.group(0)
     return sections
-
-
-def _has_section_marker(app_tsx: str, section_id: str) -> bool:
-    marker = section_id.lower().replace("_", "-")
-    return (
-        f'data-ham-section="{marker}"' in app_tsx
-        or f"data-ham-section='{marker}'" in app_tsx
-        or f"{{/* {marker}" in app_tsx.lower()
-    )
 
 
 def _insert_section_before_main_close(app_tsx: str, section_block: str) -> str:
@@ -83,7 +77,7 @@ def restore_missing_pack_sections(
     restored: list[str] = []
     for section_id in missing_ids:
         normalized = section_id.lower().replace("_", "-")
-        if _has_section_marker(updated, normalized):
+        if has_required_section_element(updated, normalized):
             continue
         block = pack_sections.get(normalized)
         if not block:
