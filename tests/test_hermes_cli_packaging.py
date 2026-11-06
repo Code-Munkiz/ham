@@ -81,6 +81,59 @@ def test_build_hermes_cli_chat_argv_omits_provider_and_model_when_unset(
     assert "-m" not in argv
 
 
+def test_collect_workspace_files_truncation_sets_flag(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from src.ham import hermes_workspace_execution as ws_exec
+
+    # Force a tiny cap so we hit truncation with a few files deterministically.
+    monkeypatch.setattr(ws_exec, "_MAX_TOTAL_BYTES", 100)
+    monkeypatch.setattr(ws_exec, "_MAX_FILES", 10_000)
+    for i in range(3):
+        p = tmp_path / f"f{i}.txt"
+        p.write_text("x" * 40, encoding="utf-8")
+    files, truncated = ws_exec.collect_workspace_files(tmp_path)
+    assert truncated is True
+    assert len(files) < 3
+
+
+def test_cli_success_with_truncated_collection_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Do not materialize a partial snapshot when file collection hits caps."""
+    from unittest.mock import MagicMock
+
+    import src.ham.hermes_workspace_execution as ws_exec
+
+    monkeypatch.setattr(ws_exec, "resolve_hermes_cli_binary", lambda: "/usr/local/bin/hermes")
+    monkeypatch.setattr(
+        ws_exec,
+        "seed_template_pack_workspace",
+        lambda *_a, **_k: None,
+    )
+    monkeypatch.setattr(
+        ws_exec,
+        "collect_workspace_files",
+        lambda _p: ({"stub.txt": "partial"}, True),
+    )
+
+    def _ok_run(*_args, **_kwargs):
+        m = MagicMock()
+        m.returncode = 0
+        m.stdout = ""
+        m.stderr = ""
+        return m
+
+    monkeypatch.setattr(ws_exec.subprocess, "run", _ok_run)
+    outcome = ws_exec.HermesCliWorkspaceProvider().execute(
+        workspace_dir=tmp_path,
+        user_prompt="build app",
+        import_job_id="ijob_trunc",
+    )
+    assert outcome.ok is False
+    assert outcome.error_code == "HERMES_CLI_WORKSPACE_COLLECTION_TRUNCATED"
+
+
 def test_cli_nonzero_exit_empty_workspace_fails_safely(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
