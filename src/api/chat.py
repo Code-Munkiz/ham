@@ -2013,6 +2013,11 @@ async def post_chat(
         _log_native_build_chat_short_circuit(stream_path="rest", builder_meta=builder_meta)
         store.append_turns(sid, [ChatTurn(role="assistant", content=started_msg)])
         execution_mode = _execution_mode_payload(body_eff, last_user_plain=last_user_plain)
+        execution_mode = _apply_browser_bridge_for_turn(
+            execution_mode=execution_mode,
+            body=body_eff,
+            last_user_plain=last_user_plain,
+        )
         return ChatResponse(
             session_id=sid,
             messages=store.list_messages(sid),
@@ -2243,6 +2248,11 @@ def post_chat_stream(
         store.append_turns(sid, [ChatTurn(role="assistant", content=started_msg)])
         msgs = store.list_messages(sid)
         stream_execution_mode = _execution_mode_payload(body_eff, last_user_plain=last_user_plain)
+        stream_execution_mode = _apply_browser_bridge_for_turn(
+            execution_mode=stream_execution_mode,
+            body=body_eff,
+            last_user_plain=last_user_plain,
+        )
         return _build_native_build_started_stream_response(
             sid=sid,
             started_msg=started_msg,
