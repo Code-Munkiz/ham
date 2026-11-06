@@ -216,6 +216,15 @@ def test_backend_selector_follows_native_context_firestore(monkeypatch) -> None:
     assert isinstance(build_builder_source_store(), FirestoreBuilderSourceStore)
 
 
+def test_backend_selector_couples_when_native_context_is_firestore_and_source_explicit_file(
+    monkeypatch,
+) -> None:
+    """Mis-set source=file while native=context=firestore must still use Firestore."""
+    monkeypatch.setenv("HAM_BUILDER_SOURCE_STORE_BACKEND", "file")
+    monkeypatch.setenv("HAM_NATIVE_BUILD_CONTEXT_STORE_BACKEND", "firestore")
+    assert isinstance(build_builder_source_store(), FirestoreBuilderSourceStore)
+
+
 def test_import_job_payload_carries_no_internals() -> None:
     job = ImportJob(workspace_id="ws", project_id="proj", phase="queued", status="queued")
     payload = json.dumps(job.model_dump(mode="json")).lower()

@@ -329,15 +329,19 @@ def build_builder_source_store() -> BuilderSourceStoreProtocol:
     Defaults to the file-backed implementation. ``HAM_BUILDER_SOURCE_STORE_BACKEND
     =firestore`` selects :class:`FirestoreBuilderSourceStore` (lazy import).
 
-    When only the native build *context* store is set to Firestore, import jobs
-    must share that backend too (otherwise the worker loads context on instance B
-    but cannot find the job row and silently skips the build).
+    When either store env requests Firestore, this store uses Firestore too (even
+    if the peer explicitly set ``HAM_NATIVE_BUILD_CONTEXT_STORE_BACKEND=file``).
+    Otherwise the worker can load execution context on one backend while the
+    import job row lives on another and return HTTP 200 skipped (no retry).
     """
-    backend = (os.environ.get(_BACKEND_ENV) or "").strip().lower()
+    src_backend = (os.environ.get(_BACKEND_ENV) or "").strip().lower()
+    ctx_backend = (os.environ.get(_NATIVE_CONTEXT_BACKEND_ENV) or "").strip().lower()
+    backend = src_backend
     if not backend:
-        ctx_backend = (os.environ.get(_NATIVE_CONTEXT_BACKEND_ENV) or "").strip().lower()
         if ctx_backend == "firestore":
             backend = "firestore"
+    elif src_backend != "firestore" and ctx_backend == "firestore":
+        backend = "firestore"
     if backend == "firestore":
         from src.persistence.firestore_builder_source_store import (  # noqa: PLC0415
             FirestoreBuilderSourceStore,

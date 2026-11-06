@@ -132,14 +132,19 @@ def build_native_build_context_store() -> NativeBuildContextStoreProtocol:
     Defaults to the file-backed implementation. ``HAM_NATIVE_BUILD_CONTEXT_STORE_BACKEND
     =firestore`` selects :class:`FirestoreNativeBuildContextStore` (lazy import).
 
-    When only the builder *source* store is set to Firestore, execution context
-    must share that backend too (otherwise the worker cannot load context).
+    When either store env requests Firestore, this store uses Firestore too (even
+    if the peer explicitly set ``HAM_BUILDER_SOURCE_STORE_BACKEND=file``). A split
+    backend lets the native-build worker load context from Firestore but miss the
+    import job on disk and return HTTP 200 skipped so Cloud Tasks never retries.
     """
-    backend = (os.environ.get(_BACKEND_ENV) or "").strip().lower()
+    native_backend = (os.environ.get(_BACKEND_ENV) or "").strip().lower()
+    src_backend = (os.environ.get(_BUILDER_SOURCE_BACKEND_ENV) or "").strip().lower()
+    backend = native_backend
     if not backend:
-        src_backend = (os.environ.get(_BUILDER_SOURCE_BACKEND_ENV) or "").strip().lower()
         if src_backend == "firestore":
             backend = "firestore"
+    elif native_backend != "firestore" and src_backend == "firestore":
+        backend = "firestore"
     if backend == "firestore":
         from src.persistence.firestore_native_build_context_store import (  # noqa: PLC0415
             FirestoreNativeBuildContextStore,
