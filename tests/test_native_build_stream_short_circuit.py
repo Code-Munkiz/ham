@@ -319,6 +319,72 @@ def test_native_build_started_rest_post_chat_returns_immediately(
     assert "HAM started the native build" in assistant
 
 
+def test_native_build_started_rest_applies_browser_bridge_for_turn(
+    mock_mode, _empty_store, monkeypatch
+) -> None:
+    """Native short-circuit must still run Phase 3 browser bridge on execution_mode."""
+    prefix = "HAM started the native build. I'll prepare the Workbench preview on the right as it runs.\n\n"
+    apply_calls = {"n": 0}
+
+    def _builder_hook(**kwargs):
+        return prefix, _native_started_meta()
+
+    def _track_apply(*, execution_mode, body, last_user_plain):
+        apply_calls["n"] += 1
+        out = dict(execution_mode)
+        out["_test_browser_bridge_applied"] = True
+        return out
+
+    def _must_not_complete(*_a, **_k):
+        raise AssertionError("complete_chat_turn must not be called after native build started")
+
+    monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _builder_hook)
+    monkeypatch.setattr("src.api.chat.complete_chat_turn", _must_not_complete)
+    monkeypatch.setattr("src.api.chat._apply_browser_bridge_for_turn", _track_apply)
+
+    res = client.post(
+        "/api/chat",
+        json={"messages": [{"role": "user", "content": "build me a calculator"}]},
+    )
+    assert res.status_code == 200, res.text
+    assert apply_calls["n"] == 1
+    assert res.json()["execution_mode"].get("_test_browser_bridge_applied") is True
+
+
+def test_native_build_started_stream_non_deferred_applies_browser_bridge_for_turn(
+    mock_mode, _empty_store, monkeypatch
+) -> None:
+    """Early stream short-circuit (non-deferred) must attach browser_bridge metadata like the main path."""
+    prefix = "HAM started the native build. I'll prepare the Workbench preview on the right as it runs.\n\n"
+    apply_calls = {"n": 0}
+
+    def _builder_hook(**kwargs):
+        return prefix, _native_started_meta()
+
+    def _track_apply(*, execution_mode, body, last_user_plain):
+        apply_calls["n"] += 1
+        out = dict(execution_mode)
+        out["_test_browser_bridge_applied"] = True
+        return out
+
+    def _must_not_stream(*_a, **_k):
+        raise AssertionError("stream_chat_turn must not run after native build started")
+
+    monkeypatch.setattr("src.api.chat.run_builder_happy_path_hook", _builder_hook)
+    monkeypatch.setattr("src.api.chat.stream_chat_turn", _must_not_stream)
+    monkeypatch.setattr("src.api.chat._apply_browser_bridge_for_turn", _track_apply)
+
+    res = client.post(
+        "/api/chat/stream",
+        json={"messages": [{"role": "user", "content": "build me a calculator"}]},
+    )
+    assert res.status_code == 200, res.text
+    assert apply_calls["n"] == 1
+    events = _parse_ndjson(res.text)
+    done = [e for e in events if e["type"] == "done"][0]
+    assert done["execution_mode"].get("_test_browser_bridge_applied") is True
+
+
 # ---------------------------------------------------------------------------
 # Other builder paths unchanged
 # ---------------------------------------------------------------------------
