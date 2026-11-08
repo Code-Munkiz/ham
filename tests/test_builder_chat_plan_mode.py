@@ -205,7 +205,7 @@ def test_plan_mode_true_affirmation_continues_into_selected_builder(
                 "scaffolded": False,
                 "ham_native_builder": {"status": "unavailable"},
             },
-        ),
+        ) as native_start_mock,
         patch(
             "src.ham.builder_chat_scaffold.maybe_chat_scaffold_for_turn",
             side_effect=_raise_if_scaffold,
@@ -227,6 +227,13 @@ def test_plan_mode_true_affirmation_continues_into_selected_builder(
     assert meta.get("selected_builder_state") == "native"
     assert meta.get("ham_native_builder", {}).get("status") == "unavailable"
     assert prefix is not None
+    native_start_mock.assert_called_once_with(
+        workspace_id=ws,
+        project_id=pid,
+        session_id="sess_cont",
+        user_prompt="build me a calculator",
+        created_by="user_plan",
+    )
 
 
 def test_plan_mode_true_yes_without_pending_plan_does_not_scaffold(
