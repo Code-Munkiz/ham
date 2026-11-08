@@ -864,8 +864,11 @@ def run_builder_happy_path_hook(
                 active_template=active_template,
             )
             meta = {
+                **meta,
                 "builder_intent": base_intent,
                 "builder_action_decision": action_decision.to_safe_dict(),
+                "effective_plain": effective_plain,
+                "created_by": created_by,
             }
             advice_only = action_decision.kind == "answer_only"
             wants_update = (not advice_only) and (
