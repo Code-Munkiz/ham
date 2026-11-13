@@ -38,7 +38,6 @@ def _has_section_marker(app_tsx: str, section_id: str) -> bool:
     return (
         f'data-ham-section="{marker}"' in app_tsx
         or f"data-ham-section='{marker}'" in app_tsx
-        or f"{{/* {marker}" in app_tsx.lower()
     )
 
 
