@@ -222,12 +222,20 @@ def collect_workspace_files(workspace_dir: Path) -> dict[str, str]:
     """Collect text files from workspace tree with size caps (no secrets in logs)."""
     if not workspace_dir.is_dir():
         return {}
+    root = workspace_dir.resolve()
     out: dict[str, str] = {}
     total = 0
-    for file_path in sorted(workspace_dir.rglob("*")):
+    for file_path in sorted(root.rglob("*")):
+        if file_path.is_symlink():
+            continue
         if not file_path.is_file():
             continue
-        rel = file_path.relative_to(workspace_dir).as_posix()
+        try:
+            resolved = file_path.resolve()
+            resolved.relative_to(root)
+        except (OSError, ValueError):
+            continue
+        rel = file_path.relative_to(root).as_posix()
         if not rel or ".." in rel.split("/") or _should_skip_path(rel):
             continue
         try:
