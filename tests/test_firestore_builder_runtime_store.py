@@ -206,6 +206,15 @@ def test_backend_selector_follows_source_firestore(monkeypatch) -> None:
     assert isinstance(build_builder_runtime_job_store(), FirestoreBuilderRuntimeJobStore)
 
 
+def test_backend_selector_follows_native_context_firestore(monkeypatch) -> None:
+    monkeypatch.delenv("HAM_BUILDER_RUNTIME_STORE_BACKEND", raising=False)
+    monkeypatch.delenv("HAM_BUILDER_SOURCE_STORE_BACKEND", raising=False)
+    monkeypatch.delenv("HAM_BUILDER_RUNTIME_JOB_STORE_BACKEND", raising=False)
+    monkeypatch.setenv("HAM_NATIVE_BUILD_CONTEXT_STORE_BACKEND", "firestore")
+    assert isinstance(build_builder_runtime_store(), FirestoreBuilderRuntimeStore)
+    assert isinstance(build_builder_runtime_job_store(), FirestoreBuilderRuntimeJobStore)
+
+
 def test_runtime_session_payload_carries_no_internals() -> None:
     runtime = RuntimeSession(
         workspace_id="ws",
