@@ -319,6 +319,7 @@ _STORE_SINGLETON: list[BuilderRuntimeStoreProtocol | None] = [None]
 _BACKEND_ENV = "HAM_BUILDER_RUNTIME_STORE_BACKEND"
 _SOURCE_BACKEND_ENV = "HAM_BUILDER_SOURCE_STORE_BACKEND"
 _JOB_BACKEND_ENV = "HAM_BUILDER_RUNTIME_JOB_STORE_BACKEND"
+_NATIVE_CONTEXT_BACKEND_ENV = "HAM_NATIVE_BUILD_CONTEXT_STORE_BACKEND"
 
 
 def build_builder_runtime_store() -> BuilderRuntimeStoreProtocol:
@@ -334,7 +335,11 @@ def build_builder_runtime_store() -> BuilderRuntimeStoreProtocol:
     """
     backend = (os.environ.get(_BACKEND_ENV) or "").strip().lower()
     if not backend:
-        for env_name in (_SOURCE_BACKEND_ENV, _JOB_BACKEND_ENV):
+        for env_name in (
+            _SOURCE_BACKEND_ENV,
+            _JOB_BACKEND_ENV,
+            _NATIVE_CONTEXT_BACKEND_ENV,
+        ):
             if (os.environ.get(env_name) or "").strip().lower() == "firestore":
                 backend = "firestore"
                 break
