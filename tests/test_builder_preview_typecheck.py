@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import patch
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.ham.builder_preview_bootstrap import ensure_preview_bootstrap_files
 from src.ham.builder_preview_typecheck import (
+    _npm_install,
     build_default_tailwind_config_js,
     ensure_tailwind_config_for_preview,
     run_preview_typecheck,
@@ -140,3 +142,21 @@ def test_try_repair_identifier_case_mismatch_unit() -> None:
 def test_build_default_tailwind_config_has_required_content() -> None:
     body = build_default_tailwind_config_js()
     assert '["./index.html", "./src/**/*.{js,ts,jsx,tsx}"]' in body
+
+
+def test_npm_install_uses_ignore_scripts_on_untrusted_trees(tmp_path: Path) -> None:
+    """Lifecycle scripts in model-generated package.json must not run on the worker."""
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **_kwargs):
+        calls.append(list(cmd))
+        return MagicMock(returncode=0, stdout="", stderr="")
+
+    with (
+        patch("src.ham.builder_preview_typecheck.shutil.which", return_value="/usr/bin/npm"),
+        patch("src.ham.builder_preview_typecheck.subprocess.run", side_effect=fake_run),
+    ):
+        ok, _ = _npm_install(tmp_path)
+    assert ok is True
+    assert calls
+    assert "--ignore-scripts" in calls[0]
