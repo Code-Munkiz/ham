@@ -236,7 +236,14 @@ def _npm_install(project_dir: Path) -> tuple[bool, str]:
     if not npm:
         return False, "npm is not available for preview dependency install"
     proc = subprocess.run(
-        [npm, "install", "--no-audit", "--no-fund", "--legacy-peer-deps"],
+        [
+            npm,
+            "install",
+            "--ignore-scripts",
+            "--no-audit",
+            "--no-fund",
+            "--legacy-peer-deps",
+        ],
         cwd=str(project_dir),
         capture_output=True,
         text=True,
