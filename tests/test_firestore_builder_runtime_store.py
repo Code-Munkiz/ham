@@ -123,6 +123,44 @@ def test_file_store_cross_instance_reload(tmp_path) -> None:
     assert loaded.id == runtime.id
 
 
+def test_local_preview_does_not_clobber_active_cloud_runtime_session(tmp_path: Path) -> None:
+    path = tmp_path / "builder_runtime.json"
+    store = BuilderRuntimeStore(store_path=path)
+    ws, pid = "ws_local_cloud", "proj_local_cloud"
+
+    cloud = store.upsert_runtime_session(
+        RuntimeSession(
+            workspace_id=ws,
+            project_id=pid,
+            mode="cloud",
+            status="running",
+            health="healthy",
+        )
+    )
+    local = store.upsert_local_runtime_session(
+        workspace_id=ws,
+        project_id=pid,
+        source_snapshot_id="snap_local",
+        message="local preview",
+    )
+    assert local.id != cloud.id
+    assert local.mode == "local"
+    assert local.status == "running"
+
+    active_cloud = store.get_active_runtime_session(workspace_id=ws, project_id=pid)
+    assert active_cloud is not None
+    assert active_cloud.id == cloud.id
+    assert active_cloud.mode == "cloud"
+    assert active_cloud.status == "running"
+
+    store.clear_local_preview(workspace_id=ws, project_id=pid)
+    still_cloud = store.get_active_runtime_session(workspace_id=ws, project_id=pid)
+    assert still_cloud is not None
+    assert still_cloud.id == cloud.id
+    assert still_cloud.mode == "cloud"
+    assert still_cloud.status == "running"
+
+
 def test_firestore_store_worker_writes_api_reads_runtime_session() -> None:
     """ham-api reader sees cloud runtime session written by worker writer."""
     client = _FakeFirestoreClient()

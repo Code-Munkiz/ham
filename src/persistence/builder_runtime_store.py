@@ -157,11 +157,16 @@ class BuilderRuntimeStore:
         source_snapshot_id: str | None,
         message: str | None = None,
     ) -> RuntimeSession:
-        existing = self.get_active_runtime_session(workspace_id=workspace_id, project_id=project_id)
+        existing = self.get_latest_runtime_session(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            mode="local",
+        )
         if existing is None:
             existing = RuntimeSession(
                 workspace_id=workspace_id,
                 project_id=project_id,
+                mode="local",
             )
         existing.mode = "local"
         existing.status = "running"
@@ -221,7 +226,13 @@ class BuilderRuntimeStore:
         return None
 
     def clear_local_preview(self, *, workspace_id: str, project_id: str) -> tuple[RuntimeSession | None, PreviewEndpoint | None]:
-        runtime = self.get_active_runtime_session(workspace_id=workspace_id, project_id=project_id)
+        runtime = self.get_latest_runtime_session(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            mode="local",
+        )
+        if runtime is None or runtime.status in {"stopped", "expired"}:
+            return None, None
         endpoint: PreviewEndpoint | None = None
         if runtime is not None:
             endpoint = self.get_active_preview_endpoint(
