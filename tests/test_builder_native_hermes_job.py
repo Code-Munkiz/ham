@@ -134,6 +134,40 @@ class _RecordingEnqueue:
         self.calls.append(envelope)
 
 
+class _FailingEnqueue:
+    def enqueue(self, envelope) -> None:
+        raise RuntimeError("cloud tasks unavailable")
+
+
+def test_durable_dispatch_enqueue_failure_marks_job_failed(
+    tmp_path, monkeypatch
+) -> None:
+    _durable_env(tmp_path, monkeypatch)
+    store = BuilderSourceStore(store_path=tmp_path / "sources.json")
+    set_builder_source_store_for_tests(store)
+    set_native_build_enqueue_for_tests(_FailingEnqueue())
+    try:
+        result = start_native_build_job(
+            workspace_id="ws_enq",
+            project_id="proj_enq",
+            session_id="sess_enq",
+            user_prompt="build a landing page",
+            created_by="user_enq",
+        )
+    finally:
+        set_native_build_enqueue_for_tests(None)
+        set_builder_source_store_for_tests(None)
+
+    assert result["ham_native_builder"]["status"] == "failed"
+    assert result["ham_native_builder"]["failure_reason"] == "enqueue_failed"
+    job_id = result["native_build_job_id"]
+    job = store.get_import_job(import_job_id=job_id)
+    assert job is not None
+    assert job.status == "failed"
+    assert job.phase == NATIVE_BUILD_PHASE_FAILED
+    assert job.error_code == "HAM_NATIVE_BUILD_ENQUEUE_FAILED"
+
+
 def test_durable_dispatch_persists_context_and_enqueues_without_inline_build(
     tmp_path, monkeypatch
 ) -> None:
