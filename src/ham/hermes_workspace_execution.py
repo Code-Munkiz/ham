@@ -222,22 +222,45 @@ def collect_workspace_files(workspace_dir: Path) -> dict[str, str]:
     """Collect text files from workspace tree with size caps (no secrets in logs)."""
     if not workspace_dir.is_dir():
         return {}
+    try:
+        workspace_resolved = workspace_dir.expanduser().resolve(strict=False)
+    except OSError:
+        return {}
     out: dict[str, str] = {}
     total = 0
     for file_path in sorted(workspace_dir.rglob("*")):
         if not file_path.is_file():
             continue
+        try:
+            resolved = file_path.resolve(strict=False)
+        except OSError:
+            continue
+        if resolved != workspace_resolved:
+            try:
+                if not resolved.is_relative_to(workspace_resolved):
+                    continue
+            except (AttributeError, ValueError):
+                try:
+                    resolved.relative_to(workspace_resolved)
+                except ValueError:
+                    continue
         rel = file_path.relative_to(workspace_dir).as_posix()
-        if not rel or ".." in rel.split("/") or _should_skip_path(rel):
+        if not rel or ".." in rel.split("/"):
             continue
         try:
-            size = file_path.stat().st_size
+            resolved_rel = resolved.relative_to(workspace_resolved).as_posix()
+        except ValueError:
+            continue
+        if _should_skip_path(rel) or _should_skip_path(resolved_rel):
+            continue
+        try:
+            size = resolved.stat().st_size
         except OSError:
             continue
         if size > _MAX_FILE_BYTES:
             continue
         try:
-            text = file_path.read_text(encoding="utf-8")
+            text = resolved.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
         total += len(text.encode("utf-8"))
